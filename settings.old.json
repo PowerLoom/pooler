@@ -1,0 +1,83 @@
+{
+    "development": {
+        "polymarket_strapi_url": "https://strapi-matic.poly.market/markets?active=true&_sort=volume:desc&_limit=-1&closed=false",
+        "host": "127.0.0.1",
+        "port": 9002,
+        "audit_protocol_engine": {
+            "url": "http://localhost:9000"
+        },
+        "snapshot_max_workers": 5,
+        "snapshot_maticvigil_limits": {
+            "max_acquisition_tries": 20,
+            "acquisition_sleep": 3,
+            "max_workers": 10
+        },
+        "payload_attrs_filter": [
+            "id",
+            "question",
+            "conditionId",
+            "end_date",
+            "description",
+            "created_at",
+            "marketMakerAddress",
+            "resolution_source",
+            "active"
+        ],
+        "redis": {
+            "host": "powerloom-main1.op9vva.ng.0001.use2.cache.amazonaws.com",
+            "port": 6379,
+            "db": 4,
+            "password": null
+        },
+        "redis_reader": {
+            "host": "powerloom-main1-ro.op9vva.ng.0001.use2.cache.amazonaws.com",
+            "port": 6379,
+            "db": 4,
+            "password": null
+        },
+        "trade_vol_snapshot_interval": 180,
+        "verify_abi_endpoint": "https://mainnet.maticvigil.com/api/verifyABI",
+        "check_contract_endpoint": "https://mainnet.maticvigil.com/api/checkContract",
+        "verify_contract_endpoint": "https://mainnet.maticvigil.com/api/verify",
+        "activate_hook_endpoint": "https://mainnet.maticvigil.com/api/hooks/activate",
+        "deactivate_hook_endpoint": "https://mainnet.maticvigil.com/api/hooks/deactivate",
+        "update_hook_events_endpoint": "https://mainnet.maticvigil.com/api/hooks/updateEvents",
+        "add_hook_endpoint": "https://mainnet.maticvigil.com/api/hooks/add",
+        "login_endpoint": "https://mainnet.maticvigil.com/api/login",
+        "webhook_listener": {
+            "host": "127.0.0.1",
+            "port": 9090,
+            "root": "https://polymarket-hooks2.powerloom.io",
+            "market_event_listener_path": "hooks",
+            "commit_confirmation_callback_path": "commit_confirm"
+        },
+        "event_confirmation_block_height": 12,
+        "event_cache_collection_chain_head_offset": 2,
+        "matic_vigil_keys": {
+            "private_key": "0xeaa5a84fcd4b14fe2fdf964f53b193b13260a78497ca443a3804508cdd6d2511",
+            "read_key": "04fe8fe8-5634-4cd7-891b-9fce6848a071",
+            "api_key": "363e58dc-6552-4f7d-ac75-9b5abd739f0b"
+        },
+        "subgraph_url": "https://subgraph-matic.poly.market/subgraphs/name/TokenUnion/polymarket",
+        "offchain_snapshot_interval": 600,
+        "onchain_snapshot_interval": 180,
+        "matic_rpc_url": "https://rpc-mainnet.maticvigil.com/v1/6a8b7e796e9075657c8cd531ef0028d82f1e2890",
+        "eth_logs_timeout": 240,
+        "force_hook_add": false,
+        "force_add_new_hook_id": false,
+        "force_seed_trade_volume": false,
+        "force_seed_liquidity": false,
+        "force_seed_outcome_prices": false,
+        "seeding_retry_limits": {
+            "liquidity": 2,
+            "trade_vol": 10
+        },
+        "pending_commit_timeout": 300,
+        "client_session_timeout": {
+            "sock_read": 5,
+            "connect": 5,
+            "sock_connect": 5,
+            "total": 10
+        }
+    }
+}

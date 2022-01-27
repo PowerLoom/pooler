@@ -1,0 +1,144 @@
+{
+    "development": {
+        "namespace": "staging",
+        "polymarket_strapi_url": "https://strapi-matic.poly.market/markets?active=true&_sort=volume:desc&_limit=10",
+        "rpc": {
+            "matic": ["https://rpc-mainnet.maticvigil.com/v1/"],
+            "logs_query": {
+                "chunk": 1000000,
+                "retry": 2,
+                "timeout": 10
+            },
+            "eth_mainnet": "",
+            "retry": 1,
+            "rate_limit": "10000000/day;1000/minute;100/second"
+        },
+        "eth_log_worker": {
+            "subtopic": "ethlogs",
+            "receiver_queue_name": "powerloom-ethlogs-request-receiver-q",
+            "sender_queue_name": "powerloom-ethlogs-request-sender-q", 
+            "host": "127.0.0.1",
+            "port": 9003
+        },
+        "rlimit": {
+          "file_descriptors": 2048
+        },
+        "timeouts": {
+            "basic": 5,
+            "archival": 180,
+            "connection_init": 2
+        },
+        "epoch": {
+            "height": 10,
+            "head_offset": 2,
+            "block_time": 2
+        },
+        "rabbitmq": {
+            "user": "guest",
+            "password": "guest",
+            "host": "localhost",
+            "port": 5672,
+            "setup": {
+                "core": {
+                    "exchange": "powerloom-backend"
+                },
+                "callbacks": {
+                    "exchange": "powerloom-backend-callbacks",
+                    "path": "callback_modules/",
+                    "config": "module_queues_config.json",
+                    "services": [
+                        "trade_volume.py"
+                    ]
+                }
+            }
+        },
+        "zookeeper": {
+            "host": "127.0.0.1",
+            "port": "2181",
+            "user": "guest",
+            "password": "guest"
+        },
+        "host": "127.0.0.1",
+        "port": 9002,
+        "audit_protocol_engine": {
+            "url": "http://localhost:9000"
+        },
+        "redis": {
+            "host": "127.0.0.1",
+            "port": 6379,
+            "db": 0,
+            "password": null,
+            "ssl": false,
+            "cluster_mode": false
+        },
+        "snapshot_max_workers": 5,
+        "snapshot_maticvigil_limits": {
+            "max_acquisition_tries": 20,
+            "acquisition_sleep": 1,
+            "max_workers": 10
+        },
+        "actor_semaphore_limits": {
+            "rpc": {
+                "max_acquisition_tries": 10,
+                "acquisition_sleep": 45
+            }
+        },
+        "payload_attrs_filter": [
+            "id",
+            "question",
+            "conditionId",
+            "end_date",
+            "description",
+            "created_at",
+            "updated_at",
+            "active"
+        ],
+        "redis_reader": {
+            "host": "127.0.0.1",
+            "port": 6379,
+            "db": 0,
+            "password": null
+        },
+        "offchain_snapshot_interval": 120,
+        "onchain_snapshot_interval": 120,
+        "trade_vol_snapshot_interval": 180,
+        "verify_abi_endpoint": "https://mainnet.maticvigil.com/api/verifyABI",
+        "check_contract_endpoint": "https://mainnet.maticvigil.com/api/checkContract",
+        "verify_contract_endpoint": "https://mainnet.maticvigil.com/api/verify",
+        "activate_hook_endpoint": "https://mainnet.maticvigil.com/api/hooks/activate",
+        "deactivate_hook_endpoint": "https://mainnet.maticvigil.com/api/hooks/deactivate",
+        "update_hook_events_endpoint": "https://mainnet.maticvigil.com/api/hooks/updateEvents",
+        "add_hook_endpoint": "https://mainnet.maticvigil.com/api/hooks/add",
+        "login_endpoint": "https://mainnet.maticvigil.com/api/login",
+        "webhook_listener": {
+            "host": "127.0.0.1",
+            "port": 9090,
+            "root": "https://anstripe.blocksapi.com",
+            "market_event_listener_path": "hooks",
+            "commit_confirmation_callback_path": "commit_confirm"
+        },
+        "event_confirmation_block_height": 12,
+        "event_cache_collection_chain_head_offset": 2,
+        "matic_vigil_keys": {
+            "private_key": "",
+            "read_key": "",
+            "api_key": ""
+        },
+        "force_hook_add": false,
+        "force_add_new_hook_id": false,
+        "force_seed_trade_volume": false,
+        "force_seed_liquidity": false,
+        "force_seed_outcome_prices": false,
+        "seeding_retry_limits": {
+            "liquidity": 2,
+            "trade_vol": 10
+        },
+        "eth_logs_timeout": 600,
+        "client_session_timeout": {
+            "sock_read": 200,
+            "connect": 200,
+            "sock_connect": 200
+        },
+        "pending_commit_timeout": 300
+    }
+}

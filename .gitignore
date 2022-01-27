@@ -1,0 +1,8 @@
+.env
+.python-version
+settings.json
+__pycache__/
+logs/
+static/
+.idea/
+.DS_Store 
