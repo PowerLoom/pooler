@@ -49,6 +49,7 @@ def get_all_pairs():
 
 # call getReserves on pairs contract
 def get_reserves():
-    return quick_swap_uniswap_v2_pair_contract.functions.token0().call()
+    return quick_swap_uniswap_v2_pair_contract.functions.getReserves().call()
+
 
 print(get_reserves())
