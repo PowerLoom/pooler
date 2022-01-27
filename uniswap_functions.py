@@ -11,10 +11,7 @@ from helper_functions import handle_failed_maticvigil_exception, acquire_threadi
 
 web3 = Web3(Web3.HTTPProvider(settings.RPC.MATIC[0]))
 
-#set logger scope
-logging.root.setLevel(logging.getLevelName(os.environ.get("LOG_LEVEL", "DEBUG")))
-logging.config.dictConfig(config_logger_with_namespace('PowerLoom|Uniswap|Helpers'))
-logger = logging.getLogger('PowerLoom|Uniswap|Helpers')
+logger = logging.getLogger('PowerLoom|UniswapHelpers')
 logger.setLevel(logging.DEBUG)
 logger.handlers = [logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
 
@@ -64,29 +61,31 @@ def get_all_pair_length():
     return quick_swap_uniswap_v2_factory_contract.functions.allPairsLength().call()
 
 # call allPair by index number
+
+
 @acquire_threading_semaphore
-def getPairsByIndex(index, semaphore=None):
+def get_pair_by_index(index, semaphore=None):
     if not index:
         index = 0
     pair = quick_swap_uniswap_v2_factory_contract.functions.allPairs(index).call()
-    print(f"{pair},")
     return pair
+
 
 # get list of allPairs using allPairsLength
 def get_all_pairs():
     all_pairs = []
     all_pair_length = get_all_pair_length()
     logger.debug(f"All pair length: {all_pair_length}, accumulating all pairs addresses, please wait...")
-    print(f"All pair length: {all_pair_length}, accumulating all pairs addresses, please wait...")
-    
+
     # declare semaphore and executor
     sem = threading.BoundedSemaphore(settings.UNISWAP_FUNCTIONS.THREADING_SEMAPHORE)
     with BoundedThreadPoolExecutor(max_workers=settings.UNISWAP_FUNCTIONS.SEMAPHORE_WORKERS) as executor:
         future_to_pairs_addr = {executor.submit(
-            getPairsByIndex,
+            get_pair_by_index,
             index=index,
             semaphore=sem
         ): index for index in range(all_pair_length)}
+    added = 0
     for future in as_completed(future_to_pairs_addr):
         pair_addr = future_to_pairs_addr[future]
         try:
@@ -99,10 +98,13 @@ def get_all_pairs():
         else:
             if rj:
                 all_pairs.append(rj)
+                added += 1
+                if added % 1000 == 0:
+                    logger.debug(f"Accumulated {added} pair addresses")
             else:
                 print(f"Skipping pair address at index: {pair_addr}")
                 logger.debug(f"Skipping pair address at index: {pair_addr}")
-
+    logger.debug(f"Cached a total {added} pair addresses")
     return all_pairs
                 
     # for i in range(all_pair_length):
@@ -115,19 +117,21 @@ def get_all_pairs():
 def get_all_pairs_and_write_to_file():
     try:
         all_pairs = get_all_pairs()
-        if not os.path.exists('./static'):
-            os.makedirs('./static')
+        if not os.path.exists('static/'):
+            os.makedirs('static/')
 
-        with open('./static/cached_pair_addresses.json', 'w') as f:
+        with open('static/cached_pair_addresses.json', 'w') as f:
             json.dump(all_pairs, f)
         return all_pairs
     except Exception as e:
         logger.error(e, exc_info=True)
         raise e
 
+
 # call getReserves on pairs contract
 def get_reserves():
     return quick_swap_uniswap_v2_pair_contract.functions.getReserves().call()
 
 
-print(get_all_pairs_and_write_to_file())
+if __name__ == '__main__':
+    print(get_all_pairs_and_write_to_file())

@@ -1,7 +1,14 @@
 {
     "development": {
         "namespace": "staging",
-        "polymarket_strapi_url": "https://strapi-matic.poly.market/markets?active=true&_sort=volume:desc&_limit=10",
+        "contract_addresses":{
+            "quick_swap_iuniswap_v2_factory": "0x5757371414417b8C6CAad45bAeF941aBc7d3Ab32",
+            "quick_swap_iuniswap_v2_pair": "0xadbF1854e5883eB8aa7BAf50705338739e558E5b"
+        },
+        "uniswap_functions":{
+            "threading_semaphore": 5,
+            "semaphore_workers": 10
+        },
         "rpc": {
             "matic": ["https://rpc-mainnet.maticvigil.com/v1/"],
             "logs_query": {
@@ -101,7 +108,7 @@
         },
         "offchain_snapshot_interval": 120,
         "onchain_snapshot_interval": 120,
-        "trade_vol_snapshot_interval": 180,
+        "update_pairs_interval": 300,
         "verify_abi_endpoint": "https://mainnet.maticvigil.com/api/verifyABI",
         "check_contract_endpoint": "https://mainnet.maticvigil.com/api/checkContract",
         "verify_contract_endpoint": "https://mainnet.maticvigil.com/api/verify",
@@ -124,11 +131,7 @@
             "read_key": "",
             "api_key": ""
         },
-        "force_hook_add": false,
-        "force_add_new_hook_id": false,
-        "force_seed_trade_volume": false,
-        "force_seed_liquidity": false,
-        "force_seed_outcome_prices": false,
+
         "seeding_retry_limits": {
             "liquidity": 2,
             "trade_vol": 10
