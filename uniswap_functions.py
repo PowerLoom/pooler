@@ -123,6 +123,13 @@ def get_all_pairs_and_write_to_file():
 def get_reserves():
     return quick_swap_uniswap_v2_pair_contract.functions.getReserves().call()
 
+
+# TODO: 'asyncify' the web3 calls
+# async limits rate limit check
+# if rate limit checks out then we call
+# introduce block height in get reserves
+# reservers = pair.functions.getReserves().call()
+
 # get liquidity of each token reserve
 def get_liquidity_of_each_token_reserve(pair_address):
     logger.debug("Pair Data:")
@@ -135,11 +142,14 @@ def get_liquidity_of_each_token_reserve(pair_address):
 
     token0Addr = pair.functions.token0().call()
     token1Addr = pair.functions.token1().call()
+    # async limits rate limit check
+    # if rate limit checks out then we call
+    # introduce block height in get reserves
     reservers = pair.functions.getReserves().call()
     logger.debug(f"Token0: {token0Addr}, Reservers: {reservers[0]}")
     logger.debug(f"Token1: {token1Addr}, Reservers: {reservers[1]}")
     
-    
+
     #toke0 contract
     token0 = web3.eth.contract(
         address=token0Addr, 
