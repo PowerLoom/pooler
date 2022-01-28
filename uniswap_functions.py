@@ -368,7 +368,6 @@ if __name__ == '__main__':
 
     # async liqudity function
     loop = asyncio.get_event_loop()
-    # Blocking call which returns when the display_date() coroutine is done
     session = loop.run_until_complete(get_aiohttp_cache(loop))
     reservers = loop.run_until_complete(async_get_liquidity_of_each_token_reserve(loop, session=session, pair_address=pair_address))
     print("reservers: ", reservers)
