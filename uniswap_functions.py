@@ -96,12 +96,6 @@ async def load_rate_limiter_scripts(redis_conn: aioredis.Redis):
     }
     return LUA_SCRIPT_SHAS
 
-
-async def get_aiohttp_cache(loop) -> aiohttp.ClientSession:
-    basic_rpc_connector = aiohttp.TCPConnector(limit=settings['rlimit']['file_descriptors'])
-    aiohttp_client_basic_rpc_session = aiohttp.ClientSession(connector=basic_rpc_connector, loop=loop)
-    return aiohttp_client_basic_rpc_session
-
 def read_json_file(file_path: str):
     """Read given json file and return its content as a dictionary."""
     try:
@@ -135,7 +129,6 @@ def instantiate_contracts():
         )
 
     except Exception as e:
-        print(e)
         logger.error(e, exc_info=True)
 
 #initiate all contracts
@@ -217,10 +210,9 @@ def get_reserves():
 # reservers = pair.functions.getReserves().call()
 
 
-
 # asynchronously get liquidity of each token reserve
 @provide_async_redis_conn_insta
-async def async_get_liquidity_of_each_token_reserve(loop, session: aiohttp.ClientSession, pair_address, block_identifier='latest', redis_conn: aioredis.Redis = None):
+async def async_get_liquidity_of_each_token_reserve(loop, pair_address, block_identifier='latest', redis_conn: aioredis.Redis = None):
     
     try:
         redis_storage = AsyncRedisStorage(await load_rate_limiter_scripts(redis_conn), redis_conn)
@@ -300,11 +292,10 @@ async def async_get_liquidity_of_each_token_reserve(loop, session: aiohttp.Clien
     except RPCException as r:
         raise r
     except Exception as e:
-        print("error in make_post_call_async: ", e)
+        logger.error("error in make_post_call_async: ", exc_info=True)
         raise RPCException(request=pair_address, response=response, underlying_exception=e,
                            extra_info={'msg': str(e), "rate_limit_exception": rate_limit_exception})
     finally:
-        await session.close()
         redis_conn.close()
 
 
@@ -368,7 +359,5 @@ if __name__ == '__main__':
 
     # async liqudity function
     loop = asyncio.get_event_loop()
-    session = loop.run_until_complete(get_aiohttp_cache(loop))
-    reservers = loop.run_until_complete(async_get_liquidity_of_each_token_reserve(loop, session=session, pair_address=pair_address))
-    print("reservers: ", reservers)
+    reservers = loop.run_until_complete(async_get_liquidity_of_each_token_reserve(loop, pair_address=pair_address))
     loop.close()
