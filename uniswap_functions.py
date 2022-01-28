@@ -61,8 +61,6 @@ def get_all_pair_length():
     return quick_swap_uniswap_v2_factory_contract.functions.allPairsLength().call()
 
 # call allPair by index number
-
-
 @acquire_threading_semaphore
 def get_pair_by_index(index, semaphore=None):
     if not index:
@@ -91,7 +89,6 @@ def get_all_pairs():
         try:
             rj = future.result()
         except Exception as exc:
-            print("future error: ", exc)
             logger.error(f"Error getting address of pair against index: {pair_addr}")
             logger.error(exc, exc_info=True)
             continue
@@ -102,15 +99,9 @@ def get_all_pairs():
                 if added % 1000 == 0:
                     logger.debug(f"Accumulated {added} pair addresses")
             else:
-                print(f"Skipping pair address at index: {pair_addr}")
                 logger.debug(f"Skipping pair address at index: {pair_addr}")
     logger.debug(f"Cached a total {added} pair addresses")
     return all_pairs
-                
-    # for i in range(all_pair_length):
-    #     all_pairs.append(getPairsByIndex(i))
-    # logger.debug(f"Fetched All pairs: {all_pairs}")
-    # return all_pairs
 
 
 # get list of allPairs using allPairsLength and write to file
