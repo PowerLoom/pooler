@@ -1,4 +1,7 @@
 from web3 import Web3
+import asyncio
+import aiohttp
+from redis_conn import provide_async_redis_conn_insta
 from dynaconf import settings
 import logging.config
 from proto_system_logging import config_logger_with_namespace
@@ -8,6 +11,13 @@ from bounded_pool_executor import BoundedThreadPoolExecutor
 import threading
 from concurrent.futures import as_completed
 from helper_functions import handle_failed_maticvigil_exception, acquire_threading_semaphore
+import aioredis
+from async_limits.strategies import AsyncFixedWindowRateLimiter
+from async_limits.storage import AsyncRedisStorage
+from async_limits import parse_many as limit_parse_many
+import time
+from datetime import datetime, timedelta
+
 
 web3 = Web3(Web3.HTTPProvider(settings.RPC.MATIC[0]))
 
@@ -15,6 +25,82 @@ logger = logging.getLogger('PowerLoom|UniswapHelpers')
 logger.setLevel(logging.DEBUG)
 logger.handlers = [logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
 
+#Initialize rate limits when program starts
+GLOBAL_RPC_RATE_LIMIT_STR = settings.RPC.rate_limit
+PARSED_LIMITS = limit_parse_many(GLOBAL_RPC_RATE_LIMIT_STR)
+
+
+### RATE LIMITER LUA SCRIPTS
+SCRIPT_CLEAR_KEYS = """
+        local keys = redis.call('keys', KEYS[1])
+        local res = 0
+        for i=1,#keys,5000 do
+            res = res + redis.call(
+                'del', unpack(keys, i, math.min(i+4999, #keys))
+            )
+        end
+        return res
+        """
+
+SCRIPT_INCR_EXPIRE = """
+        local current
+        current = redis.call("incrby",KEYS[1],ARGV[2])
+        if tonumber(current) == tonumber(ARGV[2]) then
+            redis.call("expire",KEYS[1],ARGV[1])
+        end
+        return current
+    """
+
+# args = [value, expiry]
+SCRIPT_SET_EXPIRE = """
+    local keyttl = redis.call('TTL', KEYS[1])
+    local current
+    current = redis.call('SET', KEYS[1], ARGV[1])
+    if keyttl == -2 then
+        redis.call('EXPIRE', KEYS[1], ARGV[2])
+    elseif keyttl ~= -1 then
+        redis.call('EXPIRE', KEYS[1], keyttl)
+    end
+    return current
+"""
+### END RATE LIMITER LUA SCRIPTS
+
+class RPCException(Exception):
+    def __init__(self, request, response, underlying_exception, extra_info):
+        self.request = request
+        self.response = response
+        self.underlying_exception: Exception = underlying_exception
+        self.extra_info = extra_info
+
+    def __str__(self):
+        ret = {
+            'request': self.request,
+            'response': self.response,
+            'extra_info': self.extra_info,
+            'exception': None
+        }
+        if isinstance(self.underlying_exception, Exception):
+            ret.update({'exception': self.underlying_exception.__str__()})
+        return json.dumps(ret)
+
+    def __repr__(self):
+        return self.__str__()
+
+# needs to be run only once
+async def load_rate_limiter_scripts(redis_conn: aioredis.Redis):
+    script_clear_keys_sha = await redis_conn.script_load(SCRIPT_CLEAR_KEYS)
+    script_incr_expire = await redis_conn.script_load(SCRIPT_INCR_EXPIRE)
+    LUA_SCRIPT_SHAS = {
+        "script_incr_expire": script_incr_expire,
+        "script_clear_keys": script_clear_keys_sha
+    }
+    return LUA_SCRIPT_SHAS
+
+
+async def get_aiohttp_cache(loop) -> aiohttp.ClientSession:
+    basic_rpc_connector = aiohttp.TCPConnector(limit=settings['rlimit']['file_descriptors'])
+    aiohttp_client_basic_rpc_session = aiohttp.ClientSession(connector=basic_rpc_connector, loop=loop)
+    return aiohttp_client_basic_rpc_session
 
 def read_json_file(file_path: str):
     """Read given json file and return its content as a dictionary."""
@@ -130,6 +216,98 @@ def get_reserves():
 # introduce block height in get reserves
 # reservers = pair.functions.getReserves().call()
 
+
+
+# asynchronously get liquidity of each token reserve
+@provide_async_redis_conn_insta
+async def async_get_liquidity_of_each_token_reserve(loop, session: aiohttp.ClientSession, pair_address, block_identifier='latest', redis_conn: aioredis.Redis = None):
+    
+    try:
+        redis_storage = AsyncRedisStorage(await load_rate_limiter_scripts(redis_conn), redis_conn)
+        custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
+        limit_incr_by = 1   # score to be incremented for each request
+        app_id = settings.RPC.MATIC[0].split('/')[-1]  # future support for loadbalancing over multiple MaticVigil RPC appID
+        key_bits = [app_id, 'eth_getLogs']  # TODO: add unique elements that can identify a request
+        can_request = True
+        rate_limit_exception = False
+        retry_after = 1
+        response = None
+        for each_lim in PARSED_LIMITS:
+            # window_stats = custom_limiter.get_window_stats(each_lim, key_bits)
+            # local_app_cacher_logger.debug(window_stats)
+            # rest_logger.debug('Limit %s expiry: %s', each_lim, each_lim.get_expiry())
+            try:
+                if await custom_limiter.hit(each_lim, limit_incr_by, *[key_bits]) is False:
+                    window_stats = await custom_limiter.get_window_stats(each_lim, key_bits)
+                    reset_in = 1 + window_stats[0]
+                    # if you need information on back offs
+                    retry_after = reset_in - int(time.time())
+                    retry_after = (datetime.now() + timedelta(0,retry_after)).isoformat()
+                    can_request = False
+                    break  # make sure to break once false condition is hit
+            except (
+                    aioredis.errors.ConnectionClosedError, aioredis.errors.ConnectionForcedCloseError,
+                    aioredis.errors.PoolClosedError
+            ) as e:
+                # shit can happen while each limit check call hits Redis, handle appropriately
+                logger.debug('Bypassing rate limit check for appID because of Redis exception: ' + str({'appID': app_id, 'exception': e}))
+        if can_request:
+            logger.debug("Pair Data:")
+    
+            #pair contract
+            pair = web3.eth.contract(
+                address=pair_address, 
+                abi=read_json_file(f"abis/UniswapV2Pair.json")
+            )
+
+            token0Addr = pair.functions.token0().call()
+            token1Addr = pair.functions.token1().call()
+            # async limits rate limit check
+            # if rate limit checks out then we call
+            # introduce block height in get reserves
+            reservers = pair.functions.getReserves().call(block_identifier=block_identifier)
+            logger.debug(f"Token0: {token0Addr}, Reservers: {reservers[0]}")
+            logger.debug(f"Token1: {token1Addr}, Reservers: {reservers[1]}")
+            
+
+            #toke0 contract
+            token0 = web3.eth.contract(
+                address=token0Addr, 
+                abi=read_json_file('abis/IERC20.json')
+            )
+            #toke1 contract
+            token1 = web3.eth.contract(
+                address=token1Addr, 
+                abi=read_json_file('abis/IERC20.json')
+            )
+
+            token0_decimals = token0.functions.decimals().call()
+            token1_decimals = token1.functions.decimals().call()
+
+            
+            logger.debug(f"Decimals of token1: {token1_decimals}, Decimals of token1: {token0_decimals}")
+            logger.debug(f"reservers[0]/10**token0_decimals: {reservers[0]/10**token0_decimals}, reservers[1]/10**token1_decimals: {reservers[1]/10**token1_decimals}")
+            return {"token0": reservers[0]/10**token0_decimals, "token1": reservers[1]/10**token1_decimals}
+        else:
+            msg = f"exhausted_api_key_rate_limit"
+            rate_limit_exception = True
+            raise RPCException(request=pair_address, response={}, underlying_exception=None,
+                            extra_info={'msg': msg, "rate_limit_exception": rate_limit_exception, "retry_after": retry_after})
+    except aiohttp.ClientResponseError as terr:
+        msg = 'aiohttp error occurred while making async post call'    
+        raise RPCException(request=pair_address, response=response, underlying_exception=terr,
+                           extra_info={'msg': msg, "rate_limit_exception": rate_limit_exception})
+    except RPCException as r:
+        raise r
+    except Exception as e:
+        print("error in make_post_call_async: ", e)
+        raise RPCException(request=pair_address, response=response, underlying_exception=e,
+                           extra_info={'msg': str(e), "rate_limit_exception": rate_limit_exception})
+    finally:
+        await session.close()
+        redis_conn.close()
+
+
 # get liquidity of each token reserve
 def get_liquidity_of_each_token_reserve(pair_address, block_identifier='latest'):
     logger.debug("Pair Data:")
@@ -185,5 +363,13 @@ if __name__ == '__main__':
     logger.debug(f"Pair address : {pair_address}")
     logger.debug(get_liquidity_of_each_token_reserve(pair_address))
 
-    #we can pass block_identifier=chain_height
-    print(get_liquidity_of_each_token_reserve(pair_address, block_identifier=24265790))
+    # #we can pass block_identifier=chain_height
+    # print(get_liquidity_of_each_token_reserve(pair_address, block_identifier=24265790))
+
+    # async liqudity function
+    loop = asyncio.get_event_loop()
+    # Blocking call which returns when the display_date() coroutine is done
+    session = loop.run_until_complete(get_aiohttp_cache(loop))
+    reservers = loop.run_until_complete(async_get_liquidity_of_each_token_reserve(loop, session=session, pair_address=pair_address))
+    print("reservers: ", reservers)
+    loop.close()
