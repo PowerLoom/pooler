@@ -131,7 +131,7 @@ def get_reserves():
 # reservers = pair.functions.getReserves().call()
 
 # get liquidity of each token reserve
-def get_liquidity_of_each_token_reserve(pair_address):
+def get_liquidity_of_each_token_reserve(pair_address, block_identifier='latest'):
     logger.debug("Pair Data:")
     
     #pair contract
@@ -145,7 +145,7 @@ def get_liquidity_of_each_token_reserve(pair_address):
     # async limits rate limit check
     # if rate limit checks out then we call
     # introduce block height in get reserves
-    reservers = pair.functions.getReserves().call()
+    reservers = pair.functions.getReserves().call(block_identifier=block_identifier)
     logger.debug(f"Token0: {token0Addr}, Reservers: {reservers[0]}")
     logger.debug(f"Token1: {token1Addr}, Reservers: {reservers[1]}")
     
@@ -184,4 +184,6 @@ if __name__ == '__main__':
     pair_address = get_pair(dai, gns)
     logger.debug(f"Pair address : {pair_address}")
     logger.debug(get_liquidity_of_each_token_reserve(pair_address))
-    print(get_liquidity_of_each_token_reserve(pair_address))
+
+    #we can pass block_identifier=chain_height
+    print(get_liquidity_of_each_token_reserve(pair_address, block_identifier=24265790))
