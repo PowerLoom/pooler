@@ -130,7 +130,7 @@ def get_liquidity_of_each_token_reserve(pair_address):
     #pair contract
     pair = web3.eth.contract(
         address=pair_address, 
-        abi=read_json_file(f"abis/{pair_address}.json")
+        abi=read_json_file(f"abis/UniswapV2Pair.json")
     )
 
     token0Addr = pair.functions.token0().call()
@@ -169,7 +169,9 @@ def get_pair(token0, token1):
 if __name__ == '__main__':
     
     #here instead of calling get pair we can directly use cached all pair addresses
-    pair_address = get_pair(settings.TOKEN_ADDRESSES.DAI, settings.TOKEN_ADDRESSES.GNS)
+    dai= "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063"
+    gns= "0xE5417Af564e4bFDA1c483642db72007871397896"
+    pair_address = get_pair(dai, gns)
     logger.debug(f"Pair address : {pair_address}")
     logger.debug(get_liquidity_of_each_token_reserve(pair_address))
     print(get_liquidity_of_each_token_reserve(pair_address))
