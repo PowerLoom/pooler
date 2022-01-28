@@ -123,6 +123,53 @@ def get_all_pairs_and_write_to_file():
 def get_reserves():
     return quick_swap_uniswap_v2_pair_contract.functions.getReserves().call()
 
+# get liquidity of each token reserve
+def get_liquidity_of_each_token_reserve(pair_address):
+    logger.debug("Pair Data:")
+    
+    #pair contract
+    pair = web3.eth.contract(
+        address=pair_address, 
+        abi=read_json_file(f"abis/{pair_address}.json")
+    )
+
+    token0Addr = pair.functions.token0().call()
+    token1Addr = pair.functions.token1().call()
+    reservers = pair.functions.getReserves().call()
+    logger.debug(f"Token0: {token0Addr}, Reservers: {reservers[0]}")
+    logger.debug(f"Token1: {token1Addr}, Reservers: {reservers[1]}")
+    
+    
+    #toke0 contract
+    token0 = web3.eth.contract(
+        address=token0Addr, 
+        abi=read_json_file('abis/IERC20.json')
+    )
+    #toke1 contract
+    token1 = web3.eth.contract(
+        address=token1Addr, 
+        abi=read_json_file('abis/IERC20.json')
+    )
+
+    token0_decimals = token0.functions.decimals().call()
+    token1_decimals = token1.functions.decimals().call()
+
+    
+    logger.debug(f"Decimals of token1: {token1_decimals}, Decimals of token1: {token0_decimals}")
+    logger.debug(f"reservers[0]/10**token0_decimals: {reservers[0]/10**token0_decimals}, reservers[1]/10**token1_decimals: {reservers[1]/10**token1_decimals}")
+
+    return {"token0": reservers[0]/10**token0_decimals, "token1": reservers[1]/10**token1_decimals}
+
+def get_pair(token0, token1):
+    pair = quick_swap_uniswap_v2_factory_contract.functions.getPair(token0, token1).call()
+    return pair
+    
+
 
 if __name__ == '__main__':
-    print(get_all_pairs_and_write_to_file())
+    
+    #here instead of calling get pair we can directly use cached all pair addresses
+    pair_address = get_pair(settings.TOKEN_ADDRESSES.DAI, settings.TOKEN_ADDRESSES.GNS)
+    logger.debug(f"Pair address : {pair_address}")
+    logger.debug(get_liquidity_of_each_token_reserve(pair_address))
+    print(get_liquidity_of_each_token_reserve(pair_address))
