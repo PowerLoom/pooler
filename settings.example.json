@@ -52,10 +52,7 @@
                 "callbacks": {
                     "exchange": "powerloom-backend-callbacks",
                     "path": "callback_modules/",
-                    "config": "module_queues_config.json",
-                    "services": [
-                        "trade_volume.py"
-                    ]
+                    "config": "module_queues_config.json"
                 }
             }
         },

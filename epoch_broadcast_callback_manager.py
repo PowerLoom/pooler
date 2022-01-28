@@ -19,20 +19,11 @@ def append_epoch_context(msg_json: dict):
     if injected_contract:
         msg_json['contracts'] = [injected_contract.lower()]
         return
-    response = requests.get(settings.POLYMARKET_STRAPI_URL)
-    if response.status_code == 200:
-        payload_data = response.json()
-    else:
-        return
-    if not os.path.exists('static/cached_markets.json'):
-        old_market_data = None
-    else:
+    contracts = list()
+    if os.path.exists('static/cached_markets.json'):
         with open('static/cached_markets.json', 'r') as fp:
-            old_market_data = json.load(fp)
-    cache_markets_data(old_market_data, payload_data)
-
-    all_polymarket_contracts = list(map(lambda x: x.get('marketMakerAddress'), payload_data))
-    msg_json['contracts'] = all_polymarket_contracts
+            contracts = json.load(fp)
+    msg_json['contracts'] = contracts
 
 
 class EpochCallbackManager(Process):

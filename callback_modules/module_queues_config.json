@@ -1,0 +1,19 @@
+{
+  "callback_topics": {
+    "pair_total_reserves": {
+      "sub_topics": ["processor"]
+    }
+  },
+  "callback_workers": {
+    "pair_total_reserves": [
+      {
+          "class": "PairTotalReservesProcessorDistributor",
+          "name": "PowerLoom|UniswapPooler|Callbacks|PairTotalReservesProcessorDistributor-"
+      },
+      {
+        "class": "PairTotalReservesProcessor",
+        "name": "PowerLoom|UniswapPooler|Callbacks|PairTotalReservesProcessor"
+      }
+    ]
+  }
+}

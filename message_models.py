@@ -1,5 +1,7 @@
 from pydantic import BaseModel, validator
-from typing import Union, List, Optional
+from typing import Union, List, Optional, Mapping
+
+# TODO: clean up polymarket specific models as we develop the callback workers
 
 
 class EpochBase(BaseModel):
@@ -20,11 +22,11 @@ class SystemEpochStatusReport(EpochBase):
     reorg: bool = False
 
 
-class PolymarketCallbackEpoch(SystemEpochStatusReport):
+class PowerloomCallbackEpoch(SystemEpochStatusReport):
     contracts: List[str]
 
 
-class PolymarketCallbackProcessMessage(SystemEpochStatusReport):
+class PowerloomCallbackProcessMessage(SystemEpochStatusReport):
     contract: str
 
 
@@ -102,13 +104,11 @@ class PolymarketSellShareTransaction(BaseModel):
     chainHeight: int
 
 
-class PolymarketEpochTradeVolume(BaseModel):
+class UniswapEpochPairTotalReserves(BaseModel):
     contract: str
-    tradeVolume: float
+    totalReserves: Mapping[str, float]  # block number to corresponding total reserves (in USD?)
     chainHeightRange: EpochBase
     broadcast_id: str
-    buys: List[PolymarketBuyShareTransaction] = list()
-    sells: List[PolymarketSellShareTransaction] = list()
     timestamp: float
 
 
