@@ -1,8 +1,10 @@
+import asyncio
+
 import aiohttp
 
 from init_rabbitmq import create_rabbitmq_conn
 from setproctitle import setproctitle
-from uniswap_functions import get_liquidity_of_each_token_reserve
+from uniswap_functions import get_liquidity_of_each_token_reserve, async_get_liquidity_of_each_token_reserve
 from typing import List
 from functools import reduce
 from message_models import (
@@ -51,7 +53,11 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         for block_num in range(min_chain_height, max_chain_height+1):
             # TODO: support querying of reserves at this `block_num`
             try:
-                pair_reserve_total = get_liquidity_of_each_token_reserve(msg_obj.contract)
+                pair_reserve_total = await async_get_liquidity_of_each_token_reserve(
+                    loop=asyncio.get_event_loop(),
+                    pair_address=msg_obj.contract,
+                    block_identifier=block_num
+                )
             except:
                 # if querying fails, we are going to ensure it is recorded for future processing
                 enqueue_epoch = True

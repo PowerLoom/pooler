@@ -1,3 +1,4 @@
+from functools import partial
 from web3 import Web3
 import asyncio
 import aiohttp
@@ -20,17 +21,20 @@ from datetime import datetime, timedelta
 
 
 web3 = Web3(Web3.HTTPProvider(settings.RPC.MATIC[0]))
+# TODO: Use async http provider once it is considered stable by the web3.py project maintainers
+# web3_async = Web3(Web3.AsyncHTTPProvider(settings.RPC.MATIC[0]))
 
 logger = logging.getLogger('PowerLoom|UniswapHelpers')
 logger.setLevel(logging.DEBUG)
 logger.handlers = [logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
 
-#Initialize rate limits when program starts
+
+# Initialize rate limits when program starts
 GLOBAL_RPC_RATE_LIMIT_STR = settings.RPC.rate_limit
 PARSED_LIMITS = limit_parse_many(GLOBAL_RPC_RATE_LIMIT_STR)
 
 
-### RATE LIMITER LUA SCRIPTS
+# # # RATE LIMITER LUA SCRIPTS
 SCRIPT_CLEAR_KEYS = """
         local keys = redis.call('keys', KEYS[1])
         local res = 0
@@ -63,7 +67,8 @@ SCRIPT_SET_EXPIRE = """
     end
     return current
 """
-### END RATE LIMITER LUA SCRIPTS
+# # # END RATE LIMITER LUA SCRIPTS
+
 
 class RPCException(Exception):
     def __init__(self, request, response, underlying_exception, extra_info):
@@ -87,6 +92,8 @@ class RPCException(Exception):
         return self.__str__()
 
 # needs to be run only once
+
+
 async def load_rate_limiter_scripts(redis_conn: aioredis.Redis):
     script_clear_keys_sha = await redis_conn.script_load(SCRIPT_CLEAR_KEYS)
     script_incr_expire = await redis_conn.script_load(SCRIPT_INCR_EXPIRE)
@@ -95,6 +102,7 @@ async def load_rate_limiter_scripts(redis_conn: aioredis.Redis):
         "script_clear_keys": script_clear_keys_sha
     }
     return LUA_SCRIPT_SHAS
+
 
 def read_json_file(file_path: str):
     """Read given json file and return its content as a dictionary."""
@@ -110,29 +118,24 @@ def read_json_file(file_path: str):
     return json_data
 
 
-def instantiate_contracts():
-    """Instantiate all contracts."""
-    global quick_swap_uniswap_v2_factory_contract
-    global quick_swap_uniswap_v2_pair_contract
-    
-    try:
-        # intantiate UniswapV2Factory contract (using quick swap v2 factory address)
-        quick_swap_uniswap_v2_factory_contract = web3.eth.contract(
-            address=settings.CONTRACT_ADDRESSES.QUICK_SWAP_IUNISWAP_V2_FACTORY,
-            abi=read_json_file('./abis/IUniswapV2Factory.json')
-        )
+# initiate all contracts
+try:
+    # instantiate UniswapV2Factory contract (using quick swap v2 factory address)
+    quick_swap_uniswap_v2_factory_contract = web3.eth.contract(
+        address=settings.CONTRACT_ADDRESSES.QUICK_SWAP_IUNISWAP_V2_FACTORY,
+        abi=read_json_file('./abis/IUniswapV2Factory.json')
+    )
 
-        # intantiate UniswapV2Pair contract (using quick swap v2 pair address)
-        quick_swap_uniswap_v2_pair_contract = web3.eth.contract(
-            address=settings.CONTRACT_ADDRESSES.QUICK_SWAP_IUNISWAP_V2_PAIR, 
-            abi=read_json_file('./abis/UniswapV2Pair.json')
-        )
+    # instantiate UniswapV2Pair contract (using quick swap v2 pair address)
+    quick_swap_uniswap_v2_pair_contract = web3.eth.contract(
+        address=settings.CONTRACT_ADDRESSES.QUICK_SWAP_IUNISWAP_V2_PAIR,
+        abi=read_json_file('./abis/UniswapV2Pair.json')
+    )
 
-    except Exception as e:
-        logger.error(e, exc_info=True)
-
-#initiate all contracts
-instantiate_contracts()
+except Exception as e:
+    quick_swap_uniswap_v2_factory_contract = None
+    quick_swap_uniswap_v2_pair_contract = None
+    logger.error(e, exc_info=True)
 
 
 # get allPairLength
@@ -198,11 +201,6 @@ def get_all_pairs_and_write_to_file():
         raise e
 
 
-# call getReserves on pairs contract
-def get_reserves():
-    return quick_swap_uniswap_v2_pair_contract.functions.getReserves().call()
-
-
 # TODO: 'asyncify' the web3 calls
 # async limits rate limit check
 # if rate limit checks out then we call
@@ -212,7 +210,7 @@ def get_reserves():
 
 # asynchronously get liquidity of each token reserve
 @provide_async_redis_conn_insta
-async def async_get_liquidity_of_each_token_reserve(loop, pair_address, block_identifier='latest', redis_conn: aioredis.Redis = None):
+async def async_get_liquidity_of_each_token_reserve(loop: asyncio.AbstractEventLoop, pair_address, block_identifier='latest', redis_conn: aioredis.Redis = None):
     
     try:
         redis_storage = AsyncRedisStorage(await load_rate_limiter_scripts(redis_conn), redis_conn)
@@ -220,7 +218,7 @@ async def async_get_liquidity_of_each_token_reserve(loop, pair_address, block_id
         limit_incr_by = 1   # score to be incremented for each request
         app_id = settings.RPC.MATIC[0].split('/')[-1]  # future support for loadbalancing over multiple MaticVigil RPC appID
         key_bits = [app_id, 'eth_getLogs']  # TODO: add unique elements that can identify a request
-        can_request = True
+        can_request = False
         rate_limit_exception = False
         retry_after = 1
         response = None
@@ -228,6 +226,8 @@ async def async_get_liquidity_of_each_token_reserve(loop, pair_address, block_id
             # window_stats = custom_limiter.get_window_stats(each_lim, key_bits)
             # local_app_cacher_logger.debug(window_stats)
             # rest_logger.debug('Limit %s expiry: %s', each_lim, each_lim.get_expiry())
+            # async limits rate limit check
+            # if rate limit checks out then we call
             try:
                 if await custom_limiter.hit(each_lim, limit_incr_by, *[key_bits]) is False:
                     window_stats = await custom_limiter.get_window_stats(each_lim, key_bits)
@@ -243,43 +243,47 @@ async def async_get_liquidity_of_each_token_reserve(loop, pair_address, block_id
             ) as e:
                 # shit can happen while each limit check call hits Redis, handle appropriately
                 logger.debug('Bypassing rate limit check for appID because of Redis exception: ' + str({'appID': app_id, 'exception': e}))
+            else:
+                can_request = True
         if can_request:
             logger.debug("Pair Data:")
     
-            #pair contract
+            # pair contract
             pair = web3.eth.contract(
                 address=pair_address, 
                 abi=read_json_file(f"abis/UniswapV2Pair.json")
             )
-
-            token0Addr = pair.functions.token0().call()
-            token1Addr = pair.functions.token1().call()
-            # async limits rate limit check
-            # if rate limit checks out then we call
+            # run in loop's default executor
+            # TODO: cache these results? Maybe block identifier is unnecessary since these arent supposed to change?
+            pfunc_0 = partial(pair.functions.token0().call, kwargs={'block_identifier': block_identifier})
+            token0Addr = await loop.run_in_executor(func=pfunc_0, executor=None)
+            pfunc_1 = partial(pair.functions.token1().call, kwargs={'block_identifier': block_identifier})
+            token1Addr = await loop.run_in_executor(func=pfunc_1, executor=None)
             # introduce block height in get reserves
-            reservers = pair.functions.getReserves().call(block_identifier=block_identifier)
-            logger.debug(f"Token0: {token0Addr}, Reservers: {reservers[0]}")
-            logger.debug(f"Token1: {token1Addr}, Reservers: {reservers[1]}")
-            
+            pfunc_get_reserves = partial(pair.functions.getReserves().call, kwargs={'block_identifier': block_identifier})
+            reserves = await loop.run_in_executor(func=pfunc_get_reserves, executor=None)
+            logger.debug(f"Token0: {token0Addr}, Reserves: {reserves[0]}")
+            logger.debug(f"Token1: {token1Addr}, Reserves: {reserves[1]}")
 
-            #toke0 contract
+            # token0 contract
             token0 = web3.eth.contract(
                 address=token0Addr, 
                 abi=read_json_file('abis/IERC20.json')
             )
-            #toke1 contract
+            # token1 contract
             token1 = web3.eth.contract(
                 address=token1Addr, 
                 abi=read_json_file('abis/IERC20.json')
             )
 
-            token0_decimals = token0.functions.decimals().call()
-            token1_decimals = token1.functions.decimals().call()
+            # TODO: cache token decimals as well
+            token0_decimals = await loop.run_in_executor(func=token0.functions.decimals().call, executor=None)
+            token1_decimals = await loop.run_in_executor(func=token1.functions.decimals().call, executor=None)
 
             
             logger.debug(f"Decimals of token1: {token1_decimals}, Decimals of token1: {token0_decimals}")
-            logger.debug(f"reservers[0]/10**token0_decimals: {reservers[0]/10**token0_decimals}, reservers[1]/10**token1_decimals: {reservers[1]/10**token1_decimals}")
-            return {"token0": reservers[0]/10**token0_decimals, "token1": reservers[1]/10**token1_decimals}
+            logger.debug(f"reserves[0]/10**token0_decimals: {reserves[0]/10**token0_decimals}, reserves[1]/10**token1_decimals: {reserves[1]/10**token1_decimals}")
+            return {"token0": reserves[0]/10**token0_decimals, "token1": reserves[1]/10**token1_decimals}
         else:
             msg = f"exhausted_api_key_rate_limit"
             rate_limit_exception = True
