@@ -8,22 +8,18 @@ from uniswap_functions import get_liquidity_of_each_token_reserve, async_get_liq
 from typing import List
 from functools import reduce
 from message_models import (
-    PowerloomCallbackEpoch, PowerloomCallbackProcessMessage, UniswapEpochPairTotalReserves, PolymarketTradeVolumeBase,
-    EpochBase, PolymarketSeedTradeVolumeRequest, PolymarketBuyShareTransaction, PolymarketSellShareTransaction,
-    PolymarketTradeSnapshot, PolymarketTradeSnapshotTotalTrade, ethLogRequestModel
+    PowerloomCallbackEpoch, PowerloomCallbackProcessMessage, UniswapEpochPairTotalReserves,
+    EpochBase
 )
 from dynaconf import settings
 from callback_modules.helpers import AuditProtocolCommandsHelper, CallbackAsyncWorker, get_cumulative_trade_vol
 from redis_keys import (
-    polymarket_base_trade_vol_key_f, polymarket_consolidated_trade_vol_key_f, polymarket_seed_trade_lock,
-    polymarket_queued_trade_vol_epochs_redis_q_f, uniswap_pair_total_reserves_processing_status,
-    powerloom_broadcast_id_processing_set, eth_log_request_data_f, uniswap_failed_pair_total_reserves_epochs_redis_q_f
+    uniswap_pair_total_reserves_processing_status, uniswap_pair_total_reserves_last_snapshot,
+    eth_log_request_data_f, uniswap_failed_pair_total_reserves_epochs_redis_q_f
 )
 from pydantic import ValidationError
 from functools import wraps
-from helper_functions import (
-    get_market_data_by_address, AsyncHTTPSessionCache, eth_get_block_number_async
-)
+from helper_functions import AsyncHTTPSessionCache
 from aio_pika import ExchangeType, IncomingMessage
 import aioredis
 import logging
@@ -88,12 +84,12 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             msg_obj = PowerloomCallbackProcessMessage.parse_raw(message.body)
         except ValidationError as e:
             self._logger.error(
-                'Bad message structure of callback in polymarket contract trade volume processor: %s', e, exc_info=True
+                'Bad message structure of callback in processor for total pair reserves: %s', e, exc_info=True
             )
             return
         except Exception as e:
             self._logger.error(
-                'Unexptected message structure of callback in polymarket contract trade volume processor: %s',
+                'Unexpected message structure of callback in processor for total pair reserves: %s',
                 e,
                 exc_info=True
             )
@@ -104,8 +100,23 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         self._aiohttp_session: aiohttp.ClientSession = await self._aiohttp_session_interface.get_aiohttp_cache
         self._logger.debug('Got aiohttp session cache. Now sending call to trade volume seeding function...')
 
-        pair_total_reserves_epoch_data = await self._construct_epoch_snapshot_data(msg_obj=msg_obj, enqueue_on_failure=True)
-        # TODO: get previous total reserves epoch from cache and update processing status
+        pair_total_reserves_epoch_snapshot = await self._construct_epoch_snapshot_data(msg_obj=msg_obj, enqueue_on_failure=True)
+        if not pair_total_reserves_epoch_snapshot:
+            return
+        # TODO: should we attach previous total reserves epoch from cache?
+        AuditProtocolCommandsHelper.set_diff_rule_for_pair_reserves(
+            pair_contract_address=pair_total_reserves_epoch_snapshot.contract,
+            stream='pair_total_reserves'
+        )
+        payload = pair_total_reserves_epoch_snapshot.dict()
+        # TODO: check response returned
+        AuditProtocolCommandsHelper.commit_payload(
+            pair_contract_address=pair_total_reserves_epoch_snapshot.contract,
+            stream='pair_total_reserves',
+            report_payload=payload
+        )
+        # TODO: update last snapshot in cache
+        #  TODO: update processing status in cache?
         # await self._redis_conn.set(uniswap_pair_total_reserves_processing_status.format(pair_total_reserves_epoch_data.contract),
         #                            json.dumps(
         #                                {
@@ -122,12 +133,6 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         #                            ))
 
         # TODO : send snapshot to audit protocol
-        # market_data = get_market_data_by_address(trade_vol_data.contract)
-        # if market_data:
-        #     AuditProtocolCommandsHelper.set_diff_rule(market_data['id'], stream='trades')
-        #     payload = {'trades': trades_snapshot.dict()}
-        #     AuditProtocolCommandsHelper.commit_payload(market_id=market_data['id'], stream='trades',
-        #                                                report_payload=payload)
 
     def run(self):
         # setup_loguru_intercept()

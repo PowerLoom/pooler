@@ -4,6 +4,7 @@ uniswap_failed_pair_total_reserves_epochs_redis_q_f = 'uniswap:pairContract:'+se
 uniswap_pair_total_reserves_processing_status = 'uniswap:pairContract:'+settings.NAMESPACE+':{}:PairTotalReservesProcessingStatus'
 uniswap_pair_contract_tokens_addresses = 'uniswap:pairContract:'+settings.NAMESPACE+':{}:PairContractTokensAddresses'
 uniswap_pair_contract_tokens_data = 'uniswap:pairContract:'+settings.NAMESPACE+':{}:PairContractTokensData'
+uniswap_pair_total_reserves_last_snapshot = 'uniswap:pairContract:'+settings.NAMESPACE+':{}:LastCachedPairReserve'
 
 polymarket_base_trade_vol_key_f = 'polymarket:marketMaker:'+settings.NAMESPACE+':{}:TradeVolumeBase'
 polymarket_consolidated_trade_vol_key_f = 'polymarket:marketMaker:'+settings.NAMESPACE+':{}:consolidatedTradeVolume'
@@ -14,7 +15,6 @@ powerloom_broadcast_id_processing_set = 'polymarket:broadcastID:' + settings.NAM
 powerloom_broadcast_id_zset = 'powerloom:broadcastID:' + settings.NAMESPACE + ':broadcastProcessingStatus'
 polymarket_queued_trade_vol_epochs_redis_q_f = 'polymarket:marketMaker:'+settings.NAMESPACE+':{}:queuedTradeVolumeEpochs'
 polymarket_seed_liquidity_lock = 'polymarket:marketMaker:'+settings.NAMESPACE+':{}:liquidity:Lock'
-polymarket_base_liquidity_key_f = 'polymarket:marketMaker:'+settings.NAMESPACE+':{}:LiquidityBase'
 polymarket_consolidated_liquidity_key_f = 'polymarket:marketMaker:'+settings.NAMESPACE+':{}:consolidatedLiquidity'
 position_id_cache_key_prefix_f = 'polymarket:market:'+settings.NAMESPACE+':{}:outcome:'  # market_id
 eth_log_request_data_f = 'powerloom:ethLogs:'+settings.NAMESPACE+':requestId:{}:results'  # request UUID

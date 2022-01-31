@@ -11,7 +11,6 @@ import json
 from bounded_pool_executor import BoundedThreadPoolExecutor
 import threading
 from concurrent.futures import as_completed
-from helper_functions import handle_failed_maticvigil_exception, acquire_threading_semaphore
 import aioredis
 from async_limits.strategies import AsyncFixedWindowRateLimiter
 from async_limits.storage import AsyncRedisStorage

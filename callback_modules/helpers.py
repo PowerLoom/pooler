@@ -45,9 +45,10 @@ async def get_rabbitmq_channel(connection_pool) -> aio_pika.Channel:
 class AuditProtocolCommandsHelper:
     @classmethod
     @provide_redis_conn_insta
-    def set_diff_rule(cls, market_id, stream, redis_conn: redis.Redis = None):
-        project_id = f'polymarket_onChain_{stream}_{market_id}'
-        if not redis_conn.sismember('polymarket:diffRuleSetFor', project_id):
+    # TODO: asyncify request, exception handling on request failure
+    def set_diff_rule_for_pair_reserves(cls, pair_contract_address, stream, redis_conn: redis.Redis = None):
+        project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}'
+        if not redis_conn.sismember('uniswap:diffRuleSetFor', project_id):
             """ Setup diffRules for this market"""
             resp = requests.post(
                 url=urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{project_id}/diffRules'),
@@ -55,62 +56,51 @@ class AuditProtocolCommandsHelper:
                     'rules': [
                         {
                             "ruleType": "ignore",
-                            "field": "trail",
-                            "fieldType": "list",
-                            "listMemberType": "map",
-                            "ignoreMemberFields": ["chainHeight"]
-                        },
-                        {
-                            "ruleType": "ignore",
-                            "field": "trades",
+                            "field": "chainHeightRange",
                             "fieldType": "map",
-                            "ignoreMemberFields": ["buys", "sells", "previousCumulativeTrades.chainHeight", "previousCumulativeTrades.timestamp"],
+                            "ignoreMemberFields": ["begin", "end"],
                         },
                         {
                             "ruleType": "compare",
-                            "field": "trades",
+                            "field": "totalReserves",
                             "fieldType": "map",
-                            "operation": "add",
-                            "memberFields": ["totalTrade.tradeVolume", "previousCumulativeTrades.tradeVolume"]
+                            "operation": "listSlice",
+                            "memberFields": -1
                         },
 
                         {
                             "ruleType": "ignore",
-                            "field": "liquidity",
-                            "fieldType": "map",
-                            "ignoreMemberFields": ["fundingAdded", "fundingRemoved", "previousLiquidityData.chainHeight",
-                                                   "previousLiquidityData.timestamp"],
+                            "field": "broadcast_id",
+                            "fieldType": "str"
                         },
 
                         {
-                            "ruleType": "compare",
-                            "field": "liquidity",
-                            "fieldType": "map",
-                            "operation": "add",
-                            "memberFields": ["totalLiquidity.liquidity", "previousLiquidityData.liquidity"]
-                        },
-
+                            "ruleType": "ignore",
+                            "field": "timestamp",
+                            "fieldType": "float"
+                        }
                     ]
                 }
             )
             if resp.status_code in range(200, 300):
-                redis_conn.sadd('polymarket:diffRuleSetFor', project_id)
+                redis_conn.sadd('uniswap:diffRuleSetFor', project_id)
 
     @classmethod
     @provide_redis_conn_insta
-    def set_commit_callback_url(cls, market_id, redis_conn: redis.Redis = None):
-        project_id = f'polymarket_onChain_{market_id}'
-        if not redis_conn.sismember('polymarket:callbackURLSetFor', project_id):
+    def set_commit_callback_url(cls, pair_contract_address, stream, redis_conn: redis.Redis = None):
+        project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}'
+        if not redis_conn.sismember('uniswap:callbackURLSetFor', project_id):
             r = requests.post(
                 url=urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{project_id}/confirmations/callback'),
                 json={'callbackURL': urljoin(settings.WEBHOOK_LISTENER.ROOT, settings.WEBHOOK_LISTENER.COMMIT_CONFIRMATION_CALLBACK_PATH)}
             )
             if r.status_code in range(200, 300):
-                redis_conn.sadd('polymarket:callbackURLSetFor', project_id)
+                redis_conn.sadd('uniswap:callbackURLSetFor', project_id)
 
     @classmethod
-    def commit_payload(cls, market_id, stream, report_payload):
-        project_id = f'polymarket_onChain_{stream}_{market_id}'
+    # TODO: asyncify request, exception handling on request failure
+    def commit_payload(cls, pair_contract_address, stream, report_payload):
+        project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}'
         r = requests.post(
             url=urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, 'commit_payload'),
             json={'payload': report_payload, 'projectId': project_id}
