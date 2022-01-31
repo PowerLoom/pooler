@@ -18,7 +18,9 @@ from async_limits.storage import AsyncRedisStorage
 from async_limits import parse_many as limit_parse_many
 import time
 from datetime import datetime, timedelta
-
+from redis_keys import (
+    uniswap_pair_contract_tokens_addresses, uniswap_pair_contract_tokens_data
+)
 
 web3 = Web3(Web3.HTTPProvider(settings.RPC.MATIC[0]))
 # TODO: Use async http provider once it is considered stable by the web3.py project maintainers
@@ -201,13 +203,6 @@ def get_all_pairs_and_write_to_file():
         raise e
 
 
-# TODO: 'asyncify' the web3 calls
-# async limits rate limit check
-# if rate limit checks out then we call
-# introduce block height in get reserves
-# reservers = pair.functions.getReserves().call()
-
-
 # asynchronously get liquidity of each token reserve
 @provide_async_redis_conn_insta
 async def async_get_liquidity_of_each_token_reserve(loop: asyncio.AbstractEventLoop, pair_address, block_identifier='latest', redis_conn: aioredis.Redis = None):
@@ -253,14 +248,21 @@ async def async_get_liquidity_of_each_token_reserve(loop: asyncio.AbstractEventL
                 address=pair_address, 
                 abi=read_json_file(f"abis/UniswapV2Pair.json")
             )
-            # run in loop's default executor
-            # TODO: cache these results? Maybe block identifier is unnecessary since these arent supposed to change?
-            pfunc_0 = partial(pair.functions.token0().call, kwargs={'block_identifier': block_identifier})
-            token0Addr = await loop.run_in_executor(func=pfunc_0, executor=None)
-            pfunc_1 = partial(pair.functions.token1().call, kwargs={'block_identifier': block_identifier})
-            token1Addr = await loop.run_in_executor(func=pfunc_1, executor=None)
+
+            pairTokensAddresses = await redis_conn.hgetall(uniswap_pair_contract_tokens_addresses.format(pair_address))
+            if pairTokensAddresses:
+                token0Addr = pairTokensAddresses[b"token0Addr"].decode('utf-8')
+                token1Addr = pairTokensAddresses[b"token1Addr"].decode('utf-8')
+            else:
+                # run in loop's default executor
+                pfunc_0 = partial(pair.functions.token0().call)
+                token0Addr = await loop.run_in_executor(func=pfunc_0, executor=None)
+                pfunc_1 = partial(pair.functions.token1().call)
+                token1Addr = await loop.run_in_executor(func=pfunc_1, executor=None)
+                await redis_conn.hmset(uniswap_pair_contract_tokens_addresses.format(pair_address), 'token0Addr', token0Addr, 'token1Addr', token1Addr)
+            
             # introduce block height in get reserves
-            pfunc_get_reserves = partial(pair.functions.getReserves().call, kwargs={'block_identifier': block_identifier})
+            pfunc_get_reserves = partial(pair.functions.getReserves().call, {'block_identifier': block_identifier})
             reserves = await loop.run_in_executor(func=pfunc_get_reserves, executor=None)
             logger.debug(f"Token0: {token0Addr}, Reserves: {reserves[0]}")
             logger.debug(f"Token1: {token1Addr}, Reserves: {reserves[1]}")
@@ -276,14 +278,37 @@ async def async_get_liquidity_of_each_token_reserve(loop: asyncio.AbstractEventL
                 abi=read_json_file('abis/IERC20.json')
             )
 
-            # TODO: cache token decimals as well
-            token0_decimals = await loop.run_in_executor(func=token0.functions.decimals().call, executor=None)
-            token1_decimals = await loop.run_in_executor(func=token1.functions.decimals().call, executor=None)
+            pairTokensData = await redis_conn.hgetall(uniswap_pair_contract_tokens_data.format(pair_address))
+            if pairTokensData:
+                token1_decimals = pairTokensData[b"token0_decimals"].decode('utf-8')
+                token0_decimals = pairTokensData[b"token1_decimals"].decode('utf-8')
+            else:
+                executor_gather = list()
+                executor_gather.append(loop.run_in_executor(func=token0.functions.name().call, executor=None))
+                executor_gather.append(loop.run_in_executor(func=token0.functions.symbol().call, executor=None))
+                executor_gather.append(loop.run_in_executor(func=token0.functions.decimals().call, executor=None))
+
+                executor_gather.append(loop.run_in_executor(func=token1.functions.name().call, executor=None))
+                executor_gather.append(loop.run_in_executor(func=token1.functions.symbol().call, executor=None))
+                executor_gather.append(loop.run_in_executor(func=token1.functions.decimals().call, executor=None))
+                [
+                    token0_name, token0_symbol, token0_decimals,
+                    token1_name, token1_symbol, token1_decimals
+                ] = await asyncio.gather(*executor_gather)
+                await redis_conn.hmset(
+                    uniswap_pair_contract_tokens_data.format(pair_address), 
+                    "token0_name", token0_name,
+                    "token0_symbol", token0_symbol,
+                    "token0_decimals", token0_decimals,
+                    "token1_name", token1_name,
+                    "token1_symbol", token1_symbol,
+                    "token1_decimals", token1_decimals
+                )
 
             
             logger.debug(f"Decimals of token1: {token1_decimals}, Decimals of token1: {token0_decimals}")
-            logger.debug(f"reserves[0]/10**token0_decimals: {reserves[0]/10**token0_decimals}, reserves[1]/10**token1_decimals: {reserves[1]/10**token1_decimals}")
-            return {"token0": reserves[0]/10**token0_decimals, "token1": reserves[1]/10**token1_decimals}
+            logger.debug(f"reserves[0]/10**token0_decimals: {reserves[0]/10**int(token0_decimals)}, reserves[1]/10**token1_decimals: {reserves[1]/10**int(token1_decimals)}")
+            return {"token0": reserves[0]/10**int(token0_decimals), "token1": reserves[1]/10**int(token1_decimals)}
         else:
             msg = f"exhausted_api_key_rate_limit"
             rate_limit_exception = True
