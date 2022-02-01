@@ -89,12 +89,13 @@ class AuditProtocolCommandsHelper:
                     ) as response_obj:
                         response_status_code = response_obj.status
                     
+                    response = (await response_obj.json()) or {}
+
                     if response_status_code in range(200, 300):
                         redis_conn.sadd('uniswap:diffRuleSetFor', project_id)
                     elif response_status_code == 500 or response_status_code == 502:
-                        return #ignore 500 and 502 errors
+                        return {"message": f"failed with status code: {response_status_code}", "response": response} #ignore 500 and 502 errors
                     else:
-                        response = (await response_obj.json()) or {}
                         raise Exception('Failed audit protocol engine call with status code: {} and response: {}'.format(response_status_code, response))
 
     @classmethod
@@ -122,12 +123,13 @@ class AuditProtocolCommandsHelper:
                 ) as response_obj:
                     response_status_code = response_obj.status
                 
+                response = (await response_obj.json()) or {}
+
                 if response_status_code in range(200, 300):
                     return response_obj
                 elif response_status_code == 500 or response_status_code == 502:
-                    return #ignore 500 and 502 errors
+                    return {"message": f"failed with status code: {response_status_code}", "response": response}#ignore 500 and 502 errors
                 else:
-                    response = (await response_obj.json()) or {}
                     raise Exception('Failed audit protocol engine call with status code: {} and response: {}'.format(response_status_code, response))
 
 
