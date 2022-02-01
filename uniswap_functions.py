@@ -20,6 +20,10 @@ from datetime import datetime, timedelta
 from redis_keys import (
     uniswap_pair_contract_tokens_addresses, uniswap_pair_contract_tokens_data
 )
+from helper_functions import (
+    acquire_threading_semaphore
+)
+from tenacity import Retrying, stop_after_attempt, wait_random_exponential
 
 web3 = Web3(Web3.HTTPProvider(settings.RPC.MATIC[0]))
 # TODO: Use async http provider once it is considered stable by the web3.py project maintainers
@@ -201,7 +205,6 @@ def get_all_pairs_and_write_to_file():
         logger.error(e, exc_info=True)
         raise e
 
-
 # asynchronously get liquidity of each token reserve
 @provide_async_redis_conn_insta
 async def async_get_liquidity_of_each_token_reserve(loop: asyncio.AbstractEventLoop, pair_address, block_identifier='latest', redis_conn: aioredis.Redis = None):
@@ -283,46 +286,42 @@ async def async_get_liquidity_of_each_token_reserve(loop: asyncio.AbstractEventL
                 token0_decimals = pairTokensData[b"token1_decimals"].decode('utf-8')
             else:
                 executor_gather = list()
-                executor_gather.append(loop.run_in_executor(func=token0.functions.name().call, executor=None))
-                executor_gather.append(loop.run_in_executor(func=token0.functions.symbol().call, executor=None))
-                executor_gather.append(loop.run_in_executor(func=token0.functions.decimals().call, executor=None))
+            
+                for attempt in Retrying(reraise=True, wait=wait_random_exponential(multiplier=1, min=10, max=60), stop=stop_after_attempt(settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS)):
+                    with attempt:
+                        executor_gather.append(loop.run_in_executor(func=token0.functions.name().call, executor=None))
+                        executor_gather.append(loop.run_in_executor(func=token0.functions.symbol().call, executor=None))
+                        executor_gather.append(loop.run_in_executor(func=token0.functions.decimals().call, executor=None))
 
-                executor_gather.append(loop.run_in_executor(func=token1.functions.name().call, executor=None))
-                executor_gather.append(loop.run_in_executor(func=token1.functions.symbol().call, executor=None))
-                executor_gather.append(loop.run_in_executor(func=token1.functions.decimals().call, executor=None))
-                [
-                    token0_name, token0_symbol, token0_decimals,
-                    token1_name, token1_symbol, token1_decimals
-                ] = await asyncio.gather(*executor_gather)
-                await redis_conn.hmset(
-                    uniswap_pair_contract_tokens_data.format(pair_address), 
-                    "token0_name", token0_name,
-                    "token0_symbol", token0_symbol,
-                    "token0_decimals", token0_decimals,
-                    "token1_name", token1_name,
-                    "token1_symbol", token1_symbol,
-                    "token1_decimals", token1_decimals
-                )
+                        executor_gather.append(loop.run_in_executor(func=token1.functions.name().call, executor=None))
+                        executor_gather.append(loop.run_in_executor(func=token1.functions.symbol().call, executor=None))
+                        executor_gather.append(loop.run_in_executor(func=token1.functions.decimals().call, executor=None))
+
+                        [
+                            token0_name, token0_symbol, token0_decimals,
+                            token1_name, token1_symbol, token1_decimals
+                        ] = await asyncio.gather(*executor_gather)
+
+                        await redis_conn.hmset(
+                            uniswap_pair_contract_tokens_data.format(pair_address), 
+                            "token0_name", token0_name,
+                            "token0_symbol", token0_symbol,
+                            "token0_decimals", token0_decimals,
+                            "token1_name", token1_name,
+                            "token1_symbol", token1_symbol,
+                            "token1_decimals", token1_decimals
+                        )
+                            
 
             
             logger.debug(f"Decimals of token1: {token1_decimals}, Decimals of token1: {token0_decimals}")
             logger.debug(f"reserves[0]/10**token0_decimals: {reserves[0]/10**int(token0_decimals)}, reserves[1]/10**token1_decimals: {reserves[1]/10**int(token1_decimals)}")
             return {"token0": reserves[0]/10**int(token0_decimals), "token1": reserves[1]/10**int(token1_decimals)}
         else:
-            msg = f"exhausted_api_key_rate_limit"
-            rate_limit_exception = True
-            raise RPCException(request=pair_address, response={}, underlying_exception=None,
-                            extra_info={'msg': msg, "rate_limit_exception": rate_limit_exception, "retry_after": retry_after})
-    except aiohttp.ClientResponseError as terr:
-        msg = 'aiohttp error occurred while making async post call'    
-        raise RPCException(request=pair_address, response=response, underlying_exception=terr,
-                           extra_info={'msg': msg, "rate_limit_exception": rate_limit_exception})
-    except RPCException as r:
-        raise r
+            raise Exception("exhausted_api_key_rate_limit inside uniswap_functions get async liquidity reservers")
     except Exception as e:
-        logger.error("error in make_post_call_async: ", exc_info=True)
-        raise RPCException(request=pair_address, response=response, underlying_exception=e,
-                           extra_info={'msg': str(e), "rate_limit_exception": rate_limit_exception})
+        logger.error("error at async_get_liquidity_of_each_token_reserve fn: ", exc_info=True)
+        return e
     finally:
         redis_conn.close()
 
