@@ -7,7 +7,8 @@
         },
         "uniswap_functions":{
             "threading_semaphore": 5,
-            "semaphore_workers": 10
+            "semaphore_workers": 10,
+            "retrial_attempts": 5
         },
         "rpc": {
             "matic": ["https://rpc-mainnet.maticvigil.com/v1/"],
