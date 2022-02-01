@@ -3,7 +3,6 @@ from init_rabbitmq import create_rabbitmq_conn
 from redis_keys import powerloom_broadcast_id_zset
 from redis_conn import create_redis_conn, REDIS_CONN_CONF
 from dynaconf import settings
-from helper_functions import cache_markets_data
 from multiprocessing import Process
 import redis
 import time

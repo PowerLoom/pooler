@@ -15,10 +15,6 @@ from aio_pika import connect, Channel, Message, DeliveryMode, ExchangeType
 from aio_pika.pool import Pool
 import json
 import logging
-from proto_system_logging import config_logger_with_namespace
-from redis_keys import (
-    polymarket_seed_trade_lock,polymarket_market_trades_processing_status
-)
 from eth_log_dist_worker import get_event_sig, get_aiohttp_cache, RPCException, make_post_call_async
 from message_models import ethLogRequestModel
 import time

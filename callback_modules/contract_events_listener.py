@@ -9,16 +9,13 @@ import logging
 import sys
 import hmac
 import asyncio
-from helper_functions import (
-    get_market_data_by_id, get_market_data_by_address, append_cached_outcome_balances_liquidity,
-    append_cached_trade_vol
-)
-
 trade_logger = logging.getLogger(__name__)
 socket_log_handler = logging.handlers.SocketHandler('localhost', logging.handlers.DEFAULT_TCP_LOGGING_PORT)
 trade_logger.addHandler(socket_log_handler)
 app = FastAPI()
 
+
+# TODO: if we support the callback confirmation call feature from AuditProtocol, this module would need a rewrite
 REDIS_CONN_CONF = {
     "host": settings['REDIS']['HOST'],
     "port": settings['REDIS']['PORT'],
@@ -192,7 +189,7 @@ async def commit_confirmation_cb(
         response.status_code = 200
         return {}
 
-    contract_address = get_market_data_by_id(market_id)
+    contract_address = None
     if not contract_address:
         response.status_code = 200
         return {}

@@ -4,24 +4,24 @@ import pydantic
 from aio_pika import connect, Message, Channel, IncomingMessage, ExchangeType
 from redis_conn import provide_async_redis_conn_insta
 from functools import partial
-import aioredis
-import json
+from async_limits.strategies import AsyncFixedWindowRateLimiter
+from async_limits.storage import AsyncRedisStorage
+from async_limits import parse_many as limit_parse_many
 from dynaconf import settings
-import aiohttp
 from eth_utils import keccak
 from redis_keys import eth_log_request_data_f
 from message_models import ethLogRequestModel
 from init_rabbitmq import init_rmq_exchange_queue_async
-import logging.config
 from proto_system_logging import config_logger_with_namespace
-import os
-
-from async_limits.strategies import AsyncFixedWindowRateLimiter
-from async_limits.storage import AsyncRedisStorage
-from async_limits import parse_many as limit_parse_many
 from tenacity import retry, RetryError, wait_fixed, stop_after_attempt, stop_after_delay, retry_if_result
-import time
 from datetime import datetime, timedelta
+import aioredis
+import json
+import aiohttp
+import logging.config
+import os
+import logging.handlers
+import time
 
 
 #set logger scope
