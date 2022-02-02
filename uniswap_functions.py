@@ -127,13 +127,13 @@ def read_json_file(file_path: str):
 try:
     # instantiate UniswapV2Factory contract (using quick swap v2 factory address)
     quick_swap_uniswap_v2_factory_contract = web3.eth.contract(
-        address=settings.CONTRACT_ADDRESSES.QUICK_SWAP_IUNISWAP_V2_FACTORY,
+        address=Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.QUICK_SWAP_IUNISWAP_V2_FACTORY),
         abi=read_json_file('./abis/IUniswapV2Factory.json')
     )
 
     # instantiate UniswapV2Pair contract (using quick swap v2 pair address)
     quick_swap_uniswap_v2_pair_contract = web3.eth.contract(
-        address=settings.CONTRACT_ADDRESSES.QUICK_SWAP_IUNISWAP_V2_PAIR,
+        address=Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.QUICK_SWAP_IUNISWAP_V2_PAIR),
         abi=read_json_file('./abis/UniswapV2Pair.json')
     )
 
@@ -209,6 +209,8 @@ def get_all_pairs_and_write_to_file():
 @provide_async_redis_conn_insta
 async def async_get_liquidity_of_each_token_reserve(loop: asyncio.AbstractEventLoop, pair_address, block_identifier='latest', redis_conn: aioredis.Redis = None):
     try:
+        pair_address = Web3.toChecksumAddress(pair_address)
+
         redis_storage = AsyncRedisStorage(await load_rate_limiter_scripts(redis_conn), redis_conn)
         custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
         limit_incr_by = 1   # score to be incremented for each request
@@ -325,6 +327,8 @@ async def async_get_liquidity_of_each_token_reserve(loop: asyncio.AbstractEventL
 def get_liquidity_of_each_token_reserve(pair_address, block_identifier='latest'):
     logger.debug("Pair Data:")
     
+    pair_address = Web3.toChecksumAddress(pair_address)
+
     #pair contract
     pair = web3.eth.contract(
         address=pair_address, 
@@ -362,6 +366,8 @@ def get_liquidity_of_each_token_reserve(pair_address, block_identifier='latest')
     return {"token0": reservers[0]/10**token0_decimals, "token1": reservers[1]/10**token1_decimals}
 
 def get_pair(token0, token1):
+    token0 = web3.toChecksumAddress(token0)
+    token1 = web3.toChecksumAddress(token1)
     pair = quick_swap_uniswap_v2_factory_contract.functions.getPair(token0, token1).call()
     return pair
     
