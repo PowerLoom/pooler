@@ -104,16 +104,17 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         if not pair_total_reserves_epoch_snapshot:
             return
         # TODO: should we attach previous total reserves epoch from cache?
-        AuditProtocolCommandsHelper.set_diff_rule_for_pair_reserves(
+        await AuditProtocolCommandsHelper.set_diff_rule_for_pair_reserves(
             pair_contract_address=pair_total_reserves_epoch_snapshot.contract,
             stream='pair_total_reserves'
         )
         payload = pair_total_reserves_epoch_snapshot.dict()
         # TODO: check response returned
-        AuditProtocolCommandsHelper.commit_payload(
+        await AuditProtocolCommandsHelper.commit_payload(
             pair_contract_address=pair_total_reserves_epoch_snapshot.contract,
             stream='pair_total_reserves',
-            report_payload=payload
+            report_payload=payload,
+            session=self._aiohttp_session
         )
         # TODO: update last snapshot in cache
         #  TODO: update processing status in cache?
@@ -131,8 +132,6 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         #                                    }
         #                                }
         #                            ))
-
-        # TODO : send snapshot to audit protocol
 
     def run(self):
         # setup_loguru_intercept()

@@ -73,19 +73,13 @@ def check_onchain_param(onChain):
     return on_chain
 
 
-def project_namespace_inject(request: Request, onChain: str = Query(default='false'), stream: str = Query(default='trades')):
-    on_chain = check_onchain_param(onChain)
-    market_id = request.path_params['marketId']
-    if on_chain:
-        if stream == '':
-            audit_project_id = f"polymarket_onChain_{market_id}"
-        else:
-            audit_project_id  = f"polymarket_onChain_{stream}_{market_id}"
-    else:
-        if stream == '':
-            audit_project_id = f"polymarket_offChain_{market_id}"
-        else:
-            audit_project_id = f"polymarket_offChain_{stream}_{market_id}"
+def project_namespace_inject(request: Request, stream: str = Query(default='pair_total_reserves')):
+    """
+        This dependency injection is meant to support multiple 'streams' of snapshots submitted to Audit Protocol core.
+        for eg. pair total reserves, pair trades etc. Effectively, it injects namespaces into a project ID
+    """
+    pair_contract_address = request.path_params['pair_contract_address']
+    audit_project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}'
     return audit_project_id
 
 
@@ -193,7 +187,7 @@ async def delete_request_data(
     request.app.redis_pool.release(redis_conn_raw)
 
 
-@app.get('/snapshots/{marketId:str}')
+@app.get('/snapshots/{pair_contract_address:str}')
 async def get_past_snapshots(
         request: Request,
         response: Response,
