@@ -146,6 +146,12 @@ def provide_async_redis_conn_insta(fn):
                 return await fn(*args, **kwargs)
             except:
                 raise
+            finally:
+                try:  # ignore residual errors
+                    connection.close()
+                    await connection.wait_closed()
+                except:
+                    pass
     return wrapped
 
 

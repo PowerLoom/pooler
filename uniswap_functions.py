@@ -208,7 +208,6 @@ def get_all_pairs_and_write_to_file():
 # asynchronously get liquidity of each token reserve
 @provide_async_redis_conn_insta
 async def async_get_liquidity_of_each_token_reserve(loop: asyncio.AbstractEventLoop, pair_address, block_identifier='latest', redis_conn: aioredis.Redis = None):
-    
     try:
         redis_storage = AsyncRedisStorage(await load_rate_limiter_scripts(redis_conn), redis_conn)
         custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
@@ -311,19 +310,15 @@ async def async_get_liquidity_of_each_token_reserve(loop: asyncio.AbstractEventL
                             "token1_symbol", token1_symbol,
                             "token1_decimals", token1_decimals
                         )
-                            
 
-            
             logger.debug(f"Decimals of token1: {token1_decimals}, Decimals of token1: {token0_decimals}")
             logger.debug(f"reserves[0]/10**token0_decimals: {reserves[0]/10**int(token0_decimals)}, reserves[1]/10**token1_decimals: {reserves[1]/10**int(token1_decimals)}")
             return {"token0": reserves[0]/10**int(token0_decimals), "token1": reserves[1]/10**int(token1_decimals)}
         else:
             raise Exception("exhausted_api_key_rate_limit inside uniswap_functions get async liquidity reservers")
-    except Exception as e:
-        logger.error("error at async_get_liquidity_of_each_token_reserve fn: ", exc_info=True)
-        return e
-    finally:
-        redis_conn.close()
+    except Exception as exc:
+        logger.error("error at async_get_liquidity_of_each_token_reserve fn: %s", exc, exc_info=True)
+        raise
 
 
 # get liquidity of each token reserve
