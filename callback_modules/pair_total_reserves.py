@@ -166,7 +166,7 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
             return
         for contract in msg_obj.contracts:
             contract = contract.lower()
-            trade_vol_process_unit = PowerloomCallbackProcessMessage(
+            pair_total_reserves_process_unit = PowerloomCallbackProcessMessage(
                 begin=msg_obj.begin,
                 end=msg_obj.end,
                 contract=contract,
@@ -174,8 +174,8 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
             )
             ch.basic_publish(
                 exchange=f'{settings.RABBITMQ.SETUP.CALLBACKS.EXCHANGE}.subtopics:{settings.NAMESPACE}',
-                routing_key=f'powerloom-backend-callback:{settings.NAMESPACE}.pair_total_reserves.processor',
-                body=trade_vol_process_unit.json().encode('utf-8'),
+                routing_key=f'powerloom-backend-callback:{settings.NAMESPACE}.pair_total_reserves_worker.processor',
+                body=pair_total_reserves_process_unit.json().encode('utf-8'),
                 properties=pika.BasicProperties(
                     delivery_mode=2,
                     content_type='text/plain',
@@ -183,7 +183,7 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
                 ),
                 mandatory=True
             )
-            self._logger.debug(f'Sent out epoch to be processed by worker to calculate total reserves: {trade_vol_process_unit}')
+            self._logger.debug(f'Sent out epoch to be processed by worker to calculate total reserves: {pair_total_reserves_process_unit}')
 
     def run(self):
         # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|Callbacks|TradeVolumeProcessDistributor'))
