@@ -134,11 +134,10 @@ class AuditProtocolCommandsHelper:
 
 
 class CallbackAsyncWorker(multiprocessing.Process):
-    def __init__(self, name, name_prefix, rmq_q, rmq_routing, **kwargs):
+    def __init__(self, name, rmq_q, rmq_routing, **kwargs):
         self._q = rmq_q
         self._rmq_routing = rmq_routing
-        self._name_prefix = name_prefix
-        self._unique_id = f'{name_prefix}-' + keccak(text=str(uuid4())).hex()[:8]
+        self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
         self._redis_conn: Union[None, aioredis.Redis] = None
         super(CallbackAsyncWorker, self).__init__(name=name, **kwargs)
         setproctitle(self._unique_id)
@@ -218,7 +217,7 @@ class CallbackAsyncWorker(multiprocessing.Process):
         for s in signals:
             ev_loop.add_signal_handler(
                 s, lambda x=s: ev_loop.create_task(self._shutdown_handler(x, ev_loop)))
-        logger.debug(f'Starting asynchronous worker - Trade Volume Processor {self._unique_id}...')
+        self._logger.debug(f'Starting asynchronous epoch callback worker {self._unique_id}...')
         asyncio.ensure_future(self._rabbitmq_consumer(ev_loop))
         try:
             ev_loop.run_forever()

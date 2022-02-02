@@ -35,7 +35,6 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
     def __init__(self, name, **kwargs):
         super(PairTotalReservesProcessor, self).__init__(
             name=name,
-            name_prefix='PairTotalReservesProcessor',
             rmq_q=f'powerloom-backend-cb-pair_total_reserves-processor:{settings.NAMESPACE}',
             rmq_routing=f'powerloom-backend-callback:{settings.NAMESPACE}.pair_total_reserves_worker.processor',
             **kwargs
@@ -136,7 +135,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
     def run(self):
         # setup_loguru_intercept()
         self._aiohttp_session_interface = AsyncHTTPSessionCache()
-        self._logger.debug('Launching epochs summation actor for total reserves of pairs...')
+        # self._logger.debug('Launching epochs summation actor for total reserves of pairs...')
         super(PairTotalReservesProcessor, self).run()
 
 
@@ -183,11 +182,11 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
                 ),
                 mandatory=True
             )
-            self._logger.debug(f'Sent out epoch to be processed by worker to calculate total reserves: {pair_total_reserves_process_unit}')
+            self._logger.debug(f'Sent out epoch to be processed by worker to calculate total reserves for pair contract: {pair_total_reserves_process_unit}')
 
     def run(self):
         # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|Callbacks|TradeVolumeProcessDistributor'))
-        self._logger = logging.getLogger('PowerLoom|Callbacks|TradeVolumeProcessDistributor')
+        self._logger = logging.getLogger('PowerLoom|Callbacks|PairTotalReservesProcessDistributor')
         self._logger.setLevel(logging.DEBUG)
         self._logger.handlers = [
             logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
