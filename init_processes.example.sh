@@ -1,6 +1,7 @@
 #!/bin/zsh
 
-python launch_process_hub_core.py > /dev/null 2>&1 &
+pm2 start launch_process_hub_core.py --name=uniswap-pooler-processhub-core
+echo "Launched Uniswap Pooler Process Hub Core..."
 echo "Launched Process Hub Core..."
 sleep 3
 python processhub_cmd.py start EpochCallbackManager

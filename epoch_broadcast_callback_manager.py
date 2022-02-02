@@ -19,8 +19,9 @@ def append_epoch_context(msg_json: dict):
         msg_json['contracts'] = [injected_contract.lower()]
         return
     contracts = list()
-    if os.path.exists('static/cached_markets.json'):
-        with open('static/cached_markets.json', 'r') as fp:
+    if os.path.exists('static/cached_pair_addresses.json'):
+        with open('static/cached_pair_addresses.json', 'r') as fp:
+            # the file contains an array of pair contract addresses
             contracts = json.load(fp)
     msg_json['contracts'] = contracts
 

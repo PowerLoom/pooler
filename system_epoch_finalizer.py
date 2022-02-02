@@ -21,7 +21,7 @@ def broadcast_epoch(
         ch: pika.adapters.blocking_connection.BlockingChannel,
         epoch_report: SystemEpochStatusReport,
 ) -> EpochBroadcast:
-    broadcast_msg = EpochBroadcast(begin=epoch_report.begin, end=epoch_report.end, broadcast_id=epoch_report.broadcast_id)
+    broadcast_msg = SystemEpochStatusReport(begin=epoch_report.begin, end=epoch_report.end, broadcast_id=epoch_report.broadcast_id)
     ch.basic_publish(
         exchange=f'{settings.RABBITMQ.SETUP.CORE.EXCHANGE}:{settings.NAMESPACE}',
         routing_key=f'epoch-broadcast:{settings.NAMESPACE}',
