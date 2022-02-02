@@ -283,8 +283,8 @@ async def async_get_liquidity_of_each_token_reserve(loop: asyncio.AbstractEventL
 
             pairTokensData = await redis_conn.hgetall(uniswap_pair_contract_tokens_data.format(pair_address))
             if pairTokensData:
-                token1_decimals = pairTokensData[b"token0_decimals"].decode('utf-8')
-                token0_decimals = pairTokensData[b"token1_decimals"].decode('utf-8')
+                token0_decimals = pairTokensData[b"token0_decimals"].decode('utf-8')
+                token1_decimals = pairTokensData[b"token1_decimals"].decode('utf-8')
             else:
                 executor_gather = list()
             
@@ -313,7 +313,7 @@ async def async_get_liquidity_of_each_token_reserve(loop: asyncio.AbstractEventL
                             "token1_decimals", token1_decimals
                         )
 
-            logger.debug(f"Decimals of token1: {token1_decimals}, Decimals of token1: {token0_decimals}")
+            logger.debug(f"Decimals of token0: {token0_decimals}, Decimals of token1: {token1_decimals}")
             logger.debug(f"reserves[0]/10**token0_decimals: {reserves[0]/10**int(token0_decimals)}, reserves[1]/10**token1_decimals: {reserves[1]/10**int(token1_decimals)}")
             return {"token0": reserves[0]/10**int(token0_decimals), "token1": reserves[1]/10**int(token1_decimals)}
         else:
