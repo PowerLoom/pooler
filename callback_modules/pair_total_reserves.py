@@ -8,7 +8,7 @@ from uniswap_functions import get_liquidity_of_each_token_reserve, async_get_liq
 from typing import List
 from functools import reduce
 from message_models import (
-    PowerloomCallbackEpoch, PowerloomCallbackProcessMessage, UniswapEpochPairTotalReserves,
+    PowerloomCallbackEpoch, PowerloomCallbackProcessMessage, UniswapPairTotalReservesSnapshot,
     EpochBase
 )
 from dynaconf import settings
@@ -44,9 +44,9 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         max_chain_height = msg_obj.end
         min_chain_height = msg_obj.begin
         enqueue_epoch = False
-        epoch_reserves_snapshot_map = dict()
+        epoch_reserves_snapshot_map_token0 = dict()
+        epoch_reserves_snapshot_map_token1 = dict()
         for block_num in range(min_chain_height, max_chain_height+1):
-            # TODO: support querying of reserves at this `block_num`
             try:
                 pair_reserve_total = await async_get_liquidity_of_each_token_reserve(
                     loop=asyncio.get_event_loop(),
@@ -58,7 +58,8 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 enqueue_epoch = True
                 break
             else:
-                epoch_reserves_snapshot_map[f'block{block_num}'] = pair_reserve_total
+                epoch_reserves_snapshot_map_token0[f'block{block_num}'] = pair_reserve_total['token0']
+                epoch_reserves_snapshot_map_token1[f'block{block_num}'] = pair_reserve_total['token1']
         if enqueue_epoch:
             if enqueue_on_failure:
                 await self._redis_conn.rpush(
@@ -68,8 +69,9 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 self._logger.debug(f'Enqueued epoch broadcast ID {msg_obj.broadcast_id} because reserve query failed: {msg_obj}')
             return None
 
-        pair_total_reserves_snapshot = UniswapEpochPairTotalReserves(**{
-            'totalReserves': epoch_reserves_snapshot_map,
+        pair_total_reserves_snapshot = UniswapPairTotalReservesSnapshot(**{
+            'token0Reserves': epoch_reserves_snapshot_map_token0,
+            'token1Reserves': epoch_reserves_snapshot_map_token1,
             'chainHeightRange': EpochBase(begin=min_chain_height, end=max_chain_height),
             'timestamp': float(f'{time.time(): .4f}'),
             'contract': msg_obj.contract,
@@ -105,16 +107,18 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         # TODO: should we attach previous total reserves epoch from cache?
         await AuditProtocolCommandsHelper.set_diff_rule_for_pair_reserves(
             pair_contract_address=pair_total_reserves_epoch_snapshot.contract,
-            stream='pair_total_reserves'
+            stream='pair_total_reserves',
+            session=self._aiohttp_session
         )
         payload = pair_total_reserves_epoch_snapshot.dict()
         # TODO: check response returned
-        await AuditProtocolCommandsHelper.commit_payload(
+        r = await AuditProtocolCommandsHelper.commit_payload(
             pair_contract_address=pair_total_reserves_epoch_snapshot.contract,
             stream='pair_total_reserves',
             report_payload=payload,
             session=self._aiohttp_session
         )
+        self._logger.debug('Sent snapshot to audit protocol: %s | Helper Response: %s', pair_total_reserves_epoch_snapshot, r)
         # TODO: update last snapshot in cache
         #  TODO: update processing status in cache?
         # await self._redis_conn.set(uniswap_pair_total_reserves_processing_status.format(pair_total_reserves_epoch_data.contract),

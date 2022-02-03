@@ -1,0 +1,120 @@
+{
+	"info": {
+		"_postman_id": "de408af6-a230-4e8e-9a29-f684f1a70fee",
+		"name": "Uniswap Pooler API",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Get past snapshots for a pair contract address",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:9002/snapshots/0x853ee4b2a13f8a742d64c8f088be7ba2131f670d?maxCount=3&data=true",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "9002",
+					"path": [
+						"snapshots",
+						"0x853ee4b2a13f8a742d64c8f088be7ba2131f670d"
+					],
+					"query": [
+						{
+							"key": "maxCount",
+							"value": "3"
+						},
+						{
+							"key": "data",
+							"value": "true"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get latest diffs from all observed pair contracts (WIP)",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "localhost:9002/diffs/latest?maxCount=20&onChain=true",
+					"host": [
+						"localhost"
+					],
+					"port": "9002",
+					"path": [
+						"diffs",
+						"latest"
+					],
+					"query": [
+						{
+							"key": "maxCount",
+							"value": "20"
+						},
+						{
+							"key": "onChain",
+							"value": "true"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get cached latest snapshot along with any diffs from the previous one(WIP)",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:9002/snapshot/101?onChain=true",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "9002",
+					"path": [
+						"snapshot",
+						"101"
+					],
+					"query": [
+						{
+							"key": "onChain",
+							"value": "true"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get diffs for a pair contract address. query parameters maxCount=10(default)",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:9002/diffs/0x853ee4b2a13f8a742d64c8f088be7ba2131f670d?onChain=true",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "9002",
+					"path": [
+						"diffs",
+						"0x853ee4b2a13f8a742d64c8f088be7ba2131f670d"
+					],
+					"query": [
+						{
+							"key": "onChain",
+							"value": "true"
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

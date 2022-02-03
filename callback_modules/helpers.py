@@ -43,8 +43,8 @@ async def get_rabbitmq_channel(connection_pool) -> aio_pika.Channel:
     async with connection_pool.acquire() as connection:
         return await connection.channel()
 
+
 class AuditProtocolCommandsHelper:
-    
     @classmethod
     @provide_redis_conn_insta
     async def set_diff_rule_for_pair_reserves(cls, pair_contract_address, stream, session: aiohttp.ClientSession, redis_conn: redis.Redis = None):
@@ -66,7 +66,14 @@ class AuditProtocolCommandsHelper:
                                 },
                                 {
                                     "ruleType": "compare",
-                                    "field": "totalReserves",
+                                    "field": "token0Reserves",
+                                    "fieldType": "map",
+                                    "operation": "listSlice",
+                                    "memberFields": -1
+                                },
+                                {
+                                    "ruleType": "compare",
+                                    "field": "token1Reserves",
                                     "fieldType": "map",
                                     "operation": "listSlice",
                                     "memberFields": -1
@@ -88,15 +95,15 @@ class AuditProtocolCommandsHelper:
                         timeout=aiohttp.ClientTimeout(total=None, sock_read=settings.TIMEOUTS.ARCHIVAL, sock_connect=settings.TIMEOUTS.CONNECTION_INIT )
                     ) as response_obj:
                         response_status_code = response_obj.status
-                    
-                    response = (await response_obj.json()) or {}
-
-                    if response_status_code in range(200, 300):
-                        redis_conn.sadd('uniswap:diffRuleSetFor', project_id)
-                    elif response_status_code == 500 or response_status_code == 502:
-                        return {"message": f"failed with status code: {response_status_code}", "response": response} #ignore 500 and 502 errors
-                    else:
-                        raise Exception('Failed audit protocol engine call with status code: {} and response: {}'.format(response_status_code, response))
+                        response = await response_obj.json() or {}
+                        logger.debug('Response code on setting diff rule on audit protocol: %s', response_status_code)
+                        if response_status_code in range(200, 300):
+                            redis_conn.sadd('uniswap:diffRuleSetFor', project_id)
+                            return {"message": f"success status code: {response_status_code}", "response": response}
+                        elif response_status_code == 500 or response_status_code == 502:
+                            return {"message": f"failed with status code: {response_status_code}", "response": response} # ignore 500 and 502 errors
+                        else:
+                            raise Exception('Failed audit protocol engine call with status code: {} and response: {}'.format(response_status_code, response))
 
     @classmethod
     @provide_redis_conn_insta
@@ -122,15 +129,13 @@ class AuditProtocolCommandsHelper:
                     timeout=aiohttp.ClientTimeout(total=None, sock_read=settings.TIMEOUTS.ARCHIVAL, sock_connect=settings.TIMEOUTS.CONNECTION_INIT )
                 ) as response_obj:
                     response_status_code = response_obj.status
-                
-                response = (await response_obj.json()) or {}
-
-                if response_status_code in range(200, 300):
-                    return response_obj
-                elif response_status_code == 500 or response_status_code == 502:
-                    return {"message": f"failed with status code: {response_status_code}", "response": response}#ignore 500 and 502 errors
-                else:
-                    raise Exception('Failed audit protocol engine call with status code: {} and response: {}'.format(response_status_code, response))
+                    response = await response_obj.json() or {}
+                    if response_status_code in range(200, 300):
+                        return response
+                    elif response_status_code == 500 or response_status_code == 502:
+                        return {"message": f"failed with status code: {response_status_code}", "response": response}#ignore 500 and 502 errors
+                    else:
+                        raise Exception('Failed audit protocol engine call with status code: {} and response: {}'.format(response_status_code, response))
 
 
 class CallbackAsyncWorker(multiprocessing.Process):
