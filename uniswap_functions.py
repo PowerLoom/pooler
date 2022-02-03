@@ -270,12 +270,12 @@ async def async_get_liquidity_of_each_token_reserve(loop: asyncio.AbstractEventL
             # token0 contract
             token0 = web3.eth.contract(
                 address=Web3.toChecksumAddress(token0Addr), 
-                abi=read_json_file(erc20_abi)
+                abi=erc20_abi
             )
             # token1 contract
             token1 = web3.eth.contract(
                 address=Web3.toChecksumAddress(token1Addr), 
-                abi=read_json_file(erc20_abi)
+                abi=erc20_abi
             )
 
             pairTokensData = await redis_conn.hgetall(uniswap_pair_contract_tokens_data.format(pair_address))
@@ -329,7 +329,7 @@ def get_liquidity_of_each_token_reserve(pair_address, block_identifier='latest')
     #pair contract
     pair = web3.eth.contract(
         address=pair_address, 
-        abi=read_json_file(f"abis/UniswapV2Pair.json")
+        abi=pair_contract_abi
     )
 
     token0Addr = pair.functions.token0().call()
@@ -345,12 +345,12 @@ def get_liquidity_of_each_token_reserve(pair_address, block_identifier='latest')
     #toke0 contract
     token0 = web3.eth.contract(
         address=Web3.toChecksumAddress(token0Addr), 
-        abi=read_json_file('abis/IERC20.json')
+        abi=erc20_abi
     )
     #toke1 contract
     token1 = web3.eth.contract(
         address=Web3.toChecksumAddress(token1Addr), 
-        abi=read_json_file('abis/IERC20.json')
+        abi=erc20_abi
     )
 
     token0_decimals = token0.functions.decimals().call()
