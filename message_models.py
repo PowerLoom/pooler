@@ -1,5 +1,5 @@
 from pydantic import BaseModel, validator
-from typing import Union, List, Optional, Mapping
+from typing import Union, List, Optional, Mapping, Dict
 
 # TODO: clean up polymarket specific models as we develop the callback workers
 
@@ -106,7 +106,7 @@ class PolymarketSellShareTransaction(BaseModel):
 
 class UniswapEpochPairTotalReserves(BaseModel):
     contract: str
-    totalReserves: Mapping[str, float]  # block number to corresponding total reserves (in USD?)
+    totalReserves: Dict[str, float]  # block number to corresponding total reserves (in USD?)
     chainHeightRange: EpochBase
     broadcast_id: str
     timestamp: float

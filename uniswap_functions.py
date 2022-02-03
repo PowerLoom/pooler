@@ -5,7 +5,6 @@ import aiohttp
 from redis_conn import provide_async_redis_conn_insta
 from dynaconf import settings
 import logging.config
-from proto_system_logging import config_logger_with_namespace
 import os
 import json
 from bounded_pool_executor import BoundedThreadPoolExecutor
@@ -75,6 +74,25 @@ SCRIPT_SET_EXPIRE = """
 # # # END RATE LIMITER LUA SCRIPTS
 
 
+# KEEP INTERFACE ABIs CACHED IN MEMORY
+def read_json_file(file_path: str):
+    """Read given json file and return its content as a dictionary."""
+    try:
+        f_ = open(file_path, 'r')
+    except Exception as e:
+        logger.warning(f"Unable to open the {file_path} file")
+        logger.error(e, exc_info=True)
+        raise e
+    else:
+        logger.debug(f"Reading {file_path} file")
+        json_data = json.loads(f_.read())
+    return json_data
+
+
+pair_contract_abi = read_json_file(f"abis/UniswapV2Pair.json")
+erc20_abi = read_json_file('abis/IERC20.json')
+
+
 class RPCException(Exception):
     def __init__(self, request, response, underlying_exception, extra_info):
         self.request = request
@@ -109,20 +127,6 @@ async def load_rate_limiter_scripts(redis_conn: aioredis.Redis):
     return LUA_SCRIPT_SHAS
 
 
-def read_json_file(file_path: str):
-    """Read given json file and return its content as a dictionary."""
-    try:
-        f_ = open(file_path, 'r')
-    except Exception as e:
-        logger.warning(f"Unable to open the {file_path} file")
-        logger.error(e, exc_info=True)
-        raise e
-    else:
-        logger.debug(f"Reading {file_path} file")
-        json_data = json.loads(f_.read())
-    return json_data
-
-
 # initiate all contracts
 try:
     # instantiate UniswapV2Factory contract (using quick swap v2 factory address)
@@ -131,15 +135,8 @@ try:
         abi=read_json_file('./abis/IUniswapV2Factory.json')
     )
 
-    # instantiate UniswapV2Pair contract (using quick swap v2 pair address)
-    quick_swap_uniswap_v2_pair_contract = web3.eth.contract(
-        address=Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.QUICK_SWAP_IUNISWAP_V2_PAIR),
-        abi=read_json_file('./abis/UniswapV2Pair.json')
-    )
-
 except Exception as e:
     quick_swap_uniswap_v2_factory_contract = None
-    quick_swap_uniswap_v2_pair_contract = None
     logger.error(e, exc_info=True)
 
 
@@ -249,7 +246,7 @@ async def async_get_liquidity_of_each_token_reserve(loop: asyncio.AbstractEventL
             # pair contract
             pair = web3.eth.contract(
                 address=pair_address, 
-                abi=read_json_file(f"abis/UniswapV2Pair.json")
+                abi=pair_contract_abi
             )
 
             pairTokensAddresses = await redis_conn.hgetall(uniswap_pair_contract_tokens_addresses.format(pair_address))
@@ -273,12 +270,12 @@ async def async_get_liquidity_of_each_token_reserve(loop: asyncio.AbstractEventL
             # token0 contract
             token0 = web3.eth.contract(
                 address=Web3.toChecksumAddress(token0Addr), 
-                abi=read_json_file('abis/IERC20.json')
+                abi=read_json_file(erc20_abi)
             )
             # token1 contract
             token1 = web3.eth.contract(
                 address=Web3.toChecksumAddress(token1Addr), 
-                abi=read_json_file('abis/IERC20.json')
+                abi=read_json_file(erc20_abi)
             )
 
             pairTokensData = await redis_conn.hgetall(uniswap_pair_contract_tokens_data.format(pair_address))
