@@ -99,7 +99,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         self._logger.debug('Got epoch to process for calculating total reserves for pair: %s', msg_obj)
 
         self._aiohttp_session: aiohttp.ClientSession = await self._aiohttp_session_interface.get_aiohttp_cache
-        self._logger.debug('Got aiohttp session cache. Now sending call to trade volume seeding function...')
+        self._logger.debug('Got aiohttp session cache. Attempting to snapshot total reserves data in epoch %s...', msg_obj)
 
         pair_total_reserves_epoch_snapshot = await self._construct_epoch_snapshot_data(msg_obj=msg_obj, enqueue_on_failure=True)
         if not pair_total_reserves_epoch_snapshot:

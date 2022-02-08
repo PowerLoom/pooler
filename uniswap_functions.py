@@ -241,7 +241,7 @@ async def async_get_liquidity_of_each_token_reserve(loop: asyncio.AbstractEventL
             else:
                 can_request = True
         if can_request:
-            logger.debug("Pair Data:")
+            # logger.debug("Pair Data:")
     
             # pair contract
             pair = web3.eth.contract(
@@ -264,8 +264,6 @@ async def async_get_liquidity_of_each_token_reserve(loop: asyncio.AbstractEventL
             # introduce block height in get reserves
             pfunc_get_reserves = partial(pair.functions.getReserves().call, {'block_identifier': block_identifier})
             reserves = await loop.run_in_executor(func=pfunc_get_reserves, executor=None)
-            logger.debug(f"Token0: {token0Addr}, Reserves: {reserves[0]}")
-            logger.debug(f"Token1: {token1Addr}, Reserves: {reserves[1]}")
 
             # token0 contract
             token0 = web3.eth.contract(
@@ -277,7 +275,8 @@ async def async_get_liquidity_of_each_token_reserve(loop: asyncio.AbstractEventL
                 address=Web3.toChecksumAddress(token1Addr), 
                 abi=erc20_abi
             )
-
+            token0_decimals = 0
+            token1_decimals = 0
             pairTokensData = await redis_conn.hgetall(uniswap_pair_contract_tokens_data.format(pair_address))
             if pairTokensData:
                 token0_decimals = pairTokensData[b"token0_decimals"].decode('utf-8')
@@ -310,8 +309,12 @@ async def async_get_liquidity_of_each_token_reserve(loop: asyncio.AbstractEventL
                             "token1_decimals", token1_decimals
                         )
 
-            logger.debug(f"Decimals of token0: {token0_decimals}, Decimals of token1: {token1_decimals}")
-            logger.debug(f"reserves[0]/10**token0_decimals: {reserves[0]/10**int(token0_decimals)}, reserves[1]/10**token1_decimals: {reserves[1]/10**int(token1_decimals)}")
+            # logger.debug(f"Decimals of token0: {token0_decimals}, Decimals of token1: {token1_decimals}")
+            logger.debug(
+                "Token0: %s, Reserves: %s | Token1: %s, Reserves: %s", token0Addr, token1Addr,
+                reserves[0]/10**int(token0_decimals), reserves[1]/10**int(token1_decimals)
+            )
+
             return {"token0": reserves[0]/10**int(token0_decimals), "token1": reserves[1]/10**int(token1_decimals)}
         else:
             raise Exception("exhausted_api_key_rate_limit inside uniswap_functions get async liquidity reservers")
