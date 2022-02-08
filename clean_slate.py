@@ -18,7 +18,7 @@ r = Redis(**REDIS_CONN_CONF)
 
 def redis_cleanup():
     try:
-        r.delete(*r.keys('*projectID*polymarket*'))
+        r.delete(*r.keys('*projectID*uniswap*'))
     except:
         pass
 
@@ -30,42 +30,18 @@ def redis_cleanup():
     poly_last_snapshots = r.hgetall('auditprotocol:lastSeenSnapshots')
     poly_last_snapshots = list(map(lambda x: x.decode('utf-8'), poly_last_snapshots.keys()))
     for k in poly_last_snapshots:
-        if 'polymarket' in k:
+        if 'uniswap' in k:
             r.hdel('auditprotocol:lastSeenSnapshots', k)
 
     try:
-        c = r.delete(*r.keys('lastPruned*polymarket*'))
+        c = r.delete(*r.keys('lastPruned*uniswap*'))
         print(c)
     except:
         pass
 
     try:
-        r.delete(*r.keys('tradeVolume*'))
-    except:
-        pass
-
-    try:
-        r.delete(*r.keys('liquidityData*'))
-    except:
-        pass
-
-    try:
-        r.delete(*r.keys('*lastLiquidityAggregation'))
-    except:
-        pass
-
-    try:
-        r.delete(*r.keys('*lastTradeVolAggregation'))
-    except:
-        pass
-
-    try:
-        r.delete(*r.keys('*pendingLastCommitConfirmation*'))
-    except:
-        pass
-
-    try:
-        r.delete(*r.keys('*SetFor'))
+        c = r.delete(*r.keys('uniswap:pairContract:*'))
+        print(c)
     except:
         pass
 

@@ -49,7 +49,7 @@ class AuditProtocolCommandsHelper:
     @provide_redis_conn_insta
     async def set_diff_rule_for_pair_reserves(cls, pair_contract_address, stream, session: aiohttp.ClientSession, redis_conn: redis.Redis = None):
         project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}'
-        if not redis_conn.sismember('uniswap:diffRuleSetFor', project_id):
+        if not redis_conn.sismember(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id):
             """ Setup diffRules for this market"""
             # retry below call given at settings.AUDIT_PROTOCOL_ENGINE.RETRY
             for attempt in Retrying(reraise=True, stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY)):
@@ -98,7 +98,7 @@ class AuditProtocolCommandsHelper:
                         response = await response_obj.json() or {}
                         logger.debug('Response code on setting diff rule on audit protocol: %s', response_status_code)
                         if response_status_code in range(200, 300):
-                            redis_conn.sadd('uniswap:diffRuleSetFor', project_id)
+                            redis_conn.sadd(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id)
                             return {"message": f"success status code: {response_status_code}", "response": response}
                         elif response_status_code == 500 or response_status_code == 502:
                             return {"message": f"failed with status code: {response_status_code}", "response": response} # ignore 500 and 502 errors
