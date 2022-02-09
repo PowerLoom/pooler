@@ -1,5 +1,6 @@
 from redis import Redis
 from redis_conn import REDIS_CONN_CONF
+from dynaconf import settings
 import json
 
 
@@ -45,6 +46,7 @@ def redis_cleanup():
     except:
         pass
 
+    r.delete(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}')
     try:
         r.delete(*r.keys('payloadCommit:*'))
     except:
