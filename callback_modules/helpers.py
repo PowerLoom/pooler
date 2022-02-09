@@ -13,6 +13,7 @@ from aio_pika.pool import Pool
 from helper_functions import get_event_sig, parse_logs
 from functools import reduce
 from typing import Union
+import sys
 import aioredis
 import aioredis_cluster
 import requests
@@ -215,7 +216,16 @@ class CallbackAsyncWorker(multiprocessing.Process):
         # logging.config.dictConfig(config_logger_with_namespace(self.name))
         self._logger = logging.getLogger(self.name)
         self._logger.setLevel(logging.DEBUG)
-        self._logger.handlers = [logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
+        stdout_handler = logging.StreamHandler(sys.stdout)
+        stdout_handler.setLevel(logging.DEBUG)
+        stderr_handler = logging.StreamHandler(sys.stderr)
+        stderr_handler.setLevel(logging.ERROR)
+
+        self._logger.handlers = [
+            logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT),
+            stdout_handler,
+            stderr_handler
+        ]
         self._redis_pool_interface = RedisPoolCache()
         ev_loop = asyncio.get_event_loop()
         signals = (signal.SIGTERM, signal.SIGINT)

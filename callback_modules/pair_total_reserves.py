@@ -103,6 +103,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
 
         pair_total_reserves_epoch_snapshot = await self._construct_epoch_snapshot_data(msg_obj=msg_obj, enqueue_on_failure=True)
         if not pair_total_reserves_epoch_snapshot:
+            self._logger.error('No epoch snapshot to commit. Construction of snapshot failed for %s', msg_obj)
             return
         # TODO: should we attach previous total reserves epoch from cache?
         await AuditProtocolCommandsHelper.set_diff_rule_for_pair_reserves(
