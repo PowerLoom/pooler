@@ -25,6 +25,8 @@ from helper_functions import (
 from tenacity import Retrying, stop_after_attempt, wait_random_exponential
 from urllib.parse import urlencode, urljoin
 from data_models import liquidityProcessedData
+from decimal import Decimal
+
 
 web3 = Web3(Web3.HTTPProvider(settings.RPC.MATIC[0]))
 # TODO: Use async http provider once it is considered stable by the web3.py project maintainers
@@ -93,7 +95,13 @@ def read_json_file(file_path: str):
 
 pair_contract_abi = read_json_file(f"abis/UniswapV2Pair.json")
 erc20_abi = read_json_file('abis/IERC20.json')
+router_contract_abi = read_json_file(f"abis/UniswapV2Router.json")
 
+#TODO: put this in settings.json
+router_addr = "0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff" 
+dai = "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063"
+usdt = "0xc2132d05d31c914a87c6611c10748aeb04b58e8f"
+weth = "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619"
 
 class RPCException(Exception):
     def __init__(self, request, response, underlying_exception, extra_info):
@@ -197,7 +205,7 @@ def get_all_pairs_and_write_to_file():
         if not os.path.exists('static/'):
             os.makedirs('static/')
 
-        with open('static/cached_pair_addresses.json', 'w') as f:
+        with open('static/cached_pair_addresses2.json', 'w') as f:
             json.dump(all_pairs, f)
         return all_pairs
     except Exception as e:
@@ -280,7 +288,7 @@ async def async_get_liquidity_of_each_token_reserve(loop: asyncio.AbstractEventL
             token0_decimals = 0
             token1_decimals = 0
             pairTokensData = await redis_conn.hgetall(uniswap_pair_contract_tokens_data.format(pair_address))
-            if pairTokensData:
+            if False:
                 token0_decimals = pairTokensData[b"token0_decimals"].decode('utf-8')
                 token1_decimals = pairTokensData[b"token1_decimals"].decode('utf-8')
             else:
@@ -311,6 +319,7 @@ async def async_get_liquidity_of_each_token_reserve(loop: asyncio.AbstractEventL
                             "token1_decimals", token1_decimals,
                             "pair_symbol", f"{token0_symbol}-{token1_symbol}"
                         )
+                        print(f"pair_symbol {token0_symbol}-{token1_symbol}")
 
             # logger.debug(f"Decimals of token0: {token0_decimals}, Decimals of token1: {token1_decimals}")
             logger.debug(
@@ -374,9 +383,10 @@ def get_pair(token0, token1):
     pair = quick_swap_uniswap_v2_factory_contract.functions.getPair(token0, token1).call()
     return pair
 
-async def process_pairs_data(session, redis_conn, maxCount, data, pair_contract_address):
+async def process_pairs_data(session, redis_conn, router_contract, maxCount, data, pair_contract_address):
     #TODO: we might not get this audit_project_id what's then?
-    audit_project_id = f'uniswap_pairContract_pair_total_reserves_{pair_contract_address.lower()}'
+    pair_contract_address = pair_contract_address.lower()
+    audit_project_id = f'uniswap_pairContract_pair_total_reserves_{pair_contract_address}'
     last_block_height_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{audit_project_id}/payloads/height')
     async with session.get(url=last_block_height_url) as resp:
         rest_json = await resp.json()
@@ -388,8 +398,12 @@ async def process_pairs_data(session, redis_conn, maxCount, data, pair_contract_
         from_block = (1 if (to_block < maxCount or maxCount == -1) else to_block - (maxCount - 1))
 
         #TODO: we need to store pair name for each pair first else this will return empty string
-        pair_name = await redis_conn.hmget(uniswap_pair_contract_tokens_data.format(pair_contract_address), "pair_symbol")
-        pair_name = (pair_name[0].decode('utf-8') if pair_name[0] else "")
+        redis_values = await redis_conn.hmget(uniswap_pair_contract_tokens_data.format(Web3.toChecksumAddress(pair_contract_address)), "pair_symbol", "token0Addr", "token1Addr", "token0_decimals", "token1_decimals")
+        pair_name = (redis_values[0].decode('utf-8') if redis_values[0] else "")
+        token0Addr = (redis_values[1].decode('utf-8') if redis_values[1] else "")
+        token1Addr = (redis_values[2].decode('utf-8') if redis_values[2] else "")
+        token0_decimals = (redis_values[3].decode('utf-8') if redis_values[3] else "")
+        token1_decimals = (redis_values[4].decode('utf-8') if redis_values[4] else "")
         
         #TODO: we might not get this audit_project_id what's then?
         query_params = {'from_height': from_block, 'to_height': to_block, 'data': data}
@@ -431,15 +445,31 @@ async def process_pairs_data(session, redis_conn, maxCount, data, pair_contract_
             volume_7d_data=False
             volume_7d_timestamp=(time.time() - 60*60*7) #7hour ago
 
+
+            ##WE HAVE MULTIPLE WAYS TO FIND PRICE: 
+            # 0. token->stablecoins: use get_pair() until you find pair with stablecoin then use getAmountsOut
+            # 1. token->weth->usdt: https://ethereum.stackexchange.com/a/106466 (token to weth always exist v1 lagecy)
+            # 2. priceCummulativeLast: https://ethereum.stackexchange.com/a/94390 (uniswap docs talks alot about this)
+
+            #TODO: 100000000000000000 this should be replaced by token_decimals I guess
+
+            token0Price = None
+            token1Price = None
+            if(Web3.toChecksumAddress(token0Addr) != Web3.toChecksumAddress(usdt)):
+                token0Price = router_contract.functions.getAmountsOut(100000000000000000, [Web3.toChecksumAddress(token0Addr), Web3.toChecksumAddress(usdt)]).call()
+            if(Web3.toChecksumAddress(token1Addr) != Web3.toChecksumAddress(usdt)):
+                token1Price = router_contract.functions.getAmountsOut(100000000000000000, [Web3.toChecksumAddress(token1Addr), Web3.toChecksumAddress(usdt)]).call()
+            
+
             #I AM ASSUMING RESPONSE IS SORTED BY TIMESTAMP KEY            
             for idx, val in enumerate(resp_json):
                 if((not volume_24h_data) and val['timestamp'] <= volume_24h_timestamp):
                     #get data for last 24hour
                     volume_24h_data = resp_json[:idx+1]
                     #subsctract latestest reservers and earliest reservers for token0
-                    volume_24h_token0 = list(volume_24h_data[0]['data']['payload']['token0Reserves'].values())[-1] - list(volume_24h_data[-1]['data']['payload']['token0Reserves'].values())[-1]
+                    volume_24h_token0 = Decimal(list(volume_24h_data[0]['data']['payload']['token0Reserves'].values())[-1]) - Decimal(list(volume_24h_data[-1]['data']['payload']['token0Reserves'].values())[-1])
                     #subsctract latestest reservers and earliest reservers for token1
-                    volume_24h_token1 = list(volume_24h_data[0]['data']['payload']['token1Reserves'].values())[-1] - list(volume_24h_data[-1]['data']['payload']['token1Reserves'].values())[-1]
+                    volume_24h_token1 = Decimal(list(volume_24h_data[0]['data']['payload']['token1Reserves'].values())[-1]) - Decimal(list(volume_24h_data[-1]['data']['payload']['token1Reserves'].values())[-1])
                     #Add subsctracted reservers of token0 and token1 to get final volume
                     volume_24h = volume_24h_token0 + volume_24h_token1
 
@@ -447,18 +477,15 @@ async def process_pairs_data(session, redis_conn, maxCount, data, pair_contract_
                     #get data for last 7d
                     volume_7d_data = resp_json[:idx+1]
                     #subsctract latestest reservers and earliest reservers for token0
-                    volume_7d_data_token0 = list(volume_7d_data[0]['data']['payload']['token0Reserves'].values())[-1] - list(volume_7d_data[-1]['data']['payload']['token0Reserves'].values())[-1]
+                    volume_7d_data_token0 = Decimal(list(volume_7d_data[0]['data']['payload']['token0Reserves'].values())[-1]) - Decimal(list(volume_7d_data[-1]['data']['payload']['token0Reserves'].values())[-1])
                     #subsctract latestest reservers and earliest reservers for token1
-                    volume_7d_data_token1 = list(volume_7d_data[0]['data']['payload']['token1Reserves'].values())[-1] - list(volume_7d_data[-1]['data']['payload']['token1Reserves'].values())[-1]
+                    volume_7d_data_token1 = Decimal(list(volume_7d_data[0]['data']['payload']['token1Reserves'].values())[-1]) - Decimal(list(volume_7d_data[-1]['data']['payload']['token1Reserves'].values())[-1])
                     #Add subsctracted reservers of token0 and token1 to get final volume
                     volume_7d = volume_7d_data_token0 + volume_7d_data_token1
 
                 #break if volumes are calculated
                 if (volume_7d_data and volume_7d_data):
                     break
-                    
-
-
 
 
             #adapt data to cosumable form
@@ -487,9 +514,14 @@ async def v2_pairs_data(session, redis_conn, maxCount, data):
         if len(pairs) <= 0:
             return []
 
+        router_contract = web3.eth.contract(
+            address=router_addr, 
+            abi=router_contract_abi
+        )
+
         process_data_list = []
         for pair_contract_address in pairs:
-            t = process_pairs_data(session, redis_conn, maxCount, data, pair_contract_address)
+            t = process_pairs_data(session, redis_conn, router_contract, maxCount, data, pair_contract_address)
             process_data_list.append(t)
 
         #TODO: how about some error handling?
@@ -507,16 +539,18 @@ async def v2_pairs_data(session, redis_conn, maxCount, data):
 if __name__ == '__main__':
     
     #here instead of calling get pair we can directly use cached all pair addresses
-    dai= "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063"
-    gns= "0xE5417Af564e4bFDA1c483642db72007871397896"
-    pair_address = get_pair(dai, gns)
-    logger.debug(f"Pair address : {pair_address}")
-    logger.debug(get_liquidity_of_each_token_reserve(pair_address))
+    dai = "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063"
+    gns = "0xE5417Af564e4bFDA1c483642db72007871397896"
+    weth = "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619"
+    pair_address = get_pair("0x29bf8Df7c9a005a080E4599389Bf11f15f6afA6A", "0xc2132d05d31c914a87c6611c10748aeb04b58e8f")
+    print(f"pair_address: {pair_address}")
+    # logger.debug(f"Pair address : {pair_address}")
+    # logger.debug(get_liquidity_of_each_token_reserve(pair_address))
 
-    # #we can pass block_identifier=chain_height
-    # print(get_liquidity_of_each_token_reserve(pair_address, block_identifier=24265790))
+    # # #we can pass block_identifier=chain_height
+    # # print(get_liquidity_of_each_token_reserve(pair_address, block_identifier=24265790))
 
-    # async liqudity function
-    loop = asyncio.get_event_loop()
-    reservers = loop.run_until_complete(async_get_liquidity_of_each_token_reserve(loop, pair_address=pair_address))
-    loop.close()
+    # # async liqudity function
+    # loop = asyncio.get_event_loop()
+    # reservers = loop.run_until_complete(async_get_liquidity_of_each_token_reserve(loop, pair_address="0x9d3cd87FFEB9eBa14F63DeC135Da5153eC5CA698"))
+    # loop.close()
