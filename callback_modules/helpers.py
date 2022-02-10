@@ -14,6 +14,7 @@ from helper_functions import get_event_sig, parse_logs
 from functools import reduce
 from typing import Union
 import sys
+import os
 import aioredis
 import aioredis_cluster
 import requests
@@ -220,11 +221,10 @@ class CallbackAsyncWorker(multiprocessing.Process):
         stdout_handler.setLevel(logging.DEBUG)
         stderr_handler = logging.StreamHandler(sys.stderr)
         stderr_handler.setLevel(logging.ERROR)
-
+        # self._logger.debug('Launched %s ', self._unique_id)
+        # self._logger.debug('Launched PID: %s', self.pid)
         self._logger.handlers = [
             logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT),
-            stdout_handler,
-            stderr_handler
         ]
         self._redis_pool_interface = RedisPoolCache()
         ev_loop = asyncio.get_event_loop()

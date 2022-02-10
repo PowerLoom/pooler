@@ -3,7 +3,12 @@
         "namespace": "staging",
         "contract_addresses":{
             "quick_swap_iuniswap_v2_factory": "0x5757371414417b8C6CAad45bAeF941aBc7d3Ab32",
-            "quick_swap_iuniswap_v2_pair": "0xadbF1854e5883eB8aa7BAf50705338739e558E5b"
+            "quick_swap_iuniswap_v2_pair": "0xadbF1854e5883eB8aa7BAf50705338739e558E5b",
+            "USDT": "0xc2132d05d31c914a87c6611c10748aeb04b58e8f",
+            "DAI": "0x8f3cf7ad23cd3cadbd9735aff958023239c6a063",
+            "USDC": "0x2791bca1f2de4661ed88a30c99a7a9449aa84174",
+            "WETH": "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619,",
+            "WETH-USDT": "0xf6422b997c7f54d1c6a6e103bcb1499eea0a7046"
         },
         "uniswap_functions":{
             "threading_semaphore": 5,

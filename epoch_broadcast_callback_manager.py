@@ -8,7 +8,7 @@ import redis
 import time
 import logging
 import logging.handlers
-import requests
+import sys
 import json
 import os
 
@@ -71,7 +71,16 @@ class EpochCallbackManager(Process):
         # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|EpochCallbackManager'))
         self._logger = logging.getLogger('PowerLoom|EpochCallbackManager')
         self._logger.setLevel(logging.DEBUG)
-        self._logger.handlers = [logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
+        stdout_handler = logging.StreamHandler(sys.stdout)
+        stdout_handler.setLevel(logging.DEBUG)
+        stderr_handler = logging.StreamHandler(sys.stderr)
+        stderr_handler.setLevel(logging.ERROR)
+        self._logger.handlers = [
+            logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT),
+            stdout_handler,
+            stderr_handler
+        ]
+        self._logger.debug('Launched PowerLoom|EpochCallbackManager with PID: %s', self.pid)
         # self._asys = ActorSystem('multiprocTCPBase', logDefs=logcfg_thespian_main)
         c = create_rabbitmq_conn()
         ch = c.channel()
@@ -86,8 +95,8 @@ class EpochCallbackManager(Process):
         try:
             self._logger.debug('Starting RabbitMQ consumer on queue %s', queue_name)
             ch.start_consuming()
-        except:
-            pass
+        except Exception as e:
+            self._logger.error('Exception launching RabbitMQ consumer on queue %s', queue_name)
         finally:
             try:
                 ch.close()

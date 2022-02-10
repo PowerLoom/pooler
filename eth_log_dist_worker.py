@@ -25,8 +25,8 @@ import time
 
 
 #set logger scope
-logging.root.setLevel(logging.getLevelName(os.environ.get("LOG_LEVEL", "DEBUG")))
-logging.config.dictConfig(config_logger_with_namespace('PowerLoom|EthLogs|worker'))
+# logging.root.setLevel(logging.getLevelName(os.environ.get("LOG_LEVEL", "DEBUG")))
+# logging.config.dictConfig(config_logger_with_namespace('PowerLoom|EthLogs|worker'))
 log_entry_logger = logging.getLogger('PowerLoom|EthLogs|worker')
 log_entry_logger.setLevel(logging.DEBUG)
 log_entry_logger.handlers = [logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
