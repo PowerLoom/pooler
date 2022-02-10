@@ -23,6 +23,8 @@ from helper_functions import (
     acquire_threading_semaphore
 )
 from tenacity import Retrying, stop_after_attempt, wait_random_exponential
+from urllib.parse import urlencode, urljoin
+from data_models import liquidityProcessedData
 
 web3 = Web3(Web3.HTTPProvider(settings.RPC.MATIC[0]))
 # TODO: Use async http provider once it is considered stable by the web3.py project maintainers
@@ -298,7 +300,7 @@ async def async_get_liquidity_of_each_token_reserve(loop: asyncio.AbstractEventL
                             token0_name, token0_symbol, token0_decimals,
                             token1_name, token1_symbol, token1_decimals
                         ] = await asyncio.gather(*executor_gather)
-
+                        
                         await redis_conn.hmset(
                             uniswap_pair_contract_tokens_data.format(pair_address), 
                             "token0_name", token0_name,
@@ -306,7 +308,8 @@ async def async_get_liquidity_of_each_token_reserve(loop: asyncio.AbstractEventL
                             "token0_decimals", token0_decimals,
                             "token1_name", token1_name,
                             "token1_symbol", token1_symbol,
-                            "token1_decimals", token1_decimals
+                            "token1_decimals", token1_decimals,
+                            "pair_symbol", f"{token0_symbol}-{token1_symbol}"
                         )
 
             # logger.debug(f"Decimals of token0: {token0_decimals}, Decimals of token1: {token1_decimals}")
@@ -370,7 +373,135 @@ def get_pair(token0, token1):
     token1 = web3.toChecksumAddress(token1)
     pair = quick_swap_uniswap_v2_factory_contract.functions.getPair(token0, token1).call()
     return pair
-    
+
+async def process_pairs_data(session, redis_conn, maxCount, data, pair_contract_address):
+    #TODO: we might not get this audit_project_id what's then?
+    audit_project_id = f'uniswap_pairContract_pair_total_reserves_{pair_contract_address.lower()}'
+    last_block_height_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{audit_project_id}/payloads/height')
+    async with session.get(url=last_block_height_url) as resp:
+        rest_json = await resp.json()
+        last_block_height = rest_json.get('height')
+        
+        #set default to block
+        to_block = last_block_height
+        #set defualt from block
+        from_block = (1 if (to_block < maxCount or maxCount == -1) else to_block - (maxCount - 1))
+
+        #TODO: we need to store pair name for each pair first else this will return empty string
+        pair_name = await redis_conn.hmget(uniswap_pair_contract_tokens_data.format(pair_contract_address), "pair_symbol")
+        pair_name = (pair_name[0].decode('utf-8') if pair_name[0] else "")
+        
+        #TODO: we might not get this audit_project_id what's then?
+        query_params = {'from_height': from_block, 'to_height': to_block, 'data': data}
+        range_fetch_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{audit_project_id}/payloads')
+        
+        async with session.get(url=range_fetch_url, params=query_params) as resp:
+            resp_json = await resp.json()
+            if 'error' in resp_json:
+                logger.error(f"Error getting pair data contract:{pair_contract_address}, error msg: {resp_json['error']}")
+                return liquidityProcessedData(
+                    contractAddress=pair_contract_address,
+                    name=pair_name,
+                    liquidity=0.0,volume_24h="",volume_7d="",
+                    deltaToken0Reserves=0.0,deltaToken1Reserves=0.0,deltaTime=0.0,
+                    latestTimestamp=0.0,earliestTimestamp=0.0
+                )
+
+            # Save the data for this requestId
+            if isinstance(resp_json, dict) and ('requestId' in resp_json.keys()):
+                _ = await redis_conn.set(
+                    f"pendingRequestInfo:{resp_json['requestId']}", 
+                    json.dumps({
+                        'maxCount': maxCount,
+                        'fromHeight': from_block,
+                        'toHeight': to_block,
+                        'data': data,
+                        'projectId': audit_project_id
+                    })
+                )
+            
+            #TODO: what if 'resp_json' has no element or just 1 element?
+            
+
+            volume_24h=""
+            volume_24h_data=False
+            volume_24h_timestamp=(time.time() - 60*60) #1 hour ago
+            
+            volume_7d=""
+            volume_7d_data=False
+            volume_7d_timestamp=(time.time() - 60*60*7) #7hour ago
+
+            #I AM ASSUMING RESPONSE IS SORTED BY TIMESTAMP KEY            
+            for idx, val in enumerate(resp_json):
+                if((not volume_24h_data) and val['timestamp'] <= volume_24h_timestamp):
+                    #get data for last 24hour
+                    volume_24h_data = resp_json[:idx+1]
+                    #subsctract latestest reservers and earliest reservers for token0
+                    volume_24h_token0 = list(volume_24h_data[0]['data']['payload']['token0Reserves'].values())[-1] - list(volume_24h_data[-1]['data']['payload']['token0Reserves'].values())[-1]
+                    #subsctract latestest reservers and earliest reservers for token1
+                    volume_24h_token1 = list(volume_24h_data[0]['data']['payload']['token1Reserves'].values())[-1] - list(volume_24h_data[-1]['data']['payload']['token1Reserves'].values())[-1]
+                    #Add subsctracted reservers of token0 and token1 to get final volume
+                    volume_24h = volume_24h_token0 + volume_24h_token1
+
+                if((not volume_7d_data) and val['timestamp'] <= volume_7d_timestamp):
+                    #get data for last 7d
+                    volume_7d_data = resp_json[:idx+1]
+                    #subsctract latestest reservers and earliest reservers for token0
+                    volume_7d_data_token0 = list(volume_7d_data[0]['data']['payload']['token0Reserves'].values())[-1] - list(volume_7d_data[-1]['data']['payload']['token0Reserves'].values())[-1]
+                    #subsctract latestest reservers and earliest reservers for token1
+                    volume_7d_data_token1 = list(volume_7d_data[0]['data']['payload']['token1Reserves'].values())[-1] - list(volume_7d_data[-1]['data']['payload']['token1Reserves'].values())[-1]
+                    #Add subsctracted reservers of token0 and token1 to get final volume
+                    volume_7d = volume_7d_data_token0 + volume_7d_data_token1
+
+                #break if volumes are calculated
+                if (volume_7d_data and volume_7d_data):
+                    break
+                    
+
+
+
+
+            #adapt data to cosumable form
+            return liquidityProcessedData(
+                contractAddress=pair_contract_address,
+                name=pair_name,
+                liquidity=list(resp_json[0]['data']['payload']['token0Reserves'].values())[-1] + list(resp_json[0]['data']['payload']['token1Reserves'].values())[-1],
+                volume_24h=volume_24h,
+                volume_7d=volume_7d,
+                deltaToken0Reserves=list(resp_json[0]['data']['payload']['token0Reserves'].values())[-1] - list(resp_json[-1]['data']['payload']['token0Reserves'].values())[-1],
+                deltaToken1Reserves=list(resp_json[0]['data']['payload']['token1Reserves'].values())[-1] - list(resp_json[-1]['data']['payload']['token1Reserves'].values())[-1],
+                deltaTime=resp_json[0]['timestamp'] - resp_json[-1]['timestamp'],
+                latestTimestamp=resp_json[0]['timestamp'],
+                earliestTimestamp=resp_json[-1]['timestamp']
+            )
+
+async def v2_pairs_data(session, redis_conn, maxCount, data):
+    f = None
+    try:
+        #TODO: we can cache cached_pair_addresses content with expiry date
+        if not os.path.exists('static/cached_pair_addresses.json'):
+            return []
+        f = open('static/cached_pair_addresses.json', 'r')
+        pairs = json.loads(f.read())
+        
+        if len(pairs) <= 0:
+            return []
+
+        process_data_list = []
+        for pair_contract_address in pairs:
+            t = process_pairs_data(session, redis_conn, maxCount, data, pair_contract_address)
+            process_data_list.append(t)
+
+        #TODO: how about some error handling?
+        final_results = await asyncio.gather(*process_data_list)
+        #logger.debug(f"Processed data: {final_results}")
+        return final_results
+            
+    except Exception as e:
+        logger.error(f"Error at V2 pair data: {str(e)}", exc_info=True)
+    finally:
+        if f is not None:
+            f.close()
 
 
 if __name__ == '__main__':

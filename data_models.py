@@ -29,3 +29,15 @@ class SystemConfig(BaseModel):
     rpc: RPCConfig
     rlimit: RLimitConfig
 
+
+class liquidityProcessedData(BaseModel):
+    contractAddress: str
+    name: str
+    liquidity: float
+    volume_24h: str
+    volume_7d: str
+    deltaToken0Reserves: float
+    deltaToken1Reserves: float
+    deltaTime: float
+    latestTimestamp: float
+    earliestTimestamp: float
