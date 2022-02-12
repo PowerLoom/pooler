@@ -214,7 +214,7 @@ def get_all_pairs_and_write_to_file():
 
 
 @provide_async_redis_conn_insta
-async def get_pair_per_token_metadata(pair_contract_obj, pair_address, redis_conn: aioredis.Redis = None, loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()):
+async def get_pair_per_token_metadata(pair_contract_obj, pair_address, loop: asyncio.AbstractEventLoop, redis_conn: aioredis.Redis = None):
     """
         returns information on the tokens contained within a pair contract - name, symbol, decimals of token0 and token1
         also returns pair symbol by concatenating {token0Symbol}-{token1Symbol}

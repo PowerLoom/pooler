@@ -42,6 +42,7 @@ if os.path.exists('static/cached_pair_addresses.json'):
 else:
     CACHED_PAIR_CONTRACTS = list()
 
+web3 = Web3(Web3.HTTPProvider(settings.RPC.MATIC[0]))
 
 @provide_async_redis_conn_insta
 async def cache_pair_meta_data(redis_conn: aioredis.Redis = None):
@@ -116,9 +117,10 @@ async def cache_pair_meta_data(redis_conn: aioredis.Redis = None):
 
 @provide_async_redis_conn_insta
 async def cache_pair_stablecoin_exchange_rates(redis_conn: aioredis.Redis = None):
-    await cache_pair_meta_data()
-    event_loop = asyncio.get_running_loop()
-    all_pair_contracts = await event_loop.run_in_executor(executor=None, func=get_all_pairs)
+    #await cache_pair_meta_data()
+    #event_loop = asyncio.get_running_loop()
+    #all_pair_contracts = await event_loop.run_in_executor(executor=None, func=get_all_pairs)
+    all_pair_contracts = read_json_file('static/cached_pair_addresses.json')
     for each_pair_contract in all_pair_contracts:
         for attempt in Retrying(reraise=True, wait=wait_random_exponential(multiplier=1, min=10, max=60),
                                 stop=stop_after_attempt(settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS)):
@@ -157,38 +159,38 @@ async def cache_pair_stablecoin_exchange_rates(redis_conn: aioredis.Redis = None
                             {'appID': app_id, 'exception': e}))
                     else:
                         can_request = True
-                # # # rate limit check - end
-                if can_request:
-                    pair_contract_obj = web3.eth.contract(
-                        address=each_pair_contract,
-                        abi=pair_contract_abi
-                    )
-                    pair_per_token_metadata = await get_pair_per_token_metadata(
-                        pair_contract_obj=pair_contract_obj,
-                        pair_address=each_pair_contract
-                    )
-                    router_contract_obj = web3.eth.contract(
-                        address="0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff", 
-                        abi=read_json_file('./abis/UniswapV2Router.json')
-                    )
+                    # # # rate limit check - end
+                    if can_request:
+                        pair_contract_obj = web3.eth.contract(
+                            address=each_pair_contract,
+                            abi=pair_contract_abi
+                        )
+                        pair_per_token_metadata = await get_pair_per_token_metadata(
+                            pair_contract_obj=pair_contract_obj,
+                            pair_address=each_pair_contract
+                        )
+                        router_contract_obj = web3.eth.contract(
+                            address="0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff", 
+                            abi=read_json_file('./abis/UniswapV2Router.json')
+                        )
 
-                    print("Check if token aren't equal to WETH and then calculate prices")
-                    # check if token1 is WETH
-                    if Web3.toChecksumAddress(pair_per_token_metadata['token1']['address']) \
-                        != Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH):
-                        # TODO: 1. let x = getAmountsOut(in=1 unit of token0 i.e. 10**decimals, path=[each_pair_contract]) -- we do this because this function does not return floating/double points etc
-                        #       2. y = getAmountsOut(in=x calculated above, path=[WETH-USDT pair contract])
-                        #       3. store exchange value y/10**USDTdecimals for token0 -> US DOLLAR
-                        #       4. research on 3
-                        print("calculating price...")
-                        #router_contract.functions.getAmountsOut(100000000000000000, [Web3.toChecksumAddress(token0Addr), Web3.toChecksumAddress(usdt)]).call()
-                        loop = asyncio.get_running_loop()
-                        priceFunction = partial(router_contract_obj.functions.getAmountsOut(100000000000000000, ["0x7ceb23fd6bc0add59e62ac25578270cff1b9f619", "0xc2132d05d31c914a87c6611c10748aeb04b58e8f"]).call)
-                        x = await loop.run_in_executor(func=priceFunction, executor=None)
-                        #y = router_contract_obj.functions.getAmountsOut(x, [str(settings.CONTRACT_ADDRESSES.WETH-USDT)]).call()
-                        print("Calculated prices")
-                    else:
-                        print("I am in else block")
+                        print("Check if token aren't equal to WETH and then calculate prices")
+                        # check if token1 is WETH
+                        if Web3.toChecksumAddress(pair_per_token_metadata['token1']['address']) \
+                            != Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH):
+                            # TODO: 1. let x = getAmountsOut(in=1 unit of token0 i.e. 10**decimals, path=[each_pair_contract]) -- we do this because this function does not return floating/double points etc
+                            #       2. y = getAmountsOut(in=x calculated above, path=[WETH-USDT pair contract])
+                            #       3. store exchange value y/10**USDTdecimals for token0 -> US DOLLAR
+                            #       4. research on 3
+                            print("calculating price...")
+                            #router_contract.functions.getAmountsOut(100000000000000000, [Web3.toChecksumAddress(token0Addr), Web3.toChecksumAddress(usdt)]).call()
+                            loop = asyncio.get_running_loop()
+                            priceFunction = partial(router_contract_obj.functions.getAmountsOut(100000000000000000, ["0x7ceb23fd6bc0add59e62ac25578270cff1b9f619", "0xc2132d05d31c914a87c6611c10748aeb04b58e8f"]).call)
+                            x = await loop.run_in_executor(func=priceFunction, executor=None)
+                            #y = router_contract_obj.functions.getAmountsOut(x, [str(settings.CONTRACT_ADDRESSES.WETH-USDT)]).call()
+                            print("Calculated prices")
+                        else:
+                            print("I am in else block")
 
 
 async def periodic_retrieval():
