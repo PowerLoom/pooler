@@ -123,12 +123,12 @@ async def cache_pair_meta_data(redis_conn: aioredis.Redis = None):
         retrieval_logger.error("error at cache_pair_meta_data fn: %s", exc, exc_info=True)
         raise
 
-# @tenacity.retry(
-#     wait=tenacity.wait_random_exponential(multiplier=1, max=60),
-#     stop=stop_after_attempt(settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS),
-#     reraise=True
-# )
 
+@tenacity.retry(
+    wait=tenacity.wait_random_exponential(multiplier=1, min=10, max=60),
+    stop=stop_after_attempt(settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS),
+    reraise=True
+)
 @provide_async_redis_conn_insta
 async def cache_pair_stablecoin_exchange_rates(redis_conn: aioredis.Redis = None):
     await cache_pair_meta_data()
@@ -143,8 +143,7 @@ async def cache_pair_stablecoin_exchange_rates(redis_conn: aioredis.Redis = None
         -1]  # future support for loadbalancing over multiple MaticVigil RPC appID
     key_bits = [app_id, 'eth_call']  # TODO: add unique elements that can identify a request
     # # # prepare for rate limit check - end
-    for idx, each_pair_contract in enumerate(all_pair_contracts):
-        retrieval_logger.debug('Loop index %d in cached contracts', idx)
+    for each_pair_contract in all_pair_contracts:
         # TODO: refactor rate limit check into something modular and easier to use
         # # # rate limit check - begin
         can_request = False
@@ -188,18 +187,38 @@ async def cache_pair_stablecoin_exchange_rates(redis_conn: aioredis.Redis = None
                 loop=ev_loop
             )
             retrieval_logger.debug("Got pair token data for pair contract %s: %s", each_pair_contract, pair_per_token_metadata)
-            # check if token1 is WETH. If it is, token0-weth conversion can be figured right here, and then to USDT
             # if not,provide conversion path to token0-weth-usdt
+            retrieval_logger.debug("Calculating %s - WETH conversion...", pair_per_token_metadata['token0']['symbol'])
+            priceFunction_token0 = router_contract_obj.functions.getAmountsOut(
+                10 ** int(pair_per_token_metadata['token0']['decimals']), [
+                    Web3.toChecksumAddress(pair_per_token_metadata['token0']['address']),
+                    Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH),
+                    Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDT)]
+            ).call
+            x = await ev_loop.run_in_executor(func=priceFunction_token0, executor=None)
+            retrieval_logger.debug("Calculated price for token0 %s - WETH conversion: %s", pair_per_token_metadata['token0']['symbol'], x)
+            # check if token1 is WETH. If it is, weth-usdt conversion can be figured right here,
+            # else provide full path token1-weth-usdt
             if Web3.toChecksumAddress(pair_per_token_metadata['token1']['address']) \
                     != Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH):
-                retrieval_logger.debug("calculating price...")
-                priceFunction = router_contract_obj.functions.getAmountsOut(
-                    10**int(pair_per_token_metadata['token0']['decimals']), [
-                                    Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH),
-                                    Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDT)]
-                                  ).call
-                x = await ev_loop.run_in_executor(func=priceFunction, executor=None)
-                retrieval_logger.debug("Calculated prices for token %s: %s", pair_per_token_metadata['token0'], x)
+                priceFunction_token1 = router_contract_obj.functions.getAmountsOut(
+                    10 ** int(pair_per_token_metadata['token1']['decimals']), [
+                        Web3.toChecksumAddress(pair_per_token_metadata['token1']['address']),
+                        Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH),
+                        Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDT)]
+                ).call
+                x = await ev_loop.run_in_executor(func=priceFunction_token1, executor=None)
+            else:
+                priceFunction_token1 = router_contract_obj.functions.getAmountsOut(
+                    10 ** int(pair_per_token_metadata['token1']['decimals']), [
+                        Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH),
+                        Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDT)]
+                ).call
+                x = await ev_loop.run_in_executor(func=priceFunction_token1, executor=None)
+            retrieval_logger.debug("Calculated prices for token1 %s - WETH conversion: %s",
+                                   pair_per_token_metadata['token1']['symbol'], x)
+            # TODO: cache these conversion rates appropriately, use them in another worker that fetches from core_api
+            #       and stores liquidity values/deltas in USD  
         else:
             retrieval_logger.debug('I cant request')
     retrieval_logger.debug('Sleeping...')
