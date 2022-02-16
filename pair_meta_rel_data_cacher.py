@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from dynaconf import settings
 import asyncio
 import aiohttp
-import web3
+import tenacity
 import asyncio
 import logging
 import json
@@ -24,11 +24,12 @@ import sys
 
 
 """ Inititalize the logger """
-retrieval_logger = logging.getLogger('PowerLoom|EthLogs|worker')
+retrieval_logger = logging.getLogger('PowerLoom|UniswapFunctions|PairMetadataCacher')
 retrieval_logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter("%(levelname)-8s %(name)-4s %(asctime)s %(msecs)d %(module)s-%(funcName)s: %(message)s")
 stdout_handler = logging.StreamHandler(sys.stdout)
 stdout_handler.setFormatter(formatter)
+stdout_handler.setLevel(logging.DEBUG)
 stderr_handler = logging.StreamHandler(sys.stderr)
 stderr_handler.setLevel(logging.ERROR)
 retrieval_logger.handlers = [
@@ -42,7 +43,14 @@ if os.path.exists('static/cached_pair_addresses.json'):
 else:
     CACHED_PAIR_CONTRACTS = list()
 
-web3 = Web3(Web3.HTTPProvider(settings.RPC.MATIC[0]))
+w3 = Web3(Web3.HTTPProvider(settings.RPC.MATIC[0]))
+
+router_contract_obj = w3.eth.contract(
+    address=Web3.toChecksumAddress("0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff"),
+    abi=read_json_file('./abis/UniswapV2Router.json')
+)
+retrieval_logger.debug("Got uniswap v2 router object")
+
 
 @provide_async_redis_conn_insta
 async def cache_pair_meta_data(redis_conn: aioredis.Redis = None):
@@ -55,7 +63,7 @@ async def cache_pair_meta_data(redis_conn: aioredis.Redis = None):
         for pair_contract_address in CACHED_PAIR_CONTRACTS:
 
             pair_address = Web3.toChecksumAddress(pair_contract_address)
-            print(f"pair_add:{pair_contract_address}")
+            # print(f"pair_add:{pair_contract_address}")
 
             redis_storage = AsyncRedisStorage(await load_rate_limiter_scripts(redis_conn), redis_conn)
             custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
@@ -91,15 +99,16 @@ async def cache_pair_meta_data(redis_conn: aioredis.Redis = None):
             if can_request:
                 try:
                     # pair contract
-                    pair = web3.eth.contract(
-                        address=pair_address,
+                    pair = w3.eth.contract(
+                        address=Web3.toChecksumAddress(pair_address),
                         abi=pair_contract_abi
                     )
-                    await get_pair_per_token_metadata(
+                    x = await get_pair_per_token_metadata(
                         pair_contract_obj=pair,
-                        pair_address=pair_address,
+                        pair_address=Web3.toChecksumAddress(pair_address),
                         loop=asyncio.get_running_loop()
                     )
+                    # retrieval_logger.debug('Got pair contract per token metadata: %s', x)
                 except Exception as e:
                     retrieval_logger.error(f"Error fetching pair contract meta data: {pair_contract_address} | message: {str(e)}", exc_info=True)
                     if(str(e)=="Could not transact with/call contract function, is contract deployed correctly and chain synced?"):
@@ -114,93 +123,94 @@ async def cache_pair_meta_data(redis_conn: aioredis.Redis = None):
         retrieval_logger.error("error at cache_pair_meta_data fn: %s", exc, exc_info=True)
         raise
 
+# @tenacity.retry(
+#     wait=tenacity.wait_random_exponential(multiplier=1, max=60),
+#     stop=stop_after_attempt(settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS),
+#     reraise=True
+# )
 
 @provide_async_redis_conn_insta
 async def cache_pair_stablecoin_exchange_rates(redis_conn: aioredis.Redis = None):
-    #await cache_pair_meta_data()
-    #event_loop = asyncio.get_running_loop()
-    #all_pair_contracts = await event_loop.run_in_executor(executor=None, func=get_all_pairs)
+    await cache_pair_meta_data()
     all_pair_contracts = read_json_file('static/cached_pair_addresses.json')
-    for each_pair_contract in all_pair_contracts:
-        for attempt in Retrying(reraise=True, wait=wait_random_exponential(multiplier=1, min=10, max=60),
-                                stop=stop_after_attempt(settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS)):
-            with attempt:
-                # TODO: refactor rate limit check into something modular and easier to use
-                # # # rate limit check - begin
-                redis_storage = AsyncRedisStorage(await load_rate_limiter_scripts(redis_conn), redis_conn)
-                custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
-                limit_incr_by = 1  # score to be incremented for each request
-                app_id = settings.RPC.MATIC[0].split('/')[
-                    -1]  # future support for loadbalancing over multiple MaticVigil RPC appID
-                key_bits = [app_id, 'eth_call']  # TODO: add unique elements that can identify a request
-                can_request = False
-                rate_limit_exception = False
-                retry_after = 1
-                response = None
-                for each_lim in PARSED_LIMITS:
-                    # window_stats = custom_limiter.get_window_stats(each_lim, key_bits)
-                    # local_app_cacher_logger.debug(window_stats)
-                    # logger.debug('Limit %s expiry: %s', each_lim, each_lim.get_expiry())
-                    try:
-                        if await custom_limiter.hit(each_lim, limit_incr_by, *[key_bits]) is False:
-                            window_stats = await custom_limiter.get_window_stats(each_lim, key_bits)
-                            reset_in = 1 + window_stats[0]
-                            # if you need information on back offs
-                            retry_after = reset_in - int(time.time())
-                            retry_after = (datetime.now() + timedelta(0, retry_after)).isoformat()
-                            can_request = False
-                            break  # make sure to break once false condition is hit
-                    except (
-                            aioredis.errors.ConnectionClosedError, aioredis.errors.ConnectionForcedCloseError,
-                            aioredis.errors.PoolClosedError
-                    ) as e:
-                        # shit can happen while each limit check call hits Redis, handle appropriately
-                        retrieval_logger.debug('Bypassing rate limit check for appID because of Redis exception: ' + str(
-                            {'appID': app_id, 'exception': e}))
-                    else:
-                        can_request = True
-                    # # # rate limit check - end
-                    if can_request:
-                        pair_contract_obj = web3.eth.contract(
-                            address=each_pair_contract,
-                            abi=pair_contract_abi
-                        )
-                        pair_per_token_metadata = await get_pair_per_token_metadata(
-                            pair_contract_obj=pair_contract_obj,
-                            pair_address=each_pair_contract
-                        )
-                        router_contract_obj = web3.eth.contract(
-                            address="0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff", 
-                            abi=read_json_file('./abis/UniswapV2Router.json')
-                        )
-
-                        print("Check if token aren't equal to WETH and then calculate prices")
-                        # check if token1 is WETH
-                        if Web3.toChecksumAddress(pair_per_token_metadata['token1']['address']) \
-                            != Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH):
-                            # TODO: 1. let x = getAmountsOut(in=1 unit of token0 i.e. 10**decimals, path=[each_pair_contract]) -- we do this because this function does not return floating/double points etc
-                            #       2. y = getAmountsOut(in=x calculated above, path=[WETH-USDT pair contract])
-                            #       3. store exchange value y/10**USDTdecimals for token0 -> US DOLLAR
-                            #       4. research on 3
-                            print("calculating price...")
-                            #router_contract.functions.getAmountsOut(100000000000000000, [Web3.toChecksumAddress(token0Addr), Web3.toChecksumAddress(usdt)]).call()
-                            loop = asyncio.get_running_loop()
-                            priceFunction = partial(router_contract_obj.functions.getAmountsOut(100000000000000000, ["0x7ceb23fd6bc0add59e62ac25578270cff1b9f619", "0xc2132d05d31c914a87c6611c10748aeb04b58e8f"]).call)
-                            x = await loop.run_in_executor(func=priceFunction, executor=None)
-                            #y = router_contract_obj.functions.getAmountsOut(x, [str(settings.CONTRACT_ADDRESSES.WETH-USDT)]).call()
-                            print("Calculated prices")
-                        else:
-                            print("I am in else block")
+    retrieval_logger.debug('Cached pair contracts: %s', all_pair_contracts)
+    ev_loop = asyncio.get_running_loop()
+    # # # prepare for rate limit check
+    redis_storage = AsyncRedisStorage(await load_rate_limiter_scripts(redis_conn), redis_conn)
+    custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
+    limit_incr_by = 1  # score to be incremented for each request
+    app_id = settings.RPC.MATIC[0].split('/')[
+        -1]  # future support for loadbalancing over multiple MaticVigil RPC appID
+    key_bits = [app_id, 'eth_call']  # TODO: add unique elements that can identify a request
+    # # # prepare for rate limit check - end
+    for idx, each_pair_contract in enumerate(all_pair_contracts):
+        retrieval_logger.debug('Loop index %d in cached contracts', idx)
+        # TODO: refactor rate limit check into something modular and easier to use
+        # # # rate limit check - begin
+        can_request = False
+        rate_limit_exception = False
+        retry_after = 1
+        response = None
+        for each_lim in PARSED_LIMITS:
+            # window_stats = custom_limiter.get_window_stats(each_lim, key_bits)
+            # local_app_cacher_logger.debug(window_stats)
+            # logger.debug('Limit %s expiry: %s', each_lim, each_lim.get_expiry())
+            try:
+                if await custom_limiter.hit(each_lim, limit_incr_by, *[key_bits]) is False:
+                    window_stats = await custom_limiter.get_window_stats(each_lim, key_bits)
+                    reset_in = 1 + window_stats[0]
+                    # if you need information on back offs
+                    retry_after = reset_in - int(time.time())
+                    retry_after = (datetime.now() + timedelta(0, retry_after)).isoformat()
+                    can_request = False
+                    break  # make sure to break once false condition is hit
+            except (
+                    aioredis.errors.ConnectionClosedError, aioredis.errors.ConnectionForcedCloseError,
+                    aioredis.errors.PoolClosedError
+            ) as e:
+                # shit can happen while each limit check call hits Redis, handle appropriately
+                retrieval_logger.debug('Bypassing rate limit check for appID because of Redis exception: ' + str(
+                    {'appID': app_id, 'exception': e}))
+            else:
+                can_request = True
+        # # # rate limit check - end
+        if can_request:
+            # retrieval_logger.debug('I can request')
+            retrieval_logger.debug("Getting pair contract object for %s", each_pair_contract)
+            pair_contract_obj = w3.eth.contract(
+                address=Web3.toChecksumAddress(each_pair_contract),
+                abi=pair_contract_abi
+            )
+            retrieval_logger.debug("Got pair contract object for %s", each_pair_contract)
+            pair_per_token_metadata = await get_pair_per_token_metadata(
+                pair_contract_obj=pair_contract_obj,
+                pair_address=Web3.toChecksumAddress(each_pair_contract),
+                loop=ev_loop
+            )
+            retrieval_logger.debug("Got pair token data for pair contract %s: %s", each_pair_contract, pair_per_token_metadata)
+            # check if token1 is WETH. If it is, token0-weth conversion can be figured right here, and then to USDT
+            # if not,provide conversion path to token0-weth-usdt
+            if Web3.toChecksumAddress(pair_per_token_metadata['token1']['address']) \
+                    != Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH):
+                retrieval_logger.debug("calculating price...")
+                priceFunction = router_contract_obj.functions.getAmountsOut(
+                    10**int(pair_per_token_metadata['token0']['decimals']), [
+                                    Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH),
+                                    Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDT)]
+                                  ).call
+                x = await ev_loop.run_in_executor(func=priceFunction, executor=None)
+                retrieval_logger.debug("Calculated prices for token %s: %s", pair_per_token_metadata['token0'], x)
+        else:
+            retrieval_logger.debug('I cant request')
+    retrieval_logger.debug('Sleeping...')
 
 
 async def periodic_retrieval():
     while True:
-        await asyncio.gather(
-            cache_pair_stablecoin_exchange_rates(),
-            # TODO: create task that runs audit protocol fetches and uses the exchange rates stored earlier to
-            #       calculate and cache liquidty information/change in US DOLLARS in Redis
-            asyncio.sleep(120)  # run every 2 minutes
-        )
+        await cache_pair_stablecoin_exchange_rates()
+        # TODO: create task that runs audit protocol fetches and uses the exchange rates stored earlier to
+        #       calculate and cache liquidty information/change in US DOLLARS in Redis
+        await asyncio.sleep(120)  # run every 2 minutes
 
 
 def verifier_crash_cb(fut: asyncio.Future):
@@ -220,6 +230,6 @@ if __name__ == "__main__":
     f = asyncio.ensure_future(periodic_retrieval())
     f.add_done_callback(verifier_crash_cb)
     try:
-        asyncio.get_event_loop().run_until_complete(asyncio.gather(f))
+        asyncio.get_event_loop().run_until_complete(f)
     except:
         asyncio.get_event_loop().stop()

@@ -28,7 +28,7 @@ from data_models import liquidityProcessedData
 from decimal import Decimal
 
 
-web3 = Web3(Web3.HTTPProvider(settings.RPC.MATIC[0]))
+w3 = Web3(Web3.HTTPProvider(settings.RPC.MATIC[0]))
 # TODO: Use async http provider once it is considered stable by the web3.py project maintainers
 # web3_async = Web3(Web3.AsyncHTTPProvider(settings.RPC.MATIC[0]))
 
@@ -140,7 +140,7 @@ async def load_rate_limiter_scripts(redis_conn: aioredis.Redis):
 # initiate all contracts
 try:
     # instantiate UniswapV2Factory contract (using quick swap v2 factory address)
-    quick_swap_uniswap_v2_factory_contract = web3.eth.contract(
+    quick_swap_uniswap_v2_factory_contract = w3.eth.contract(
         address=Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.QUICK_SWAP_IUNISWAP_V2_FACTORY),
         abi=read_json_file('./abis/IUniswapV2Factory.json')
     )
@@ -219,25 +219,28 @@ async def get_pair_per_token_metadata(pair_contract_obj, pair_address, loop: asy
         returns information on the tokens contained within a pair contract - name, symbol, decimals of token0 and token1
         also returns pair symbol by concatenating {token0Symbol}-{token1Symbol}
     """
+    pair_address = Web3.toChecksumAddress(pair_address)
     pairTokensAddresses = await redis_conn.hgetall(uniswap_pair_contract_tokens_addresses.format(pair_address))
     if pairTokensAddresses:
-        token0Addr = pairTokensAddresses[b"token0Addr"].decode('utf-8')
-        token1Addr = pairTokensAddresses[b"token1Addr"].decode('utf-8')
+        token0Addr = Web3.toChecksumAddress(pairTokensAddresses[b"token0Addr"].decode('utf-8'))
+        token1Addr = Web3.toChecksumAddress(pairTokensAddresses[b"token1Addr"].decode('utf-8'))
     else:
         # run in loop's default executor
         pfunc_0 = partial(pair_contract_obj.functions.token0().call)
         token0Addr = await loop.run_in_executor(func=pfunc_0, executor=None)
         pfunc_1 = partial(pair_contract_obj.functions.token1().call)
         token1Addr = await loop.run_in_executor(func=pfunc_1, executor=None)
+        token0Addr = Web3.toChecksumAddress(token0Addr)
+        token1Addr = Web3.toChecksumAddress(token1Addr)
         await redis_conn.hmset(uniswap_pair_contract_tokens_addresses.format(pair_address), 'token0Addr', token0Addr,
                                'token1Addr', token1Addr)
     # token0 contract
-    token0 = web3.eth.contract(
+    token0 = w3.eth.contract(
         address=Web3.toChecksumAddress(token0Addr),
         abi=erc20_abi
     )
     # token1 contract
-    token1 = web3.eth.contract(
+    token1 = w3.eth.contract(
         address=Web3.toChecksumAddress(token1Addr),
         abi=erc20_abi
     )
@@ -251,34 +254,30 @@ async def get_pair_per_token_metadata(pair_contract_obj, pair_address, loop: asy
         token1_name = pair_tokens_data[b"token1_name"].decode('utf-8')
     else:
         executor_gather = list()
+        executor_gather.append(loop.run_in_executor(func=token0.functions.name().call, executor=None))
+        executor_gather.append(loop.run_in_executor(func=token0.functions.symbol().call, executor=None))
+        executor_gather.append(loop.run_in_executor(func=token0.functions.decimals().call, executor=None))
 
-        for attempt in Retrying(reraise=True, wait=wait_random_exponential(multiplier=1, min=10, max=60),
-                                stop=stop_after_attempt(settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS)):
-            with attempt:
-                executor_gather.append(loop.run_in_executor(func=token0.functions.name().call, executor=None))
-                executor_gather.append(loop.run_in_executor(func=token0.functions.symbol().call, executor=None))
-                executor_gather.append(loop.run_in_executor(func=token0.functions.decimals().call, executor=None))
+        executor_gather.append(loop.run_in_executor(func=token1.functions.name().call, executor=None))
+        executor_gather.append(loop.run_in_executor(func=token1.functions.symbol().call, executor=None))
+        executor_gather.append(loop.run_in_executor(func=token1.functions.decimals().call, executor=None))
 
-                executor_gather.append(loop.run_in_executor(func=token1.functions.name().call, executor=None))
-                executor_gather.append(loop.run_in_executor(func=token1.functions.symbol().call, executor=None))
-                executor_gather.append(loop.run_in_executor(func=token1.functions.decimals().call, executor=None))
+        [
+            token0_name, token0_symbol, token0_decimals,
+            token1_name, token1_symbol, token1_decimals
+        ] = await asyncio.gather(*executor_gather)
 
-                [
-                    token0_name, token0_symbol, token0_decimals,
-                    token1_name, token1_symbol, token1_decimals
-                ] = await asyncio.gather(*executor_gather)
-
-                await redis_conn.hmset(
-                    uniswap_pair_contract_tokens_data.format(pair_address),
-                    "token0_name", token0_name,
-                    "token0_symbol", token0_symbol,
-                    "token0_decimals", token0_decimals,
-                    "token1_name", token1_name,
-                    "token1_symbol", token1_symbol,
-                    "token1_decimals", token1_decimals,
-                    "pair_symbol", f"{token0_symbol}-{token1_symbol}"
-                )
-                # print(f"pair_symbol {token0_symbol}-{token1_symbol}")
+        await redis_conn.hmset(
+            uniswap_pair_contract_tokens_data.format(pair_address),
+            "token0_name", token0_name,
+            "token0_symbol", token0_symbol,
+            "token0_decimals", token0_decimals,
+            "token1_name", token1_name,
+            "token1_symbol", token1_symbol,
+            "token1_decimals", token1_decimals,
+            "pair_symbol", f"{token0_symbol}-{token1_symbol}"
+        )
+        # print(f"pair_symbol {token0_symbol}-{token1_symbol}")
     # TODO: formalize return structure in a pydantic model for better readability
     return {
         'token0': {
@@ -304,7 +303,7 @@ async def get_liquidity_of_each_token_reserve_async(loop: asyncio.AbstractEventL
     try:
         pair_address = Web3.toChecksumAddress(pair_address)
         # pair contract
-        pair = web3.eth.contract(
+        pair = w3.eth.contract(
             address=pair_address,
             abi=pair_contract_abi
         )
@@ -369,7 +368,7 @@ def get_liquidity_of_each_token_reserve(pair_address, block_identifier='latest')
     # logger.debug("Pair Data:")
     pair_address = Web3.toChecksumAddress(pair_address)
     # pair contract
-    pair = web3.eth.contract(
+    pair = w3.eth.contract(
         address=pair_address, 
         abi=pair_contract_abi
     )
@@ -385,12 +384,12 @@ def get_liquidity_of_each_token_reserve(pair_address, block_identifier='latest')
     
 
     #toke0 contract
-    token0 = web3.eth.contract(
+    token0 = w3.eth.contract(
         address=Web3.toChecksumAddress(token0Addr), 
         abi=erc20_abi
     )
     #toke1 contract
-    token1 = web3.eth.contract(
+    token1 = w3.eth.contract(
         address=Web3.toChecksumAddress(token1Addr), 
         abi=erc20_abi
     )
@@ -541,7 +540,7 @@ async def v2_pairs_data(session, redis_conn, maxCount, data):
         if len(pairs) <= 0:
             return []
 
-        router_contract = web3.eth.contract(
+        router_contract = w3.eth.contract(
             address=router_addr, 
             abi=router_contract_abi
         )

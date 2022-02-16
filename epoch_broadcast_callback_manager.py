@@ -1,9 +1,11 @@
 import pika
 from init_rabbitmq import create_rabbitmq_conn
+from rabbitmq_helpers import RabbitmqSelectLoopInteractor
 from redis_keys import powerloom_broadcast_id_zset
 from redis_conn import create_redis_conn, REDIS_CONN_CONF
 from dynaconf import settings
 from multiprocessing import Process
+import threading
 import redis
 import time
 import logging
@@ -33,9 +35,16 @@ class EpochCallbackManager(Process):
         with open(callback_q_conf_path, 'r') as f:
             # TODO: code the callback modules rabbitmq queue setup into pydantic model
             self._callback_q_config = json.load(f)
+        self._rmq_callback_threads = list()
+        self.rabbitmq_interactor = None
 
-    def _epoch_broadcast_callback(self, ch, method, properties, body):
-        ch.basic_ack(delivery_tag=method.delivery_tag)
+    # TODO: to make a tryly async consumer, define the work bit in here and let it run as a thread
+    #       use self._rmq_callback_threads to monitor, join and clean up launched 'works'
+    def _epoch_broadcast_callback_work(self):
+        pass
+
+    def _epoch_broadcast_callback(self, dont_use_ch, method, properties, body):
+        self.rabbitmq_interactor._channel.basic_ack(delivery_tag=method.delivery_tag)
         broadcast_json = json.loads(body)
         self._logger.debug('Got epoch broadcast: %s', broadcast_json)
         append_epoch_context(broadcast_json)
@@ -47,16 +56,10 @@ class EpochCallbackManager(Process):
         for topic in self._callback_q_config['callback_topics'].keys():
             # send epoch context to third party worker modules as registered
             routing_key = f'powerloom-backend-callback:{settings.NAMESPACE}.{topic}'
-            ch.basic_publish(
+            self.rabbitmq_interactor.enqueue_msg_delivery(
                 exchange=callback_exchange_name,
                 routing_key=f'powerloom-backend-callback:{settings.NAMESPACE}.{topic}',
-                body=json.dumps(broadcast_json),
-                properties=pika.BasicProperties(
-                    delivery_mode=2,
-                    content_type='text/plain',
-                    content_encoding='utf-8'
-                ),
-                mandatory=True
+                msg_body=json.dumps(broadcast_json)
             )
             self._logger.debug(f'Sent epoch to callback routing key {routing_key}: {body}')
         # send commands to actors to start processing this pronto
@@ -82,24 +85,12 @@ class EpochCallbackManager(Process):
         ]
         self._logger.debug('Launched PowerLoom|EpochCallbackManager with PID: %s', self.pid)
         # self._asys = ActorSystem('multiprocTCPBase', logDefs=logcfg_thespian_main)
-        c = create_rabbitmq_conn()
-        ch = c.channel()
         self._connection_pool = redis.BlockingConnectionPool(**REDIS_CONN_CONF)
         queue_name = f"powerloom-epoch-broadcast-q:{settings.NAMESPACE}"
-        ch.basic_qos(prefetch_count=1)
-        ch.basic_consume(
-            queue=queue_name,
-            on_message_callback=self._epoch_broadcast_callback,
-            auto_ack=False
+        self.rabbitmq_interactor: RabbitmqSelectLoopInteractor = RabbitmqSelectLoopInteractor(
+            consume_queue_name=queue_name,
+            consume_callback=self._epoch_broadcast_callback
         )
-        try:
-            self._logger.debug('Starting RabbitMQ consumer on queue %s', queue_name)
-            ch.start_consuming()
-        except Exception as e:
-            self._logger.error('Exception launching RabbitMQ consumer on queue %s', queue_name)
-        finally:
-            try:
-                ch.close()
-                c.close()
-            except:
-                pass
+        # self.rabbitmq_interactor.start_publishing()
+        self._logger.debug('Starting RabbitMQ consumer on queue %s', queue_name)
+        self.rabbitmq_interactor.run()
