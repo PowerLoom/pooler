@@ -24,7 +24,7 @@ coloredlogs.install(level='DEBUG', logger=init_rmq_logger, stream=sys.stdout)
 
 
 def create_rabbitmq_conn():
-    c = pika.BaseConnection(pika.ConnectionParameters(
+    c = pika.BlockingConnection(pika.ConnectionParameters(
         host=settings.RABBITMQ.HOST,
         port=settings.RABBITMQ.PORT,
         virtual_host='/',
