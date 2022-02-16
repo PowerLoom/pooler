@@ -5,6 +5,7 @@ uniswap_pair_total_reserves_processing_status = 'uniswap:pairContract:'+settings
 uniswap_pair_contract_tokens_addresses = 'uniswap:pairContract:'+settings.NAMESPACE+':{}:PairContractTokensAddresses'
 uniswap_pair_contract_tokens_data = 'uniswap:pairContract:'+settings.NAMESPACE+':{}:PairContractTokensData'
 uniswap_pair_total_reserves_last_snapshot = 'uniswap:pairContract:'+settings.NAMESPACE+':{}:LastCachedPairReserve'
+uniswap_pair_cached_token_price = 'uniswap:pairContract:'+settings.NAMESPACE+':{}:cachedPairPrice'
 
 powerloom_broadcast_id_zset = 'powerloom:broadcastID:' + settings.NAMESPACE + ':broadcastProcessingStatus'
 eth_log_request_data_f = 'powerloom:ethLogs:'+settings.NAMESPACE+':requestId:{}:results'  # request UUID
