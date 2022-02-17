@@ -14,10 +14,11 @@ import os
 import time
 from redis_conn import provide_async_redis_conn
 from functools import reduce
-from uniswap_functions import v2_pairs_data
+from uniswap_functions import v2_pairs_data, read_json_file
 from redis_keys import (
     uniswap_pair_contract_V2_pair_data
 )
+from web3 import Web3
 
 REDIS_CONN_CONF = {
     "host": settings['redis']['host'],
@@ -245,14 +246,19 @@ async def get_v2_pairs_data(
     response: Response,
     contract: str
 ):
+    all_pair_contracts = read_json_file('static/cached_pair_addresses.json')
+    
+    if all_pair_contracts and len(all_pair_contracts) <= 0:
+        return {"error": "No data found"}
+
     redis_conn_raw = await request.app.redis_pool.acquire()
     redis_conn: aioredis.Redis = aioredis.Redis(redis_conn_raw)
-    data = await redis_conn.get(uniswap_pair_contract_V2_pair_data.format(f"{contract}"))
+    all_pair_contracts = [uniswap_pair_contract_V2_pair_data.format(f"{Web3.toChecksumAddress(addr)}") for addr in all_pair_contracts]
+    data = await redis_conn.mget(*all_pair_contracts)
     request.app.redis_pool.release(redis_conn_raw)
 
-    if(data):
-        data = data.decode('utf-8')
-        data = json.loads(data)
+    if data:
+        data = [json.loads(pair_data) for pair_data in data]
     else:
         data = {"error": "No data found"}
     

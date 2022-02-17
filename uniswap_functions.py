@@ -552,7 +552,7 @@ async def process_pairs_data(session, redis_conn, router_contract, maxCount, dat
             total_liquidity = token0_liquidity + token1_liquidity
 
             
-            await redis_conn.set(uniswap_pair_contract_V2_pair_data.format(f"{pair_contract_address}"), liquidityProcessedData(
+            await redis_conn.set(uniswap_pair_contract_V2_pair_data.format(f"{Web3.toChecksumAddress(pair_contract_address)}"), liquidityProcessedData(
                 contractAddress=pair_contract_address,
                 name=pair_name,
                 liquidity=total_liquidity,
