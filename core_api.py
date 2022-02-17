@@ -15,6 +15,9 @@ import time
 from redis_conn import provide_async_redis_conn
 from functools import reduce
 from uniswap_functions import v2_pairs_data
+from redis_keys import (
+    uniswap_pair_contract_V2_pair_data
+)
 
 REDIS_CONN_CONF = {
     "host": settings['redis']['host'],
@@ -240,24 +243,20 @@ async def get_past_snapshots(
 async def get_v2_pairs_data(
     request: Request,
     response: Response,
-    maxCount: Optional[int] = Query(None),
-    data: Optional[str] = Query('false')
+    contract: str
 ):
-    #set default max count
-    maxCount = maxCount if maxCount else 10    
-    
-    if not (data.lower() == 'true' or data.lower() == 'false'):
-        data = 'false'
-    else:
-        data = data.lower()
-
     redis_conn_raw = await request.app.redis_pool.acquire()
     redis_conn: aioredis.Redis = aioredis.Redis(redis_conn_raw)
+    data = await redis_conn.get(uniswap_pair_contract_V2_pair_data.format(f"{contract}"))
+    request.app.redis_pool.release(redis_conn_raw)
+
+    if(data):
+        data = data.decode('utf-8')
+        data = json.loads(data)
+    else:
+        data = {"error": "No data found"}
     
-    async with aiohttp.ClientSession() as session:
-        results = await v2_pairs_data(session, redis_conn, maxCount, data)
-        request.app.redis_pool.release(redis_conn_raw)
-        return results
+    return data
 
 
 @app.get('/request_status/{requestId:str}')

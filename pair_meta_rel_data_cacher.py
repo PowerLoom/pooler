@@ -1,6 +1,7 @@
 from uniswap_functions import (
     get_pair_per_token_metadata, SCRIPT_CLEAR_KEYS, SCRIPT_SET_EXPIRE, SCRIPT_INCR_EXPIRE, GLOBAL_RPC_RATE_LIMIT_STR,
-    load_rate_limiter_scripts, PARSED_LIMITS, pair_contract_abi, get_all_pairs, get_pair, read_json_file
+    load_rate_limiter_scripts, PARSED_LIMITS, pair_contract_abi, get_all_pairs, get_pair, read_json_file,
+    v2_pairs_data
 )
 from redis_keys import (
     uniswap_pair_cached_token_price
@@ -258,15 +259,21 @@ async def cache_pair_stablecoin_exchange_rates(redis_conn: aioredis.Redis = None
 
         else:
             retrieval_logger.debug('I cant request')
-    retrieval_logger.debug('Sleeping...')
 
+async def get_aiohttp_cache() -> aiohttp.ClientSession:
+    basic_rpc_connector = aiohttp.TCPConnector(limit=settings['rlimit']['file_descriptors'])
+    aiohttp_client_basic_rpc_session = aiohttp.ClientSession(connector=basic_rpc_connector)
+    return aiohttp_client_basic_rpc_session
 
 async def periodic_retrieval():
+    session = await get_aiohttp_cache()
     while True:
-        await cache_pair_stablecoin_exchange_rates()
-        # TODO: create task that runs audit protocol fetches and uses the exchange rates stored earlier to
-        #       calculate and cache liquidty information/change in US DOLLARS in Redis
-        await asyncio.sleep(120)  # run every 2 minutes
+        await asyncio.gather(
+            cache_pair_stablecoin_exchange_rates(),
+            v2_pairs_data(session, 500, 'true'),
+            asyncio.sleep(120)  # run atleast 'x' seconds not sleep for x seconds
+        )
+    session.close()
 
 
 def verifier_crash_cb(fut: asyncio.Future):
