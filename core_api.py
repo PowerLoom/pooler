@@ -243,8 +243,7 @@ async def get_past_snapshots(
 @app.get('/v2-pairs')
 async def get_v2_pairs_data(
     request: Request,
-    response: Response,
-    contract: str
+    response: Response
 ):
     all_pair_contracts = read_json_file('static/cached_pair_addresses.json')
     
