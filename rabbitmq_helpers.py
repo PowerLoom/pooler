@@ -119,9 +119,12 @@ class RabbitmqSelectLoopInteractor(object):
         if self._stopping:
             self._connection.ioloop.stop()
         else:
-            logger.warning('Connection closed, reopening in 5 seconds: %s',
-                           reason)
-            self._connection.ioloop.call_later(5, self._connection.ioloop.stop)
+            if '200' and 'Normal shutdown' in reason.__repr__():
+                logger.warning('Connection closed: %s', reason)
+            else:
+                logger.warning('Connection closed, reopening in 5 seconds: %s',
+                               reason)
+                self._connection.ioloop.call_later(5, self._connection.ioloop.stop)
 
     def open_channel(self):
         """This method will open a new channel with RabbitMQ by issuing the
