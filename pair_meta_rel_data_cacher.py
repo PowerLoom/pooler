@@ -50,7 +50,7 @@ else:
 w3 = Web3(Web3.HTTPProvider(settings.RPC.MATIC[0]))
 
 router_contract_obj = w3.eth.contract(
-    address=Web3.toChecksumAddress("0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff"),
+    address=Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.IUNISWAP_V2_ROUTER),
     abi=read_json_file('./abis/UniswapV2Router.json')
 )
 retrieval_logger.debug("Got uniswap v2 router object")

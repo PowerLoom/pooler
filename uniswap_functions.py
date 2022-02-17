@@ -98,11 +98,10 @@ pair_contract_abi = read_json_file(f"abis/UniswapV2Pair.json")
 erc20_abi = read_json_file('abis/IERC20.json')
 router_contract_abi = read_json_file(f"abis/UniswapV2Router.json")
 
-#TODO: put this in settings.json
-router_addr = "0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff" 
-dai = "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063"
-usdt = "0xc2132d05d31c914a87c6611c10748aeb04b58e8f"
-weth = "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619"
+router_addr = settings.CONTRACT_ADDRESSES.IUNISWAP_V2_ROUTER
+dai = settings.CONTRACT_ADDRESSES.DAI
+usdt = settings.CONTRACT_ADDRESSES.USDT
+weth = settings.CONTRACT_ADDRESSES.WETH
 
 class RPCException(Exception):
     def __init__(self, request, response, underlying_exception, extra_info):
@@ -142,7 +141,7 @@ async def load_rate_limiter_scripts(redis_conn: aioredis.Redis):
 try:
     # instantiate UniswapV2Factory contract (using quick swap v2 factory address)
     quick_swap_uniswap_v2_factory_contract = w3.eth.contract(
-        address=Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.QUICK_SWAP_IUNISWAP_V2_FACTORY),
+        address=Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.IUNISWAP_V2_FACTORY),
         abi=read_json_file('./abis/IUniswapV2Factory.json')
     )
 
