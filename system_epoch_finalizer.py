@@ -41,9 +41,9 @@ def main():
     rmq_ch = rmq_conn.channel()
     last_reorg_state = SystemEpochStatusReport(begin=0, end=0, reorg=False, broadcast_id='dummy')
     last_epoch_broadcast = EpochBroadcast(begin=0, end=0, broadcast_id='dummy')
-    coordinator = coordination.get_coordinator(f'kazoo://{construct_kazoo_url()}', 'powerloom:epoch:finalizer')
+    coordinator = coordination.get_coordinator(f'kazoo://{construct_kazoo_url()}', f'powerloom:epoch:finalizer:{settings.NAMESPACE}')
     coordinator.start(start_heart=True)
-    group_id = 'powerloom:epoch:reports'
+    group_id = f'powerloom:epoch:reports:{settings.NAMESPACE}'
     group_id = group_id.encode('utf-8')
     try:
         coordinator.create_group(group_id).get()
@@ -64,7 +64,7 @@ def main():
             for member, cap in get_capabilities:
                 # print("Member %s has capabilities: %s" % (member, cap.get()))
                 member_name = member.decode('utf-8') if type(member) == bytes else member
-                if member_name == 'powerloom:epoch:collator':
+                if member_name == f'powerloom:epoch:collator:{settings.NAMESPACE}':
                     report = cap.get()
                     try:
                         report_obj = SystemEpochStatusReport(**report)
