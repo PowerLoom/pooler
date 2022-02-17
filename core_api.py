@@ -83,7 +83,7 @@ def project_namespace_inject(request: Request, stream: str = Query(default='pair
         for eg. pair total reserves, pair trades etc. Effectively, it injects namespaces into a project ID
     """
     pair_contract_address = request.path_params['pair_contract_address']
-    audit_project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}'
+    audit_project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
     return audit_project_id
 
 

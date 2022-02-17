@@ -404,16 +404,18 @@ def get_liquidity_of_each_token_reserve(pair_address, block_identifier='latest')
 
     return {"token0": reservers[0]/10**token0_decimals, "token1": reservers[1]/10**token1_decimals}
 
+
 def get_pair(token0, token1):
-    token0 = web3.toChecksumAddress(token0)
-    token1 = web3.toChecksumAddress(token1)
+    token0 = w3.toChecksumAddress(token0)
+    token1 = w3.toChecksumAddress(token1)
     pair = quick_swap_uniswap_v2_factory_contract.functions.getPair(token0, token1).call()
     return pair
+
 
 async def process_pairs_data(session, redis_conn, router_contract, maxCount, data, pair_contract_address):
     #TODO: we might not get this audit_project_id what's then?
     pair_contract_address = pair_contract_address.lower()
-    audit_project_id = f'uniswap_pairContract_pair_total_reserves_{pair_contract_address}'
+    audit_project_id = f'uniswap_pairContract_pair_total_reserves_{pair_contract_address}_{settings.NAMESPACE}'
     last_block_height_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{audit_project_id}/payloads/height')
     async with session.get(url=last_block_height_url) as resp:
         logger.debug(f"Starting calculation of v2 pair data for contract: {pair_contract_address}")

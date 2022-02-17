@@ -31,7 +31,7 @@ def redis_cleanup():
     poly_last_snapshots = r.hgetall('auditprotocol:lastSeenSnapshots')
     poly_last_snapshots = list(map(lambda x: x.decode('utf-8'), poly_last_snapshots.keys()))
     for k in poly_last_snapshots:
-        if 'uniswap' in k:
+        if f'uniswap*{settings.NAMESPACE}*' in k:
             r.hdel('auditprotocol:lastSeenSnapshots', k)
 
     try:
@@ -41,7 +41,7 @@ def redis_cleanup():
         pass
 
     try:
-        c = r.delete(*r.keys('uniswap:pairContract:*'))
+        c = r.delete(*r.keys(f'uniswap:pairContract*{settings.NAMESPACE}*'))
         print(c)
     except:
         pass

@@ -50,7 +50,7 @@ class AuditProtocolCommandsHelper:
     @classmethod
     @provide_redis_conn_insta
     async def set_diff_rule_for_pair_reserves(cls, pair_contract_address, stream, session: aiohttp.ClientSession, redis_conn: redis.Redis = None):
-        project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}'
+        project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
         if not redis_conn.sismember(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id):
             """ Setup diffRules for this market"""
             # retry below call given at settings.AUDIT_PROTOCOL_ENGINE.RETRY
@@ -110,21 +110,21 @@ class AuditProtocolCommandsHelper:
     @classmethod
     @provide_redis_conn_insta
     def set_commit_callback_url(cls, pair_contract_address, stream, redis_conn: redis.Redis = None):
-        project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}'
-        if not redis_conn.sismember('uniswap:callbackURLSetFor', project_id):
+        project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
+        if not redis_conn.sismember(f'uniswap:{settings.NAMESPACE}:callbackURLSetFor', project_id):
             r = requests.post(
                 url=urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{project_id}/confirmations/callback'),
                 json={'callbackURL': urljoin(settings.WEBHOOK_LISTENER.ROOT, settings.WEBHOOK_LISTENER.COMMIT_CONFIRMATION_CALLBACK_PATH)}
             )
             if r.status_code in range(200, 300):
-                redis_conn.sadd('uniswap:callbackURLSetFor', project_id)
+                redis_conn.sadd(f'uniswap:{settings.NAMESPACE}:callbackURLSetFor', project_id)
 
     @classmethod
     async def commit_payload(cls, pair_contract_address, stream, report_payload, session: aiohttp.ClientSession):
         # retry below call given at settings.AUDIT_PROTOCOL_ENGINE.RETRY
         for attempt in Retrying(reraise=True, stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY)):
             with attempt:
-                project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}'
+                project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
                 async with session.post(
                     url=urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, 'commit_payload'), 
                     json={'payload': report_payload, 'projectId': project_id}, 
