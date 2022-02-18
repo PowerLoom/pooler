@@ -20,12 +20,15 @@ logger.handlers = [logging.handlers.SocketHandler(host='localhost', port=logging
 def resume_on_rabbitmq_fail(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
+        ret = None
         for attempt in Retrying(
             reraise=True, stop=stop_after_attempt(5), wait=wait_random_exponential(multiplier=1, max=60),
-            retry=retry_if_exception_type(pika.exceptions.AMQPError)
+            retry=retry_if_exception_type(pika.exceptions.AMQPError) | retry_if_exception_type(pika.exceptions.AMQPConnectionError) |
+            retry_if_exception_type(pika.exceptions.StreamLostError) | retry_if_exception_type(pika.exceptions.AMQPChannelError)
         ):
             with attempt:
-                return fn(*args, **kwargs)
+                ret = fn(*args, **kwargs)
+        return ret
     return wrapper
 
 
