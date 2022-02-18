@@ -257,7 +257,7 @@ async def get_v2_pairs_data(
     request.app.redis_pool.release(redis_conn_raw)
 
     if data:
-        data = [json.loads(pair_data) for pair_data in data]
+        data = [json.loads(pair_data) for pair_data in data if pair_data is not None]
     else:
         data = {"error": "No data found"}
     
