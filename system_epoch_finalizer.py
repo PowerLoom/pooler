@@ -6,9 +6,11 @@ from time import sleep
 from tooz import coordination
 from helper_functions import construct_kazoo_url
 from pydantic import ValidationError as PydanticValidationError
-import logging
+import uuid
 import logging.handlers
 import json
+import tooz
+import time
 import pika
 
 # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|EpochFinalizer'))
@@ -16,12 +18,15 @@ finalizer_logger = logging.getLogger('PowerLoom|EpochFinalizer')
 finalizer_logger.setLevel(logging.DEBUG)
 finalizer_logger.handlers = [logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
 
+
 # TODO: Handle delivery failures
 def broadcast_epoch(
         ch: pika.adapters.blocking_connection.BlockingChannel,
         epoch_report: SystemEpochStatusReport,
 ) -> EpochBroadcast:
-    broadcast_msg = SystemEpochStatusReport(begin=epoch_report.begin, end=epoch_report.end, broadcast_id=epoch_report.broadcast_id)
+    report = SystemEpochStatusReport(begin=epoch_report.begin, end=epoch_report.end,
+                                     broadcast_id=epoch_report.broadcast_id)
+    broadcast_msg = report
     ch.basic_publish(
         exchange=f'{settings.RABBITMQ.SETUP.CORE.EXCHANGE}:{settings.NAMESPACE}',
         routing_key=f'epoch-broadcast:{settings.NAMESPACE}',
@@ -41,7 +46,8 @@ def main():
     rmq_ch = rmq_conn.channel()
     last_reorg_state = SystemEpochStatusReport(begin=0, end=0, reorg=False, broadcast_id='dummy')
     last_epoch_broadcast = EpochBroadcast(begin=0, end=0, broadcast_id='dummy')
-    coordinator = coordination.get_coordinator(f'kazoo://{construct_kazoo_url()}', f'powerloom:epoch:finalizer:{settings.NAMESPACE}')
+    member_id = f'powerloom:epoch:finalizer:{settings.NAMESPACE}'
+    coordinator = coordination.get_coordinator(f'kazoo://{construct_kazoo_url()}', member_id)
     coordinator.start(start_heart=True)
     group_id = f'powerloom:epoch:reports:{settings.NAMESPACE}'
     group_id = group_id.encode('utf-8')
@@ -55,7 +61,21 @@ def main():
         'end': 0,
         'reorg': False
     }
-    coordinator.join_group(group_id, capabilities=init_state_capabilities).get()
+    c = 0
+    while c < 10:
+        try:
+            coordinator.join_group(group_id, capabilities=init_state_capabilities).get()
+        except tooz.coordination.MemberAlreadyExist:
+            finalizer_logger.debug('Worker %s will attempt to REJOIN group %s. Delaying '
+                          'for earlier dead worker to be removed from tooz group | Retry %d', member_id,
+                          group_id, c)
+            c += 1
+            # coordinator.leave_group(group_id).get()
+            time.sleep(2)
+        else:
+            break
+    else:
+        raise Exception('tooz group joining failed for member %s on group %s', member_id, group_id)
     try:
         while True:
             get_capabilities = [(member, coordinator.get_member_capabilities(group_id, member))
@@ -64,7 +84,7 @@ def main():
             for member, cap in get_capabilities:
                 # print("Member %s has capabilities: %s" % (member, cap.get()))
                 member_name = member.decode('utf-8') if type(member) == bytes else member
-                if member_name == f'powerloom:epoch:collator:{settings.NAMESPACE}':
+                if 'powerloom:epoch:collator' in member_name and settings.NAMESPACE in member_name:
                     report = cap.get()
                     try:
                         report_obj = SystemEpochStatusReport(**report)

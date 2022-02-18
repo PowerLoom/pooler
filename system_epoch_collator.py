@@ -10,7 +10,10 @@ from threading import Thread
 from queue import Queue
 from uuid import uuid4
 from pydantic import ValidationError as PydanticValidationError
+import uuid
 import logging
+import time
+import tooz
 import logging.handlers
 import json
 import pika
@@ -35,7 +38,8 @@ def collate_epoch(
 def state_report_thread():
     t_logger = logging.getLogger('PowerLoom|EpochCollator')
     # t_logger.handlers = [logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
-    coordinator = coordination.get_coordinator(f'kazoo://{construct_kazoo_url()}', f'powerloom:epoch:collator:{settings.NAMESPACE}')
+    member_id = f'powerloom:epoch:collator:{settings.NAMESPACE}'
+    coordinator = coordination.get_coordinator(f'kazoo://{construct_kazoo_url()}', member_id)
     coordinator.start(start_heart=True)
     group_id = f'powerloom:epoch:reports:{settings.NAMESPACE}'
     group_id = group_id.encode('utf-8')
@@ -49,19 +53,38 @@ def state_report_thread():
         'end': 0,
         'reorg': False
     }
-    coordinator.join_group(group_id, capabilities=init_state_capabilities).get()
+    c = 0
+    while c < 10:
+        try:
+            coordinator.join_group(group_id, capabilities=init_state_capabilities).get()
+        except tooz.coordination.MemberAlreadyExist:
+            t_logger.debug('Worker %s will attempt to REJOIN group %s. Delaying '
+                          'for earlier dead worker to be removed from tooz group | Retry %d', member_id,
+                          group_id, c)
+            c += 1
+            time.sleep(2)
+        else:
+            break
+    else:
+        raise Exception('tooz group joining failed for member %s on group %s', member_id, group_id)
     t_logger.debug('Joined Tooz group %s', group_id)
-    while True:
-        t_logger.debug('Waiting for processed epoch consensus reports...')
-        latest_state = state_update_q.get(block=True)
-        t_logger.debug('Got processed epoch update')
-        t_logger.debug(latest_state)
-        coordinator.update_capabilities(
-            group_id,
-            capabilities=latest_state.dict()
-        ).get()
-        t_logger.debug('Reported latest epoch collation state to tooz: %s', latest_state)
-        state_update_q.task_done()
+    try:
+        while True:
+            t_logger.debug('Waiting for processed epoch consensus reports...')
+            latest_state = state_update_q.get(block=True)
+            t_logger.debug('Got processed epoch update')
+            t_logger.debug(latest_state)
+            coordinator.update_capabilities(
+                group_id,
+                capabilities=latest_state.dict()
+            ).get()
+            t_logger.debug('Reported latest epoch collation state to tooz: %s', latest_state)
+            state_update_q.task_done()
+    except:
+        try:
+            coordinator.leave_group(group_id).get()
+        except:
+            pass
 
 
 class EpochCollatorProcess(Process):
@@ -111,10 +134,6 @@ class EpochCollatorProcess(Process):
         except:
             pass
         finally:
-            try:
-                self._tooz_reporter.join()
-            except:
-                pass
             try:
                 ch.close()
                 c.close()
