@@ -2,17 +2,31 @@
 # pylint: disable=C0111,C0103,R0205
 from dynaconf import settings
 from typing import Union
-import time
+from functools import wraps
+from tenacity import Retrying, stop_after_attempt, wait_random_exponential, retry_if_exception_type
+import uuid
 import functools
 import logging
-import json
+import time
 import pika
+import pika.exceptions
 import pika.channel
-from pika.exchange_type import ExchangeType
 
 logger = logging.getLogger('PowerLoom|RabbitmqHelpers')
 logger.setLevel(logging.DEBUG)
 logger.handlers = [logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
+
+
+def resume_on_rabbitmq_fail(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        for attempt in Retrying(
+            reraise=True, stop=stop_after_attempt(5), wait=wait_random_exponential(multiplier=1, max=60),
+            retry=retry_if_exception_type(pika.exceptions.AMQPError)
+        ):
+            with attempt:
+                return fn(*args, **kwargs)
+    return wrapper
 
 
 # Adapted from:
@@ -43,7 +57,7 @@ class RabbitmqSelectLoopInteractor(object):
         self.should_reconnect = False
         self.was_consuming = False
         self._consumer_tag = None
-        self.queued_messages = list()
+        self.queued_messages = dict()
         self._deliveries = None
         self._acked = None
         self._nacked = None
@@ -150,11 +164,12 @@ class RabbitmqSelectLoopInteractor(object):
         self.add_on_channel_close_callback()
         # self.setup_exchange(self.EXCHANGE)
         self.start_publishing()
-        self.start_consuming(
-            queue_name=self._consume_queue,
-            consume_cb=self._consume_callback,
-            auto_ack=False
-        )
+        if self._consume_queue and self._consume_callback:
+            self.start_consuming(
+                queue_name=self._consume_queue,
+                consume_cb=self._consume_callback,
+                auto_ack=False
+            )
 
     def add_on_channel_close_callback(self):
         """This method tells pika to call the on_channel_closed method if
@@ -300,7 +315,7 @@ class RabbitmqSelectLoopInteractor(object):
             len(self._deliveries), self._acked, self._nacked)
 
     def enqueue_msg_delivery(self, exchange, routing_key, msg_body):
-        self.queued_messages.append((msg_body, exchange, routing_key))
+        self.queued_messages[str(uuid.uuid4())] = [msg_body, exchange, routing_key]
 
     def schedule_next_message(self):
         """If we are not closing our connection to RabbitMQ, schedule another
@@ -328,7 +343,10 @@ class RabbitmqSelectLoopInteractor(object):
         if self._channel is None or not self._channel.is_open:
             return
         # check for queued messages
-        for msg_info in self.queued_messages:
+        pushed_outputs = list()
+        # logger.debug('queued msgs: %s', self.queued_messages)
+        for unique_id in self.queued_messages:
+            msg_info = self.queued_messages[unique_id]
             msg, exchange, routing_key = msg_info
             logger.debug(
                 'Got queued message body to send to exchange %s via routing key %s: %s',
@@ -347,7 +365,10 @@ class RabbitmqSelectLoopInteractor(object):
             )
             self._message_number += 1
             self._deliveries.append(self._message_number)
-            logger.info('Published message # %i', self._message_number)
+            logger.info('Published message # %i to exchange %s via routing key %s: %s',
+                        self._message_number, exchange, routing_key, msg)
+            pushed_outputs.append(unique_id)
+        self.queued_messages = {k: self.queued_messages[k] for k in self.queued_messages if k not in pushed_outputs}
         self.schedule_next_message()
 
     def run(self):

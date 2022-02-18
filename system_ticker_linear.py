@@ -5,13 +5,14 @@ from dynaconf import settings
 from time import sleep
 from multiprocessing import Process
 from setproctitle import setproctitle
-from proto_system_logging import config_logger_with_namespace
+from rabbitmq_helpers import resume_on_rabbitmq_fail
 import logging
 import logging
 import json
 import pika
 
 
+@resume_on_rabbitmq_fail
 def main_ticker_process(begin=None, end=None):
     # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|EpochTicker|Linear'))
     linear_ticker_logger = logging.getLogger('PowerLoom|EpochTicker|Linear')
