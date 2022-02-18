@@ -503,28 +503,6 @@ async def process_pairs_data(session, redis_conn, router_contract, maxCount, dat
             #I AM ASSUMING RESPONSE IS SORTED BY TIMESTAMP KEY            
             for idx, val in enumerate(resp_json):
 
-                #THIS IS JUST FOR TESTING REMOVE THIS IF BLOCK ON PROD
-                if((not volume_24h_data) and resp_json[0]['timestamp'] <= volume_24h_timestamp):
-                    volume_24h_data = resp_json[:10]
-                    #subsctract latestest reservers and earliest reservers for token0
-                    volume_24h_token0 = float(list(volume_24h_data[0]['data']['payload']['token0Reserves'].values())[-1]) - float(list(volume_24h_data[-1]['data']['payload']['token0Reserves'].values())[-1])
-                    #subsctract latestest reservers and earliest reservers for token1
-                    volume_24h_token1 = float(list(volume_24h_data[0]['data']['payload']['token1Reserves'].values())[-1]) - float(list(volume_24h_data[-1]['data']['payload']['token1Reserves'].values())[-1])
-                    #Add subsctracted reservers of token0 and token1 to get final volume
-                    volume_24h = (volume_24h_token0 * token0Price) + (volume_24h_token1 * token1Price)
-
-                #THIS IS JUST FOR TESTING REMOVE THIS IF BLOCK ON PROD
-                if((not volume_7d_data) and resp_json[0]['timestamp'] <= volume_7d_timestamp):
-                    #get data for last 7d
-                    volume_7d_data = resp_json[:30]
-                    #subsctract latestest reservers and earliest reservers for token0
-                    volume_7d_data_token0 = list(volume_7d_data[0]['data']['payload']['token0Reserves'].values())[-1] - list(volume_7d_data[-1]['data']['payload']['token0Reserves'].values())[-1]
-                    #subsctract latestest reservers and earliest reservers for token1
-                    volume_7d_data_token1 = list(volume_7d_data[0]['data']['payload']['token1Reserves'].values())[-1] - list(volume_7d_data[-1]['data']['payload']['token1Reserves'].values())[-1]
-                    #Add subsctracted reservers of token0 and token1 to get final volume
-                    volume_7d = (float(volume_7d_data_token0) * token0Price) + (float(volume_7d_data_token1) * token1Price)
-
-
                 if((not volume_24h_data) and val['timestamp'] <= volume_24h_timestamp):
                     #get data for last 24hour
                     volume_24h_data = resp_json[:idx+1]
