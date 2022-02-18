@@ -49,7 +49,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         for block_num in range(min_chain_height, max_chain_height+1):
             try:
                 pair_reserve_total = await get_liquidity_of_each_token_reserve_async(
-                    loop=asyncio.get_event_loop(),
+                    loop=asyncio.get_running_loop(),
                     pair_address=msg_obj.contract,
                     block_identifier=block_num
                 )

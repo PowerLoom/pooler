@@ -342,7 +342,8 @@ async def get_liquidity_of_each_token_reserve_async(loop: asyncio.AbstractEventL
         if can_request:
             pair_per_token_metadata = await get_pair_per_token_metadata(
                 pair_contract_obj=pair,
-                pair_address=pair_address
+                pair_address=pair_address,
+                loop=loop
             )
             pfunc_get_reserves = partial(pair.functions.getReserves().call, {'block_identifier': block_identifier})
             reserves = await loop.run_in_executor(func=pfunc_get_reserves, executor=None)
