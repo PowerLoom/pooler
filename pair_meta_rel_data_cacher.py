@@ -137,7 +137,6 @@ async def cache_pair_meta_data(redis_conn: aioredis.Redis = None):
 async def cache_pair_stablecoin_exchange_rates(redis_conn: aioredis.Redis = None):
     await cache_pair_meta_data()
     all_pair_contracts = read_json_file('static/cached_pair_addresses.json')
-    retrieval_logger.debug('Cached pair contracts: %s', all_pair_contracts)
     ev_loop = asyncio.get_running_loop()
     # # # prepare for rate limit check
     redis_storage = AsyncRedisStorage(await load_rate_limiter_scripts(redis_conn), redis_conn)
@@ -273,6 +272,7 @@ async def periodic_retrieval():
             v2_pairs_data(session, 500, 'true'),
             asyncio.sleep(120)  # run atleast 'x' seconds not sleep for x seconds
         )
+        retrieval_logger.debug('Completed one cycle of pair meta data cache.........')
     session.close()
 
 

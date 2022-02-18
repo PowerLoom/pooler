@@ -33,7 +33,7 @@ class SystemConfig(BaseModel):
 class liquidityProcessedData(BaseModel):
     contractAddress: str
     name: str
-    liquidity: float
+    liquidity: str
     volume_24h: str
     volume_7d: str
     deltaToken0Reserves: float

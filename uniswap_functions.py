@@ -6,6 +6,7 @@ from redis_conn import provide_async_redis_conn_insta
 from dynaconf import settings
 import logging.config
 import os
+import math
 import json
 from bounded_pool_executor import BoundedThreadPoolExecutor
 import threading
@@ -422,7 +423,7 @@ async def process_pairs_data(session, redis_conn, router_contract, maxCount, dat
 
         rest_json = await resp.json()
         last_block_height = rest_json.get('height')
-        
+
         #set default to block
         to_block = last_block_height
         #set defualt from block
@@ -499,33 +500,58 @@ async def process_pairs_data(session, redis_conn, router_contract, maxCount, dat
                 token1Price = 0
                 logger.error(f"Error: can't find {pair_per_token_metadata['token1']['symbol']}-USDT Price and setting it 0 | {pair_per_token_metadata['token1']['address']}")
 
+            #lets do some scaling for initial times of accumulated data
+            resp_json_length = len(resp_json)
+            if resp_json_length < maxCount and resp_json_length > 0:
+                logger.debug(">>>> Scaling for lower height data pairs <<<<")
+                slice_index_24h = math.ceil(resp_json_length/3) - 1
+                slice_index_7d = resp_json_length - 1
 
-            #I AM ASSUMING RESPONSE IS SORTED BY TIMESTAMP KEY            
-            for idx, val in enumerate(resp_json):
 
-                if((not volume_24h_data) and val['timestamp'] <= volume_24h_timestamp):
-                    #get data for last 24hour
-                    volume_24h_data = resp_json[:idx+1]
-                    #subsctract latestest reservers and earliest reservers for token0
-                    volume_24h_token0 = float(list(volume_24h_data[0]['data']['payload']['token0Reserves'].values())[-1]) - float(list(volume_24h_data[-1]['data']['payload']['token0Reserves'].values())[-1])
-                    #subsctract latestest reservers and earliest reservers for token1
-                    volume_24h_token1 = float(list(volume_24h_data[0]['data']['payload']['token1Reserves'].values())[-1]) - float(list(volume_24h_data[-1]['data']['payload']['token1Reserves'].values())[-1])                    
-                    #Add subsctracted reservers of token0 and token1 to get final volume
-                    volume_24h = (volume_24h_token0 * token0Price) + (volume_24h_token1 * token1Price)
+                #get data for last 24hour
+                volume_24h_data = resp_json[:slice_index_24h+1]
+                #subsctract latestest reservers and earliest reservers for token0
+                volume_24h_token0 = float(list(volume_24h_data[0]['data']['payload']['token0Reserves'].values())[-1]) - float(list(volume_24h_data[-1]['data']['payload']['token0Reserves'].values())[-1])
+                #subsctract latestest reservers and earliest reservers for token1
+                volume_24h_token1 = float(list(volume_24h_data[0]['data']['payload']['token1Reserves'].values())[-1]) - float(list(volume_24h_data[-1]['data']['payload']['token1Reserves'].values())[-1])                    
+                #Add subsctracted reservers of token0 and token1 to get final volume
+                volume_24h = (volume_24h_token0 * token0Price) + (volume_24h_token1 * token1Price)
+                
+                #get data for last 7d
+                volume_7d_data = resp_json[:slice_index_7d+1]
+                #subsctract latestest reservers and earliest reservers for token0
+                volume_7d_data_token0 = list(volume_7d_data[0]['data']['payload']['token0Reserves'].values())[-1] - list(volume_7d_data[-1]['data']['payload']['token0Reserves'].values())[-1]
+                #subsctract latestest reservers and earliest reservers for token1
+                volume_7d_data_token1 = list(volume_7d_data[0]['data']['payload']['token1Reserves'].values())[-1] - list(volume_7d_data[-1]['data']['payload']['token1Reserves'].values())[-1]
+                #Add subsctracted reservers of token0 and token1 to get final volume
+                volume_7d = (float(volume_7d_data_token0) * token0Price) + (float(volume_7d_data_token1) * token1Price)
+            else:
+                #I AM ASSUMING RESPONSE IS SORTED BY TIMESTAMP KEY            
+                for idx, val in enumerate(resp_json):
 
-                if((not volume_7d_data) and val['timestamp'] <= volume_7d_timestamp):
-                    #get data for last 7d
-                    volume_7d_data = resp_json[:idx+1]
-                    #subsctract latestest reservers and earliest reservers for token0
-                    volume_7d_data_token0 = list(volume_7d_data[0]['data']['payload']['token0Reserves'].values())[-1] - list(volume_7d_data[-1]['data']['payload']['token0Reserves'].values())[-1]
-                    #subsctract latestest reservers and earliest reservers for token1
-                    volume_7d_data_token1 = list(volume_7d_data[0]['data']['payload']['token1Reserves'].values())[-1] - list(volume_7d_data[-1]['data']['payload']['token1Reserves'].values())[-1]
-                    #Add subsctracted reservers of token0 and token1 to get final volume
-                    volume_7d = (float(volume_7d_data_token0) * token0Price) + (float(volume_7d_data_token1) * token1Price)
+                    if((not volume_24h_data) and val['timestamp'] <= volume_24h_timestamp):
+                        #get data for last 24hour
+                        volume_24h_data = resp_json[:idx+1]
+                        #subsctract latestest reservers and earliest reservers for token0
+                        volume_24h_token0 = float(list(volume_24h_data[0]['data']['payload']['token0Reserves'].values())[-1]) - float(list(volume_24h_data[-1]['data']['payload']['token0Reserves'].values())[-1])
+                        #subsctract latestest reservers and earliest reservers for token1
+                        volume_24h_token1 = float(list(volume_24h_data[0]['data']['payload']['token1Reserves'].values())[-1]) - float(list(volume_24h_data[-1]['data']['payload']['token1Reserves'].values())[-1])                    
+                        #Add subsctracted reservers of token0 and token1 to get final volume
+                        volume_24h = (volume_24h_token0 * token0Price) + (volume_24h_token1 * token1Price)
 
-                #break if volumes are calculated
-                if (volume_7d_data and volume_7d_data):
-                    break
+                    if((not volume_7d_data) and val['timestamp'] <= volume_7d_timestamp):
+                        #get data for last 7d
+                        volume_7d_data = resp_json[:idx+1]
+                        #subsctract latestest reservers and earliest reservers for token0
+                        volume_7d_data_token0 = list(volume_7d_data[0]['data']['payload']['token0Reserves'].values())[-1] - list(volume_7d_data[-1]['data']['payload']['token0Reserves'].values())[-1]
+                        #subsctract latestest reservers and earliest reservers for token1
+                        volume_7d_data_token1 = list(volume_7d_data[0]['data']['payload']['token1Reserves'].values())[-1] - list(volume_7d_data[-1]['data']['payload']['token1Reserves'].values())[-1]
+                        #Add subsctracted reservers of token0 and token1 to get final volume
+                        volume_7d = (float(volume_7d_data_token0) * token0Price) + (float(volume_7d_data_token1) * token1Price)
+
+                    #break if volumes are calculated
+                    if (volume_7d_data and volume_7d_data):
+                        break
 
             token0_liquidity = float(list(resp_json[0]['data']['payload']['token0Reserves'].values())[-1]) * token0Price 
             token1_liquidity = float(list(resp_json[0]['data']['payload']['token1Reserves'].values())[-1]) * token1Price 
@@ -535,9 +561,9 @@ async def process_pairs_data(session, redis_conn, router_contract, maxCount, dat
             await redis_conn.set(uniswap_pair_contract_V2_pair_data.format(f"{Web3.toChecksumAddress(pair_contract_address)}"), liquidityProcessedData(
                 contractAddress=pair_contract_address,
                 name=pair_name,
-                liquidity=total_liquidity,
-                volume_24h=volume_24h,
-                volume_7d=volume_7d,
+                liquidity=f"US${abs(total_liquidity):,}",
+                volume_24h=f"US${abs(volume_24h):,}",
+                volume_7d=f"US${abs(volume_7d):,}",
                 deltaToken0Reserves=list(resp_json[0]['data']['payload']['token0Reserves'].values())[-1] - list(resp_json[-1]['data']['payload']['token0Reserves'].values())[-1],
                 deltaToken1Reserves=list(resp_json[0]['data']['payload']['token1Reserves'].values())[-1] - list(resp_json[-1]['data']['payload']['token1Reserves'].values())[-1],
                 deltaTime=resp_json[0]['timestamp'] - resp_json[-1]['timestamp'],
@@ -551,9 +577,9 @@ async def process_pairs_data(session, redis_conn, router_contract, maxCount, dat
             return liquidityProcessedData(
                 contractAddress=pair_contract_address,
                 name=pair_name,
-                liquidity=total_liquidity,
-                volume_24h=volume_24h,
-                volume_7d=volume_7d,
+                liquidity=f"US${abs(total_liquidity):,}",
+                volume_24h=f"US${abs(volume_24h):,}",
+                volume_7d=f"US${abs(volume_7d):,}",
                 deltaToken0Reserves=list(resp_json[0]['data']['payload']['token0Reserves'].values())[-1] - list(resp_json[-1]['data']['payload']['token0Reserves'].values())[-1],
                 deltaToken1Reserves=list(resp_json[0]['data']['payload']['token1Reserves'].values())[-1] - list(resp_json[-1]['data']['payload']['token1Reserves'].values())[-1],
                 deltaTime=resp_json[0]['timestamp'] - resp_json[-1]['timestamp'],
