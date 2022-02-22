@@ -51,6 +51,17 @@ class UniswapPairTotalReservesSnapshot(BaseModel):
     timestamp: float
 
 
+class UniswapTradesSnapshot(BaseModel):
+    contract: str
+    totalTrade: float  # in USD
+    token0TradeVolume: int  # in token native decimals supply
+    token1TradeVolume: int  # in token native decimals supply
+    events: list
+    chainHeightRange: EpochBase
+    broadcast_id: str
+    timestamp: float
+
+
 class ethLogRequestModel(BaseModel):
     fromBlock: int = None
     toBlock: int = None
