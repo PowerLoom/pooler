@@ -207,6 +207,9 @@ async def extract_trade_volume_data(event_name, event_logs: List[AttributeDict],
         elif event_name == 'Mint' or event_name == 'Burn':
             token0_swapped += parsed_log_obj_values.get('amount0')
             token1_swapped += parsed_log_obj_values.get('amount1')
+    # normalize token volume according to decimals specification
+    token0_swapped = token0_swapped / 10 ** int(pair_per_token_metadata['token0']['decimals'])
+    token1_swapped = token1_swapped / 10 ** int(pair_per_token_metadata['token1']['decimals'])
     # get conversion
     trade_volume_usd = 0
     token0Price = await redis_conn.get(
@@ -214,7 +217,7 @@ async def extract_trade_volume_data(event_name, event_logs: List[AttributeDict],
     if token0Price:
         token0Price = float(token0Price.decode('utf-8'))
         # print(f"Got {pair_per_token_metadata['token0']['symbol']}-USDT conversion: ", token0Price)
-        trade_volume_usd += token0_swapped * token0Price / 10 ** int(pair_per_token_metadata['token0']['decimals'])
+        trade_volume_usd += token0_swapped * token0Price
     else:
         logger.warning(
             f"Error in trade volume calculation: can't find {pair_per_token_metadata['token0']['symbol']}-"
@@ -229,7 +232,7 @@ async def extract_trade_volume_data(event_name, event_logs: List[AttributeDict],
         uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token1']['symbol']}-USDT"))
     if token1Price:
         token1Price = float(token1Price.decode('utf-8'))
-        trade_volume_usd += token1_swapped * token1Price / 10 ** int(pair_per_token_metadata['token1']['decimals'])
+        trade_volume_usd += token1_swapped * token1Price
         # print(f"Got {pair_per_token_metadata['token1']['symbol']}-USDT conversion: ", token1Price)
     else:
         logger.warning(
@@ -468,8 +471,13 @@ async def get_liquidity_of_each_token_reserve_async(loop: asyncio.AbstractEventL
 
 # asynchronously get trades on a pair contract
 @provide_async_redis_conn_insta
-async def get_pair_contract_trades_async(loop: asyncio.AbstractEventLoop, pair_address, from_block, to_block,
-                                   redis_conn: aioredis.Redis = None):
+async def get_pair_contract_trades_async(
+        ev_loop: asyncio.AbstractEventLoop,
+        pair_address,
+        from_block,
+        to_block,
+        redis_conn: aioredis.Redis = None
+):
     try:
         pair_address = Web3.toChecksumAddress(pair_address)
         # pair contract
@@ -515,7 +523,7 @@ async def get_pair_contract_trades_async(loop: asyncio.AbstractEventLoop, pair_a
             pair_per_token_metadata = await get_pair_per_token_metadata(
                 pair_contract_obj=pair,
                 pair_address=pair_address,
-                loop=loop
+                loop=ev_loop
             )
             event_log_fetch_coros = list()
             for trade_event_name in ['Swap', 'Mint', 'Burn']:
@@ -529,7 +537,7 @@ async def get_pair_contract_trades_async(loop: asyncio.AbstractEventLoop, pair_a
                         'event_abi': event_abi
                     }
                 )
-                event_log_fetch_coros.append(loop.run_in_executor(func=pfunc_get_event_logs, executor=None))
+                event_log_fetch_coros.append(ev_loop.run_in_executor(func=pfunc_get_event_logs, executor=None))
             [
                 swap_event_logs, mint_event_logs, burn_event_logs
             ] = await asyncio.gather(*event_log_fetch_coros)
@@ -539,13 +547,15 @@ async def get_pair_contract_trades_async(loop: asyncio.AbstractEventLoop, pair_a
                 'Burn': burn_event_logs
             }
             # extract total trade from them
-            rets = list()
+            rets = dict()
             for trade_event_name in ['Swap', 'Mint', 'Burn']:
-                rets.append({
+                # print(f'Event {trade_event_name} logs: ', logs_ret[trade_event_name])
+                rets.update({
                     trade_event_name: {
-                        'logs': logs_ret[trade_event_name],
+                        'logs': [dict(k.args) for k in logs_ret[trade_event_name]],
                         'trades': await extract_trade_volume_data(
                             event_name=trade_event_name,
+                            # event_logs=logs_ret[trade_event_name],
                             event_logs=logs_ret[trade_event_name],
                             redis_conn=redis_conn,
                             pair_per_token_metadata=pair_per_token_metadata

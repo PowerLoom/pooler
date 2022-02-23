@@ -54,8 +54,8 @@ class UniswapPairTotalReservesSnapshot(BaseModel):
 class UniswapTradesSnapshot(BaseModel):
     contract: str
     totalTrade: float  # in USD
-    token0TradeVolume: int  # in token native decimals supply
-    token1TradeVolume: int  # in token native decimals supply
+    token0TradeVolume: float  # in token native decimals supply
+    token1TradeVolume: float  # in token native decimals supply
     events: list
     chainHeightRange: EpochBase
     broadcast_id: str
