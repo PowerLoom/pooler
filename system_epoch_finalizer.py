@@ -6,9 +6,10 @@ from time import sleep
 from tooz import coordination
 from helper_functions import construct_kazoo_url
 from pydantic import ValidationError as PydanticValidationError
-import uuid
+from rabbitmq_helpers import RabbitmqThreadedSelectLoopInteractor
+import threading
 import logging.handlers
-import json
+import queue
 import tooz
 import time
 import pika
@@ -41,9 +42,19 @@ def broadcast_epoch(
     return broadcast_msg
 
 
+def interactor_wrapper_obj(q: queue.Queue):
+    s = RabbitmqThreadedSelectLoopInteractor(publish_queue=q)
+    s.run()
+
+
 def main():
-    rmq_conn = create_rabbitmq_conn()
-    rmq_ch = rmq_conn.channel()
+    exchange = f'{settings.RABBITMQ.SETUP.CORE.EXCHANGE}:{settings.NAMESPACE}'
+    routing_key = f'epoch-broadcast:{settings.NAMESPACE}'
+
+    q = queue.Queue()
+    t = threading.Thread(target=interactor_wrapper_obj, kwargs={'q': q})
+    t.start()
+
     last_reorg_state = SystemEpochStatusReport(begin=0, end=0, reorg=False, broadcast_id='dummy')
     last_epoch_broadcast = EpochBroadcast(begin=0, end=0, broadcast_id='dummy')
     member_id = f'powerloom:epoch:finalizer:{settings.NAMESPACE}'
@@ -102,7 +113,8 @@ def main():
                         else:
                             if report_obj.begin > last_epoch_broadcast.end:
                                 finalizer_logger.info('Broadcasting finalized epoch for callbacks: %s', report_obj)
-                                broadcast_epoch(rmq_ch, report_obj)
+                                brodcast_msg = (report_obj.json().encode('utf-8'), exchange, routing_key)
+                                q.put(brodcast_msg)
                                 finalizer_logger.info('DONE: Broadcasting finalized epoch for callbacks: %s', report_obj)
                                 last_epoch_broadcast = EpochBroadcast(begin=report_obj.begin, end=report_obj.end, broadcast_id=report_obj.broadcast_id)
                             # else:

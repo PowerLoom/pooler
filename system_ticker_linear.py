@@ -5,15 +5,27 @@ from dynaconf import settings
 from time import sleep
 from multiprocessing import Process
 from setproctitle import setproctitle
-from rabbitmq_helpers import resume_on_rabbitmq_fail
+from rabbitmq_helpers import resume_on_rabbitmq_fail, RabbitmqThreadedSelectLoopInteractor
+import queue
 import logging
+import threading
 import logging
 import json
 import pika
 
 
-@resume_on_rabbitmq_fail
+def interactor_wrapper_obj(q: queue.Queue):
+    s = RabbitmqThreadedSelectLoopInteractor(publish_queue=q)
+    s.run()
+
+
 def main_ticker_process(begin=None, end=None):
+    exchange = f'{settings.RABBITMQ.SETUP.CORE.EXCHANGE}:{settings.NAMESPACE}'
+    routing_key = f'epoch-consensus:{settings.NAMESPACE}'
+
+    q = queue.Queue()
+    t = threading.Thread(target=interactor_wrapper_obj, kwargs={'q': q})
+    t.start()
     # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|EpochTicker|Linear'))
     linear_ticker_logger = logging.getLogger('PowerLoom|EpochTicker|Linear')
     linear_ticker_logger.setLevel(logging.DEBUG)
@@ -43,18 +55,9 @@ def main_ticker_process(begin=None, end=None):
                 _ = {'begin': begin_block_epoch, 'end': end_block_epoch}
                 linear_ticker_logger.debug('Epoch of sufficient length found')
                 cmd = EpochConsensusReport(**_)
+                cmd_obj = (cmd.json().encode('utf-8'), exchange, routing_key)
+                q.put(cmd_obj)
                 # send epoch report
-                ch.basic_publish(
-                    exchange=f'{settings.RABBITMQ.SETUP.CORE.EXCHANGE}:{settings.NAMESPACE}',
-                    routing_key=f'epoch-consensus:{settings.NAMESPACE}',
-                    body=cmd.json(),
-                    properties=pika.BasicProperties(
-                        delivery_mode=2,
-                        content_type='text/plain',
-                        content_encoding='utf-8'
-                    ),
-                    mandatory=True
-                )
                 linear_ticker_logger.debug(cmd)
                 begin_block_epoch = end_block_epoch + 1
                 linear_ticker_logger.debug('Waiting to build next epoch...')
