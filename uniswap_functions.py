@@ -1,5 +1,10 @@
 from functools import partial
+from typing import List
 from web3 import Web3
+from web3.datastructures import AttributeDict
+from eth_utils import keccak
+from web3._utils.events import get_event_data
+from eth_abi.codec import ABICodec
 import asyncio
 import aiohttp
 from redis_conn import provide_async_redis_conn_insta
@@ -24,10 +29,10 @@ from redis_keys import (
 from helper_functions import (
     acquire_threading_semaphore
 )
-from tenacity import Retrying, stop_after_attempt, wait_random_exponential
 from urllib.parse import urlencode, urljoin
 from data_models import liquidityProcessedData
-from decimal import Decimal
+from message_models import UniswapTradesSnapshot
+from ipfs_async import client as ipfs_client
 
 
 w3 = Web3(Web3.HTTPProvider(settings.RPC.MATIC[0]))
@@ -38,11 +43,9 @@ logger = logging.getLogger('PowerLoom|UniswapHelpers')
 logger.setLevel(logging.DEBUG)
 logger.handlers = [logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
 
-
 # Initialize rate limits when program starts
 GLOBAL_RPC_RATE_LIMIT_STR = settings.RPC.rate_limit
 PARSED_LIMITS = limit_parse_many(GLOBAL_RPC_RATE_LIMIT_STR)
-
 
 # # # RATE LIMITER LUA SCRIPTS
 SCRIPT_CLEAR_KEYS = """
@@ -77,6 +80,8 @@ SCRIPT_SET_EXPIRE = """
     end
     return current
 """
+
+
 # # # END RATE LIMITER LUA SCRIPTS
 
 
@@ -98,11 +103,21 @@ def read_json_file(file_path: str):
 pair_contract_abi = read_json_file(f"abis/UniswapV2Pair.json")
 erc20_abi = read_json_file('abis/IERC20.json')
 router_contract_abi = read_json_file(f"abis/UniswapV2Router.json")
+uniswap_trade_events_abi = read_json_file('abis/UniswapTradeEvents.json')
 
 router_addr = settings.CONTRACT_ADDRESSES.IUNISWAP_V2_ROUTER
 dai = settings.CONTRACT_ADDRESSES.DAI
 usdt = settings.CONTRACT_ADDRESSES.USDT
 weth = settings.CONTRACT_ADDRESSES.WETH
+
+codec: ABICodec = w3.codec
+
+UNISWAP_TRADE_EVENT_SIGS = {
+    'Swap': "Swap(address,uint256,uint256,uint256,uint256,address)",
+    'Mint': "Mint(address,uint256,uint256)",
+    'Burn': "Burn(address,uint256,uint256,address)"
+}
+
 
 class RPCException(Exception):
     def __init__(self, request, response, underlying_exception, extra_info):
@@ -125,9 +140,8 @@ class RPCException(Exception):
     def __repr__(self):
         return self.__str__()
 
+
 # needs to be run only once
-
-
 async def load_rate_limiter_scripts(redis_conn: aioredis.Redis):
     script_clear_keys_sha = await redis_conn.script_load(SCRIPT_CLEAR_KEYS)
     script_incr_expire = await redis_conn.script_load(SCRIPT_INCR_EXPIRE)
@@ -151,9 +165,130 @@ except Exception as e:
     logger.error(e, exc_info=True)
 
 
+def get_event_sig_and_abi(event_name):
+    event_sig = '0x' + keccak(text=UNISWAP_TRADE_EVENT_SIGS.get(event_name, 'incorrect event name')).hex()
+    abi = uniswap_trade_events_abi.get(event_name, 'incorrect event name')
+    return event_sig, abi
+
+
+def get_events_logs(contract_address, toBlock, fromBlock, topics, event_abi):
+    event_log = w3.eth.get_logs({
+        'address': Web3.toChecksumAddress(contract_address),
+        'toBlock': toBlock,
+        'fromBlock': fromBlock,
+        'topics': topics
+    })
+
+    all_events = []
+    for log in event_log:
+        evt = get_event_data(codec, event_abi, log)
+        all_events.append(evt)
+
+    return all_events
+
+
+async def extract_trade_volume_data(event_name, event_logs: List[AttributeDict], redis_conn: aioredis.Redis, pair_per_token_metadata):
+    log_topic_values = list()
+    token0_swapped = 0
+    token1_swapped = 0
+    token0_fee = None
+    token1_fee = None
+    for log in event_logs:
+        log = log.args
+        topics = dict()
+        for field in uniswap_trade_events_abi[event_name]['inputs']:
+            field = field['name']
+            topics[field] = log.get(field)
+        log_topic_values.append(topics)
+    for parsed_log_obj_values in log_topic_values:
+        if event_name == 'Swap':
+            if parsed_log_obj_values.get('amount1In') == 0:
+                token0_swapped += parsed_log_obj_values.get('amount0In')
+                token1_swapped += parsed_log_obj_values.get('amount1Out')
+                token0_fee = parsed_log_obj_values.get('amount0In')
+            elif parsed_log_obj_values.get('amount0In') == 0:
+                token0_swapped += parsed_log_obj_values.get('amount0Out')
+                token1_swapped += parsed_log_obj_values.get('amount1In')
+                token1_fee = parsed_log_obj_values.get('amount1In')
+        elif event_name == 'Mint' or event_name == 'Burn':
+            token0_swapped += parsed_log_obj_values.get('amount0')
+            token1_swapped += parsed_log_obj_values.get('amount1')
+
+    # normalize token volume according to decimals specification
+    token0_swapped = token0_swapped / 10 ** int(pair_per_token_metadata['token0']['decimals'])
+    token1_swapped = token1_swapped / 10 ** int(pair_per_token_metadata['token1']['decimals'])
+
+    # get conversion
+    trade_volume_usd = 0
+    trade_fee_usd = 0
+    token0Price = await redis_conn.get(
+        uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token0']['symbol']}-USDT"))
+    token1Price = await redis_conn.get(
+        uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token1']['symbol']}-USDT"))
+        
+        
+
+    # if event is 'Swap' then only add single token in total volume calculation
+    if event_name == 'Swap':
+        # calculate trade volume in USD
+        if token0Price:
+           trade_volume_usd += token0_swapped * float(token0Price.decode('utf-8'))
+        elif token1Price:
+           trade_volume_usd += token1_swapped * float(token1Price.decode('utf-8'))
+
+        # calculate uniswap LP fee
+        if token0_fee and token0Price:
+            token0_fee = token0_fee / 10 ** int(pair_per_token_metadata['token0']['decimals'])
+            token0_fee = token0_fee * 0.003 # uniswap LP fee rate
+            trade_fee_usd = token0_fee * float(token0Price.decode('utf-8'))
+        elif token1_fee and token1Price:
+            token1_fee = token1_fee / 10 ** int(pair_per_token_metadata['token1']['decimals'])
+            token1_fee = token1_fee * 0.003 # uniswap LP fee rate
+            trade_fee_usd = token1_fee * float(token1Price.decode('utf-8'))
+
+        return {
+            'totalTradesUSD': trade_volume_usd,
+            'totalFeeUSD': trade_fee_usd,
+            'token0TradeVolume': token0_swapped,
+            'token1TradeVolume': token1_swapped 
+        }
+           
+       
+    
+    if token0Price:
+        token0Price = float(token0Price.decode('utf-8'))
+        trade_volume_usd += token0_swapped * token0Price
+    else:
+        logger.warning(
+            f"Error in trade volume calculation: can't find {pair_per_token_metadata['token0']['symbol']}-"
+            f"USDT Price. Attempting to find {pair_per_token_metadata['token1']['symbol']}-USDT price and 2x it"
+        )
+        print(
+                    f"Error in trade volume calculation: can't find {pair_per_token_metadata['token0']['symbol']}-"
+                    f"USDT Price. Attempting to find {pair_per_token_metadata['token1']['symbol']}-USDT price and 2x it"
+                )
+
+    if token1Price:
+        token1Price = float(token1Price.decode('utf-8'))
+        trade_volume_usd += token1_swapped * token1Price
+    else:
+        logger.warning(
+            f"Error: can't find {pair_per_token_metadata['token1']['symbol']}-USDT Price")
+        print(
+            f"Error: can't find {pair_per_token_metadata['token1']['symbol']}-USDT Price")
+    if not token0Price or not token1Price:
+        trade_volume_usd *= 2
+    return {
+        'totalTradesUSD': trade_volume_usd,
+        'token0TradeVolume': token0_swapped,
+        'token1TradeVolume': token1_swapped
+    }
+
+
 # get allPairLength
 def get_all_pair_length():
     return quick_swap_uniswap_v2_factory_contract.functions.allPairsLength().call()
+
 
 # call allPair by index number
 @acquire_threading_semaphore
@@ -215,7 +350,8 @@ def get_all_pairs_and_write_to_file():
 
 
 @provide_async_redis_conn_insta
-async def get_pair_per_token_metadata(pair_contract_obj, pair_address, loop: asyncio.AbstractEventLoop, redis_conn: aioredis.Redis = None):
+async def get_pair_per_token_metadata(pair_contract_obj, pair_address, loop: asyncio.AbstractEventLoop,
+                                      redis_conn: aioredis.Redis = None):
     """
         returns information on the tokens contained within a pair contract - name, symbol, decimals of token0 and token1
         also returns pair symbol by concatenating {token0Symbol}-{token1Symbol}
@@ -298,9 +434,11 @@ async def get_pair_per_token_metadata(pair_contract_obj, pair_address, loop: asy
         }
     }
 
+
 # asynchronously get liquidity of each token reserve
 @provide_async_redis_conn_insta
-async def get_liquidity_of_each_token_reserve_async(loop: asyncio.AbstractEventLoop, pair_address, block_identifier='latest', redis_conn: aioredis.Redis = None):
+async def get_liquidity_of_each_token_reserve_async(loop: asyncio.AbstractEventLoop, pair_address,
+                                                    block_identifier='latest', redis_conn: aioredis.Redis = None):
     try:
         pair_address = Web3.toChecksumAddress(pair_address)
         # pair contract
@@ -310,8 +448,9 @@ async def get_liquidity_of_each_token_reserve_async(loop: asyncio.AbstractEventL
         )
         redis_storage = AsyncRedisStorage(await load_rate_limiter_scripts(redis_conn), redis_conn)
         custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
-        limit_incr_by = 1   # score to be incremented for each request
-        app_id = settings.RPC.MATIC[0].split('/')[-1]  # future support for loadbalancing over multiple MaticVigil RPC appID
+        limit_incr_by = 1  # score to be incremented for each request
+        app_id = settings.RPC.MATIC[0].split('/')[
+            -1]  # future support for loadbalancing over multiple MaticVigil RPC appID
         key_bits = [app_id, 'eth_call']  # TODO: add unique elements that can identify a request
         can_request = False
         rate_limit_exception = False
@@ -329,7 +468,7 @@ async def get_liquidity_of_each_token_reserve_async(loop: asyncio.AbstractEventL
                     reset_in = 1 + window_stats[0]
                     # if you need information on back offs
                     retry_after = reset_in - int(time.time())
-                    retry_after = (datetime.now() + timedelta(0,retry_after)).isoformat()
+                    retry_after = (datetime.now() + timedelta(0, retry_after)).isoformat()
                     can_request = False
                     break  # make sure to break once false condition is hit
             except (
@@ -337,7 +476,8 @@ async def get_liquidity_of_each_token_reserve_async(loop: asyncio.AbstractEventL
                     aioredis.errors.PoolClosedError
             ) as e:
                 # shit can happen while each limit check call hits Redis, handle appropriately
-                logger.debug('Bypassing rate limit check for appID because of Redis exception: ' + str({'appID': app_id, 'exception': e}))
+                logger.debug('Bypassing rate limit check for appID because of Redis exception: ' + str(
+                    {'appID': app_id, 'exception': e}))
             else:
                 can_request = True
         if can_request:
@@ -355,13 +495,117 @@ async def get_liquidity_of_each_token_reserve_async(loop: asyncio.AbstractEventL
             # logger.debug(f"Decimals of token0: {token0_decimals}, Decimals of token1: {token1_decimals}")
             logger.debug(
                 "Token0: %s, Reserves: %s | Token1: %s, Reserves: %s", token0_addr, token1_addr,
-                reserves[0]/10**int(token0_decimals), reserves[1]/10**int(token1_decimals)
+                reserves[0] / 10 ** int(token0_decimals), reserves[1] / 10 ** int(token1_decimals)
             )
-            return {"token0": reserves[0]/10**int(token0_decimals), "token1": reserves[1]/10**int(token1_decimals)}
+            return {"token0": reserves[0] / 10 ** int(token0_decimals),
+                    "token1": reserves[1] / 10 ** int(token1_decimals)}
         else:
             raise Exception("exhausted_api_key_rate_limit inside uniswap_functions get async liquidity reservers")
     except Exception as exc:
         logger.error("error at async_get_liquidity_of_each_token_reserve fn: %s", exc, exc_info=True)
+        raise
+
+
+# asynchronously get trades on a pair contract
+@provide_async_redis_conn_insta
+async def get_pair_contract_trades_async(
+        ev_loop: asyncio.AbstractEventLoop,
+        pair_address,
+        from_block,
+        to_block,
+        redis_conn: aioredis.Redis = None
+):
+    try:
+        pair_address = Web3.toChecksumAddress(pair_address)
+        # pair contract
+        pair = w3.eth.contract(
+            address=pair_address,
+            abi=pair_contract_abi
+        )
+        redis_storage = AsyncRedisStorage(await load_rate_limiter_scripts(redis_conn), redis_conn)
+        custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
+        limit_incr_by = 3  # be honest, we will make 3 eth_getLogs queries here
+        app_id = settings.RPC.MATIC[0].split('/')[
+            -1]  # future support for loadbalancing over multiple MaticVigil RPC appID
+        key_bits = [app_id, 'eth_logs']  # TODO: add unique elements that can identify a request
+        can_request = False
+        rate_limit_exception = False
+        retry_after = 1
+        response = None
+        for each_lim in PARSED_LIMITS:
+            # window_stats = custom_limiter.get_window_stats(each_lim, key_bits)
+            # local_app_cacher_logger.debug(window_stats)
+            # rest_logger.debug('Limit %s expiry: %s', each_lim, each_lim.get_expiry())
+            # async limits rate limit check
+            # if rate limit checks out then we call
+            try:
+                if await custom_limiter.hit(each_lim, limit_incr_by, *[key_bits]) is False:
+                    window_stats = await custom_limiter.get_window_stats(each_lim, key_bits)
+                    reset_in = 1 + window_stats[0]
+                    # if you need information on back offs
+                    retry_after = reset_in - int(time.time())
+                    retry_after = (datetime.now() + timedelta(0, retry_after)).isoformat()
+                    can_request = False
+                    break  # make sure to break once false condition is hit
+            except (
+                    aioredis.errors.ConnectionClosedError, aioredis.errors.ConnectionForcedCloseError,
+                    aioredis.errors.PoolClosedError
+            ) as e:
+                # shit can happen while each limit check call hits Redis, handle appropriately
+                logger.debug('Bypassing rate limit check for appID because of Redis exception: ' + str(
+                    {'appID': app_id, 'exception': e}))
+            else:
+                can_request = True
+        if can_request:
+            pair_per_token_metadata = await get_pair_per_token_metadata(
+                pair_contract_obj=pair,
+                pair_address=pair_address,
+                loop=ev_loop
+            )
+            event_log_fetch_coros = list()
+            for trade_event_name in ['Swap', 'Mint', 'Burn']:
+                event_sig, event_abi = get_event_sig_and_abi(trade_event_name)
+                pfunc_get_event_logs = partial(
+                    get_events_logs, **{
+                        'contract_address': pair_address,
+                        'toBlock': to_block,
+                        'fromBlock': from_block,
+                        'topics': [event_sig],
+                        'event_abi': event_abi
+                    }
+                )
+                event_log_fetch_coros.append(ev_loop.run_in_executor(func=pfunc_get_event_logs, executor=None))
+            [
+                swap_event_logs, mint_event_logs, burn_event_logs
+            ] = await asyncio.gather(*event_log_fetch_coros)
+            logs_ret = {
+                'Swap': swap_event_logs,
+                'Mint': mint_event_logs,
+                'Burn': burn_event_logs
+            }
+            # extract total trade from them
+            rets = dict()
+            for trade_event_name in ['Swap', 'Mint', 'Burn']:
+                # print(f'Event {trade_event_name} logs: ', logs_ret[trade_event_name])
+                rets.update({
+                    trade_event_name: {
+                        'logs': [dict(k.args) for k in logs_ret[trade_event_name]],
+                        'trades': await extract_trade_volume_data(
+                            event_name=trade_event_name,
+                            # event_logs=logs_ret[trade_event_name],
+                            event_logs=logs_ret[trade_event_name],
+                            redis_conn=redis_conn,
+                            pair_per_token_metadata=pair_per_token_metadata
+                        )
+                    }
+                })
+            print(rets)
+            return rets
+            # logger.debug(f"Decimals of token0: {token0_decimals}, Decimals of token1: {token1_decimals}")
+        else:
+            raise Exception("exhausted_api_key_rate_limit inside uniswap_functions get async liquidity reservers")
+    except Exception as exc:
+        logger.error("error at get_pair_contract_trades_async fn: %s", exc, exc_info=True)
         raise
 
 
@@ -371,7 +615,7 @@ def get_liquidity_of_each_token_reserve(pair_address, block_identifier='latest')
     pair_address = Web3.toChecksumAddress(pair_address)
     # pair contract
     pair = w3.eth.contract(
-        address=pair_address, 
+        address=pair_address,
         abi=pair_contract_abi
     )
 
@@ -383,27 +627,26 @@ def get_liquidity_of_each_token_reserve(pair_address, block_identifier='latest')
     reservers = pair.functions.getReserves().call(block_identifier=block_identifier)
     logger.debug(f"Token0: {token0Addr}, Reservers: {reservers[0]}")
     logger.debug(f"Token1: {token1Addr}, Reservers: {reservers[1]}")
-    
 
-    #toke0 contract
+    # toke0 contract
     token0 = w3.eth.contract(
-        address=Web3.toChecksumAddress(token0Addr), 
+        address=Web3.toChecksumAddress(token0Addr),
         abi=erc20_abi
     )
-    #toke1 contract
+    # toke1 contract
     token1 = w3.eth.contract(
-        address=Web3.toChecksumAddress(token1Addr), 
+        address=Web3.toChecksumAddress(token1Addr),
         abi=erc20_abi
     )
 
     token0_decimals = token0.functions.decimals().call()
     token1_decimals = token1.functions.decimals().call()
 
-    
     logger.debug(f"Decimals of token1: {token1_decimals}, Decimals of token1: {token0_decimals}")
-    logger.debug(f"reservers[0]/10**token0_decimals: {reservers[0]/10**token0_decimals}, reservers[1]/10**token1_decimals: {reservers[1]/10**token1_decimals}")
+    logger.debug(
+        f"reservers[0]/10**token0_decimals: {reservers[0] / 10 ** token0_decimals}, reservers[1]/10**token1_decimals: {reservers[1] / 10 ** token1_decimals}")
 
-    return {"token0": reservers[0]/10**token0_decimals, "token1": reservers[1]/10**token1_decimals}
+    return {"token0": reservers[0] / 10 ** token0_decimals, "token1": reservers[1] / 10 ** token1_decimals}
 
 
 def get_pair(token0, token1):
@@ -413,20 +656,22 @@ def get_pair(token0, token1):
     return pair
 
 
-async def process_pairs_data(session, redis_conn, router_contract, maxCount, data, pair_contract_address):
-    #TODO: we might not get this audit_project_id what's then?
+async def process_pairs_token_reserves(session, redis_conn, router_contract, maxCount, data, pair_contract_address):
+    # TODO: we might not get this audit_project_id what's then?
     pair_contract_address = pair_contract_address.lower()
-    audit_project_id = f'uniswap_pairContract_pair_total_reserves_{pair_contract_address}_{settings.NAMESPACE}'
-    last_block_height_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{audit_project_id}/payloads/height')
+    pair_reserves_audit_project_id = f'uniswap_pairContract_pair_total_reserves_{pair_contract_address}_{settings.NAMESPACE}'
+    last_block_height_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{pair_reserves_audit_project_id}/payloads/height')
+    from_block = 1
+    to_block = 1
     async with session.get(url=last_block_height_url) as resp:
         logger.debug(f"Starting calculation of v2 pair data for contract: {pair_contract_address}")
 
         rest_json = await resp.json()
         last_block_height = rest_json.get('height')
 
-        #set default to block
+        # set default to block
         to_block = last_block_height
-        #set defualt from block
+        # set defualt from block
         from_block = (1 if (to_block < maxCount or maxCount == -1) else to_block - (maxCount - 1))
 
         pair_contract_obj = w3.eth.contract(
@@ -445,176 +690,218 @@ async def process_pairs_data(session, redis_conn, router_contract, maxCount, dat
         token1Addr = pair_per_token_metadata['token1']['address']
         token0_decimals = pair_per_token_metadata['token0']['decimals']
         token1_decimals = pair_per_token_metadata['token1']['decimals']
-        
-        #TODO: we might not get this audit_project_id what's then?
-        query_params = {'from_height': from_block, 'to_height': to_block, 'data': data}
-        range_fetch_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{audit_project_id}/payloads')
-        
-        async with session.get(url=range_fetch_url, params=query_params) as resp:
-            resp_json = await resp.json()
-            if 'error' in resp_json:
-                logger.error(f"Error getting pair data contract:{pair_contract_address}, error msg: {resp_json['error']}")
-                return liquidityProcessedData(
-                    contractAddress=pair_contract_address,
-                    name=pair_name,
-                    liquidity=0.0,volume_24h="",volume_7d="",
-                    deltaToken0Reserves=0.0,deltaToken1Reserves=0.0,deltaTime=0.0,
-                    latestTimestamp=0.0,earliestTimestamp=0.0
-                )
+        token0Price = await redis_conn.get(
+            uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token0']['symbol']}-USDT"))
+        if (token0Price):
+            token0Price = float(token0Price.decode('utf-8'))
+        else:
+            token0Price = 0
+            logger.error(
+                f"Error: can't find {pair_per_token_metadata['token0']['symbol']}-USDT Price and setting it 0 | {pair_per_token_metadata['token0']['address']}")
 
-            # Save the data for this requestId
-            if isinstance(resp_json, dict) and ('requestId' in resp_json.keys()):
-                _ = await redis_conn.set(
-                    f"pendingRequestInfo:{resp_json['requestId']}", 
-                    json.dumps({
-                        'maxCount': maxCount,
-                        'fromHeight': from_block,
-                        'toHeight': to_block,
-                        'data': data,
-                        'projectId': audit_project_id
-                    })
-                )
-            
-            #TODO: what if 'resp_json' has no element or just 1 element?
-            
+        token1Price = await redis_conn.get(
+            uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token1']['symbol']}-USDT"))
+        if (token1Price):
+            token1Price = float(token1Price.decode('utf-8'))
+        else:
+            token1Price = 0
+            logger.error(
+                f"Error: can't find {pair_per_token_metadata['token1']['symbol']}-USDT Price and setting it 0 | {pair_per_token_metadata['token1']['address']}")
 
-            volume_24h=""
-            volume_24h_data=False
-            volume_24h_timestamp=(time.time() - 60*60) #1 hour ago
-            
-            volume_7d=""
-            volume_7d_data=False
-            volume_7d_timestamp=(time.time() - 60*60*7) #7hour ago
-
-            token0Price = await redis_conn.get(uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token0']['symbol']}-USDT"))
-            if(token0Price):
-                token0Price = float(token0Price.decode('utf-8'))
-            else:
-                token0Price = 0
-                logger.error(f"Error: can't find {pair_per_token_metadata['token0']['symbol']}-USDT Price and setting it 0 | {pair_per_token_metadata['token0']['address']}")
-
-            token1Price = await redis_conn.get(uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token1']['symbol']}-USDT"))
-            if(token1Price):
-                token1Price = float(token1Price.decode('utf-8'))
-            else:
-                token1Price = 0
-                logger.error(f"Error: can't find {pair_per_token_metadata['token1']['symbol']}-USDT Price and setting it 0 | {pair_per_token_metadata['token1']['address']}")
-
-            #lets do some scaling for initial times of accumulated data
-            resp_json_length = len(resp_json)
-            if resp_json_length < maxCount and resp_json_length > 0:
-                logger.debug(">>>> Scaling for lower height data pairs <<<<")
-                slice_index_24h = math.ceil(resp_json_length/3) - 1
-                slice_index_7d = resp_json_length - 1
-
-
-                #get data for last 24hour
-                volume_24h_data = resp_json[:slice_index_24h+1]
-                #subsctract latestest reservers and earliest reservers for token0
-                volume_24h_token0 = float(list(volume_24h_data[0]['data']['payload']['token0Reserves'].values())[-1]) - float(list(volume_24h_data[-1]['data']['payload']['token0Reserves'].values())[-1])
-                #subsctract latestest reservers and earliest reservers for token1
-                volume_24h_token1 = float(list(volume_24h_data[0]['data']['payload']['token1Reserves'].values())[-1]) - float(list(volume_24h_data[-1]['data']['payload']['token1Reserves'].values())[-1])                    
-                #Add subsctracted reservers of token0 and token1 to get final volume
-                volume_24h = (volume_24h_token0 * token0Price) + (volume_24h_token1 * token1Price)
-                
-                #get data for last 7d
-                volume_7d_data = resp_json[:slice_index_7d+1]
-                #subsctract latestest reservers and earliest reservers for token0
-                volume_7d_data_token0 = list(volume_7d_data[0]['data']['payload']['token0Reserves'].values())[-1] - list(volume_7d_data[-1]['data']['payload']['token0Reserves'].values())[-1]
-                #subsctract latestest reservers and earliest reservers for token1
-                volume_7d_data_token1 = list(volume_7d_data[0]['data']['payload']['token1Reserves'].values())[-1] - list(volume_7d_data[-1]['data']['payload']['token1Reserves'].values())[-1]
-                #Add subsctracted reservers of token0 and token1 to get final volume
-                volume_7d = (float(volume_7d_data_token0) * token0Price) + (float(volume_7d_data_token1) * token1Price)
-            else:
-                #I AM ASSUMING RESPONSE IS SORTED BY TIMESTAMP KEY            
-                for idx, val in enumerate(resp_json):
-
-                    if((not volume_24h_data) and val['timestamp'] <= volume_24h_timestamp):
-                        #get data for last 24hour
-                        volume_24h_data = resp_json[:idx+1]
-                        #subsctract latestest reservers and earliest reservers for token0
-                        volume_24h_token0 = float(list(volume_24h_data[0]['data']['payload']['token0Reserves'].values())[-1]) - float(list(volume_24h_data[-1]['data']['payload']['token0Reserves'].values())[-1])
-                        #subsctract latestest reservers and earliest reservers for token1
-                        volume_24h_token1 = float(list(volume_24h_data[0]['data']['payload']['token1Reserves'].values())[-1]) - float(list(volume_24h_data[-1]['data']['payload']['token1Reserves'].values())[-1])                    
-                        #Add subsctracted reservers of token0 and token1 to get final volume
-                        volume_24h = (volume_24h_token0 * token0Price) + (volume_24h_token1 * token1Price)
-
-                    if((not volume_7d_data) and val['timestamp'] <= volume_7d_timestamp):
-                        #get data for last 7d
-                        volume_7d_data = resp_json[:idx+1]
-                        #subsctract latestest reservers and earliest reservers for token0
-                        volume_7d_data_token0 = list(volume_7d_data[0]['data']['payload']['token0Reserves'].values())[-1] - list(volume_7d_data[-1]['data']['payload']['token0Reserves'].values())[-1]
-                        #subsctract latestest reservers and earliest reservers for token1
-                        volume_7d_data_token1 = list(volume_7d_data[0]['data']['payload']['token1Reserves'].values())[-1] - list(volume_7d_data[-1]['data']['payload']['token1Reserves'].values())[-1]
-                        #Add subsctracted reservers of token0 and token1 to get final volume
-                        volume_7d = (float(volume_7d_data_token0) * token0Price) + (float(volume_7d_data_token1) * token1Price)
-
-                    #break if volumes are calculated
-                    if (volume_7d_data and volume_7d_data):
-                        break
-
-            token0_liquidity = float(list(resp_json[0]['data']['payload']['token0Reserves'].values())[-1]) * token0Price 
-            token1_liquidity = float(list(resp_json[0]['data']['payload']['token1Reserves'].values())[-1]) * token1Price 
-            total_liquidity = token0_liquidity + token1_liquidity
-
-            
-            await redis_conn.set(uniswap_pair_contract_V2_pair_data.format(f"{Web3.toChecksumAddress(pair_contract_address)}"), liquidityProcessedData(
-                contractAddress=pair_contract_address,
-                name=pair_name,
-                liquidity=f"US${abs(total_liquidity):,}",
-                volume_24h=f"US${abs(volume_24h):,}",
-                volume_7d=f"US${abs(volume_7d):,}",
-                deltaToken0Reserves=list(resp_json[0]['data']['payload']['token0Reserves'].values())[-1] - list(resp_json[-1]['data']['payload']['token0Reserves'].values())[-1],
-                deltaToken1Reserves=list(resp_json[0]['data']['payload']['token1Reserves'].values())[-1] - list(resp_json[-1]['data']['payload']['token1Reserves'].values())[-1],
-                deltaTime=resp_json[0]['timestamp'] - resp_json[-1]['timestamp'],
-                latestTimestamp=resp_json[0]['timestamp'],
-                earliestTimestamp=resp_json[-1]['timestamp']
-            ).json())
-
-            logger.debug(f"Calculated v2 pair data for contract: {pair_contract_address} | symbol:{pair_per_token_metadata['token0']['symbol']}-{pair_per_token_metadata['token1']['symbol']}")
-
-            #adapt data to cosumable form
+    total_liquidity = 0
+    # TODO: we might not get this audit_project_id what's then?
+    pair_reserves_query_params = {'from_height': from_block, 'to_height': to_block, 'data': data}
+    pair_reserves_range_fetch_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{pair_reserves_audit_project_id}/payloads')
+    async with session.get(url=pair_reserves_range_fetch_url, params=pair_reserves_query_params) as resp:
+        resp_json = await resp.json()
+        if 'error' in resp_json:
+            logger.error(
+                f"Error getting pair data contract:{pair_contract_address}, error msg: {resp_json['error']}")
             return liquidityProcessedData(
                 contractAddress=pair_contract_address,
                 name=pair_name,
-                liquidity=f"US${abs(total_liquidity):,}",
-                volume_24h=f"US${abs(volume_24h):,}",
-                volume_7d=f"US${abs(volume_7d):,}",
-                deltaToken0Reserves=list(resp_json[0]['data']['payload']['token0Reserves'].values())[-1] - list(resp_json[-1]['data']['payload']['token0Reserves'].values())[-1],
-                deltaToken1Reserves=list(resp_json[0]['data']['payload']['token1Reserves'].values())[-1] - list(resp_json[-1]['data']['payload']['token1Reserves'].values())[-1],
-                deltaTime=resp_json[0]['timestamp'] - resp_json[-1]['timestamp'],
-                latestTimestamp=resp_json[0]['timestamp'],
-                earliestTimestamp=resp_json[-1]['timestamp']
+                liquidity=0.0, volume_24h="", volume_7d="", fees_24h=f"",
+                deltaToken0Reserves=0.0, deltaToken1Reserves=0.0, deltaTime=0.0,
+                latestTimestamp=0.0, earliestTimestamp=0.0
             )
+
+        # Save the data for this requestId
+        if isinstance(resp_json, dict) and ('requestId' in resp_json.keys()):
+            _ = await redis_conn.set(
+                f"pendingRequestInfo:{resp_json['requestId']}",
+                json.dumps({
+                    'maxCount': maxCount,
+                    'fromHeight': from_block,
+                    'toHeight': to_block,
+                    'data': data,
+                    'projectId': pair_reserves_audit_project_id
+                })
+            )
+        # TODO: what if 'resp_json' has no element or just 1 element?
+        token0_liquidity = float(list(resp_json[0]['data']['payload']['token0Reserves'].values())[-1]) * token0Price
+        token1_liquidity = float(list(resp_json[0]['data']['payload']['token1Reserves'].values())[-1]) * token1Price
+        total_liquidity += token0_liquidity + token1_liquidity
+
+    trade_volume_audit_project_id = f'uniswap_pairContract_trade_volume_{pair_contract_address}_{settings.NAMESPACE}'
+    trade_volume_last_block_height_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL,
+                                    f'/{trade_volume_audit_project_id}/payloads/height')
+    trade_volume_to_block = 1
+    trade_volume_from_block = 1
+    async with session.get(url=trade_volume_last_block_height_url) as resp:
+        logger.debug(f"Starting calculation of v2 trade volume for contract: {pair_contract_address}")
+        rest_json = await resp.json()
+        last_block_height = rest_json.get('height')
+        logger.debug(f"Height of trade volume blocks for contract: {pair_contract_address} | project ID: {trade_volume_audit_project_id}: {last_block_height}")
+
+        # set default to block
+        trade_volume_to_block = last_block_height
+        # set defualt from block
+        trade_volume_from_block = (1 if (to_block < maxCount or maxCount == -1) else to_block - (maxCount - 1))
+    trade_volume_query_params = {'from_height': trade_volume_from_block, 'to_height': trade_volume_to_block, 'data': data}
+    trade_volume_range_fetch_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{trade_volume_audit_project_id}/payloads')
+    logger.debug(
+        f"Fetching trade volume blocks for contract: {pair_contract_address} | project ID: {trade_volume_audit_project_id}")
+    async with session.get(url=trade_volume_range_fetch_url, params=trade_volume_query_params) as trade_vol_resp:
+        trade_vol_resp_json = await trade_vol_resp.json()
+        if 'error' in trade_vol_resp_json:
+            logger.error(
+                f"Error getting pair data contract:{pair_contract_address}, error msg: {trade_vol_resp_json['error']}")
+            return liquidityProcessedData(
+                contractAddress=pair_contract_address,
+                name=pair_name,
+                liquidity=total_liquidity, volume_24h="", volume_7d="", fees_24h=f"",
+                deltaToken0Reserves=0.0, deltaToken1Reserves=0.0, deltaTime=0.0,
+                latestTimestamp=0.0, earliestTimestamp=0.0
+            )
+
+        # Save the data for this requestId
+        if isinstance(trade_vol_resp_json, dict) and ('requestId' in trade_vol_resp_json.keys()):
+            _ = await redis_conn.set(
+                f"pendingRequestInfo:{resp_json['requestId']}",
+                json.dumps({
+                    'maxCount': maxCount,
+                    'fromHeight': from_block,
+                    'toHeight': to_block,
+                    'data': data,
+                    'projectId': trade_volume_audit_project_id
+                })
+            )
+
+        volume_24h_timestamp = time.time() - 60 * 60  # 1 hour ago
+        volume_7d_timestamp = time.time() - 60 * 60 * 7  # 7hour ago
+        trade_vol_resp_json_length = len(trade_vol_resp_json)
+        logger.debug(
+            f"Length of trade volume blocks for contract: {pair_contract_address} | project ID: {trade_volume_audit_project_id}: {trade_vol_resp_json_length}")
+        try:
+            idx_24h = next(x for x, val in enumerate(trade_vol_resp_json) if val['timestamp'] >= volume_24h_timestamp)
+        except StopIteration:
+            idx_24h = None
+        try:
+            idx_7d = next(x for x, val in enumerate(trade_vol_resp_json) if val['timestamp'] >= volume_7d_timestamp)
+        except StopIteration:
+            idx_7d = None
+        
+        # lets do some scaling for initial times of accumulated data
+        if not idx_24h:
+            idx_24h = math.ceil(trade_vol_resp_json_length / 3) - 1
+            logger.debug(">>>> Scaling 24h index for lower height data pairs. idx_24h = %d <<<<", idx_24h)
+
+        if not idx_7d:
+            idx_7d = trade_vol_resp_json_length - 1
+            logger.debug(">>>> Scaling 7d index for lower height data pairs. idx_7h = %d <<<<", idx_7d)
+
+        # get data for last 24hour
+        volume_24h = sum(map(lambda x: x['data']['payload']['totalTrade'], trade_vol_resp_json[:idx_24h + 1]))
+
+        # get data for last 7d
+        volume_7d = sum(map(lambda x: x['data']['payload']['totalTrade'], trade_vol_resp_json[:idx_7d + 1]))
+
+        # calculate / sum last 24h fee
+        fees_24h = sum(map(lambda x: x['data']['payload'].get('totalFee', 0), trade_vol_resp_json[:idx_24h + 1]))
+
+        # print("### HERE I AM")
+        volume_24h_cids = [{'dagCid': obj_24h['dagCid'], 'payloadCid': obj_24h['data']['cid']} for obj_24h in trade_vol_resp_json[:idx_24h + 1]]
+        volume_7d_cids = [{'dagCid': obj_7d['dagCid'], 'payloadCid': obj_7d['data']['cid']} for obj_7d in trade_vol_resp_json[:idx_7d + 1]]
+        # print(volume_24h_cids)
+
+        # cid = await ipfs_client.add_json(json.dumps({'a':'b'}))
+        # print("CID: %s", cid)
+        # out = await ipfs_client.cat(cid)
+        # print("GET CID:", json.loads(out.decode('utf-8')))
+
+        logger.debug('Calculated 24h, 7d and fees_24h vol: %s, %s, %s | contract: %s', volume_24h, volume_7d, fees_24h, pair_contract_address)
+        try:
+            prepared_snapshot = liquidityProcessedData(
+                    contractAddress=pair_contract_address,
+                    name=pair_name,
+                    liquidity=f"US${abs(total_liquidity):,}",
+                    volume_24h=f"US${abs(volume_24h):,}",
+                    volume_7d=f"US${abs(volume_7d):,}",
+                    fees_24h=f"US${abs(fees_24h):,}",
+                    deltaToken0Reserves=list(resp_json[0]['data']['payload']['token0Reserves'].values())[-1] -
+                                        list(resp_json[-1]['data']['payload']['token0Reserves'].values())[-1],
+                    deltaToken1Reserves=list(resp_json[0]['data']['payload']['token1Reserves'].values())[-1] -
+                                        list(resp_json[-1]['data']['payload']['token1Reserves'].values())[-1],
+                    deltaTime=resp_json[0]['timestamp'] - resp_json[-1]['timestamp'],
+                    latestTimestamp=resp_json[0]['timestamp'],
+                    earliestTimestamp=resp_json[-1]['timestamp']
+            )
+        except Exception as e:
+            logger.error('Exception applying values to model obj: %s', e, exc_info=True)
+        logger.debug('Prepared trades and token reserves snapshot: %s', prepared_snapshot)
+        r = await redis_conn.set(
+            uniswap_pair_contract_V2_pair_data.format(f"{Web3.toChecksumAddress(pair_contract_address)}"),
+            prepared_snapshot.json())
+        logger.debug('Result of setting key %s in Redis to snapshot: %s', uniswap_pair_contract_V2_pair_data.format(f"{Web3.toChecksumAddress(pair_contract_address)}"), r)
+        logger.debug(
+            f"Calculated v2 pair data for contract: {pair_contract_address} | symbol:{pair_per_token_metadata['token0']['symbol']}-{pair_per_token_metadata['token1']['symbol']}")
+
+        # adapt data to cosumable form
+        return liquidityProcessedData(
+            contractAddress=pair_contract_address,
+            name=pair_name,
+            liquidity=f"US${abs(total_liquidity):,}",
+            volume_24h=f"US${abs(volume_24h):,}",
+            volume_7d=f"US${abs(volume_7d):,}",
+            fees_24h=f"US${abs(fees_24h):,}",
+            deltaToken0Reserves=list(resp_json[0]['data']['payload']['token0Reserves'].values())[-1] -
+                                list(resp_json[-1]['data']['payload']['token0Reserves'].values())[-1],
+            deltaToken1Reserves=list(resp_json[0]['data']['payload']['token1Reserves'].values())[-1] -
+                                list(resp_json[-1]['data']['payload']['token1Reserves'].values())[-1],
+            deltaTime=resp_json[0]['timestamp'] - resp_json[-1]['timestamp'],
+            latestTimestamp=resp_json[0]['timestamp'],
+            earliestTimestamp=resp_json[-1]['timestamp']
+        )
+
 
 @provide_async_redis_conn_insta
 async def v2_pairs_data(session, maxCount, data, redis_conn: aioredis.Redis = None):
     f = None
     try:
-        #TODO: we can cache cached_pair_addresses content with expiry date
+        # TODO: we can cache cached_pair_addresses content with expiry date
         if not os.path.exists('static/cached_pair_addresses.json'):
             return []
         f = open('static/cached_pair_addresses.json', 'r')
         pairs = json.loads(f.read())
-        
+
         if len(pairs) <= 0:
             return []
 
         router_contract = w3.eth.contract(
-            address=router_addr, 
+            address=router_addr,
             abi=router_contract_abi
         )
 
         process_data_list = []
         for pair_contract_address in pairs:
-            t = process_pairs_data(session, redis_conn, router_contract, maxCount, data, pair_contract_address)
+            t = process_pairs_token_reserves(session, redis_conn, router_contract, maxCount, data, pair_contract_address)
             process_data_list.append(t)
 
-        #TODO: how about some error handling?
+        # TODO: how about some error handling?
         final_results = await asyncio.gather(*process_data_list)
-        #logger.debug(f"Processed data: {final_results}")
+        # logger.debug(f"Processed data: {final_results}")
         return final_results
-            
+
     except Exception as e:
         logger.error(f"Error at V2 pair data: {str(e)}", exc_info=True)
     finally:
@@ -622,14 +909,31 @@ async def v2_pairs_data(session, maxCount, data, redis_conn: aioredis.Redis = No
             f.close()
 
 
+async def get_aiohttp_cache() -> aiohttp.ClientSession:
+    basic_rpc_connector = aiohttp.TCPConnector(limit=settings['rlimit']['file_descriptors'])
+    aiohttp_client_basic_rpc_session = aiohttp.ClientSession(connector=basic_rpc_connector)
+    return aiohttp_client_basic_rpc_session
+
 if __name__ == '__main__':
-    
-    #here instead of calling get pair we can directly use cached all pair addresses
-    dai = "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063"
-    gns = "0xE5417Af564e4bFDA1c483642db72007871397896"
-    weth = "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619"
-    pair_address = get_pair("0x29bf8Df7c9a005a080E4599389Bf11f15f6afA6A", "0xc2132d05d31c914a87c6611c10748aeb04b58e8f")
-    print(f"pair_address: {pair_address}")
+    # here instead of calling get pair we can directly use cached all pair addresses
+    # dai = "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063"
+    # gns = "0xE5417Af564e4bFDA1c483642db72007871397896"
+    # weth = "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619"
+    # pair_address = get_pair("0x29bf8Df7c9a005a080E4599389Bf11f15f6afA6A", "0xc2132d05d31c914a87c6611c10748aeb04b58e8f")
+    # print(f"pair_address: {pair_address}")
+    # loop = asyncio.get_event_loop()
+    # loop.run_until_complete(
+    #     get_pair_contract_trades_async(loop, '0x21b8065d10f73ee2e260e5b47d3344d3ced7596e', 14291724, 14293558)
+    # )
+
+    loop = asyncio.get_event_loop()
+    session = loop.run_until_complete(get_aiohttp_cache())
+    data = loop.run_until_complete(
+        v2_pairs_data(session, 500, 'true')   
+    )
+    session.close()
+
+
     # logger.debug(f"Pair address : {pair_address}")
     # logger.debug(get_liquidity_of_each_token_reserve(pair_address))
 
@@ -637,6 +941,5 @@ if __name__ == '__main__':
     # # print(get_liquidity_of_each_token_reserve(pair_address, block_identifier=24265790))
 
     # # async liqudity function
-    # loop = asyncio.get_event_loop()
     # reservers = loop.run_until_complete(async_get_liquidity_of_each_token_reserve(loop, pair_address="0x9d3cd87FFEB9eBa14F63DeC135Da5153eC5CA698"))
     # loop.close()

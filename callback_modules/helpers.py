@@ -28,6 +28,7 @@ import aio_pika
 import aiohttp
 from tenacity import Retrying, stop_after_attempt
 
+
 # TODO: remove polymarket specific helpers
 
 
@@ -49,7 +50,8 @@ async def get_rabbitmq_channel(connection_pool) -> aio_pika.Channel:
 class AuditProtocolCommandsHelper:
     @classmethod
     @provide_redis_conn_insta
-    async def set_diff_rule_for_pair_reserves(cls, pair_contract_address, stream, session: aiohttp.ClientSession, redis_conn: redis.Redis = None):
+    async def set_diff_rule_for_pair_reserves(cls, pair_contract_address, session: aiohttp.ClientSession,
+                                              stream='pair_total_reserves', redis_conn: redis.Redis = None):
         project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
         if not redis_conn.sismember(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id):
             """ Setup diffRules for this market"""
@@ -57,44 +59,45 @@ class AuditProtocolCommandsHelper:
             for attempt in Retrying(reraise=True, stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY)):
                 with attempt:
                     async with session.post(
-                        url=urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{project_id}/diffRules'), 
-                        json={
-                            'rules': [
-                                {
-                                    "ruleType": "ignore",
-                                    "field": "chainHeightRange",
-                                    "fieldType": "map",
-                                    "ignoreMemberFields": ["begin", "end"],
-                                },
-                                {
-                                    "ruleType": "compare",
-                                    "field": "token0Reserves",
-                                    "fieldType": "map",
-                                    "operation": "listSlice",
-                                    "memberFields": -1
-                                },
-                                {
-                                    "ruleType": "compare",
-                                    "field": "token1Reserves",
-                                    "fieldType": "map",
-                                    "operation": "listSlice",
-                                    "memberFields": -1
-                                },
+                            url=urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{project_id}/diffRules'),
+                            json={
+                                'rules': [
+                                    {
+                                        "ruleType": "ignore",
+                                        "field": "chainHeightRange",
+                                        "fieldType": "map",
+                                        "ignoreMemberFields": ["begin", "end"],
+                                    },
+                                    {
+                                        "ruleType": "compare",
+                                        "field": "token0Reserves",
+                                        "fieldType": "map",
+                                        "operation": "listSlice",
+                                        "memberFields": -1
+                                    },
+                                    {
+                                        "ruleType": "compare",
+                                        "field": "token1Reserves",
+                                        "fieldType": "map",
+                                        "operation": "listSlice",
+                                        "memberFields": -1
+                                    },
 
-                                {
-                                    "ruleType": "ignore",
-                                    "field": "broadcast_id",
-                                    "fieldType": "str"
-                                },
+                                    {
+                                        "ruleType": "ignore",
+                                        "field": "broadcast_id",
+                                        "fieldType": "str"
+                                    },
 
-                                {
-                                    "ruleType": "ignore",
-                                    "field": "timestamp",
-                                    "fieldType": "float"
-                                }
-                            ]
-                        }, 
-                        timeout=aiohttp.ClientTimeout(total=None, sock_read=settings.TIMEOUTS.ARCHIVAL, sock_connect=settings.TIMEOUTS.CONNECTION_INIT )
+                                    {
+                                        "ruleType": "ignore",
+                                        "field": "timestamp",
+                                        "fieldType": "float"
+                                    }
+                                ]
+                            },
+                            timeout=aiohttp.ClientTimeout(total=None, sock_read=settings.TIMEOUTS.ARCHIVAL,
+                                                          sock_connect=settings.TIMEOUTS.CONNECTION_INIT)
                     ) as response_obj:
                         response_status_code = response_obj.status
                         response = await response_obj.json() or {}
@@ -103,9 +106,68 @@ class AuditProtocolCommandsHelper:
                             redis_conn.sadd(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id)
                             return {"message": f"success status code: {response_status_code}", "response": response}
                         elif response_status_code == 500 or response_status_code == 502:
-                            return {"message": f"failed with status code: {response_status_code}", "response": response} # ignore 500 and 502 errors
+                            return {
+                                "message": f"failed with status code: {response_status_code}", "response": response
+                            }  # ignore 500 and 502 errors
                         else:
-                            raise Exception('Failed audit protocol engine call with status code: {} and response: {}'.format(response_status_code, response))
+                            raise Exception(
+                                'Failed audit protocol engine call with status code: {} and response: {}'.format(
+                                    response_status_code, response))
+
+    @classmethod
+    @provide_redis_conn_insta
+    async def set_diff_rule_for_trade_volume(
+            cls, pair_contract_address, session: aiohttp.ClientSession, stream='trade_volume',
+            redis_conn: redis.Redis = None
+    ):
+        project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
+        if not redis_conn.sismember(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id):
+            """ Setup diffRules for this market"""
+            # retry below call given at settings.AUDIT_PROTOCOL_ENGINE.RETRY
+            for attempt in Retrying(reraise=True, stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY)):
+                with attempt:
+                    async with session.post(
+                            url=urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{project_id}/diffRules'),
+                            json={
+                                'rules': [
+                                    {
+                                        "ruleType": "ignore",
+                                        "field": "chainHeightRange",
+                                        "fieldType": "map",
+                                        "ignoreMemberFields": ["begin", "end"],
+                                    },
+                                    {
+                                        "ruleType": "ignore",
+                                        "field": "broadcast_id",
+                                        "fieldType": "str"
+                                    },
+                                    {
+                                        "ruleType": "ignore",
+                                        "field": "timestamp",
+                                        "fieldType": "float"
+                                    },
+                                    {
+                                        "ruleType": "ignore",
+                                        "field": "events",
+                                        "fieldType": "float"
+                                    }
+                                ]
+                            }
+                    ) as response_obj:
+                        response_status_code = response_obj.status
+                        response = await response_obj.json() or {}
+                        logger.debug('Response code on setting diff rule on audit protocol: %s', response_status_code)
+                        if response_status_code in range(200, 300):
+                            redis_conn.sadd(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id)
+                            return {"message": f"success status code: {response_status_code}", "response": response}
+                        elif response_status_code == 500 or response_status_code == 502:
+                            return {
+                                "message": f"failed with status code: {response_status_code}", "response": response
+                            }  # ignore 500 and 502 errors
+                        else:
+                            raise Exception(
+                                'Failed audit protocol engine call with status code: {} and response: {}'.format(
+                                    response_status_code, response))
 
     @classmethod
     @provide_redis_conn_insta
@@ -114,7 +176,10 @@ class AuditProtocolCommandsHelper:
         if not redis_conn.sismember(f'uniswap:{settings.NAMESPACE}:callbackURLSetFor', project_id):
             r = requests.post(
                 url=urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{project_id}/confirmations/callback'),
-                json={'callbackURL': urljoin(settings.WEBHOOK_LISTENER.ROOT, settings.WEBHOOK_LISTENER.COMMIT_CONFIRMATION_CALLBACK_PATH)}
+                json={
+                    'callbackURL': urljoin(settings.WEBHOOK_LISTENER.ROOT,
+                                           settings.WEBHOOK_LISTENER.COMMIT_CONFIRMATION_CALLBACK_PATH)
+                }
             )
             if r.status_code in range(200, 300):
                 redis_conn.sadd(f'uniswap:{settings.NAMESPACE}:callbackURLSetFor', project_id)
@@ -126,18 +191,23 @@ class AuditProtocolCommandsHelper:
             with attempt:
                 project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
                 async with session.post(
-                    url=urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, 'commit_payload'), 
-                    json={'payload': report_payload, 'projectId': project_id}, 
-                    timeout=aiohttp.ClientTimeout(total=None, sock_read=settings.TIMEOUTS.ARCHIVAL, sock_connect=settings.TIMEOUTS.CONNECTION_INIT )
+                        url=urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, 'commit_payload'),
+                        json={'payload': report_payload, 'projectId': project_id},
+                        timeout=aiohttp.ClientTimeout(total=None, sock_read=settings.TIMEOUTS.ARCHIVAL,
+                                                      sock_connect=settings.TIMEOUTS.CONNECTION_INIT)
                 ) as response_obj:
                     response_status_code = response_obj.status
                     response = await response_obj.json() or {}
                     if response_status_code in range(200, 300):
                         return response
                     elif response_status_code == 500 or response_status_code == 502:
-                        return {"message": f"failed with status code: {response_status_code}", "response": response}#ignore 500 and 502 errors
+                        return {
+                            "message": f"failed with status code: {response_status_code}", "response": response
+                        }  # ignore 500 and 502 errors
                     else:
-                        raise Exception('Failed audit protocol engine call with status code: {} and response: {}'.format(response_status_code, response))
+                        raise Exception(
+                            'Failed audit protocol engine call with status code: {} and response: {}'.format(
+                                response_status_code, response))
 
 
 class CallbackAsyncWorker(multiprocessing.Process):
@@ -158,7 +228,8 @@ class CallbackAsyncWorker(multiprocessing.Process):
     async def _shutdown_handler(self, sig, loop: asyncio.AbstractEventLoop):
         self._shutdown_signal_received_count += 1
         if self._shutdown_signal_received_count > 1:
-            logging.info(f'Received exit signal {sig.name}. Not processing as shutdown sequence was already initiated...')
+            logging.info(
+                f'Received exit signal {sig.name}. Not processing as shutdown sequence was already initiated...')
         else:
             logging.info(
                 f'Received exit signal {sig.name}. Processing shutdown sequence...')
@@ -290,4 +361,3 @@ def get_cumulative_trade_vol(
     trade_vol = get_trade_vol_for_events(events)
 
     return trade_vol
-

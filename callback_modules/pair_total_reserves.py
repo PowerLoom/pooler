@@ -1,15 +1,11 @@
-import asyncio
-
-import aiohttp
-
 from init_rabbitmq import create_rabbitmq_conn
 from setproctitle import setproctitle
-from uniswap_functions import get_liquidity_of_each_token_reserve, get_liquidity_of_each_token_reserve_async
+from uniswap_functions import get_pair_contract_trades_async, get_liquidity_of_each_token_reserve_async
 from typing import List
 from functools import reduce
 from message_models import (
     PowerloomCallbackEpoch, PowerloomCallbackProcessMessage, UniswapPairTotalReservesSnapshot,
-    EpochBase
+    EpochBase, UniswapTradesSnapshot
 )
 from dynaconf import settings
 from callback_modules.helpers import AuditProtocolCommandsHelper, CallbackAsyncWorker, get_cumulative_trade_vol
@@ -18,17 +14,14 @@ from redis_keys import (
     eth_log_request_data_f, uniswap_failed_pair_total_reserves_epochs_redis_q_f
 )
 from pydantic import ValidationError
-from functools import wraps
 from helper_functions import AsyncHTTPSessionCache
 from aio_pika import ExchangeType, IncomingMessage
-import aioredis
+import asyncio
+import aiohttp
 import logging
 import pika
-import aio_pika
 import time
-import json
 import multiprocessing
-import requests
 
 
 class PairTotalReservesProcessor(CallbackAsyncWorker):
@@ -40,7 +33,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             **kwargs
         )
 
-    async def _construct_epoch_snapshot_data(self, msg_obj: PowerloomCallbackProcessMessage, enqueue_on_failure=False):
+    async def _construct_pair_reserves_epoch_snapshot_data(self, msg_obj: PowerloomCallbackProcessMessage, enqueue_on_failure=False):
         max_chain_height = msg_obj.end
         min_chain_height = msg_obj.begin
         enqueue_epoch = False
@@ -79,6 +72,49 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         })
         return pair_total_reserves_snapshot
 
+    async def _construct_trade_volume_epoch_snapshot_data(self, msg_obj: PowerloomCallbackProcessMessage,
+                                                           enqueue_on_failure=False):
+        try:
+            trade_vol_processed_snapshot = await get_pair_contract_trades_async(
+                ev_loop=asyncio.get_running_loop(),
+                pair_address=msg_obj.contract,
+                from_block=msg_obj.begin,
+                to_block=msg_obj.end
+            )
+        except:
+            if enqueue_on_failure:
+                await self._redis_conn.rpush(
+                    uniswap_failed_pair_total_reserves_epochs_redis_q_f.format(msg_obj.contract),
+                    msg_obj.json()
+                )
+                self._logger.debug(f'Enqueued epoch broadcast ID {msg_obj.broadcast_id} because trade volume query failed: {msg_obj}')
+            return None
+        else:
+            total_trades_in_usd = 0
+            total_fee_in_usd = 0
+            total_token0_vol = 0
+            total_token1_vol = 0
+            final_events_list = list()
+            # self._logger.debug('Trade volume processed snapshot: %s', trade_vol_processed_snapshot)
+            for each_event in trade_vol_processed_snapshot:
+                total_trades_in_usd += trade_vol_processed_snapshot[each_event]['trades']['totalTradesUSD']
+                total_fee_in_usd += trade_vol_processed_snapshot[each_event]['trades'].get('totalFeeUSD', 0)
+                total_token0_vol += trade_vol_processed_snapshot[each_event]['trades']['token0TradeVolume']
+                total_token1_vol += trade_vol_processed_snapshot[each_event]['trades']['token1TradeVolume']
+                final_events_list.extend(trade_vol_processed_snapshot[each_event]['logs'])
+            trade_volume_snapshot = UniswapTradesSnapshot(**dict(
+                contract=msg_obj.contract,
+                broadcast_id=msg_obj.broadcast_id,
+                chainHeightRange=EpochBase(begin=msg_obj.begin, end=msg_obj.end),
+                timestamp=float(f'{time.time(): .4f}'),
+                totalTrade=float(f'{total_trades_in_usd: .6f}'),
+                totalFee=float(f'{total_fee_in_usd: .6f}'),
+                token0TradeVolume=float(f'{total_token0_vol: .6f}'),
+                token1TradeVolume=float(f'{total_token1_vol: .6f}'),
+                events=final_events_list
+            ))
+            return trade_volume_snapshot
+
     async def _on_rabbitmq_message(self, message: IncomingMessage):
         await message.ack()
         try:
@@ -101,7 +137,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         self._aiohttp_session: aiohttp.ClientSession = await self._aiohttp_session_interface.get_aiohttp_cache
         self._logger.debug('Got aiohttp session cache. Attempting to snapshot total reserves data in epoch %s...', msg_obj)
 
-        pair_total_reserves_epoch_snapshot = await self._construct_epoch_snapshot_data(msg_obj=msg_obj, enqueue_on_failure=True)
+        pair_total_reserves_epoch_snapshot = await self._construct_pair_reserves_epoch_snapshot_data(msg_obj=msg_obj, enqueue_on_failure=True)
         if not pair_total_reserves_epoch_snapshot:
             self._logger.error('No epoch snapshot to commit. Construction of snapshot failed for %s', msg_obj)
             return
@@ -122,20 +158,28 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         self._logger.debug('Sent snapshot to audit protocol: %s | Helper Response: %s', pair_total_reserves_epoch_snapshot, r)
         # TODO: update last snapshot in cache
         #  TODO: update processing status in cache?
-        # await self._redis_conn.set(uniswap_pair_total_reserves_processing_status.format(pair_total_reserves_epoch_data.contract),
-        #                            json.dumps(
-        #                                {
-        #                                    'status': 'updatedCache',
-        #                                    'data': {
-        #                                        'prevBase': prev_trade_vol_obj,
-        #                                        'extended': {
-        #                                            'buys': trades_snapshot.buys,
-        #                                            'sells': trades_snapshot.sells
-        #                                        },
-        #                                        'newBase': new_trade_vol
-        #                                    }
-        #                                }
-        #                            ))
+
+        # prepare trade volume snapshot
+        trade_vol_epoch_snapshot = await self._construct_trade_volume_epoch_snapshot_data(
+            msg_obj=msg_obj, enqueue_on_failure=True
+        )
+        if not trade_vol_epoch_snapshot:
+            self._logger.error('No epoch snapshot to commit for trade volume. Construction of snapshot failed for %s', msg_obj)
+            return
+        # TODO: should we attach previous trade volume epoch from cache?
+        await AuditProtocolCommandsHelper.set_diff_rule_for_trade_volume(
+            pair_contract_address=msg_obj.contract,
+            stream='trade_volume',
+            session=self._aiohttp_session
+        )
+        payload = trade_vol_epoch_snapshot.dict()
+        # TODO: check response returned
+        r = await AuditProtocolCommandsHelper.commit_payload(
+            pair_contract_address=pair_total_reserves_epoch_snapshot.contract,
+            stream='trade_volume',
+            report_payload=payload,
+            session=self._aiohttp_session
+        )
 
     def run(self):
         # setup_loguru_intercept()

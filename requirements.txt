@@ -70,3 +70,4 @@ web3==5.23.1
 timeago
 limits==1.5.1
 async_limits @ git+https://github.com/anomit/limits.git
+greenletio
