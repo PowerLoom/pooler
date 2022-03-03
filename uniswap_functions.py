@@ -721,6 +721,7 @@ async def process_pairs_token_reserves(session, redis_conn, router_contract, max
                 contractAddress=pair_contract_address,
                 name=pair_name,
                 liquidity=0.0, volume_24h="", volume_7d="", fees_24h=f"",
+                cid_volume_24h="", cid_volume_7d="",
                 deltaToken0Reserves=0.0, deltaToken1Reserves=0.0, deltaTime=0.0,
                 latestTimestamp=0.0, earliestTimestamp=0.0
             )
@@ -770,6 +771,7 @@ async def process_pairs_token_reserves(session, redis_conn, router_contract, max
                 contractAddress=pair_contract_address,
                 name=pair_name,
                 liquidity=total_liquidity, volume_24h="", volume_7d="", fees_24h=f"",
+                cid_volume_24h="", cid_volume_7d="",
                 deltaToken0Reserves=0.0, deltaToken1Reserves=0.0, deltaTime=0.0,
                 latestTimestamp=0.0, earliestTimestamp=0.0
             )
@@ -819,15 +821,13 @@ async def process_pairs_token_reserves(session, redis_conn, router_contract, max
         # calculate / sum last 24h fee
         fees_24h = sum(map(lambda x: x['data']['payload'].get('totalFee', 0), trade_vol_resp_json[:idx_24h + 1]))
 
-        # print("### HERE I AM")
         volume_24h_cids = [{'dagCid': obj_24h['dagCid'], 'payloadCid': obj_24h['data']['cid']} for obj_24h in trade_vol_resp_json[:idx_24h + 1]]
         volume_7d_cids = [{'dagCid': obj_7d['dagCid'], 'payloadCid': obj_7d['data']['cid']} for obj_7d in trade_vol_resp_json[:idx_7d + 1]]
-        # print(volume_24h_cids)
 
-        # cid = await ipfs_client.add_json(json.dumps({'a':'b'}))
-        # print("CID: %s", cid)
-        # out = await ipfs_client.cat(cid)
-        # print("GET CID:", json.loads(out.decode('utf-8')))
+        cids_volume_24h, cids_volume_7d = await asyncio.gather(
+            ipfs_client.add_json(json.dumps({ 'resultant':{"cids": volume_24h_cids} })),
+            ipfs_client.add_json(json.dumps({ 'resultant':{ "cids": volume_7d_cids} }))
+        )
 
         logger.debug('Calculated 24h, 7d and fees_24h vol: %s, %s, %s | contract: %s', volume_24h, volume_7d, fees_24h, pair_contract_address)
         try:
@@ -838,6 +838,8 @@ async def process_pairs_token_reserves(session, redis_conn, router_contract, max
                     volume_24h=f"US${abs(volume_24h):,}",
                     volume_7d=f"US${abs(volume_7d):,}",
                     fees_24h=f"US${abs(fees_24h):,}",
+                    cid_volume_24h=cids_volume_24h, 
+                    cid_volume_7d=cids_volume_7d,
                     deltaToken0Reserves=list(resp_json[0]['data']['payload']['token0Reserves'].values())[-1] -
                                         list(resp_json[-1]['data']['payload']['token0Reserves'].values())[-1],
                     deltaToken1Reserves=list(resp_json[0]['data']['payload']['token1Reserves'].values())[-1] -
@@ -864,6 +866,8 @@ async def process_pairs_token_reserves(session, redis_conn, router_contract, max
             volume_24h=f"US${abs(volume_24h):,}",
             volume_7d=f"US${abs(volume_7d):,}",
             fees_24h=f"US${abs(fees_24h):,}",
+            cid_volume_24h=cids_volume_24h, 
+            cid_volume_7d=cids_volume_7d,
             deltaToken0Reserves=list(resp_json[0]['data']['payload']['token0Reserves'].values())[-1] -
                                 list(resp_json[-1]['data']['payload']['token0Reserves'].values())[-1],
             deltaToken1Reserves=list(resp_json[0]['data']['payload']['token1Reserves'].values())[-1] -
@@ -921,17 +925,10 @@ if __name__ == '__main__':
     # weth = "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619"
     # pair_address = get_pair("0x29bf8Df7c9a005a080E4599389Bf11f15f6afA6A", "0xc2132d05d31c914a87c6611c10748aeb04b58e8f")
     # print(f"pair_address: {pair_address}")
-    # loop = asyncio.get_event_loop()
-    # loop.run_until_complete(
-    #     get_pair_contract_trades_async(loop, '0x21b8065d10f73ee2e260e5b47d3344d3ced7596e', 14291724, 14293558)
-    # )
-
     loop = asyncio.get_event_loop()
-    session = loop.run_until_complete(get_aiohttp_cache())
-    data = loop.run_until_complete(
-        v2_pairs_data(session, 500, 'true')   
+    loop.run_until_complete(
+        get_pair_contract_trades_async(loop, '0x21b8065d10f73ee2e260e5b47d3344d3ced7596e', 14291724, 14293558)
     )
-    session.close()
 
 
     # logger.debug(f"Pair address : {pair_address}")

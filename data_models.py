@@ -36,6 +36,8 @@ class liquidityProcessedData(BaseModel):
     liquidity: str
     volume_24h: str
     volume_7d: str
+    cid_volume_24h: str
+    cid_volume_7d: str
     fees_24h: str
     deltaToken0Reserves: float
     deltaToken1Reserves: float
