@@ -812,21 +812,32 @@ async def process_pairs_token_reserves(session, redis_conn, router_contract, max
             idx_7d = trade_vol_resp_json_length - 1
             logger.debug(">>>> Scaling 7d index for lower height data pairs. idx_7h = %d <<<<", idx_7d)
 
+        volume_24h_data = trade_vol_resp_json[:idx_24h + 1]
+        volume_7d_data = trade_vol_resp_json[:idx_7d + 1]
+
         # get data for last 24hour
-        volume_24h = sum(map(lambda x: x['data']['payload']['totalTrade'], trade_vol_resp_json[:idx_24h + 1]))
+        volume_24h = sum(map(lambda x: x['data']['payload']['totalTrade'], volume_24h_data))
 
         # get data for last 7d
-        volume_7d = sum(map(lambda x: x['data']['payload']['totalTrade'], trade_vol_resp_json[:idx_7d + 1]))
+        volume_7d = sum(map(lambda x: x['data']['payload']['totalTrade'], volume_7d_data))
 
         # calculate / sum last 24h fee
-        fees_24h = sum(map(lambda x: x['data']['payload'].get('totalFee', 0), trade_vol_resp_json[:idx_24h + 1]))
+        fees_24h = sum(map(lambda x: x['data']['payload'].get('totalFee', 0), volume_24h_data))
 
-        volume_24h_cids = [{'dagCid': obj_24h['dagCid'], 'payloadCid': obj_24h['data']['cid']} for obj_24h in trade_vol_resp_json[:idx_24h + 1]]
-        volume_7d_cids = [{'dagCid': obj_7d['dagCid'], 'payloadCid': obj_7d['data']['cid']} for obj_7d in trade_vol_resp_json[:idx_7d + 1]]
+        volume_24h_cids = [{ 'dagCid': obj_24h['dagCid'], 'payloadCid': obj_24h['data']['cid'] } for obj_24h in volume_24h_data]
+        volume_7d_cids = [{ 'dagCid': obj_7d['dagCid'], 'payloadCid': obj_7d['data']['cid'] } for obj_7d in volume_7d_data]
 
         cids_volume_24h, cids_volume_7d = await asyncio.gather(
-            ipfs_client.add_json(json.dumps({ 'resultant':{"cids": volume_24h_cids} })),
-            ipfs_client.add_json(json.dumps({ 'resultant':{ "cids": volume_7d_cids} }))
+            ipfs_client.add_json(json.dumps({ 'resultant':{
+                "cids": volume_24h_cids,
+                'latestTimestamp_volume_24h': volume_24h_data[0]['timestamp'],
+                'earliestTimestamp_volume_24h': volume_24h_data[-1]['timestamp']
+            }})),
+            ipfs_client.add_json(json.dumps({ 'resultant':{
+                "cids": volume_7d_cids,
+                'latestTimestamp_volume_7d': volume_7d_data[0]['timestamp'],
+                'earliestTimestamp_volume_7d': volume_7d_data[-1]['timestamp']
+            }}))
         )
 
         logger.debug('Calculated 24h, 7d and fees_24h vol: %s, %s, %s | contract: %s', volume_24h, volume_7d, fees_24h, pair_contract_address)
@@ -925,11 +936,16 @@ if __name__ == '__main__':
     # weth = "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619"
     # pair_address = get_pair("0x29bf8Df7c9a005a080E4599389Bf11f15f6afA6A", "0xc2132d05d31c914a87c6611c10748aeb04b58e8f")
     # print(f"pair_address: {pair_address}")
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(
-        get_pair_contract_trades_async(loop, '0x21b8065d10f73ee2e260e5b47d3344d3ced7596e', 14291724, 14293558)
-    )
+    # loop = asyncio.get_event_loop()
+    # loop.run_until_complete(
+    #     get_pair_contract_trades_async(loop, '0x21b8065d10f73ee2e260e5b47d3344d3ced7596e', 14291724, 14293558)
+    # )
 
+    
+    loop = asyncio.get_event_loop()
+    session = loop.run_until_complete(get_aiohttp_cache())
+    data = loop.run_until_complete(v2_pairs_data(session, 500, 'true'))
+    session.close()
 
     # logger.debug(f"Pair address : {pair_address}")
     # logger.debug(get_liquidity_of_each_token_reserve(pair_address))
