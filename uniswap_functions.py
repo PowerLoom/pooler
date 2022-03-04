@@ -660,7 +660,7 @@ async def process_pairs_token_reserves(session, redis_conn, router_contract, max
     # TODO: we might not get this audit_project_id what's then?
     pair_contract_address = pair_contract_address.lower()
     pair_reserves_audit_project_id = f'uniswap_pairContract_pair_total_reserves_{pair_contract_address}_{settings.NAMESPACE}'
-    last_block_height_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{pair_reserves_audit_project_id}/payloads/height')
+    last_block_height_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE_2.URL, f'/{pair_reserves_audit_project_id}/payloads/height')
     from_block = 1
     to_block = 1
     async with session.get(url=last_block_height_url) as resp:
@@ -711,7 +711,7 @@ async def process_pairs_token_reserves(session, redis_conn, router_contract, max
     total_liquidity = 0
     # TODO: we might not get this audit_project_id what's then?
     pair_reserves_query_params = {'from_height': from_block, 'to_height': to_block, 'data': data}
-    pair_reserves_range_fetch_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{pair_reserves_audit_project_id}/payloads')
+    pair_reserves_range_fetch_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE_2.URL, f'/{pair_reserves_audit_project_id}/payloads')
     async with session.get(url=pair_reserves_range_fetch_url, params=pair_reserves_query_params) as resp:
         resp_json = await resp.json()
         if 'error' in resp_json:
@@ -722,6 +722,7 @@ async def process_pairs_token_reserves(session, redis_conn, router_contract, max
                 name=pair_name,
                 liquidity=0.0, volume_24h="", volume_7d="", fees_24h=f"",
                 cid_volume_24h="", cid_volume_7d="",
+                block_height=0,
                 deltaToken0Reserves=0.0, deltaToken1Reserves=0.0, deltaTime=0.0,
                 latestTimestamp=0.0, earliestTimestamp=0.0
             )
@@ -744,7 +745,7 @@ async def process_pairs_token_reserves(session, redis_conn, router_contract, max
         total_liquidity += token0_liquidity + token1_liquidity
 
     trade_volume_audit_project_id = f'uniswap_pairContract_trade_volume_{pair_contract_address}_{settings.NAMESPACE}'
-    trade_volume_last_block_height_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL,
+    trade_volume_last_block_height_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE_2.URL,
                                     f'/{trade_volume_audit_project_id}/payloads/height')
     trade_volume_to_block = 1
     trade_volume_from_block = 1
@@ -759,7 +760,7 @@ async def process_pairs_token_reserves(session, redis_conn, router_contract, max
         # set defualt from block
         trade_volume_from_block = (1 if (to_block < maxCount or maxCount == -1) else to_block - (maxCount - 1))
     trade_volume_query_params = {'from_height': trade_volume_from_block, 'to_height': trade_volume_to_block, 'data': data}
-    trade_volume_range_fetch_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{trade_volume_audit_project_id}/payloads')
+    trade_volume_range_fetch_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE_2.URL, f'/{trade_volume_audit_project_id}/payloads')
     logger.debug(
         f"Fetching trade volume blocks for contract: {pair_contract_address} | project ID: {trade_volume_audit_project_id}")
     async with session.get(url=trade_volume_range_fetch_url, params=trade_volume_query_params) as trade_vol_resp:
@@ -772,6 +773,7 @@ async def process_pairs_token_reserves(session, redis_conn, router_contract, max
                 name=pair_name,
                 liquidity=total_liquidity, volume_24h="", volume_7d="", fees_24h=f"",
                 cid_volume_24h="", cid_volume_7d="",
+                block_height=0,
                 deltaToken0Reserves=0.0, deltaToken1Reserves=0.0, deltaTime=0.0,
                 latestTimestamp=0.0, earliestTimestamp=0.0
             )
@@ -845,12 +847,13 @@ async def process_pairs_token_reserves(session, redis_conn, router_contract, max
             prepared_snapshot = liquidityProcessedData(
                     contractAddress=pair_contract_address,
                     name=pair_name,
-                    liquidity=f"US${abs(total_liquidity):,}",
-                    volume_24h=f"US${abs(volume_24h):,}",
-                    volume_7d=f"US${abs(volume_7d):,}",
-                    fees_24h=f"US${abs(fees_24h):,}",
+                    liquidity=f"US${round(abs(total_liquidity)):,}",
+                    volume_24h=f"US${round(abs(volume_24h)):,}",
+                    volume_7d=f"US${round(abs(volume_7d)):,}",
+                    fees_24h=f"US${round(abs(fees_24h)):,}",
                     cid_volume_24h=cids_volume_24h, 
                     cid_volume_7d=cids_volume_7d,
+                    block_height=int(resp_json[0]['data']['payload']['chainHeightRange']['end']),
                     deltaToken0Reserves=list(resp_json[0]['data']['payload']['token0Reserves'].values())[-1] -
                                         list(resp_json[-1]['data']['payload']['token0Reserves'].values())[-1],
                     deltaToken1Reserves=list(resp_json[0]['data']['payload']['token1Reserves'].values())[-1] -
@@ -873,12 +876,13 @@ async def process_pairs_token_reserves(session, redis_conn, router_contract, max
         return liquidityProcessedData(
             contractAddress=pair_contract_address,
             name=pair_name,
-            liquidity=f"US${abs(total_liquidity):,}",
-            volume_24h=f"US${abs(volume_24h):,}",
-            volume_7d=f"US${abs(volume_7d):,}",
-            fees_24h=f"US${abs(fees_24h):,}",
-            cid_volume_24h=cids_volume_24h, 
+            liquidity=f"US${round(abs(total_liquidity)):,}",
+            volume_24h=f"US${round(abs(volume_24h)):,}",
+            volume_7d=f"US${round(abs(volume_7d)):,}",
+            fees_24h=f"US${round(abs(fees_24h)):,}",
+            cid_volume_24h=cids_volume_24h,
             cid_volume_7d=cids_volume_7d,
+            block_height=int(resp_json[0]['data']['payload']['chainHeightRange']['end']),
             deltaToken0Reserves=list(resp_json[0]['data']['payload']['token0Reserves'].values())[-1] -
                                 list(resp_json[-1]['data']['payload']['token0Reserves'].values())[-1],
             deltaToken1Reserves=list(resp_json[0]['data']['payload']['token1Reserves'].values())[-1] -
@@ -946,6 +950,7 @@ if __name__ == '__main__':
     session = loop.run_until_complete(get_aiohttp_cache())
     data = loop.run_until_complete(v2_pairs_data(session, 500, 'true'))
     session.close()
+    print("HERE ## ", data)
 
     # logger.debug(f"Pair address : {pair_address}")
     # logger.debug(get_liquidity_of_each_token_reserve(pair_address))

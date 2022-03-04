@@ -7,3 +7,4 @@ logs/
 static/
 .idea/
 .DS_Store 
+screenlog*
