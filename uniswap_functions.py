@@ -828,16 +828,16 @@ async def process_pairs_token_reserves(session, redis_conn, router_contract, max
         volume_7d_cids = [{ 'dagCid': obj_7d['dagCid'], 'payloadCid': obj_7d['data']['cid'] } for obj_7d in volume_7d_data]
 
         cids_volume_24h, cids_volume_7d = await asyncio.gather(
-            ipfs_client.add_json(json.dumps({ 'resultant':{
+            ipfs_client.add_json({ 'resultant':{
                 "cids": volume_24h_cids,
                 'latestTimestamp_volume_24h': volume_24h_data[0]['timestamp'],
                 'earliestTimestamp_volume_24h': volume_24h_data[-1]['timestamp']
-            }})),
-            ipfs_client.add_json(json.dumps({ 'resultant':{
+            }}),
+            ipfs_client.add_json({ 'resultant':{
                 "cids": volume_7d_cids,
                 'latestTimestamp_volume_7d': volume_7d_data[0]['timestamp'],
                 'earliestTimestamp_volume_7d': volume_7d_data[-1]['timestamp']
-            }}))
+            }})
         )
 
         logger.debug('Calculated 24h, 7d and fees_24h vol: %s, %s, %s | contract: %s', volume_24h, volume_7d, fees_24h, pair_contract_address)
