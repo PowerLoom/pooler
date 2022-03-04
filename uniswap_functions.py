@@ -940,17 +940,10 @@ if __name__ == '__main__':
     # weth = "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619"
     # pair_address = get_pair("0x29bf8Df7c9a005a080E4599389Bf11f15f6afA6A", "0xc2132d05d31c914a87c6611c10748aeb04b58e8f")
     # print(f"pair_address: {pair_address}")
-    # loop = asyncio.get_event_loop()
-    # loop.run_until_complete(
-    #     get_pair_contract_trades_async(loop, '0x21b8065d10f73ee2e260e5b47d3344d3ced7596e', 14291724, 14293558)
-    # )
-
-    
     loop = asyncio.get_event_loop()
-    session = loop.run_until_complete(get_aiohttp_cache())
-    data = loop.run_until_complete(v2_pairs_data(session, 500, 'true'))
-    session.close()
-    print("HERE ## ", data)
+    loop.run_until_complete(
+        get_pair_contract_trades_async(loop, '0x21b8065d10f73ee2e260e5b47d3344d3ced7596e', 14291724, 14293558)
+    )
 
     # logger.debug(f"Pair address : {pair_address}")
     # logger.debug(get_liquidity_of_each_token_reserve(pair_address))

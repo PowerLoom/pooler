@@ -75,6 +75,10 @@
             "url": "http://localhost:9000",
             "retry": 5
         },
+        "audit_protocol_engine_2": {
+            "url": "http://localhost:9199",
+            "retry": 5
+        },
         "redis": {
             "host": "127.0.0.1",
             "port": 6379,
