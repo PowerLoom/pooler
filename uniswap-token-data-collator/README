@@ -1,0 +1,45 @@
+# This process runs in the background periodically (every 5 minutes) fetching and refreshing token data in the cache.
+
+Pre-Requisites:
+1. This depends on settings.json being present in ../settings.json path. 
+2. This depends on PairContractAddress to be present in ../static/cached_pair_addresses.json
+3. Reads redis and Audit-Protocol-Backend2 instance config from settings.json.
+
+# Requirements
+1. Fetch token specific data for all tokens in pairs that are being tracked
+2. Following token specific data is stored in redis at key "uniswap:tokenInfo:UNISWAPV2:<tokenSymbol>:cachedData"
+    1. Name - Can be fetched from local cache or token contract
+    2. symbol - Can be fetched from local cache or token contract
+    3. liquidity- Calculated by collating the latest liquidity in all pair contracts in which the token is part of.
+    4. Volume (24 hrs) - Calculated by collating volume for all pair contracts in which the token is part of for last 24 hours.
+    5. Price - (fetched from redis)
+
+Json Schema of the data is :
+{
+    "Name":"HEX",
+    "Symbol":"HEX", 
+    "Price": 0.112128,  //float64
+    "Liquidity": 66734422.07655703, //float64
+    "TradeVolume_24h": 0  //float64
+}
+
+
+Note: If the dag-chain structure changes, then code has to be modified to work with new structure.
+
+Build instructions: 
+1. Have go environment setup. I have tested it in go 1.17. But it should work in older env as well. 
+2. Just do go build . to compile.
+3. Logs are written to stdout and level can be controlled by passing a cmdLine Arg.
+
+Run instructions: 
+
+It takes 2 optional arguments 
+	Arg1(Optional): LogLevel 
+        Pass loglevel as an argument if you don't want default(INFO) to be set.
+		Values to be passed for logLevel 0-6.
+        Following levels are used in logs: 
+        ERROR(2),INFO(4),DEBUG(5),TRACE(6)
+    Arg2 (Optional): PairContractAddress
+        This is for testing the code wherein only 1 pairAddress that is passed is used to determine liquidity and tradeVolume.
+
+e.g: ./uniswapTokenData 6   - To run binary in TRACE log level (generates lot of logs)
