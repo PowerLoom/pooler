@@ -28,7 +28,7 @@ const pairContractList string = "../static/cached_pair_addresses.json"
 
 //TODO: Move the below to config file.
 const periodicRetrievalInterval time.Duration = 300 * time.Second
-const maxBlockCountToFetch int = 500
+const maxBlockCountToFetch int = 500 //Max number of blocks to fetch in 1 shot from Audit Protocol.
 
 func main() {
 	var pairContractAddress string
@@ -117,6 +117,7 @@ func PopulateTokenV2Data() {
 		}
 		toBlock := lastBlockHeight
 		fromBlock := lastBlockHeight - 1 // this is only for pair_total_reserves.
+
 		for {
 			//Fetch pair_total_reserves from height-1 to this height
 			pairReserves, err := fetchPairTotalReserves(strings.ToLower(pairContractAddress), int(fromBlock), int(toBlock))
@@ -126,7 +127,9 @@ func PopulateTokenV2Data() {
 					toBlock--
 					continue
 				}
+				//TODO: Address failure to fetch.
 				log.Error("Skipping liquidity for pair contract", pairContractAddress)
+				//break
 			} else {
 				chainCurrentHeight := pairReserves[0].Data.Payload.ChainHeightRange.End
 				// Fetch liquidity from the 0th index as we want the latest liquidity. data.payload.token0Reserves.block<height>
@@ -146,15 +149,22 @@ func PopulateTokenV2Data() {
 			break
 		}
 
-		fromBlock = 1 //TODO: Modularize this fetch and aggregation logic for specific block range.
+		blockDiff := toBlock - maxBlockCountToFetch
+		if blockDiff < 1 {
+			fromBlock = 1
+		} else {
+			fromBlock = blockDiff
+		}
+		//TODO: Modularize this fetch and aggregation logic for specific block range.
 		//For now putting logic of going back each block till we get trade-Volume data..this needs to be fixed in Audit protocol.
-		for {
+		for fromBlock >= 1 {
+		restartLoop:
 			pairTradeVolume, err := fetchPairTradeVolume(strings.ToLower(pairContractAddress), int(fromBlock), int(toBlock))
 			if err != nil {
 				//Note: This is dependent on error string returned from Audit protocol and will break if that changes.
 				if err.Error() == "Invalid Height" {
 					toBlock--
-					continue
+					goto restartLoop
 				}
 				log.Error("Skipping Trade-Volume for pair contract", pairContractAddress)
 			} else {
@@ -168,7 +178,16 @@ func PopulateTokenV2Data() {
 				}
 				log.Debug("Found ", count, " entries in the tradeVolumePair")
 			}
-			break
+			if fromBlock == 1 {
+				break
+			}
+			blockDiff := fromBlock - maxBlockCountToFetch
+			toBlock = fromBlock - 1
+			if blockDiff < 1 {
+				fromBlock = 1
+			} else {
+				fromBlock = blockDiff
+			}
 		}
 
 		//Update Map with latest struct data.
