@@ -29,15 +29,15 @@ type TokenPairReserves struct {
 			Token0Reserves   map[string]float64 `json:"token0Reserves"`
 			Token1Reserves   map[string]float64 `json:"token1Reserves"`
 			ChainHeightRange struct {
-				Begin int `json:"begin"`
-				End   int `json:"end"`
+				Begin int64 `json:"begin"`
+				End   int64 `json:"end"`
 			} `json:"chainHeightRange"`
 			BroadcastID string  `json:"broadcast_id"`
 			Timestamp   float64 `json:"timestamp"`
 		} `json:"payload"`
 	} `json:"data"`
-	Height         int    `json:"height"`
-	Timestamp      int    `json:"timestamp"`
+	Height         int64  `json:"height"`
+	Timestamp      int64  `json:"timestamp"`
 	TxHash         string `json:"txHash"`
 	PrevDagCid     string `json:"prevDagCid"`
 	PayloadChanged bool   `json:"payloadChanged"`
@@ -66,23 +66,24 @@ type TokenPairTradeVolumeData struct {
 			Token0TradeVolume float64 `json:"token0TradeVolume"`
 			Token1TradeVolume float64 `json:"token1TradeVolume"`
 			Events            []struct {
-				Sender     string `json:"sender"`
-				To         string `json:"to"`
-				Amount0In  int    `json:"amount0In"`
-				Amount1In  int64  `json:"amount1In"`
-				Amount0Out int    `json:"amount0Out"`
-				Amount1Out int    `json:"amount1Out"`
+				Sender string `json:"sender"`
+				To     string `json:"to"`
+				/* Commenting these for now as there are samples which go beyond int64
+				Amount0In  int64 `json:"amount0In"`
+				Amount1In  int64   `json:"amount1In"`
+				Amount0Out int64   `json:"amount0Out"`
+				Amount1Out int64   `json:"amount1Out"`*/
 			} `json:"events"`
 			ChainHeightRange struct {
-				Begin int `json:"begin"`
-				End   int `json:"end"`
+				Begin int64 `json:"begin"`
+				End   int64 `json:"end"`
 			} `json:"chainHeightRange"`
 			BroadcastID string  `json:"broadcast_id"`
 			Timestamp   float64 `json:"timestamp"`
 		} `json:"payload"`
 	} `json:"data"`
-	Height         int    `json:"height"`
-	Timestamp      int    `json:"timestamp"`
+	Height         int64  `json:"height"`
+	Timestamp      int64  `json:"timestamp"`
 	TxHash         string `json:"txHash"`
 	PrevDagCid     string `json:"prevDagCid"`
 	PayloadChanged bool   `json:"payloadChanged"`

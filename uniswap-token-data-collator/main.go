@@ -51,28 +51,43 @@ func main() {
 
 	ReadSettings()
 	SetupRedisClient()
+	Run(pairContractAddress)
+
+}
+
+func Run(pairContractAddress string) {
 	for {
 		PopulatePairContractList(pairContractAddress)
-		PopulateTokenV2Data()
+
+		t := time.Now()
+		t2 := t.AddDate(0, 0, -1)
+		time24h := float64(t2.Unix())
+		//time24h = 0
+
+		log.Debug("TimeStamp for 1 day before is:", time24h)
+		//For now fetch all data within 24h for tradeVolume.
+		tokenList := FetchTokenV2Data(1, -1, time24h)
+		if len(tokenList) == 0 {
+			log.Error("No Tokens to fetch..Have to check in next cycle")
+		} else {
+			UpdateTokenDataToRedis(tokenList)
+		}
+
 		log.Info("Sleeping for " + periodicRetrievalInterval.String() + " secs")
 		time.Sleep(periodicRetrievalInterval)
 	}
 }
 
-func PopulateTokenV2Data() {
+func FetchTokenV2Data(fromBlock int, toBlock int, fromTime float64) map[string]TokenData {
 	tokenList = make(map[string]TokenData)
 	log.Info("Number of pair contracts to process:", len(pairContracts))
-	t := time.Now()
-	t2 := t.AddDate(0, 0, -1)
-	time24h := float64(t2.Unix())
-	//time24h = 0
-	log.Debug("TimeStamp for 1 day before is:", time24h)
+
 	for i := range pairContracts {
 		pairContractAddress := pairContracts[i]
 		pairContractAddr := common.HexToAddress(pairContractAddress).Hex()
+
 		// Get name and symbol of both tokens from
 		//redis key uniswap:pairContract:UNISWAPV2:<pair-contract-address>:PairContractTokensData
-
 		var token0Data, token1Data TokenData
 		redisKey := "uniswap:pairContract:UNISWAPV2:" + pairContractAddr + ":PairContractTokensData"
 		log.Debug("Fetching PariContractTokensData from redis with key:", redisKey)
@@ -94,7 +109,7 @@ func PopulateTokenV2Data() {
 		token1Data.Symbol = token1Sym
 		token1Data.Name = tokenPairMeta["token1_name"]
 
-		//TODO: How to calculate price change to be fetched from 3rdParty.
+		//TODO: How to calculate price change?? Need to come up with an approach for this to store priceHistory and then calculate to be reported.
 		//Fetching from redis for now where price is stored against USDT for each token.
 		if token0Data.Price == 0 || token1Data.Price == 0 {
 			t0Price, t1Price := FetchTokenPairUSDTPriceFromRedis(token0Data.Symbol, token1Data.Symbol, pairContractAddr)
@@ -104,8 +119,11 @@ func PopulateTokenV2Data() {
 			if token1Data.Price == 0 && t1Price != 0 {
 				token1Data.Price = t1Price
 			}
-			if token0Data.Price == 0 || token1Data.Price == 0 {
-				log.Error("unable to retrieve price from redis for tokens")
+			if token0Data.Price == 0 {
+				log.Error("unable to retrieve price from redis for token:", token0Data)
+			}
+			if token1Data.Price == 0 {
+				log.Error("unable to retrieve price from redis for token:", token1Data)
 			}
 		}
 
@@ -155,7 +173,7 @@ func PopulateTokenV2Data() {
 		} else {
 			fromBlock = blockDiff
 		}
-		//TODO: Modularize this fetch and aggregation logic for specific block range.
+
 		//For now putting logic of going back each block till we get trade-Volume data..this needs to be fixed in Audit protocol.
 		for fromBlock >= 1 {
 		restartLoop:
@@ -170,13 +188,13 @@ func PopulateTokenV2Data() {
 			} else {
 				count := 0
 				for j := range pairTradeVolume {
-					if pairTradeVolume[j].Data.Payload.Timestamp > time24h {
+					if pairTradeVolume[j].Data.Payload.Timestamp > fromTime {
 						count++
 						token0Data.TradeVolume_24h += pairTradeVolume[j].Data.Payload.Token0TradeVolume
 						token1Data.TradeVolume_24h += pairTradeVolume[j].Data.Payload.Token1TradeVolume
 					}
 				}
-				log.Debug("Found ", count, " entries in the tradeVolumePair")
+				log.Debug("Fetched ", len(pairTradeVolume), " entries. Found ", count, " entries in the tradeVolumePair from time:", fromTime)
 			}
 			if fromBlock == 1 {
 				break
@@ -189,8 +207,7 @@ func PopulateTokenV2Data() {
 				fromBlock = blockDiff
 			}
 		}
-
-		//Update Map with latest struct data.
+		//Update Map with latest  data.
 		tokenList[token0Sym] = token0Data
 		tokenList[token1Sym] = token1Data
 	}
@@ -206,7 +223,7 @@ func PopulateTokenV2Data() {
 			delete(tokenList, key)
 		}
 	}
-	UpdateTokenDataToRedis(tokenList)
+	return tokenList
 }
 
 func FetchTokenPairUSDTPriceFromRedis(token0Sym string, token1Sym string, pairContractAddr string) (float64, float64) {
@@ -220,16 +237,22 @@ func FetchTokenPairUSDTPriceFromRedis(token0Sym string, token1Sym string, pairCo
 		return 0, 0
 	}
 	values := res.Val()
-	t0Price := values[0].(string)
-	t1Price := values[1].(string)
 	var token0Price, token1Price float64
 	var err error
-	if token0Price, err = strconv.ParseFloat(t0Price, 64); err == nil {
-		log.Debug(token0Price) // 3.14159265
+	if values[0] != nil {
+		t0Price := values[0].(string)
+		if token0Price, err = strconv.ParseFloat(t0Price, 64); err == nil {
+			log.Debug("Token0 Price:", token0Price)
+		}
 	}
-	if token1Price, err = strconv.ParseFloat(t1Price, 64); err == nil {
-		log.Debug(token1Price) // 3.14159265
+
+	if values[1] != nil {
+		t1Price := values[1].(string)
+		if token1Price, err = strconv.ParseFloat(t1Price, 64); err == nil {
+			log.Debug("Token1 Price:", token1Price)
+		}
 	}
+
 	return token0Price, token1Price
 }
 
@@ -288,7 +311,6 @@ func fetchPairTotalReserves(pairContractAddr string, fromHeight int, toHeight in
 
 	pairReserves := make([]TokenPairReserves, 0)
 
-	//TODO: Build batching logic to reduce each fetch resp size.
 	pair_reserves_range_fetch_url += "?from_height=" + strconv.Itoa(fromHeight) + "&to_height=" + strconv.Itoa(toHeight) + "&data=true"
 	log.Debug("Fetching TotalPair reserves at:", pair_reserves_range_fetch_url)
 	resp, err := http.Get(pair_reserves_range_fetch_url)
@@ -303,12 +325,12 @@ func fetchPairTotalReserves(pairContractAddr string, fromHeight int, toHeight in
 		return nil, err
 	}
 	log.Trace("Rsp Body", string(body))
-	//var pairReserves []TokenPairReserves
+
 	if err = json.Unmarshal(body, &pairReserves); err != nil { // Parse []byte to the go struct pointer
 		log.Error("Can not unmarshal JSON. Resp.Body", string(body))
 		return nil, err
 	}
-	//log.Println("Reserves[0]",pairReserves[0])
+	log.Trace("Reserves[0]", pairReserves[0])
 	return pairReserves, err
 }
 
@@ -351,7 +373,7 @@ func PopulatePairContractList(pairContractAddr string) {
 		panic(err)
 	}
 
-	//log.Println("json data is", string(data))
+	log.Debug("Contracts json data is", string(data))
 	err = json.Unmarshal(data, &pairContracts)
 	if err != nil {
 		log.Error("Cannot unmarshal the pair-contracts json ", err)
@@ -368,6 +390,7 @@ func ReadSettings() {
 		panic(err)
 	}
 
+	log.Debug("Settings json data is", string(data))
 	err = json.Unmarshal(data, &settings)
 	if err != nil {
 		log.Error("Cannot unmarshal the settings json ", err)
@@ -378,7 +401,7 @@ func ReadSettings() {
 
 func SetupRedisClient() {
 	redisURL := settings.Development.Redis.Host + ":" + strconv.Itoa(settings.Development.Redis.Port)
-	//redisURL = "localhost:6379"
+
 	log.Info("Connecting to redis at:", redisURL)
 	redisClient = redis.NewClient(&redis.Options{
 		Addr:     redisURL,
