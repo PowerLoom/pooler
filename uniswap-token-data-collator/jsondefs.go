@@ -54,7 +54,7 @@ type TokenPairReserves struct {
 }
 
 // Struct auto-generated from https://mholt.github.io/json-to-go/ by pasting sample json
-
+//TODO: Refer to uniswap contract and change all fields which are uint256 to bigInt.
 type TokenPairTradeVolumeData struct {
 	DagCid string `json:"dagCid"`
 	Data   struct {
@@ -68,7 +68,8 @@ type TokenPairTradeVolumeData struct {
 			Events            []struct {
 				Sender string `json:"sender"`
 				To     string `json:"to"`
-				/* Commenting these for now as there are samples which go beyond int64
+				/* Commenting these for now as there are samples which go beyond int64.
+				Need to handle it via some bigInt if required.
 				Amount0In  int64 `json:"amount0In"`
 				Amount1In  int64   `json:"amount1In"`
 				Amount0Out int64   `json:"amount0Out"`

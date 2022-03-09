@@ -41,6 +41,7 @@ func main() {
 		if err != nil || logLevel > 6 {
 			log.SetLevel(log.InfoLevel)
 		} else {
+			//TODO: Need to come up with approach to dynamically update logLevel.
 			log.SetLevel(log.Level(logLevel))
 		}
 	}
@@ -66,6 +67,8 @@ func Run(pairContractAddress string) {
 
 		log.Debug("TimeStamp for 1 day before is:", time24h)
 		//For now fetch all data within 24h for tradeVolume.
+		//Optimization: If more tokenPairs are there, run this in parallel for different pairs.
+		//In that case, need to colate data from the common data structures to where tokenData is updated, before writing to redis.
 		tokenList := FetchTokenV2Data(1, -1, time24h)
 		if len(tokenList) == 0 {
 			log.Error("No Tokens to fetch..Have to check in next cycle")
@@ -78,6 +81,8 @@ func Run(pairContractAddress string) {
 	}
 }
 
+//TODO: Can we parallelize this for batches of contract pairs to make it faster?
+//Need to evaluate load on Audit-protocol because of that.
 func FetchTokenV2Data(fromBlock int, toBlock int, fromTime float64) map[string]TokenData {
 	tokenList = make(map[string]TokenData)
 	log.Info("Number of pair contracts to process:", len(pairContracts))
@@ -109,10 +114,11 @@ func FetchTokenV2Data(fromBlock int, toBlock int, fromTime float64) map[string]T
 		token1Data.Symbol = token1Sym
 		token1Data.Name = tokenPairMeta["token1_name"]
 
-		//TODO: How to calculate price change?? Need to come up with an approach for this to store priceHistory and then calculate to be reported.
+		//TODO: How to calculate price change?? to be fetched from 3rdParty.
 		//Fetching from redis for now where price is stored against USDT for each token.
 		if token0Data.Price == 0 || token1Data.Price == 0 {
-			t0Price, t1Price := FetchTokenPairUSDTPriceFromRedis(token0Data.Symbol, token1Data.Symbol, pairContractAddr)
+			//Fetch token price against USDT for calculations.
+			t0Price, t1Price := FetchTokenPairUSDTPriceFromRedis(token0Data.Symbol, token1Data.Symbol)
 			if token0Data.Price == 0 && t0Price != 0 {
 				token0Data.Price = t0Price
 			}
@@ -144,10 +150,12 @@ func FetchTokenV2Data(fromBlock int, toBlock int, fromTime float64) map[string]T
 				if err.Error() == "Invalid Height" {
 					toBlock--
 					continue
-				}
-				//TODO: Address failure to fetch.
+				} /*else if err.Error() == "Internal Server Error" {
+
+				}*/
+				//TODO: Address failure to fetch. Should we retry? If so, how many times?
 				log.Error("Skipping liquidity for pair contract", pairContractAddress)
-				//break
+
 			} else {
 				chainCurrentHeight := pairReserves[0].Data.Payload.ChainHeightRange.End
 				// Fetch liquidity from the 0th index as we want the latest liquidity. data.payload.token0Reserves.block<height>
@@ -192,6 +200,10 @@ func FetchTokenV2Data(fromBlock int, toBlock int, fromTime float64) map[string]T
 						count++
 						token0Data.TradeVolume_24h += pairTradeVolume[j].Data.Payload.Token0TradeVolume
 						token1Data.TradeVolume_24h += pairTradeVolume[j].Data.Payload.Token1TradeVolume
+					} else {
+						log.Debug("Hit older entries than fromTime. Stop fetching further.")
+						fromBlock = 1 //TODO: This is a dirty hack, need to improve.
+						break
 					}
 				}
 				log.Debug("Fetched ", len(pairTradeVolume), " entries. Found ", count, " entries in the tradeVolumePair from time:", fromTime)
@@ -226,34 +238,49 @@ func FetchTokenV2Data(fromBlock int, toBlock int, fromTime float64) map[string]T
 	return tokenList
 }
 
-func FetchTokenPairUSDTPriceFromRedis(token0Sym string, token1Sym string, pairContractAddr string) (float64, float64) {
-	token0Key := "uniswap:pairContract:" + settings.Development.Namespace + ":" + token0Sym + "-USDT:cachedPairPrice"
-	token1Key := "uniswap:pairContract:" + settings.Development.Namespace + ":" + token1Sym + "-USDT:cachedPairPrice"
-	keys := []string{token0Key, token1Key}
+func FetchTokenPairUSDTPriceFromRedis(token0Sym string, token1Sym string) (float64, float64) {
+	prices := FetchTokenPairCachedPriceFromRedis([]string{token0Sym + "-USDT", token1Sym + "-USDT"})
+
+	//If price with USDT is not available, then fetch pairPrice with WETH and then convert to USDT.
+	if prices[0] == 0 {
+		wethPrices := FetchTokenPairCachedPriceFromRedis([]string{token0Sym + "-WETH", "WETH-USDT"})
+		prices[0] = wethPrices[0] * wethPrices[1]
+	}
+
+	if prices[1] == 0 {
+		wethPrices := FetchTokenPairCachedPriceFromRedis([]string{token1Sym + "-WETH", "WETH-USDT"})
+		prices[1] = wethPrices[0] * wethPrices[1]
+	}
+	return prices[0], prices[1]
+}
+
+func FetchTokenPairCachedPriceFromRedis(tokenPairs []string) []float64 {
+	keys := make([]string, len(tokenPairs))
+	for i := range tokenPairs {
+		keys[i] = "uniswap:pairContract:" + settings.Development.Namespace + ":" + tokenPairs[i] + ":cachedPairPrice"
+	}
+
+	//token1Key := "uniswap:pairContract:" + settings.Development.Namespace + ":" + token1Pair + ":cachedPairPrice"
+	//keys := []string{token0Key, token1Key}
 	log.Debug("Fetching Token Price from redis for keys:", keys)
 	res := redisClient.MGet(keys...)
 	if res.Err() != nil {
 		log.Error("Unable to get price info from Redis.")
-		return 0, 0
+		return make([]float64, len(tokenPairs))
 	}
 	values := res.Val()
-	var token0Price, token1Price float64
-	var err error
-	if values[0] != nil {
-		t0Price := values[0].(string)
-		if token0Price, err = strconv.ParseFloat(t0Price, 64); err == nil {
-			log.Debug("Token0 Price:", token0Price)
+	prices := make([]float64, len(tokenPairs))
+
+	for i := range tokenPairs {
+		var err error
+		if values[i] != nil {
+			tmpPrice := values[i].(string)
+			if prices[i], err = strconv.ParseFloat(tmpPrice, 64); err == nil {
+				log.Debug("Token ", i, " Price:", prices[i])
+			}
 		}
 	}
-
-	if values[1] != nil {
-		t1Price := values[1].(string)
-		if token1Price, err = strconv.ParseFloat(t1Price, 64); err == nil {
-			log.Debug("Token1 Price:", token1Price)
-		}
-	}
-
-	return token0Price, token1Price
+	return prices
 }
 
 func UpdateTokenDataToRedis(tokenList map[string]TokenData) {
