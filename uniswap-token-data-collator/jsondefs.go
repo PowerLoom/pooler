@@ -5,7 +5,23 @@ type AuditProtocolErrorResp struct {
 }
 
 type AuditProtocolBlockHeightResp struct {
-	Height int `json:"height"`
+	Height int64 `json:"height"`
+}
+
+type DagBlockInfo struct {
+	TimeStamp float64 `json:"timeStamp"`
+	Height    int64   `json:"height"`
+}
+
+type TokenTimeBasedData struct {
+	TradeVolume_24h float64 `json:tradeVolume_24h`
+}
+
+type TokenPairCacheMetaData struct {
+	LastAggregatedBlock              DagBlockInfo       `json:"lastAggregatedBlock"`
+	LastStartingBlock                DagBlockInfo       `json:"lastStartingBlock"`
+	TentativeNextIntervalBlockStart  DagBlockInfo       `json:"tentativeNextIntervalBlockStart"`
+	WindowingLossFromCurrentInterval TokenTimeBasedData `json: "windowingLossFromCurrentInterval"` //TODO: Come up with better name.
 }
 
 type TokenData struct {
