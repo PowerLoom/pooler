@@ -9,8 +9,8 @@ type AuditProtocolBlockHeightResp struct {
 }
 
 type DagBlockInfo struct {
-	TimeStamp float64 `json:"timeStamp"`
-	Height    int64   `json:"height"`
+	TimeStamp int64 `json:"timeStamp"`
+	Height    int64 `json:"height"`
 }
 
 type TokenTimeBasedData struct {
@@ -18,10 +18,14 @@ type TokenTimeBasedData struct {
 }
 
 type TokenPairCacheMetaData struct {
-	LastAggregatedBlock              DagBlockInfo       `json:"lastAggregatedBlock"`
-	LastStartingBlock                DagBlockInfo       `json:"lastStartingBlock"`
-	TentativeNextIntervalBlockStart  DagBlockInfo       `json:"tentativeNextIntervalBlockStart"`
-	WindowingLossFromCurrentInterval TokenTimeBasedData `json: "windowingLossFromCurrentInterval"` //TODO: Come up with better name.
+	LastAggregatedBlock      DagBlockInfo       `json:"lastAggregatedBlock"`
+	LastAggregatedToken0Data TokenTimeBasedData `json:"lastAggregatedToken0Data"`
+	LastAggregatedToken1Data TokenTimeBasedData `json:"lastAggregatedToken1Data"`
+	LastStartBlock           DagBlockInfo       `json:"lastStartBlock"`
+
+	TentativeNextIntervalBlockStart        DagBlockInfo       `json:"tentativeNextIntervalBlockStart"`
+	TentativeNextStartAggregatedToken0Data TokenTimeBasedData `json: "tentativeNextStartAggregatedToken0Data"`
+	TentativeNextStartAggregatedToken1Data TokenTimeBasedData `json: "tentativeNextStartAggregatedToken1Data"`
 }
 
 type TokenData struct {
