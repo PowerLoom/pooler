@@ -143,16 +143,17 @@ func FetchTokenV2Data(fromTime float64, tokenPairCachedMetaDataList map[string]T
 			log.Error("Skipping this pair as could not get blockheight")
 		}
 		toBlock := lastBlockHeight
-		fromBlock := lastBlockHeight - 1 // this is only for pair_total_reserves.
+		fromBlock := lastBlockHeight // this is only for pair_total_reserves, because we want to capture latest reserves.
 		//Fetch this from cached data, as current tokenDataMap is being modified as we move ahead through each tokenPair.
 		lastAggregatedBlock := tokenPairCachedMetaData.LastAggregatedBlock.Height
 		if lastAggregatedBlock == lastBlockHeight {
 			//TODO: We cannot skip in this case, as we are aggregating fromTime data and data would become stale.
 			//We need to keep moving the window and keep recalculating aggregatedDat by reducing it for that interval.
-			log.Debug("Skipping token Pair as no additional blocks are created from last processing.")
+			log.Debug("As no additional blocks are created from last processing, refetching data to serve latest fromTime data.")
 			//For now punishing backend for not processing additional epochs :)
 			// Redo the fetch as per currentTimeInterval.
 			tokenPairCachedMetaData = TokenPairCacheMetaData{}
+			lastAggregatedBlock = 0
 		}
 		tentativeStartAggregatedToken0Data := tokenPairCachedMetaData.TentativeNextStartAggregatedToken0Data
 		tentativeStartAggregatedToken1Data := tokenPairCachedMetaData.TentativeNextStartAggregatedToken1Data
@@ -252,7 +253,7 @@ func FetchTokenV2Data(fromTime float64, tokenPairCachedMetaDataList map[string]T
 							if !hitTentativeNextBlockStart {
 								hitTentativeNextBlockStart = true
 								tokenPairCachedMetaData.TentativeNextIntervalBlockStart = DagBlockInfo{pairTradeVolume[j].Timestamp, pairTradeVolume[j].Height}
-								log.Debug("entativeNextBlockStart:", tokenPairCachedMetaData.TentativeNextIntervalBlockStart)
+								log.Debug("TentativeNextBlockStart:", tokenPairCachedMetaData.TentativeNextIntervalBlockStart)
 							}
 							tokenPairCachedMetaData.TentativeNextStartAggregatedToken0Data.TradeVolume_24h += pairTradeVolume[j].Data.Payload.Token0TradeVolume
 							tokenPairCachedMetaData.TentativeNextStartAggregatedToken1Data.TradeVolume_24h += pairTradeVolume[j].Data.Payload.Token1TradeVolume
@@ -412,8 +413,9 @@ func UpdateTokenCacheMetaDataToRedis(tokenCachePairMetaData map[string]TokenPair
 func UpdateTokenDataToRedis(tokenList map[string]TokenData) {
 	log.Info("Updating TokenData to redis for tokens count:", len(tokenList))
 	for _, tokenData := range tokenList {
+		tokenData.LastUpdatedTimeStamp = time.Now().String()
 		redisKey := "uniswap:tokenInfo:" + settingsObj.Development.Namespace + ":" + tokenData.Symbol + ":cachedData"
-		log.Debug("Updating Token Data for token:", tokenData.Symbol, " at key:", redisKey)
+		log.Debug("Updating Token Data for token:", tokenData.Symbol, " at key:", redisKey," data:",tokenData)
 		jsonData, err := json.Marshal(tokenData)
 		if err != nil {
 			log.Error("Json marshalling failed.")

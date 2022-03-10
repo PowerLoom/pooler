@@ -29,6 +29,7 @@ type TokenPairCacheMetaData struct {
 }
 
 type TokenData struct {
+	LastUpdatedTimeStamp		string	`json:lastUpdatedTime`
 	Name            string  `json:name`
 	Symbol          string  `json:symbol`
 	Price           float64 `json:price`
