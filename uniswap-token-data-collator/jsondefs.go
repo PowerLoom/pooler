@@ -1,5 +1,7 @@
 package main
 
+const MAX_TOKEN_PRICE_HISTORY_INDEX int = 300
+
 type AuditProtocolErrorResp struct {
 	Error string `json:error`
 }
@@ -17,6 +19,11 @@ type TokenTimeBasedData struct {
 	TradeVolume_24h float64 `json:tradeVolume_24h`
 }
 
+type TokenPriceHistory struct {
+	PriceHistory   [MAX_TOKEN_PRICE_HISTORY_INDEX]float64 `json: priceHistory`
+	LastPriceIndex int                                    `json:lastPriceIndex`
+}
+
 type TokenPairCacheMetaData struct {
 	LastAggregatedBlock      DagBlockInfo       `json:"lastAggregatedBlock"`
 	LastAggregatedToken0Data TokenTimeBasedData `json:"lastAggregatedToken0Data"`
@@ -26,15 +33,17 @@ type TokenPairCacheMetaData struct {
 	TentativeNextIntervalBlockStart        DagBlockInfo       `json:"tentativeNextIntervalBlockStart"`
 	TentativeNextStartAggregatedToken0Data TokenTimeBasedData `json: "tentativeNextStartAggregatedToken0Data"`
 	TentativeNextStartAggregatedToken1Data TokenTimeBasedData `json: "tentativeNextStartAggregatedToken1Data"`
+	//Token0PriceHistory TokenPriceHistory `json: token0PriceHistory`
+	//Token1PriceHistory TokenPriceHistory `json: token1PriceHistory`
 }
 
 type TokenData struct {
-	LastUpdatedTimeStamp		string	`json:lastUpdatedTime`
-	Name            string  `json:name`
-	Symbol          string  `json:symbol`
-	Price           float64 `json:price`
-	Liquidity       float64 `json:liquidity`
-	TradeVolume_24h float64 `json:tradeVolume_24h`
+	LastUpdatedTimeStamp string  `json:lastUpdatedTime`
+	Name                 string  `json:name`
+	Symbol               string  `json:symbol`
+	Price                float64 `json:price`
+	Liquidity            float64 `json:liquidity`
+	TradeVolume_24h      float64 `json:tradeVolume_24h`
 }
 
 // Struct auto-generated from https://mholt.github.io/json-to-go/ by pasting sample json

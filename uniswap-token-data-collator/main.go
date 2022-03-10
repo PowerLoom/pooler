@@ -84,11 +84,182 @@ func Run(pairContractAddress string) {
 	}
 }
 
+func FetchAndFillTokenMetaData(tokenList map[string]TokenData, tokenPairCachedMetaData *TokenPairCacheMetaData,
+	pairContractAddr string) (TokenData, TokenData, error) {
+	var token0Data, token1Data TokenData
+	redisKey := "uniswap:pairContract:UNISWAPV2:" + pairContractAddr + ":PairContractTokensData"
+	log.Debug("Fetching PariContractTokensData from redis with key:", redisKey)
+	tokenPairMeta, err := redisClient.HGetAll(redisKey).Result()
+	if err != nil {
+		log.Error("Failed to get tokenPair MetaData from redis for PairContract:", pairContractAddr)
+		return token0Data, token1Data, err
+	}
+
+	token0Sym := tokenPairMeta["token0_symbol"]
+	log.Debug("Fetched tokenPairMetadata from redis:", tokenPairMeta, "token0:", tokenPairMeta["token0_symbol"])
+	token0Data = tokenList[token0Sym]
+	token0Data.Symbol = token0Sym
+	token0Data.Name = tokenPairMeta["token0_name"]
+
+	token1Sym := tokenPairMeta["token1_symbol"]
+	token1Data = tokenList[token1Sym]
+	token1Data.Symbol = token1Sym
+	token1Data.Name = tokenPairMeta["token1_name"]
+
+	//TODO: How to calculate price change??
+	//Fetching from redis for now where price is stored against USDT for each token.
+	if token0Data.Price == 0 || token1Data.Price == 0 {
+		//Fetch token price against USDT for calculations.
+		t0Price, t1Price := FetchTokenPairUSDTPriceFromRedis(token0Data.Symbol, token1Data.Symbol)
+		if token0Data.Price == 0 && t0Price != 0 {
+			token0Data.Price = t0Price
+			/*index := 0
+			if tokenPairCachedMetaData.Token0PriceHistory.LastPriceIndex != MAX_TOKEN_PRICE_HISTORY_INDEX {
+				index = tokenPairCachedMetaData.Token0PriceHistory.LastPriceIndex + 1
+			}
+			tokenPairCachedMetaData.Token0PriceHistory.PriceHistory[index] = t0Price*/
+		}
+		if token1Data.Price == 0 && t1Price != 0 {
+			token1Data.Price = t1Price
+			/*index := 0
+			if tokenPairCachedMetaData.Token0PriceHistory.LastPriceIndex != MAX_TOKEN_PRICE_HISTORY_INDEX {
+				index = tokenPairCachedMetaData.Token1PriceHistory.LastPriceIndex + 1
+			}
+			tokenPairCachedMetaData.Token1PriceHistory.PriceHistory[index] = t1Price*/
+		}
+	}
+	log.Debug("Token0:", token0Data)
+	log.Debug("Token1:", token1Data)
+	return token0Data, token1Data, nil
+}
+
+func CalculateAndFillPriceChange(tokenPairCachedMetaData *TokenPairCacheMetaData, token0Data *TokenData, token1Data *TokenData) {
+
+}
+
+func AggregateTokenTradeVolumeFromPair(lastBlockHeight int64, fromTime float64, pairContractAddress string,
+	tokenPairCachedMetaData *TokenPairCacheMetaData, token0Data *TokenData, token1Data *TokenData) {
+	tentativeNextBlockStartInterval := fromTime + periodicRetrievalInterval.Seconds()
+	toBlock := lastBlockHeight
+	fromBlock := lastBlockHeight
+	//Fetch this from cached data, as current tokenDataMap is being modified as we move ahead through each tokenPair.
+	lastAggregatedBlock := tokenPairCachedMetaData.LastAggregatedBlock.Height
+	if lastAggregatedBlock == lastBlockHeight {
+		//TODO: We cannot skip in this case, as we are aggregating fromTime data and data would become stale.
+		//We need to keep moving the window and keep recalculating aggregatedDat by reducing it for that interval.
+		log.Debug("As no additional blocks are created from last processing, refetching data to serve latest fromTime data.")
+		//For now punishing backend for not processing additional epochs :)
+		// Redo the fetch as per currentTimeInterval.
+		*tokenPairCachedMetaData = TokenPairCacheMetaData{}
+		lastAggregatedBlock = 0
+	}
+	tentativeStartAggregatedToken0Data := tokenPairCachedMetaData.TentativeNextStartAggregatedToken0Data
+	tentativeStartAggregatedToken1Data := tokenPairCachedMetaData.TentativeNextStartAggregatedToken1Data
+	lastAggregatedToken0Data := tokenPairCachedMetaData.LastAggregatedToken0Data
+	lastAggregatedToken1Data := tokenPairCachedMetaData.LastAggregatedToken1Data
+
+	tokenPairCachedMetaData.TentativeNextStartAggregatedToken0Data.TradeVolume_24h = 0
+	tokenPairCachedMetaData.TentativeNextStartAggregatedToken1Data.TradeVolume_24h = 0
+	/*There are below possible cases:
+	1. Started for firstTime and hence lastAggregatedBlock is 0.
+	   In this case, follow existing logic of fetching maxBlocks each time until we find blocks within specified fromTime.
+	2. There was a last fetch till which data has been aggregated.
+	   In this case, fetch only from lastAggregatedBlock to latestBlockHeight but maxBlocks in each fetch.
+	3. There was a last fetch till which data has been aggregated, but that timeInterval is older than fromTime.
+		Fetch only till find blocks within specified fromTime, this will be greater than lastAggregatedBlock
+	*/
+
+	if lastAggregatedBlock != 0 {
+		fromBlock = lastAggregatedBlock
+	} else {
+		fromBlock = 1
+		lastAggregatedBlock = 1
+	}
+
+	blockRangeToFetch := toBlock - fromBlock
+	if blockRangeToFetch > maxBlockCountToFetch {
+		fromBlock = toBlock - maxBlockCountToFetch
+	}
+
+	curIntervalLatestProcessedBlockInfo := DagBlockInfo{0, 0}
+	hitTentativeNextBlockStart := false
+	//For now putting logic of going back each block till we get trade-Volume data..this needs to be fixed in Audit protocol.
+	for fromBlock >= lastAggregatedBlock {
+	restartLoop:
+		pairTradeVolume, err := FetchPairTradeVolume(strings.ToLower(pairContractAddress), int(fromBlock), int(toBlock))
+		if err != nil {
+			//Note: This is dependent on error string returned from Audit protocol and will break if that changes.
+			if err.Error() == "Invalid Height" {
+				toBlock--
+				goto restartLoop
+			} else if err.Error() == "Internal Server Error" {
+				//Delay and retry.
+				log.Error("Retrying due to Internal Server Error")
+				time.Sleep(100 * time.Millisecond) //TODO: Need to make this some exponential backoff.
+				goto restartLoop
+			}
+			log.Error("Skipping Trade-Volume for pair contract", pairContractAddress)
+			break
+		} else {
+			count := 0
+			//Update CurInterval Latest Block
+			if pairTradeVolume[0].Height > curIntervalLatestProcessedBlockInfo.Height {
+				curIntervalLatestProcessedBlockInfo = DagBlockInfo{pairTradeVolume[0].Timestamp, pairTradeVolume[0].Height}
+			}
+
+			for j := range pairTradeVolume {
+				if pairTradeVolume[j].Data.Payload.Timestamp > fromTime {
+					//Use second aggregator to store data to be substracted for next interval.
+					if pairTradeVolume[j].Data.Payload.Timestamp < tentativeNextBlockStartInterval {
+						//Couldn't think of a better way to do this..under time constraints.
+						if !hitTentativeNextBlockStart {
+							hitTentativeNextBlockStart = true
+							tokenPairCachedMetaData.TentativeNextIntervalBlockStart = DagBlockInfo{pairTradeVolume[j].Timestamp, pairTradeVolume[j].Height}
+							log.Debug("TentativeNextBlockStart:", tokenPairCachedMetaData.TentativeNextIntervalBlockStart)
+						}
+						tokenPairCachedMetaData.TentativeNextStartAggregatedToken0Data.TradeVolume_24h += pairTradeVolume[j].Data.Payload.Token0TradeVolume
+						tokenPairCachedMetaData.TentativeNextStartAggregatedToken1Data.TradeVolume_24h += pairTradeVolume[j].Data.Payload.Token1TradeVolume
+					}
+					count++
+					token0Data.TradeVolume_24h += pairTradeVolume[j].Data.Payload.Token0TradeVolume
+					token1Data.TradeVolume_24h += pairTradeVolume[j].Data.Payload.Token1TradeVolume
+				} else {
+					log.Debug("Hit older entries than", fromTime, ". Stop fetching further.")
+					fromBlock = lastAggregatedBlock //TODO: This is a dirty hack, need to improve.
+					tokenPairCachedMetaData.LastStartBlock = DagBlockInfo{pairTradeVolume[j].Timestamp, pairTradeVolume[j].Height}
+					break
+				}
+			}
+			log.Debug("Fetched ", len(pairTradeVolume), " entries. Found ", count, " entries in the tradeVolumePair from time:", fromTime)
+		}
+		if fromBlock == lastAggregatedBlock {
+			break
+		}
+
+		toBlock = fromBlock - 1
+		blockRangeToFetch = toBlock - lastAggregatedBlock
+		if blockRangeToFetch > maxBlockCountToFetch {
+			fromBlock = toBlock - maxBlockCountToFetch
+		} else {
+			fromBlock = lastAggregatedBlock
+		}
+	}
+
+	//Add previously aggregated fromTime data and substract previously aggregated data till tentativeBlockStart.
+	token0Data.TradeVolume_24h += lastAggregatedToken0Data.TradeVolume_24h - tentativeStartAggregatedToken0Data.TradeVolume_24h
+	token1Data.TradeVolume_24h += lastAggregatedToken1Data.TradeVolume_24h - tentativeStartAggregatedToken1Data.TradeVolume_24h
+
+	tokenPairCachedMetaData.LastAggregatedBlock = curIntervalLatestProcessedBlockInfo
+	tokenPairCachedMetaData.LastAggregatedToken0Data.TradeVolume_24h = token0Data.TradeVolume_24h
+	tokenPairCachedMetaData.LastAggregatedToken1Data.TradeVolume_24h = token1Data.TradeVolume_24h
+	log.Debug("PairCachedMetaData for this interval for tokenPair :", token0Data.Symbol, token1Data.Symbol, " is :", tokenPairCachedMetaData)
+	log.Debug("TokenPair Data Aggregated for this interval:", pairContractAddress, " Token0Data:", token0Data, ", Token1Data:", token1Data)
+}
+
 //TODO: Can we parallelize this for batches of contract pairs to make it faster?
 //Need to evaluate load on Audit-protocol because of that.
 func FetchTokenV2Data(fromTime float64, tokenPairCachedMetaDataList map[string]TokenPairCacheMetaData) map[string]TokenData {
 	tokenList = make(map[string]TokenData)
-
 	tentativeNextBlockStartInterval := fromTime + periodicRetrievalInterval.Seconds()
 	log.Info("Number of pair contracts to process:", len(pairContracts), ", tentativeNextBlockStartInterval", tentativeNextBlockStartInterval)
 	//TODO: Add some retry logic and delay in between the loop and also for retries.
@@ -103,198 +274,38 @@ func FetchTokenV2Data(fromTime float64, tokenPairCachedMetaDataList map[string]T
 		//redis key uniswap:pairContract:UNISWAPV2:<pair-contract-address>:PairContractTokensData
 		//TODO: Optimize: This fetch can be done once during init and whenver dynamic reload to re-read contract address pairs is implemented.
 		var token0Data, token1Data TokenData
-		redisKey := "uniswap:pairContract:UNISWAPV2:" + pairContractAddr + ":PairContractTokensData"
-		log.Debug("Fetching PariContractTokensData from redis with key:", redisKey)
-		tokenPairMeta, err := redisClient.HGetAll(redisKey).Result()
+		var err error
+		token0Data, token1Data, err = FetchAndFillTokenMetaData(tokenList, &tokenPairCachedMetaData, pairContractAddr)
 		if err != nil {
-			log.Error("Failed to get tokenPair MetaData from redis for PairContract:", pairContractAddr)
 			continue
 		}
+		//Calculate price change in last 24h
+		//Get last 288th index price and substract it.
+		CalculateAndFillPriceChange(&tokenPairCachedMetaData, &token0Data, &token1Data)
 
-		token0Sym := tokenPairMeta["token0_symbol"]
-		log.Debug("Fetched tokenPairMetadata from redis:", tokenPairMeta, "token0:", tokenPairMeta["token0_symbol"])
-		token0Data = tokenList[token0Sym]
-		token0Data.Symbol = token0Sym
-		token0Data.Name = tokenPairMeta["token0_name"]
-
-		log.Debug("Token0:", token0Data)
-		token1Sym := tokenPairMeta["token1_symbol"]
-		token1Data = tokenList[token1Sym]
-		token1Data.Symbol = token1Sym
-		token1Data.Name = tokenPairMeta["token1_name"]
-
-		//TODO: How to calculate price change?? to be fetched from 3rdParty.
-		//Fetching from redis for now where price is stored against USDT for each token.
-		if token0Data.Price == 0 || token1Data.Price == 0 {
-			//Fetch token price against USDT for calculations.
-			t0Price, t1Price := FetchTokenPairUSDTPriceFromRedis(token0Data.Symbol, token1Data.Symbol)
-			if token0Data.Price == 0 && t0Price != 0 {
-				token0Data.Price = t0Price
-			}
-			if token1Data.Price == 0 && t1Price != 0 {
-				token1Data.Price = t1Price
-			}
-		}
-
-		log.Debug("Token1:", token1Data)
-		//Fetch block height.
+		//Fetch Last block height.
 		lastBlockHeight := FetchLastBlockHeight(strings.ToLower(pairContractAddress))
 		if lastBlockHeight == 0 {
 			log.Error("Skipping this pair as could not get blockheight")
-		}
-		toBlock := lastBlockHeight
-		fromBlock := lastBlockHeight // this is only for pair_total_reserves, because we want to capture latest reserves.
-		//Fetch this from cached data, as current tokenDataMap is being modified as we move ahead through each tokenPair.
-		lastAggregatedBlock := tokenPairCachedMetaData.LastAggregatedBlock.Height
-		if lastAggregatedBlock == lastBlockHeight {
-			//TODO: We cannot skip in this case, as we are aggregating fromTime data and data would become stale.
-			//We need to keep moving the window and keep recalculating aggregatedDat by reducing it for that interval.
-			log.Debug("As no additional blocks are created from last processing, refetching data to serve latest fromTime data.")
-			//For now punishing backend for not processing additional epochs :)
-			// Redo the fetch as per currentTimeInterval.
-			tokenPairCachedMetaData = TokenPairCacheMetaData{}
-			lastAggregatedBlock = 0
-		}
-		tentativeStartAggregatedToken0Data := tokenPairCachedMetaData.TentativeNextStartAggregatedToken0Data
-		tentativeStartAggregatedToken1Data := tokenPairCachedMetaData.TentativeNextStartAggregatedToken1Data
-		lastAggregatedToken0Data := tokenPairCachedMetaData.LastAggregatedToken0Data
-		lastAggregatedToken1Data := tokenPairCachedMetaData.LastAggregatedToken1Data
-
-		tokenPairCachedMetaData.TentativeNextStartAggregatedToken0Data.TradeVolume_24h = 0
-		tokenPairCachedMetaData.TentativeNextStartAggregatedToken1Data.TradeVolume_24h = 0
-
-		for {
-			//Fetch pair_total_reserves from height-1 to this height
-			pairReserves, err := FetchPairTotalReserves(strings.ToLower(pairContractAddress), int(fromBlock), int(toBlock))
-			if err != nil {
-				//Note: This is dependent on error string returned from Audit protocol and will break if that changes.
-				if err.Error() == "Invalid Height" {
-					toBlock--
-					continue
-				} /*else if err.Error() == "Internal Server Error" {
-
-				}*/
-				//TODO: Address failure to fetch. Should we retry? If so, how many times?
-				log.Error("Skipping liquidity for pair contract", pairContractAddress)
-
-			} else {
-				chainCurrentHeight := pairReserves[0].Data.Payload.ChainHeightRange.End
-				// Fetch liquidity from the 0th index as we want the latest liquidity. data.payload.token0Reserves.block<height>
-				// Had to convert uint to int..ideally this shouldn't cause any issue.
-				liquidity, ok := pairReserves[0].Data.Payload.Token0Reserves["block"+strconv.Itoa(int(chainCurrentHeight))]
-				if !ok {
-					log.Error("Couldn't find latest block in pairTokenData for Token0,something wrong with snapshot.TODO")
-				}
-				token0Data.Liquidity += liquidity
-
-				liquidity, ok = pairReserves[0].Data.Payload.Token1Reserves["block"+strconv.Itoa(int(chainCurrentHeight))]
-				if !ok {
-					log.Error("Couldn't find latest block in pairTokenData for Token1,something wrong with snapshot.TODO")
-				}
-				token1Data.Liquidity += liquidity
-			}
-			break
+			continue
 		}
 
-		//tentativeNextIntervalBlockStart := token0Data.MetaData.TentativeNextIntervalBlockStart.Number
-
-		/*There are below possible cases:
-		1. Started for firstTime and hence lastAggregatedBlock is 0.
-		   In this case, follow existing logic of fetching maxBlocks each time until we find blocks within specified fromTime.
-		2. There was a last fetch till which data has been aggregated.
-		   In this case, fetch only from lastAggregatedBlock to latestBlockHeight but maxBlocks in each fetch.
-		3. There was a last fetch till which data has been aggregated, but that timeInterval is older than fromTime.
-			Fetch only till find blocks within specified fromTime, this will be greater than lastAggregatedBlock
-		*/
-
-		if lastAggregatedBlock != 0 {
-			fromBlock = lastAggregatedBlock
+		// this is only for pair_total_reserves, because we want to capture latest reserves.
+		token0Liquidity, token1Liquidity, err := FetchLatestPairTotalReserves(strings.ToLower(pairContractAddress), int(lastBlockHeight), int(lastBlockHeight))
+		if err != nil {
+			//TODO: If this happens only for 1 pair..total liquidity will be skewed.
+			log.Error("Not updating liquidity for this pairContract as..unable to fetch even after max retries.", pairContractAddress)
 		} else {
-			fromBlock = 1
-			lastAggregatedBlock = 1
+			token0Data.Liquidity += token0Liquidity
+			token1Data.Liquidity += token1Liquidity
 		}
 
-		blockRangeToFetch := toBlock - fromBlock
-		if blockRangeToFetch > maxBlockCountToFetch {
-			fromBlock = toBlock - maxBlockCountToFetch
-		}
+		AggregateTokenTradeVolumeFromPair(lastBlockHeight, fromTime, pairContractAddress,
+			&tokenPairCachedMetaData, &token0Data, &token1Data)
 
-		curIntervalLatestProcessedBlockInfo := DagBlockInfo{0, 0}
-		hitTentativeNextBlockStart := false
-		//For now putting logic of going back each block till we get trade-Volume data..this needs to be fixed in Audit protocol.
-		for fromBlock >= lastAggregatedBlock {
-		restartLoop:
-			pairTradeVolume, err := FetchPairTradeVolume(strings.ToLower(pairContractAddress), int(fromBlock), int(toBlock))
-			if err != nil {
-				//Note: This is dependent on error string returned from Audit protocol and will break if that changes.
-				if err.Error() == "Invalid Height" {
-					toBlock--
-					goto restartLoop
-				} else if err.Error() == "Internal Server Error" {
-					//Delay and retry.
-					log.Error("Retrying due to Internal Server Error")
-					time.Sleep(100 * time.Millisecond) //TODO: Need to make this some exponential backoff.
-					goto restartLoop
-				}
-				log.Error("Skipping Trade-Volume for pair contract", pairContractAddress)
-				break
-			} else {
-				count := 0
-				//Update CurInterval Latest Block
-				if pairTradeVolume[0].Height > curIntervalLatestProcessedBlockInfo.Height {
-					curIntervalLatestProcessedBlockInfo = DagBlockInfo{pairTradeVolume[0].Timestamp, pairTradeVolume[0].Height}
-				}
-
-				for j := range pairTradeVolume {
-					if pairTradeVolume[j].Data.Payload.Timestamp > fromTime {
-						//Use second aggregator to store data to be substracted for next interval.
-						if pairTradeVolume[j].Data.Payload.Timestamp < tentativeNextBlockStartInterval {
-							//Couldn't think of a better way to do this..under time constraints.
-							if !hitTentativeNextBlockStart {
-								hitTentativeNextBlockStart = true
-								tokenPairCachedMetaData.TentativeNextIntervalBlockStart = DagBlockInfo{pairTradeVolume[j].Timestamp, pairTradeVolume[j].Height}
-								log.Debug("TentativeNextBlockStart:", tokenPairCachedMetaData.TentativeNextIntervalBlockStart)
-							}
-							tokenPairCachedMetaData.TentativeNextStartAggregatedToken0Data.TradeVolume_24h += pairTradeVolume[j].Data.Payload.Token0TradeVolume
-							tokenPairCachedMetaData.TentativeNextStartAggregatedToken1Data.TradeVolume_24h += pairTradeVolume[j].Data.Payload.Token1TradeVolume
-						}
-						count++
-						token0Data.TradeVolume_24h += pairTradeVolume[j].Data.Payload.Token0TradeVolume
-						token1Data.TradeVolume_24h += pairTradeVolume[j].Data.Payload.Token1TradeVolume
-					} else {
-						log.Debug("Hit older entries than", fromTime, ". Stop fetching further.")
-						fromBlock = lastAggregatedBlock //TODO: This is a dirty hack, need to improve.
-						tokenPairCachedMetaData.LastStartBlock = DagBlockInfo{pairTradeVolume[j].Timestamp, pairTradeVolume[j].Height}
-						break
-					}
-				}
-				log.Debug("Fetched ", len(pairTradeVolume), " entries. Found ", count, " entries in the tradeVolumePair from time:", fromTime)
-			}
-			if fromBlock == lastAggregatedBlock {
-				break
-			}
-
-			toBlock = fromBlock - 1
-			blockRangeToFetch = toBlock - lastAggregatedBlock
-			if blockRangeToFetch > maxBlockCountToFetch {
-				fromBlock = toBlock - maxBlockCountToFetch
-			} else {
-				fromBlock = lastAggregatedBlock
-			}
-		}
-
-		//Add previously aggregated fromTime data and substract previously aggregated data till tentativeBlockStart.
-		token0Data.TradeVolume_24h += lastAggregatedToken0Data.TradeVolume_24h - tentativeStartAggregatedToken0Data.TradeVolume_24h
-		token1Data.TradeVolume_24h += lastAggregatedToken1Data.TradeVolume_24h - tentativeStartAggregatedToken1Data.TradeVolume_24h
-
-		tokenPairCachedMetaData.LastAggregatedBlock = curIntervalLatestProcessedBlockInfo
-		tokenPairCachedMetaData.LastAggregatedToken0Data.TradeVolume_24h = token0Data.TradeVolume_24h
-		tokenPairCachedMetaData.LastAggregatedToken1Data.TradeVolume_24h = token1Data.TradeVolume_24h
-		log.Debug("PairCachedMetaData for this interval for tokenPair :", token0Sym, token1Sym, " is :", tokenPairCachedMetaData)
-		log.Debug("TokenPair Data Aggregated for this interval:", pairContractAddress, " Token0Data:", token0Data, ", Token1Data:", token1Data)
 		//Update Map with latest  data.
-		tokenList[token0Sym] = token0Data
-		tokenList[token1Sym] = token1Data
+		tokenList[token0Data.Symbol] = token0Data
+		tokenList[token1Data.Symbol] = token1Data
 		tokenPairCachedMetaDataList[pairContractAddress] = tokenPairCachedMetaData
 	}
 	// Loop through all data and multiply liquidity and tradeVolume with TokenPrice
@@ -415,7 +426,7 @@ func UpdateTokenDataToRedis(tokenList map[string]TokenData) {
 	for _, tokenData := range tokenList {
 		tokenData.LastUpdatedTimeStamp = time.Now().String()
 		redisKey := "uniswap:tokenInfo:" + settingsObj.Development.Namespace + ":" + tokenData.Symbol + ":cachedData"
-		log.Debug("Updating Token Data for token:", tokenData.Symbol, " at key:", redisKey," data:",tokenData)
+		log.Debug("Updating Token Data for token:", tokenData.Symbol, " at key:", redisKey, " data:", tokenData)
 		jsonData, err := json.Marshal(tokenData)
 		if err != nil {
 			log.Error("Json marshalling failed.")
@@ -460,55 +471,89 @@ func FetchPairTradeVolume(pairContractAddr string, fromHeight int, toHeight int)
 	return pairVolumes, err
 }
 
-func FetchPairTotalReserves(pairContractAddr string, fromHeight int, toHeight int) ([]TokenPairReserves, error) {
+func FetchLatestPairTotalReserves(pairContractAddr string, fromHeight int, toHeight int) (float64, float64, error) {
 	pair_reserves_audit_project_id := "uniswap_pairContract_pair_total_reserves_" + pairContractAddr + "_" + settingsObj.Development.Namespace
 	pair_reserves_range_fetch_url := settingsObj.Development.AuditProtocolEngine2.URL + "/" + pair_reserves_audit_project_id + "/payloads"
-
+	var err error
 	pairReserves := make([]TokenPairReserves, 0)
 
-	pair_reserves_range_fetch_url += "?from_height=" + strconv.Itoa(fromHeight) + "&to_height=" + strconv.Itoa(toHeight) + "&data=true"
-	log.Debug("Fetching TotalPair reserves at:", pair_reserves_range_fetch_url)
-	resp, err := http.Get(pair_reserves_range_fetch_url)
-	if err != nil {
-		log.Error("Error: Could not fetch Pairtotal reserves for pairContract:", pairContractAddr, " Error:", err)
-		return nil, err
-	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Error("Unable to read HTTP resp.", err)
-		return nil, err
-	}
-	log.Trace("Rsp Body", string(body))
+	for retryCount := 0; retryCount < 3; retryCount++ {
+		pair_reserves_range_fetch_url += "?from_height=" + strconv.Itoa(fromHeight) + "&to_height=" + strconv.Itoa(toHeight) + "&data=true"
+		log.Debug("Fetching TotalPair reserves at:", pair_reserves_range_fetch_url)
 
-	if err = json.Unmarshal(body, &pairReserves); err != nil { // Parse []byte to the go struct pointer
-		log.Error("Can not unmarshal JSON. Resp.Body", string(body))
-		//TODO: Build retry logic with some delay to take care of internal error.
-		return nil, err
+		resp, err := http.Get(pair_reserves_range_fetch_url)
+		if err != nil {
+			log.Error("Error: Could not fetch Pairtotal reserves for pairContract:", pairContractAddr, " Error:", err)
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		defer resp.Body.Close()
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Error("Unable to read HTTP resp.", err)
+			continue
+		}
+		log.Trace("Rsp Body", string(body))
+
+		if err = json.Unmarshal(body, &pairReserves); err != nil { // Parse []byte to the go struct pointer
+			log.Error("Can not unmarshal JSON. Resp.Body", string(body))
+			continue
+		}
+		if err != nil && err.Error() == "Invalid Height" {
+			toHeight--
+			retryCount = 0
+			continue
+		}
+		break
 	}
-	log.Trace("Reserves[0]", pairReserves[0])
-	return pairReserves, err
+	var token0Liquidity, token1Liquidity float64
+	if err == nil {
+		chainCurrentHeight := pairReserves[0].Data.Payload.ChainHeightRange.End
+		// Fetch liquidity from the 0th index as we want the latest liquidity. data.payload.token0Reserves.block<height>
+		// Had to convert uint to int..ideally this shouldn't cause any issue.
+		liquidity, ok := pairReserves[0].Data.Payload.Token0Reserves["block"+strconv.Itoa(int(chainCurrentHeight))]
+		if !ok {
+			log.Error("Couldn't find latest block in pairTokenData for Token0,something wrong with snapshot.TODO")
+		}
+		token0Liquidity = liquidity
+
+		liquidity, ok = pairReserves[0].Data.Payload.Token1Reserves["block"+strconv.Itoa(int(chainCurrentHeight))]
+		if !ok {
+			log.Error("Couldn't find latest block in pairTokenData for Token1,something wrong with snapshot.TODO")
+		}
+		log.Trace("Reserves[0]", pairReserves[0])
+		token1Liquidity = liquidity
+	}
+
+	return token0Liquidity, token1Liquidity, err
 }
 
 func FetchLastBlockHeight(pairContractAddr string) int64 {
 	pair_reserves_audit_project_id := "uniswap_pairContract_pair_total_reserves_" + pairContractAddr + "_" + settingsObj.Development.Namespace
 	last_block_height_url := settingsObj.Development.AuditProtocolEngine2.URL + "/" + pair_reserves_audit_project_id + "/payloads/height"
 	log.Debug("Fetching Blockheight URL:", last_block_height_url)
-	resp, err := http.Get(last_block_height_url)
-	if err != nil {
-		log.Error("Error: Could not fetch block height for pairContract:", pairContractAddr, " Error:", err)
-	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Error("Unable to read HTTP resp.", err)
-		return 0
-	}
-	log.Trace("Rsp Body", string(body))
-
 	var heightResp AuditProtocolBlockHeightResp
-	if err = json.Unmarshal(body, &heightResp); err != nil { // Parse []byte to the go struct pointer
-		log.Error("Can not unmarshal JSON")
+
+	for retryCount := 0; retryCount < 3; retryCount++ {
+		resp, err := http.Get(last_block_height_url)
+		if err != nil {
+			log.Error("Error: Could not fetch block height for pairContract:", pairContractAddr, " Error:", err)
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		defer resp.Body.Close()
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Error("Unable to read HTTP resp.", err)
+			return 0
+		}
+		log.Trace("Rsp Body", string(body))
+
+		if err = json.Unmarshal(body, &heightResp); err != nil { // Parse []byte to the go struct pointer
+			log.Error("Can not unmarshal JSON")
+			continue
+		}
+		break
 	}
 	log.Debug("Last Block Height is:", heightResp)
 	return heightResp.Height
