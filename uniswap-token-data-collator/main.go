@@ -23,6 +23,8 @@ var redisClient *redis.Client
 var pairContracts []string
 var tokenList map[string]TokenData
 
+//var tokenPriceHistory map[int]float64
+
 const settingsFile string = "../settings.json"
 const pairContractListFile string = "../static/cached_pair_addresses.json"
 
@@ -31,7 +33,7 @@ const periodicRetrievalInterval time.Duration = 300 * time.Second
 const maxBlockCountToFetch int64 = 500 //Max number of blocks to fetch in 1 shot from Audit Protocol.
 
 func main() {
-	var pairContractAddress string
+	var pairContractAddressesFile string
 	if len(os.Args) < 2 {
 		fmt.Println("Pass loglevel as an argument if you don't want default(INFO) to be set.")
 		fmt.Println("Values to be passed for logLevel: ERROR(2),INFO(4),DEBUG(5)")
@@ -47,12 +49,12 @@ func main() {
 	}
 	log.SetFormatter(&log.TextFormatter{FullTimestamp: true})
 	if len(os.Args) == 3 {
-		pairContractAddress = os.Args[2]
+		pairContractAddressesFile = os.Args[2]
 	}
 
 	ReadSettings()
 	SetupRedisClient()
-	Run(pairContractAddress)
+	Run(pairContractAddressesFile)
 
 }
 
@@ -67,16 +69,16 @@ func Run(pairContractAddress string) {
 		//time24h = 0
 
 		log.Debug("TimeStamp for 1 day before is:", time24h)
-		tokenCache := FetchV2CachedTokenDataFromRedis()
+		//tokenPriceData := FetchV2TokenPriceDataFromRedis()
 		//For now fetch all data within 24h for tradeVolume.
 		//Optimization: If more tokenPairs are there, run this in parallel for different pairs.
 		//In that case, need to colate data from the common data structures to where tokenData is updated, before writing to redis.
-		tokenList := FetchTokenV2Data(time24h, tokenCache)
+		tokenList := FetchTokenV2Data(time24h)
 		if len(tokenList) == 0 {
 			log.Info("No new blocks to fetch and process..Have to check in next cycle")
 		} else {
 			UpdateTokenDataToRedis(tokenList)
-			UpdateTokenCacheMetaDataToRedis(tokenCache)
+			//UpdateTokenCacheMetaDataToRedis(tokenCache)
 		}
 
 		log.Info("Sleeping for " + periodicRetrievalInterval.String() + " secs")
@@ -84,7 +86,11 @@ func Run(pairContractAddress string) {
 	}
 }
 
-func FetchAndFillTokenMetaData(tokenList map[string]TokenData, tokenPairCachedMetaData *TokenPairCacheMetaData,
+/*func FetchV2TokenPriceDataFromRedis()(map[string]){
+
+}*/
+
+func FetchAndFillTokenMetaData(tokenList map[string]TokenData,
 	pairContractAddr string) (TokenData, TokenData, error) {
 	var token0Data, token1Data TokenData
 	redisKey := "uniswap:pairContract:UNISWAPV2:" + pairContractAddr + ":PairContractTokensData"
@@ -133,33 +139,35 @@ func FetchAndFillTokenMetaData(tokenList map[string]TokenData, tokenPairCachedMe
 	return token0Data, token1Data, nil
 }
 
-func CalculateAndFillPriceChange(tokenPairCachedMetaData *TokenPairCacheMetaData, token0Data *TokenData, token1Data *TokenData) {
+/*func CalculateAndFillPriceChange(token0Data *TokenData, token1Data *TokenData) {
 
-}
+}*/
 
 func AggregateTokenTradeVolumeFromPair(lastBlockHeight int64, fromTime float64, pairContractAddress string,
-	tokenPairCachedMetaData *TokenPairCacheMetaData, token0Data *TokenData, token1Data *TokenData) {
-	tentativeNextBlockStartInterval := fromTime + periodicRetrievalInterval.Seconds()
+	token0Data *TokenData, token1Data *TokenData) {
 	toBlock := lastBlockHeight
-	fromBlock := lastBlockHeight
-	//Fetch this from cached data, as current tokenDataMap is being modified as we move ahead through each tokenPair.
-	lastAggregatedBlock := tokenPairCachedMetaData.LastAggregatedBlock.Height
+	fromBlock := int64(1)
+	/*lastAggregatedBlock := tokenPairCachedMetaData.LastAggregatedBlock.Height
 	if lastAggregatedBlock == lastBlockHeight {
 		//TODO: We cannot skip in this case, as we are aggregating fromTime data and data would become stale.
 		//We need to keep moving the window and keep recalculating aggregatedDat by reducing it for that interval.
 		log.Debug("As no additional blocks are created from last processing, refetching data to serve latest fromTime data.")
-		//For now punishing backend for not processing additional epochs :)
-		// Redo the fetch as per currentTimeInterval.
+
 		*tokenPairCachedMetaData = TokenPairCacheMetaData{}
-		lastAggregatedBlock = 0
-	}
+		//lastAggregatedBlock = 0
+	}*/
+	/*tentativeNextBlockStartInterval := fromTime + periodicRetrievalInterval.Seconds()
+	toBlock := lastBlockHeight
+	fromBlock := lastBlockHeight
+	//Fetch this from cached data, as current tokenDataMap is being modified as we move ahead through each tokenPair.
+
 	tentativeStartAggregatedToken0Data := tokenPairCachedMetaData.TentativeNextStartAggregatedToken0Data
 	tentativeStartAggregatedToken1Data := tokenPairCachedMetaData.TentativeNextStartAggregatedToken1Data
 	lastAggregatedToken0Data := tokenPairCachedMetaData.LastAggregatedToken0Data
 	lastAggregatedToken1Data := tokenPairCachedMetaData.LastAggregatedToken1Data
 
 	tokenPairCachedMetaData.TentativeNextStartAggregatedToken0Data.TradeVolume_24h = 0
-	tokenPairCachedMetaData.TentativeNextStartAggregatedToken1Data.TradeVolume_24h = 0
+	tokenPairCachedMetaData.TentativeNextStartAggregatedToken1Data.TradeVolume_24h = 0*/
 	/*There are below possible cases:
 	1. Started for firstTime and hence lastAggregatedBlock is 0.
 	   In this case, follow existing logic of fetching maxBlocks each time until we find blocks within specified fromTime.
@@ -169,12 +177,12 @@ func AggregateTokenTradeVolumeFromPair(lastBlockHeight int64, fromTime float64, 
 		Fetch only till find blocks within specified fromTime, this will be greater than lastAggregatedBlock
 	*/
 
-	if lastAggregatedBlock != 0 {
+	/*if lastAggregatedBlock != 0 {
 		fromBlock = lastAggregatedBlock
 	} else {
 		fromBlock = 1
 		lastAggregatedBlock = 1
-	}
+	}*/
 
 	blockRangeToFetch := toBlock - fromBlock
 	if blockRangeToFetch > maxBlockCountToFetch {
@@ -182,9 +190,10 @@ func AggregateTokenTradeVolumeFromPair(lastBlockHeight int64, fromTime float64, 
 	}
 
 	curIntervalLatestProcessedBlockInfo := DagBlockInfo{0, 0}
-	hitTentativeNextBlockStart := false
+	//hitTentativeNextBlockStart := false
+	//TradeVolume and Liquidity for each pair: uniswap_pair_contract_V2_pair_data = 'uniswap:pairContract:'+settings.NAMESPACE+':{}:contractV2PairCachedData'
 	//For now putting logic of going back each block till we get trade-Volume data..this needs to be fixed in Audit protocol.
-	for fromBlock >= lastAggregatedBlock {
+	for {
 	restartLoop:
 		pairTradeVolume, err := FetchPairTradeVolume(strings.ToLower(pairContractAddress), int(fromBlock), int(toBlock))
 		if err != nil {
@@ -210,7 +219,7 @@ func AggregateTokenTradeVolumeFromPair(lastBlockHeight int64, fromTime float64, 
 			for j := range pairTradeVolume {
 				if pairTradeVolume[j].Data.Payload.Timestamp > fromTime {
 					//Use second aggregator to store data to be substracted for next interval.
-					if pairTradeVolume[j].Data.Payload.Timestamp < tentativeNextBlockStartInterval {
+					/*if pairTradeVolume[j].Data.Payload.Timestamp < tentativeNextBlockStartInterval {
 						//Couldn't think of a better way to do this..under time constraints.
 						if !hitTentativeNextBlockStart {
 							hitTentativeNextBlockStart = true
@@ -219,55 +228,56 @@ func AggregateTokenTradeVolumeFromPair(lastBlockHeight int64, fromTime float64, 
 						}
 						tokenPairCachedMetaData.TentativeNextStartAggregatedToken0Data.TradeVolume_24h += pairTradeVolume[j].Data.Payload.Token0TradeVolume
 						tokenPairCachedMetaData.TentativeNextStartAggregatedToken1Data.TradeVolume_24h += pairTradeVolume[j].Data.Payload.Token1TradeVolume
-					}
+					}*/
 					count++
 					token0Data.TradeVolume_24h += pairTradeVolume[j].Data.Payload.Token0TradeVolume
 					token1Data.TradeVolume_24h += pairTradeVolume[j].Data.Payload.Token1TradeVolume
 				} else {
 					log.Debug("Hit older entries than", fromTime, ". Stop fetching further.")
-					fromBlock = lastAggregatedBlock //TODO: This is a dirty hack, need to improve.
-					tokenPairCachedMetaData.LastStartBlock = DagBlockInfo{pairTradeVolume[j].Timestamp, pairTradeVolume[j].Height}
+					fromBlock = 1 //TODO: This is a dirty hack, need to improve.
+					//tokenPairCachedMetaData.LastStartBlock = DagBlockInfo{pairTradeVolume[j].Timestamp, pairTradeVolume[j].Height}
 					break
 				}
 			}
 			log.Debug("Fetched ", len(pairTradeVolume), " entries. Found ", count, " entries in the tradeVolumePair from time:", fromTime)
 		}
-		if fromBlock == lastAggregatedBlock {
+		if fromBlock == 1 {
 			break
 		}
 
 		toBlock = fromBlock - 1
-		blockRangeToFetch = toBlock - lastAggregatedBlock
+		blockRangeToFetch = toBlock - 1
 		if blockRangeToFetch > maxBlockCountToFetch {
 			fromBlock = toBlock - maxBlockCountToFetch
 		} else {
-			fromBlock = lastAggregatedBlock
+			fromBlock = 1
 		}
 	}
 
 	//Add previously aggregated fromTime data and substract previously aggregated data till tentativeBlockStart.
-	token0Data.TradeVolume_24h += lastAggregatedToken0Data.TradeVolume_24h - tentativeStartAggregatedToken0Data.TradeVolume_24h
-	token1Data.TradeVolume_24h += lastAggregatedToken1Data.TradeVolume_24h - tentativeStartAggregatedToken1Data.TradeVolume_24h
+	/*token0Data.TradeVolume_24h += lastAggregatedToken0Data.TradeVolume_24h - tentativeStartAggregatedToken0Data.TradeVolume_24h
+	token1Data.TradeVolume_24h += lastAggregatedToken1Data.TradeVolume_24h - tentativeStartAggregatedToken1Data.TradeVolume_24h*/
 
-	tokenPairCachedMetaData.LastAggregatedBlock = curIntervalLatestProcessedBlockInfo
-	tokenPairCachedMetaData.LastAggregatedToken0Data.TradeVolume_24h = token0Data.TradeVolume_24h
-	tokenPairCachedMetaData.LastAggregatedToken1Data.TradeVolume_24h = token1Data.TradeVolume_24h
-	log.Debug("PairCachedMetaData for this interval for tokenPair :", token0Data.Symbol, token1Data.Symbol, " is :", tokenPairCachedMetaData)
+	//tokenPairCachedMetaData.LastAggregatedBlock = curIntervalLatestProcessedBlockInfo
+	//tokenPairCachedMetaData.LastAggregatedToken0Data.TradeVolume_24h = token0Data.TradeVolume_24h
+	//tokenPairCachedMetaData.LastAggregatedToken1Data.TradeVolume_24h = token1Data.TradeVolume_24h
+	//log.Debug("PairCachedMetaData for this interval for tokenPair :", token0Data.Symbol, token1Data.Symbol, " is :", tokenPairCachedMetaData)
 	log.Debug("TokenPair Data Aggregated for this interval:", pairContractAddress, " Token0Data:", token0Data, ", Token1Data:", token1Data)
 }
 
 //TODO: Can we parallelize this for batches of contract pairs to make it faster?
 //Need to evaluate load on Audit-protocol because of that.
-func FetchTokenV2Data(fromTime float64, tokenPairCachedMetaDataList map[string]TokenPairCacheMetaData) map[string]TokenData {
+func FetchTokenV2Data(fromTime float64) map[string]TokenData {
 	tokenList = make(map[string]TokenData)
-	tentativeNextBlockStartInterval := fromTime + periodicRetrievalInterval.Seconds()
-	log.Info("Number of pair contracts to process:", len(pairContracts), ", tentativeNextBlockStartInterval", tentativeNextBlockStartInterval)
+	//tentativeNextBlockStartInterval := fromTime + periodicRetrievalInterval.Seconds()
+	log.Info("Number of pair contracts to process:", len(pairContracts)) //", tentativeNextBlockStartInterval", tentativeNextBlockStartInterval)
 	//TODO: Add some retry logic and delay in between the loop and also for retries.
 	//Look for something similar to Python's tenacity for Golang as well.
+
 	for i := range pairContracts {
 		pairContractAddress := pairContracts[i]
-		tokenPairCachedMetaData := tokenPairCachedMetaDataList[pairContractAddress]
-		log.Debug("PairCachedMetaData from previous interval is", tokenPairCachedMetaData)
+		//tokenPairCachedMetaData := tokenPairCachedMetaDataList[pairContractAddress]
+		//log.Debug("PairCachedMetaData from previous interval is", tokenPairCachedMetaData)
 		pairContractAddr := common.HexToAddress(pairContractAddress).Hex()
 
 		// Get name and symbol of both tokens from
@@ -275,40 +285,44 @@ func FetchTokenV2Data(fromTime float64, tokenPairCachedMetaDataList map[string]T
 		//TODO: Optimize: This fetch can be done once during init and whenver dynamic reload to re-read contract address pairs is implemented.
 		var token0Data, token1Data TokenData
 		var err error
-		token0Data, token1Data, err = FetchAndFillTokenMetaData(tokenList, &tokenPairCachedMetaData, pairContractAddr)
+		token0Data, token1Data, err = FetchAndFillTokenMetaData(tokenList, pairContractAddr)
 		if err != nil {
 			continue
 		}
 		//Calculate price change in last 24h
 		//Get last 288th index price and substract it.
-		CalculateAndFillPriceChange(&tokenPairCachedMetaData, &token0Data, &token1Data)
+		//CalculateAndFillPriceChange(&token0Data, &token1Data)
 
 		//Fetch Last block height.
-		lastBlockHeight := FetchLastBlockHeight(strings.ToLower(pairContractAddress))
+		/*lastBlockHeight := FetchLastBlockHeight(strings.ToLower(pairContractAddress))
 		if lastBlockHeight == 0 {
 			log.Error("Skipping this pair as could not get blockheight")
 			continue
-		}
+		}*/
 
 		// this is only for pair_total_reserves, because we want to capture latest reserves.
-		token0Liquidity, token1Liquidity, err := FetchLatestPairTotalReserves(strings.ToLower(pairContractAddress), int(lastBlockHeight), int(lastBlockHeight))
+		//token0Liquidity, token1Liquidity, err := FetchLatestPairTotalReserves(strings.ToLower(pairContractAddress), int(lastBlockHeight), int(lastBlockHeight))
+		tokenPairProcessedData, err := FetchLatestPairCachedDataFromRedis(pairContractAddr)
 		if err != nil {
-			//TODO: If this happens only for 1 pair..total liquidity will be skewed.
+			//TODO: If this happens only for 1 pair..total liquidity will be skewed.Need to handle.
 			log.Error("Not updating liquidity for this pairContract as..unable to fetch even after max retries.", pairContractAddress)
 		} else {
-			token0Data.Liquidity += token0Liquidity
-			token1Data.Liquidity += token1Liquidity
+			token0Data.Liquidity += tokenPairProcessedData.Token0Liquidity
+			token1Data.Liquidity += tokenPairProcessedData.Token1Liquidity
+
+			token0Data.TradeVolume_24h += tokenPairProcessedData.Token0TradeVolume_24h
+			token1Data.TradeVolume_24h += tokenPairProcessedData.Token1TradeVolume_24h
 		}
 
-		AggregateTokenTradeVolumeFromPair(lastBlockHeight, fromTime, pairContractAddress,
-			&tokenPairCachedMetaData, &token0Data, &token1Data)
+		//AggregateTokenTradeVolumeFromPair(lastBlockHeight, fromTime, pairContractAddress, &token0Data, &token1Data)*/
 
 		//Update Map with latest  data.
 		tokenList[token0Data.Symbol] = token0Data
 		tokenList[token1Data.Symbol] = token1Data
-		tokenPairCachedMetaDataList[pairContractAddress] = tokenPairCachedMetaData
+		//tokenPairCachedMetaDataList[pairContractAddress] = tokenPairCachedMetaData
 	}
 	// Loop through all data and multiply liquidity and tradeVolume with TokenPrice
+	//No need to multiplty with price as we are fetching cached data from redis which is already multiplied by price.
 	for key, tokenData := range tokenList {
 		if tokenData.Price != 0 {
 			tokenData.TradeVolume_24h *= tokenData.Price
@@ -321,6 +335,21 @@ func FetchTokenV2Data(fromTime float64, tokenPairCachedMetaDataList map[string]T
 		}
 	}
 	return tokenList
+}
+
+func FetchLatestPairCachedDataFromRedis(pairContractAddress string) (TokenPairLiquidityProcessedData, error) {
+	var tokenPairCachedData TokenPairLiquidityProcessedData
+	uniswap_pair_contract_V2_pair_data := "uniswap:pairContract:" + settingsObj.Development.Namespace + ":" + pairContractAddress + ":contractV2PairCachedData"
+	res := redisClient.Get(uniswap_pair_contract_V2_pair_data)
+	if res.Err() != nil {
+		log.Error("Unable to get TokenPairCachedData from Redis.")
+		return tokenPairCachedData, res.Err()
+	}
+	bytes, _ := res.Bytes()
+	if err := json.Unmarshal(bytes, &tokenPairCachedData); err != nil {
+		log.Error("Can not unmarshal JSON. err", err, " payload:", bytes)
+	}
+	return tokenPairCachedData, nil
 }
 
 func FetchTokenPairUSDTPriceFromRedis(token0Sym string, token1Sym string) (float64, float64) {
@@ -372,7 +401,7 @@ func FetchTokenPairCachedPriceFromRedis(tokenPairs []string) []float64 {
 	return prices
 }
 
-func FetchV2CachedTokenDataFromRedis() map[string]TokenPairCacheMetaData {
+/*func FetchV2CachedTokenDataFromRedis() map[string]TokenPairCacheMetaData {
 	keys := make([]string, len(pairContracts))
 	for i := range pairContracts {
 		keys[i] = "uniswap:tokenInfo:" + settingsObj.Development.Namespace + ":" + pairContracts[i] + ":cachedMetaData"
@@ -403,7 +432,7 @@ func FetchV2CachedTokenDataFromRedis() map[string]TokenPairCacheMetaData {
 	}
 	log.Debug("Fetched TokenPairCacheMetaData from redis for all PairContracts.", tokenCacheMetaData)
 	return tokenCacheMetaData
-}
+}*/
 
 func UpdateTokenCacheMetaDataToRedis(tokenCachePairMetaData map[string]TokenPairCacheMetaData) {
 	log.Info("Updating TokenCachePairMetaData to redis for tokenPairs count:", len(tokenCachePairMetaData))

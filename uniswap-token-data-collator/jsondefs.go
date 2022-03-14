@@ -25,14 +25,14 @@ type TokenPriceHistory struct {
 }
 
 type TokenPairCacheMetaData struct {
-	LastAggregatedBlock      DagBlockInfo       `json:"lastAggregatedBlock"`
-	LastAggregatedToken0Data TokenTimeBasedData `json:"lastAggregatedToken0Data"`
-	LastAggregatedToken1Data TokenTimeBasedData `json:"lastAggregatedToken1Data"`
-	LastStartBlock           DagBlockInfo       `json:"lastStartBlock"`
+	LastAggregatedBlock DagBlockInfo `json:"lastAggregatedBlock"`
+	//LastAggregatedToken0Data TokenTimeBasedData `json:"lastAggregatedToken0Data"`
+	//LastAggregatedToken1Data TokenTimeBasedData `json:"lastAggregatedToken1Data"`
+	//LastStartBlock           DagBlockInfo       `json:"lastStartBlock"`
 
-	TentativeNextIntervalBlockStart        DagBlockInfo       `json:"tentativeNextIntervalBlockStart"`
-	TentativeNextStartAggregatedToken0Data TokenTimeBasedData `json: "tentativeNextStartAggregatedToken0Data"`
-	TentativeNextStartAggregatedToken1Data TokenTimeBasedData `json: "tentativeNextStartAggregatedToken1Data"`
+	//TentativeNextIntervalBlockStart        DagBlockInfo       `json:"tentativeNextIntervalBlockStart"`
+	//TentativeNextStartAggregatedToken0Data TokenTimeBasedData `json: "tentativeNextStartAggregatedToken0Data"`
+	//TentativeNextStartAggregatedToken1Data TokenTimeBasedData `json: "tentativeNextStartAggregatedToken1Data"`
 	//Token0PriceHistory TokenPriceHistory `json: token0PriceHistory`
 	//Token1PriceHistory TokenPriceHistory `json: token1PriceHistory`
 }
@@ -44,6 +44,30 @@ type TokenData struct {
 	Price                float64 `json:price`
 	Liquidity            float64 `json:liquidity`
 	TradeVolume_24h      float64 `json:tradeVolume_24h`
+}
+
+//This is the data stored in redis.
+//TODO: Do we need to decode data that are not needed?
+type TokenPairLiquidityProcessedData struct {
+	ContractAddress            string  `json:contractAddress`
+	Name                       string  `json:name`
+	Liquidity                  string  `json:liquidity`
+	Volume_24h                 string  `json:volume_24h`
+	Volume_7d                  string  `json:volume_7d`
+	Cid_volume_24h             string  `json:cid_volume_24h`
+	Cid_volume_7d              string  `json:cid_volume_7d`
+	Fees_24h                   string  `json:fees_24h`
+	Block_height_total_reserve int     `json:block_height_total_reserve`
+	Block_heigh_trade_volume   int     `json:block_heigh_trade_volume`
+	DeltaToken0Reserves        float64 `json:deltaToken0Reserves`
+	DeltaToken1Reserves        float64 `json:deltaToken1Reserves`
+	DeltaTime                  float64 `json:deltaTime`
+	LatestTimestamp            float64 `json:latestTimestamp`
+	EarliestTimestamp          float64 `json:earliestTimestamp`
+	Token0Liquidity            float64 `json:token0Liquidity`
+	Token1Liquidity            float64 `json:token1Liquidity`
+	Token0TradeVolume_24h      float64 `json:token0TradeVolume_24h`
+	Token1TradeVolume_24h      float64 `json:token1TradeVolume_24h`
 }
 
 // Struct auto-generated from https://mholt.github.io/json-to-go/ by pasting sample json
