@@ -166,7 +166,7 @@ class ProcessHubCore(Process):
                 proc_obj = proc_details['class'](**init_kwargs)
                 proc_obj.start()
             else:
-                proc_obj = Process(target=proc_details['target'], **init_kwargs)
+                proc_obj = Process(target=proc_details['target'], kwargs=cmd_json.init_kwargs)
                 proc_obj.start()
             self._logger.debug('Process Hub Core launched process for %s with PID: %s', proc_name, proc_obj.pid)
             self._spawned_processes_map[proc_name] = proc_obj

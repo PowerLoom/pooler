@@ -1,3 +1,5 @@
+import time
+
 from rpc_helper import ConstructRPC
 from message_models import RPCNodesObject, EpochConsensusReport
 from init_rabbitmq import create_rabbitmq_conn
@@ -12,6 +14,16 @@ import threading
 import logging
 import json
 import pika
+
+
+def chunks(start_idx, stop_idx, n):
+    run_idx = 0
+    for i in range(start_idx, stop_idx+1, n):
+        # Create an index range for l of n items:
+        begin_idx = i
+        end_idx = i + n if i + n <= stop_idx else stop_idx
+        run_idx += 1
+        yield begin_idx, end_idx, run_idx
 
 
 def interactor_wrapper_obj(q: queue.Queue):
@@ -45,22 +57,34 @@ def main_ticker_process(begin=None, end=None):
         cur_block = rpc_obj.rpc_eth_blocknumber(rpc_nodes=rpc_nodes_obj)
         linear_ticker_logger.debug('Got current head of chain: %s', cur_block)
         if not begin_block_epoch:
-            begin_block_epoch = cur_block
             linear_ticker_logger.debug('Begin of epoch not set')
+            begin_block_epoch = cur_block
             linear_ticker_logger.debug('Set begin of epoch to current head of chain: %s', cur_block)
+            linear_ticker_logger.debug('Sleeping for: %s seconds', settings.EPOCH.BLOCK_TIME)
+            sleep(settings.EPOCH.BLOCK_TIME)
         else:
+            # linear_ticker_logger.debug('Picked begin of epoch: %s', begin_block_epoch)
             end_block_epoch = cur_block - settings.EPOCH.HEAD_OFFSET
-            # linear_ticker_logger.debug('Evaluating possibility to set end of epoch to CHAIN_HEAD - BLOCK_OFFSET: %s', end_block_epoch)
-            if end_block_epoch - begin_block_epoch >= settings.EPOCH.HEIGHT:
-                _ = {'begin': begin_block_epoch, 'end': end_block_epoch}
-                linear_ticker_logger.debug('Epoch of sufficient length found')
+            if not end_block_epoch - begin_block_epoch >= settings.EPOCH.HEIGHT:
+                linear_ticker_logger.debug('Current end of epoch estimated at block %s | '
+                                           'Can not build epoch yet between %s - %s. Sleeping for %s seconds',
+                                           end_block_epoch, begin_block_epoch, end_block_epoch,
+                                           settings.EPOCH.BLOCK_TIME)
+                time.sleep(settings.EPOCH.BLOCK_TIME)
+                continue
+            linear_ticker_logger.debug('Chunking blocks between %s - %s with chunk size: %s', begin_block_epoch,
+                                       end_block_epoch, settings.EPOCH.HEIGHT)
+            for epoch in chunks(begin_block_epoch, end_block_epoch, settings.EPOCH.HEIGHT):
+                _ = {'begin': epoch[0], 'end': epoch[1]}
+                linear_ticker_logger.debug('Epoch of sufficient length found: %s', _)
                 cmd = EpochConsensusReport(**_)
                 cmd_obj = (cmd.json().encode('utf-8'), exchange, routing_key)
                 q.put(cmd_obj)
                 # send epoch report
                 linear_ticker_logger.debug(cmd)
                 begin_block_epoch = end_block_epoch + 1
-                linear_ticker_logger.debug('Waiting to build next epoch...')
-        sleep(settings.EPOCH.BLOCK_TIME)
-
+                linear_ticker_logger.debug('THROTTLING to push next epoch for 60 seconds...', settings.EPOCH.HEIGHT * settings.EPOCH.BLOCK_TIME)
+                # throttle the push of piled up epochs
+                # fixed wait
+                sleep(60)
 

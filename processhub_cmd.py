@@ -86,21 +86,35 @@ def listBroadcasts(elapsed_time: int):
         typer.echo('-' * 40)
 
 
-@app.command()
-def start(process_str_id: str):
+# https://typer.tiangolo.com/tutorial/commands/context/#configuring-the-context
+@app.command(
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True}
+)
+def start(ctx: typer.Context, process_str_id: str):
     if process_str_id not in PROC_STR_ID_TO_CLASS_MAP.keys():
         typer.secho('Unknown Process identifier supplied. Check list with listProcesses command', err=True, fg=typer.colors.RED)
         return
+    kwargs = dict()
+    if process_str_id == 'SystemLinearEpochClock':
+        # for now assuming it would only be passed as --begin <block_num> , so ctx.args[0] is 'begin'
+        try:
+            begin_idx = int(ctx.args[1])
+        except:
+            pass
+        else:
+            kwargs['begin'] = begin_idx
+
     typer.secho('Creating RabbitMQ connection...', fg=typer.colors.GREEN)
     c = create_rabbitmq_conn()
     typer.secho('Opening RabbitMQ channel...', fg=typer.colors.GREEN)
     ch = c.channel()
     proc_hub_cmd = ProcessHubCommand(
         command='start',
-        proc_str_id=process_str_id
+        proc_str_id=process_str_id,
+        init_kwargs=kwargs
     )
     processhub_command_publish(ch, proc_hub_cmd.json())
-    typer.secho(f'Sent command to ProcessHubCore to launch process {process_str_id}', fg=typer.colors.YELLOW)
+    typer.secho(f'Sent command to ProcessHubCore to launch process {process_str_id} | Command: {proc_hub_cmd.json()}', fg=typer.colors.YELLOW)
 
 
 @app.command()
@@ -122,7 +136,7 @@ def stop(
                 proc_str_id=process_str_id
             )
             processhub_command_publish(ch, proc_hub_cmd.json())
-            typer.secho(f'Sent command to ProcessHubCore to stop process {process_str_id}', fg=typer.colors.YELLOW)
+            typer.secho(f'Sent command to ProcessHubCore to stop process {process_str_id} | Command: {proc_hub_cmd.json()}', fg=typer.colors.YELLOW)
     else:
         process_str_id = int(process_str_id)
         typer.secho('Creating RabbitMQ connection...', fg=typer.colors.GREEN)
