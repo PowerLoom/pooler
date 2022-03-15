@@ -1,7 +1,7 @@
 import pika
 from init_rabbitmq import create_rabbitmq_conn
 from rabbitmq_helpers import RabbitmqSelectLoopInteractor
-from redis_keys import powerloom_broadcast_id_zset
+from redis_keys import powerloom_broadcast_id_zset, uniswap_cb_broadcast_processing_logs_zset
 from redis_conn import create_redis_conn, REDIS_CONN_CONF
 from dynaconf import settings
 from multiprocessing import Process
@@ -48,27 +48,41 @@ class EpochCallbackManager(Process):
         broadcast_json = json.loads(body)
         self._logger.debug('Got epoch broadcast: %s', broadcast_json)
         append_epoch_context(broadcast_json)
-        with create_redis_conn(self._connection_pool) as r:
-            r.zadd(powerloom_broadcast_id_zset, {body: int(time.time())})
-            # remove entries older than 300 seconds
-            r.zremrangebyscore(powerloom_broadcast_id_zset, min='-inf', max=int(time.time() - 300))
+
         callback_exchange_name = f'{settings.RABBITMQ.SETUP.CALLBACKS.EXCHANGE}:{settings.NAMESPACE}'
-        for topic in self._callback_q_config['callback_topics'].keys():
-            # send epoch context to third party worker modules as registered
-            routing_key = f'powerloom-backend-callback:{settings.NAMESPACE}.{topic}'
-            self.rabbitmq_interactor.enqueue_msg_delivery(
-                exchange=callback_exchange_name,
-                routing_key=f'powerloom-backend-callback:{settings.NAMESPACE}.{topic}',
-                msg_body=json.dumps(broadcast_json)
-            )
-            self._logger.debug(f'Sent epoch to callback routing key {routing_key}: {body}')
-        # send commands to actors to start processing this pronto
-        # trade_vol_proc_actor = self._asys.createActor(
-        #     'callback_modules.trade_volume.TradeVolumeProcessorDistributor',
-        #     globalName='powerloom:polymarket:TradeVolumeProcessorDistributor'
-        # )
-        # self._asys.tell(trade_vol_proc_actor, broadcast_json)
-        # self._logger.debug('Triggered call to TradeVolumeProcessorDistributor Actor')
+        with create_redis_conn(self._connection_pool) as r:
+            for topic in self._callback_q_config['callback_topics'].keys():
+                # send epoch context to third party worker modules as registered
+                routing_key = f'powerloom-backend-callback:{settings.NAMESPACE}.{topic}'
+                self.rabbitmq_interactor.enqueue_msg_delivery(
+                    exchange=callback_exchange_name,
+                    routing_key=f'powerloom-backend-callback:{settings.NAMESPACE}.{topic}',
+                    msg_body=json.dumps(broadcast_json)
+                )
+                self._logger.debug(f'Sent epoch to callback routing key {routing_key}: {body}')
+                update_log = {
+                    'worker': 'EpochCallbackManager',
+                    'update': {
+                        'action': 'CallbackQueue.Publish',
+                        'info': {
+                            'routing_key': f'powerloom-backend-callback:{settings.NAMESPACE}.{topic}',
+                            'exchange': callback_exchange_name,
+                            'msg': broadcast_json
+                        }
+                    }
+                }
+                r.zadd(
+                    uniswap_cb_broadcast_processing_logs_zset.format(broadcast_json['broadcast_id']),
+                    {json.dumps(update_log): int(time.time())}
+                )
+
+            r.zadd(powerloom_broadcast_id_zset, {broadcast_json['broadcast_id']: int(time.time())})
+            # remove entries older than an hour
+            older_broadcast_ids = r.zrangebyscore(powerloom_broadcast_id_zset, min='-inf', max=int(time.time() - 300), withscores=False)
+            if older_broadcast_ids:
+                older_broadcast_ids_dec = map(lambda x: x.decode('utf-8'), older_broadcast_ids)
+                [r.delete(uniswap_cb_broadcast_processing_logs_zset.format(k)) for k in older_broadcast_ids_dec]
+            r.zremrangebyscore(powerloom_broadcast_id_zset, min='-inf', max=int(time.time() - 60 * 60))
 
     def run(self) -> None:
         # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|EpochCallbackManager'))

@@ -45,18 +45,11 @@ PROC_STR_ID_TO_CLASS_MAP = {
         'name': 'PowerLoom|EpochCallbackManager',
         'target': None
     },
-    'LiquidityCacher': None,
-    'SnapshotBuilder': None,
-    'SmartContractsEventsListener': {
-        'name': 'PowerLoom|ContractEventsListener',
-        'class': None,
-        'target': contract_event_listener_main
-    },
-    'MarketMakerContractsProcessor': {
-        'name': 'PowerLoom|MarketMakerProcessor|Main',
-        'class': None,
-        'target': marketmaker_processor_main
-    }
+    # 'SmartContractsEventsListener': {
+    #     'name': 'PowerLoom|ContractEventsListener',
+    #     'class': None,
+    #     'target': contract_event_listener_main
+    # }
 }
 
 with open('callback_modules/module_queues_config.json', 'r') as f:
@@ -81,6 +74,7 @@ class ProcessHubCore(Process):
     def __init__(self, name, **kwargs):
         Process.__init__(self, name=name, **kwargs)
         self._spawned_processes_map: Dict[str, Union[Process, None]] = dict()
+        self._spawned_cb_processes_map = dict()  # separate map for callback worker spawns
 
     @provide_redis_conn
     def internal_state_reporter(self, redis_conn: redis.Redis = None):
@@ -92,10 +86,14 @@ class ProcessHubCore(Process):
                         proc_id_map[k] = v.pid
                     else:
                         proc_id_map[k] = -1
-                redis_conn.hmset(f'powerloom:polymarket:{settings.NAMESPACE}:Processes', proc_id_map)
+                proc_id_map['callback_workers'] = dict()
+                for k, v in self._spawned_cb_processes_map.items():
+                    if v:
+                        proc_id_map['callback_workers'][k] = v
+                redis_conn.hmset(f'powerloom:uniswap:{settings.NAMESPACE}:Processes', proc_id_map)
                 time.sleep(2)
-        except KeyboardInterrupt:
-            redis_conn.delete(f'powerloom:polymarket:{settings.NAMESPACE}:Processes')
+        except SelfExitException:
+            redis_conn.delete(f'powerloom:uniswap:{settings.NAMESPACE}:Processes')
 
     @cleanup_children_procs
     def run(self) -> None:
@@ -109,9 +107,10 @@ class ProcessHubCore(Process):
             self._logger.debug('Launching workers for functionality %s', callback_worker_file)
             for each_worker in worker_list:
                 worker_class = getattr(importlib.import_module(f'callback_modules.{callback_worker_file}'), each_worker['class'])
-                worker_obj = worker_class(name=each_worker['name'])
+                worker_obj: Process = worker_class(name=each_worker['name'])
                 worker_obj.start()
-                self._spawned_processes_map[each_worker['class']] = worker_obj
+                self._spawned_cb_processes_map[each_worker['class']] = {'id': worker_obj.name, 'process': worker_obj}
+                # self._spawned_processes_map[each_worker['name']] = worker_obj
                 self._logger.debug('Process Hub Core launched process for callback worker %s with PID: %s', each_worker['class'], worker_obj.pid)
             self._logger.debug('='*80)
         self._logger.debug('Starting Internal Process State reporter for Process Hub Core...')

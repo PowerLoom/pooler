@@ -8,7 +8,7 @@
     "pair_total_reserves": [
       {
           "class": "PairTotalReservesProcessorDistributor",
-          "name": "PowerLoom|UniswapPooler|Callbacks|PairTotalReservesProcessorDistributor-"
+          "name": "PowerLoom|UniswapPooler|Callbacks|PairTotalReservesProcessorDistributor"
       },
       {
         "class": "PairTotalReservesProcessor",
