@@ -89,7 +89,8 @@ class ProcessHubCore(Process):
                 proc_id_map['callback_workers'] = dict()
                 for k, v in self._spawned_cb_processes_map.items():
                     if v:
-                        proc_id_map['callback_workers'][k] = v
+                        proc_id_map['callback_workers'][k] = {'pid': v['process'].pid, 'id': v['id']}
+                proc_id_map['callback_workers'] = json.dumps(proc_id_map['callback_workers'])
                 redis_conn.hmset(f'powerloom:uniswap:{settings.NAMESPACE}:Processes', proc_id_map)
                 time.sleep(2)
         except SelfExitException:
