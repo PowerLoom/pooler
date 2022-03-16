@@ -94,12 +94,14 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             return None
         else:
             total_trades_in_usd = 0
+            total_fee_in_usd = 0
             total_token0_vol = 0
             total_token1_vol = 0
             final_events_list = list()
             # self._logger.debug('Trade volume processed snapshot: %s', trade_vol_processed_snapshot)
             for each_event in trade_vol_processed_snapshot:
                 total_trades_in_usd += trade_vol_processed_snapshot[each_event]['trades']['totalTradesUSD']
+                total_fee_in_usd += trade_vol_processed_snapshot[each_event]['trades'].get('totalFeeUSD', 0)
                 total_token0_vol += trade_vol_processed_snapshot[each_event]['trades']['token0TradeVolume']
                 total_token1_vol += trade_vol_processed_snapshot[each_event]['trades']['token1TradeVolume']
                 final_events_list.extend(trade_vol_processed_snapshot[each_event]['logs'])
@@ -109,6 +111,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 chainHeightRange=EpochBase(begin=msg_obj.begin, end=msg_obj.end),
                 timestamp=float(f'{time.time(): .4f}'),
                 totalTrade=float(f'{total_trades_in_usd: .6f}'),
+                totalFee=float(f'{total_fee_in_usd: .6f}'),
                 token0TradeVolume=float(f'{total_token0_vol: .6f}'),
                 token1TradeVolume=float(f'{total_token1_vol: .6f}'),
                 events=final_events_list

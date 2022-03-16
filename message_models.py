@@ -54,6 +54,7 @@ class UniswapPairTotalReservesSnapshot(BaseModel):
 class UniswapTradesSnapshot(BaseModel):
     contract: str
     totalTrade: float  # in USD
+    totalFee: float # in USD
     token0TradeVolume: float  # in token native decimals supply
     token1TradeVolume: float  # in token native decimals supply
     events: list

@@ -32,6 +32,8 @@ from helper_functions import (
 from urllib.parse import urlencode, urljoin
 from data_models import liquidityProcessedData
 from message_models import UniswapTradesSnapshot
+from ipfs_async import client as ipfs_client
+
 
 w3 = Web3(Web3.HTTPProvider(settings.RPC.MATIC[0]))
 # TODO: Use async http provider once it is considered stable by the web3.py project maintainers
@@ -189,6 +191,8 @@ async def extract_trade_volume_data(event_name, event_logs: List[AttributeDict],
     log_topic_values = list()
     token0_swapped = 0
     token1_swapped = 0
+    token0_fee = None
+    token1_fee = None
     for log in event_logs:
         log = log.args
         topics = dict()
@@ -201,22 +205,58 @@ async def extract_trade_volume_data(event_name, event_logs: List[AttributeDict],
             if parsed_log_obj_values.get('amount1In') == 0:
                 token0_swapped += parsed_log_obj_values.get('amount0In')
                 token1_swapped += parsed_log_obj_values.get('amount1Out')
+                token0_fee = parsed_log_obj_values.get('amount0In')
             elif parsed_log_obj_values.get('amount0In') == 0:
-                token0_swapped += parsed_log_obj_values.get('amount1In')
-                token1_swapped += parsed_log_obj_values.get('amount0Out')
+                token0_swapped += parsed_log_obj_values.get('amount0Out')
+                token1_swapped += parsed_log_obj_values.get('amount1In')
+                token1_fee = parsed_log_obj_values.get('amount1In')
         elif event_name == 'Mint' or event_name == 'Burn':
             token0_swapped += parsed_log_obj_values.get('amount0')
             token1_swapped += parsed_log_obj_values.get('amount1')
+
     # normalize token volume according to decimals specification
     token0_swapped = token0_swapped / 10 ** int(pair_per_token_metadata['token0']['decimals'])
     token1_swapped = token1_swapped / 10 ** int(pair_per_token_metadata['token1']['decimals'])
+
     # get conversion
     trade_volume_usd = 0
+    trade_fee_usd = 0
     token0Price = await redis_conn.get(
         uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token0']['symbol']}-USDT"))
+    token1Price = await redis_conn.get(
+        uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token1']['symbol']}-USDT"))
+        
+        
+
+    # if event is 'Swap' then only add single token in total volume calculation
+    if event_name == 'Swap':
+        # calculate trade volume in USD
+        if token0Price:
+           trade_volume_usd += token0_swapped * float(token0Price.decode('utf-8'))
+        elif token1Price:
+           trade_volume_usd += token1_swapped * float(token1Price.decode('utf-8'))
+
+        # calculate uniswap LP fee
+        if token0_fee and token0Price:
+            token0_fee = token0_fee / 10 ** int(pair_per_token_metadata['token0']['decimals'])
+            token0_fee = token0_fee * 0.003 # uniswap LP fee rate
+            trade_fee_usd = token0_fee * float(token0Price.decode('utf-8'))
+        elif token1_fee and token1Price:
+            token1_fee = token1_fee / 10 ** int(pair_per_token_metadata['token1']['decimals'])
+            token1_fee = token1_fee * 0.003 # uniswap LP fee rate
+            trade_fee_usd = token1_fee * float(token1Price.decode('utf-8'))
+
+        return {
+            'totalTradesUSD': trade_volume_usd,
+            'totalFeeUSD': trade_fee_usd,
+            'token0TradeVolume': token0_swapped,
+            'token1TradeVolume': token1_swapped 
+        }
+           
+       
+    
     if token0Price:
         token0Price = float(token0Price.decode('utf-8'))
-        # print(f"Got {pair_per_token_metadata['token0']['symbol']}-USDT conversion: ", token0Price)
         trade_volume_usd += token0_swapped * token0Price
     else:
         logger.warning(
@@ -228,12 +268,9 @@ async def extract_trade_volume_data(event_name, event_logs: List[AttributeDict],
                     f"USDT Price. Attempting to find {pair_per_token_metadata['token1']['symbol']}-USDT price and 2x it"
                 )
 
-    token1Price = await redis_conn.get(
-        uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token1']['symbol']}-USDT"))
     if token1Price:
         token1Price = float(token1Price.decode('utf-8'))
         trade_volume_usd += token1_swapped * token1Price
-        # print(f"Got {pair_per_token_metadata['token1']['symbol']}-USDT conversion: ", token1Price)
     else:
         logger.warning(
             f"Error: can't find {pair_per_token_metadata['token1']['symbol']}-USDT Price")
@@ -623,7 +660,7 @@ async def process_pairs_token_reserves(session, redis_conn, router_contract, max
     # TODO: we might not get this audit_project_id what's then?
     pair_contract_address = pair_contract_address.lower()
     pair_reserves_audit_project_id = f'uniswap_pairContract_pair_total_reserves_{pair_contract_address}_{settings.NAMESPACE}'
-    last_block_height_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{pair_reserves_audit_project_id}/payloads/height')
+    last_block_height_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE_2.URL, f'/{pair_reserves_audit_project_id}/payloads/height')
     from_block = 1
     to_block = 1
     async with session.get(url=last_block_height_url) as resp:
@@ -674,7 +711,7 @@ async def process_pairs_token_reserves(session, redis_conn, router_contract, max
     total_liquidity = 0
     # TODO: we might not get this audit_project_id what's then?
     pair_reserves_query_params = {'from_height': from_block, 'to_height': to_block, 'data': data}
-    pair_reserves_range_fetch_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{pair_reserves_audit_project_id}/payloads')
+    pair_reserves_range_fetch_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE_2.URL, f'/{pair_reserves_audit_project_id}/payloads')
     async with session.get(url=pair_reserves_range_fetch_url, params=pair_reserves_query_params) as resp:
         resp_json = await resp.json()
         if 'error' in resp_json:
@@ -683,7 +720,9 @@ async def process_pairs_token_reserves(session, redis_conn, router_contract, max
             return liquidityProcessedData(
                 contractAddress=pair_contract_address,
                 name=pair_name,
-                liquidity=0.0, volume_24h="", volume_7d="",
+                liquidity=0.0, volume_24h="", volume_7d="", fees_24h=f"",
+                cid_volume_24h="", cid_volume_7d="",
+                block_height=0,
                 deltaToken0Reserves=0.0, deltaToken1Reserves=0.0, deltaTime=0.0,
                 latestTimestamp=0.0, earliestTimestamp=0.0
             )
@@ -706,7 +745,7 @@ async def process_pairs_token_reserves(session, redis_conn, router_contract, max
         total_liquidity += token0_liquidity + token1_liquidity
 
     trade_volume_audit_project_id = f'uniswap_pairContract_trade_volume_{pair_contract_address}_{settings.NAMESPACE}'
-    trade_volume_last_block_height_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL,
+    trade_volume_last_block_height_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE_2.URL,
                                     f'/{trade_volume_audit_project_id}/payloads/height')
     trade_volume_to_block = 1
     trade_volume_from_block = 1
@@ -721,7 +760,7 @@ async def process_pairs_token_reserves(session, redis_conn, router_contract, max
         # set defualt from block
         trade_volume_from_block = (1 if (to_block < maxCount or maxCount == -1) else to_block - (maxCount - 1))
     trade_volume_query_params = {'from_height': trade_volume_from_block, 'to_height': trade_volume_to_block, 'data': data}
-    trade_volume_range_fetch_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{trade_volume_audit_project_id}/payloads')
+    trade_volume_range_fetch_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE_2.URL, f'/{trade_volume_audit_project_id}/payloads')
     logger.debug(
         f"Fetching trade volume blocks for contract: {pair_contract_address} | project ID: {trade_volume_audit_project_id}")
     async with session.get(url=trade_volume_range_fetch_url, params=trade_volume_query_params) as trade_vol_resp:
@@ -732,7 +771,9 @@ async def process_pairs_token_reserves(session, redis_conn, router_contract, max
             return liquidityProcessedData(
                 contractAddress=pair_contract_address,
                 name=pair_name,
-                liquidity=total_liquidity, volume_24h="", volume_7d="",
+                liquidity=total_liquidity, volume_24h="", volume_7d="", fees_24h=f"",
+                cid_volume_24h="", cid_volume_7d="",
+                block_height=0,
                 deltaToken0Reserves=0.0, deltaToken1Reserves=0.0, deltaTime=0.0,
                 latestTimestamp=0.0, earliestTimestamp=0.0
             )
@@ -763,6 +804,7 @@ async def process_pairs_token_reserves(session, redis_conn, router_contract, max
             idx_7d = next(x for x, val in enumerate(trade_vol_resp_json) if val['timestamp'] >= volume_7d_timestamp)
         except StopIteration:
             idx_7d = None
+        
         # lets do some scaling for initial times of accumulated data
         if not idx_24h:
             idx_24h = math.ceil(trade_vol_resp_json_length / 3) - 1
@@ -772,20 +814,46 @@ async def process_pairs_token_reserves(session, redis_conn, router_contract, max
             idx_7d = trade_vol_resp_json_length - 1
             logger.debug(">>>> Scaling 7d index for lower height data pairs. idx_7h = %d <<<<", idx_7d)
 
+        volume_24h_data = trade_vol_resp_json[:idx_24h + 1]
+        volume_7d_data = trade_vol_resp_json[:idx_7d + 1]
+
         # get data for last 24hour
-        volume_24h = sum(map(lambda x: x['data']['payload']['totalTrade'], trade_vol_resp_json[:idx_24h + 1]))
+        volume_24h = sum(map(lambda x: x['data']['payload']['totalTrade'], volume_24h_data))
 
         # get data for last 7d
-        volume_7d = sum(map(lambda x: x['data']['payload']['totalTrade'], trade_vol_resp_json[:idx_7d + 1]))
+        volume_7d = sum(map(lambda x: x['data']['payload']['totalTrade'], volume_7d_data))
 
-        logger.debug('Calculated 24h and 7d vol: %s, %s | contract: %s', volume_24h, volume_7d, pair_contract_address)
+        # calculate / sum last 24h fee
+        fees_24h = sum(map(lambda x: x['data']['payload'].get('totalFee', 0), volume_24h_data))
+
+        volume_24h_cids = [{ 'dagCid': obj_24h['dagCid'], 'payloadCid': obj_24h['data']['cid'] } for obj_24h in volume_24h_data]
+        volume_7d_cids = [{ 'dagCid': obj_7d['dagCid'], 'payloadCid': obj_7d['data']['cid'] } for obj_7d in volume_7d_data]
+
+        cids_volume_24h, cids_volume_7d = await asyncio.gather(
+            ipfs_client.add_json({ 'resultant':{
+                "cids": volume_24h_cids,
+                'latestTimestamp_volume_24h': volume_24h_data[0]['timestamp'],
+                'earliestTimestamp_volume_24h': volume_24h_data[-1]['timestamp']
+            }}),
+            ipfs_client.add_json({ 'resultant':{
+                "cids": volume_7d_cids,
+                'latestTimestamp_volume_7d': volume_7d_data[0]['timestamp'],
+                'earliestTimestamp_volume_7d': volume_7d_data[-1]['timestamp']
+            }})
+        )
+
+        logger.debug('Calculated 24h, 7d and fees_24h vol: %s, %s, %s | contract: %s', volume_24h, volume_7d, fees_24h, pair_contract_address)
         try:
             prepared_snapshot = liquidityProcessedData(
                     contractAddress=pair_contract_address,
                     name=pair_name,
-                    liquidity=f"US${abs(total_liquidity):,}",
-                    volume_24h=f"US${abs(volume_24h):,}",
-                    volume_7d=f"US${abs(volume_7d):,}",
+                    liquidity=f"US${round(abs(total_liquidity)):,}",
+                    volume_24h=f"US${round(abs(volume_24h)):,}",
+                    volume_7d=f"US${round(abs(volume_7d)):,}",
+                    fees_24h=f"US${round(abs(fees_24h)):,}",
+                    cid_volume_24h=cids_volume_24h, 
+                    cid_volume_7d=cids_volume_7d,
+                    block_height=int(resp_json[0]['data']['payload']['chainHeightRange']['end']),
                     deltaToken0Reserves=list(resp_json[0]['data']['payload']['token0Reserves'].values())[-1] -
                                         list(resp_json[-1]['data']['payload']['token0Reserves'].values())[-1],
                     deltaToken1Reserves=list(resp_json[0]['data']['payload']['token1Reserves'].values())[-1] -
@@ -808,9 +876,13 @@ async def process_pairs_token_reserves(session, redis_conn, router_contract, max
         return liquidityProcessedData(
             contractAddress=pair_contract_address,
             name=pair_name,
-            liquidity=f"US${abs(total_liquidity):,}",
-            volume_24h=f"US${abs(volume_24h):,}",
-            volume_7d=f"US${abs(volume_7d):,}",
+            liquidity=f"US${round(abs(total_liquidity)):,}",
+            volume_24h=f"US${round(abs(volume_24h)):,}",
+            volume_7d=f"US${round(abs(volume_7d)):,}",
+            fees_24h=f"US${round(abs(fees_24h)):,}",
+            cid_volume_24h=cids_volume_24h,
+            cid_volume_7d=cids_volume_7d,
+            block_height=int(resp_json[0]['data']['payload']['chainHeightRange']['end']),
             deltaToken0Reserves=list(resp_json[0]['data']['payload']['token0Reserves'].values())[-1] -
                                 list(resp_json[-1]['data']['payload']['token0Reserves'].values())[-1],
             deltaToken1Reserves=list(resp_json[0]['data']['payload']['token1Reserves'].values())[-1] -
@@ -856,6 +928,11 @@ async def v2_pairs_data(session, maxCount, data, redis_conn: aioredis.Redis = No
             f.close()
 
 
+async def get_aiohttp_cache() -> aiohttp.ClientSession:
+    basic_rpc_connector = aiohttp.TCPConnector(limit=settings['rlimit']['file_descriptors'])
+    aiohttp_client_basic_rpc_session = aiohttp.ClientSession(connector=basic_rpc_connector)
+    return aiohttp_client_basic_rpc_session
+
 if __name__ == '__main__':
     # here instead of calling get pair we can directly use cached all pair addresses
     # dai = "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063"
@@ -865,8 +942,7 @@ if __name__ == '__main__':
     # print(f"pair_address: {pair_address}")
     loop = asyncio.get_event_loop()
     loop.run_until_complete(
-        get_pair_contract_trades_async(
-            loop, '0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc', 14242360, 14242361)
+        get_pair_contract_trades_async(loop, '0x21b8065d10f73ee2e260e5b47d3344d3ced7596e', 14291724, 14293558)
     )
 
     # logger.debug(f"Pair address : {pair_address}")
