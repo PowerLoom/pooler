@@ -10,40 +10,19 @@ type AuditProtocolBlockHeightResp struct {
 	Height int64 `json:"height"`
 }
 
-type DagBlockInfo struct {
-	TimeStamp int64 `json:"timeStamp"`
-	Height    int64 `json:"height"`
-}
-
-type TokenTimeBasedData struct {
-	TradeVolume_24h float64 `json:tradeVolume_24h`
-}
-
-type TokenPriceHistory struct {
-	PriceHistory   [MAX_TOKEN_PRICE_HISTORY_INDEX]float64 `json: priceHistory`
-	LastPriceIndex int                                    `json:lastPriceIndex`
-}
-
-type TokenPairCacheMetaData struct {
-	LastAggregatedBlock DagBlockInfo `json:"lastAggregatedBlock"`
-	//LastAggregatedToken0Data TokenTimeBasedData `json:"lastAggregatedToken0Data"`
-	//LastAggregatedToken1Data TokenTimeBasedData `json:"lastAggregatedToken1Data"`
-	//LastStartBlock           DagBlockInfo       `json:"lastStartBlock"`
-
-	//TentativeNextIntervalBlockStart        DagBlockInfo       `json:"tentativeNextIntervalBlockStart"`
-	//TentativeNextStartAggregatedToken0Data TokenTimeBasedData `json: "tentativeNextStartAggregatedToken0Data"`
-	//TentativeNextStartAggregatedToken1Data TokenTimeBasedData `json: "tentativeNextStartAggregatedToken1Data"`
-	//Token0PriceHistory TokenPriceHistory `json: token0PriceHistory`
-	//Token1PriceHistory TokenPriceHistory `json: token1PriceHistory`
+type TokenPriceHistoryEntry struct {
+	Timestamp float64 `json:timeStamp`
+	Price     float64 `json:price`
 }
 
 type TokenData struct {
-	LastUpdatedTimeStamp string  `json:lastUpdatedTime`
-	Name                 string  `json:name`
-	Symbol               string  `json:symbol`
-	Price                float64 `json:price`
-	Liquidity            float64 `json:liquidity`
-	TradeVolume_24h      float64 `json:tradeVolume_24h`
+	LastUpdatedTimeStamp   string  `json:lastUpdatedTime`
+	Name                   string  `json:name`
+	Symbol                 string  `json:symbol`
+	Price                  float64 `json:price`
+	Liquidity              float64 `json:liquidity`
+	TradeVolume_24h        float64 `json:tradeVolume_24h`
+	PriceChangePercent_24h float64 `json:priceChangePercent_24h`
 }
 
 //This is the data stored in redis.
@@ -73,7 +52,7 @@ type TokenPairLiquidityProcessedData struct {
 // Struct auto-generated from https://mholt.github.io/json-to-go/ by pasting sample json
 //Had to modify places where maps are required.
 
-type TokenPairReserves struct {
+/*type TokenPairReserves struct {
 	DagCid string `json:"dagCid"`
 	Data   struct {
 		Cid     string `json:"cid"`
@@ -105,11 +84,11 @@ type TokenPairReserves struct {
 			New map[string]float64 `json:"new"`
 		} `json:"token1Reserves"`
 	} `json:"diff"`
-}
+}*/
 
 // Struct auto-generated from https://mholt.github.io/json-to-go/ by pasting sample json
 //TODO: Refer to uniswap contract and change all fields which are uint256 to bigInt.
-type TokenPairTradeVolumeData struct {
+/*type TokenPairTradeVolumeData struct {
 	DagCid string `json:"dagCid"`
 	Data   struct {
 		Cid     string `json:"cid"`
@@ -122,12 +101,12 @@ type TokenPairTradeVolumeData struct {
 			Events            []struct {
 				Sender string `json:"sender"`
 				To     string `json:"to"`
-				/* Commenting these for now as there are samples which go beyond int64.
+				Commenting these for now as there are samples which go beyond int64.
 				Need to handle it via some bigInt if required.
 				Amount0In  int64 `json:"amount0In"`
 				Amount1In  int64   `json:"amount1In"`
 				Amount0Out int64   `json:"amount0Out"`
-				Amount1Out int64   `json:"amount1Out"`*/
+				Amount1Out int64   `json:"amount1Out"`
 			} `json:"events"`
 			ChainHeightRange struct {
 				Begin int64 `json:"begin"`
@@ -156,7 +135,7 @@ type TokenPairTradeVolumeData struct {
 			New float64 `json:"new"`
 		} `json:"token1TradeVolume"`
 	} `json:"diff"`
-}
+}*/
 
 type ProjectSettings struct {
 	Development struct {
