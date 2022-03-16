@@ -21,7 +21,7 @@ def listProcesses():
     for each in PROC_STR_ID_TO_CLASS_MAP.keys():
         typer.echo(each)
     typer.secho('='*20+'Last recorded running processes:'+'='*20, fg=typer.colors.CYAN)
-    for k, v in r.hgetall(name=f'powerloom:polymarket:{settings.NAMESPACE}:Processes').items():
+    for k, v in r.hgetall(name=f'powerloom:uniswap:{settings.NAMESPACE}:Processes').items():
         typer.echo(f'{k.decode("utf-8")}: {v.decode("utf-8")}')
     typer.secho('=' * 60, fg=typer.colors.CYAN)
 

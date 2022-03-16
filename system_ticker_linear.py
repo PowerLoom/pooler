@@ -83,7 +83,7 @@ def main_ticker_process(begin=None, end=None):
                 # send epoch report
                 linear_ticker_logger.debug(cmd)
                 begin_block_epoch = end_block_epoch + 1
-                linear_ticker_logger.debug('THROTTLING to push next epoch for 60 seconds...', settings.EPOCH.HEIGHT * settings.EPOCH.BLOCK_TIME)
+                linear_ticker_logger.debug('THROTTLING to push next epoch for 60 seconds...')
                 # throttle the push of piled up epochs
                 # fixed wait
                 sleep(60)
