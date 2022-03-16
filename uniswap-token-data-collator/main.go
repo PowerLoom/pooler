@@ -85,10 +85,6 @@ func Run(pairContractAddress string) {
 	}
 }
 
-/*func FetchV2TokenPriceDataFromRedis()(map[string]){
-
-}*/
-
 func FetchAndFillTokenMetaData(tokenList map[string]TokenData,
 	pairContractAddr string) (TokenData, TokenData, error) {
 	var token0Data, token1Data TokenData
@@ -320,7 +316,7 @@ func FetchTokenV2Data(fromTime float64) map[string]TokenData {
 			tokenData.TradeVolume_24h *= tokenData.Price
 			tokenData.Liquidity *= tokenData.Price
 			//Update TokenPrice in History Zset
-			UpdateTokenPriceHistoryRedis(tokenData)
+			UpdateTokenPriceHistoryRedis(fromTime, tokenData)
 			CalculateAndFillPriceChange(fromTime, &tokenData)
 			tokenList[key] = tokenData
 			log.Debug("Token:", key, ".Multiplying liquidity with tokenPrice. Liquidity After:", tokenData.Liquidity, ",TradeVolume_24h After:", tokenData.TradeVolume_24h)
@@ -359,7 +355,7 @@ func CalculateAndFillPriceChange(fromTime float64, tokenData *TokenData) {
 	tokenData.PriceChangePercent_24h = (tokenData.Price - oldPrice) * 100 / tokenData.Price
 }
 
-func UpdateTokenPriceHistoryRedis(tokenData TokenData) {
+func UpdateTokenPriceHistoryRedis(fromTime float64, tokenData TokenData) {
 	curTimeEpoch := float64(time.Now().Unix())
 	key := "uniswap:tokenInfo:" + settingsObj.Development.Namespace + ":" + tokenData.Symbol + ":priceHistory"
 	var priceHistoryEntry TokenPriceHistoryEntry = TokenPriceHistoryEntry{curTimeEpoch, tokenData.Price}
@@ -377,12 +373,18 @@ func UpdateTokenPriceHistoryRedis(tokenData TokenData) {
 	}
 	log.Debug("Updated TokenPriceHistory at Zset:", key, " with score:", curTimeEpoch, ",val:", priceHistoryEntry)
 	//Need to prune history older than fromTime.
-	//PrunePriceHistoryInRedis(key, fromTime)
+	PrunePriceHistoryInRedis(key, fromTime)
 }
 
-/*func PrunePriceHistoryInRedis(key string, minScore float64) {
-
-}*/
+func PrunePriceHistoryInRedis(key string, fromTime float64) {
+	//Remove any entries older than 1 hour from fromTime.
+	res := redisClient.ZRemRangeByScore(key, fmt.Sprintf("%f", 0.0),
+		fmt.Sprintf("%f", fromTime-60*60))
+	if res.Err() != nil {
+		log.Error("Pruning entries at key:", key, "failed with error:", res.Err().Error())
+	}
+	log.Debug("Pruning: Removed ", res.Val(), " entries in redis Zset at key:", key)
+}
 
 func FetchLatestPairCachedDataFromRedis(pairContractAddress string) (TokenPairLiquidityProcessedData, error) {
 	var tokenPairCachedData TokenPairLiquidityProcessedData
