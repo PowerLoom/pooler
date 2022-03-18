@@ -41,10 +41,23 @@ def redis_cleanup():
         pass
 
     try:
-        c = r.delete(*r.keys(f'uniswap:pairContract*{settings.NAMESPACE}*'))
-        print(c)
+        c = r.delete(*r.keys(f'*uniswap_pairContract*{settings.NAMESPACE}*slidingCache*'))
+        print('Pair contract sliding cache related keys deleted: ', c)
     except:
         pass
+
+    try:
+        c = r.delete(*r.keys(f'*broadcastID*{settings.NAMESPACE}*'))
+        print('Broadcast related keys deleted: ', c)
+    except:
+        pass
+
+    try:
+        c = r.delete(*r.keys(f'*uniswap:pairContract*{settings.NAMESPACE}*'))
+        print('Other Pair contract related keys deleted: ', c)
+    except:
+        pass
+
 
     r.delete(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}')
     try:
@@ -53,7 +66,12 @@ def redis_cleanup():
         pass
 
     try:
-        r.delete(*r.keys('polymarket:*'))
+        r.delete(*r.keys(f'*uniswap*{settings.NAMESPACE}*pendingTransactions:*'))
+    except:
+        pass
+
+    try:
+        r.delete(*r.keys(f'*uniswap*{settings.NAMESPACE}*discardedTransactions:*'))
     except:
         pass
 
