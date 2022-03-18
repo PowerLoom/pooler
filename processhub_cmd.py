@@ -2,7 +2,7 @@ from process_hub_core import PROC_STR_ID_TO_CLASS_MAP
 from init_rabbitmq import create_rabbitmq_conn, processhub_command_publish
 from message_models import ProcessHubCommand
 from redis_conn import REDIS_CONN_CONF
-from redis_keys import powerloom_broadcast_id_zset
+from redis_keys import (powerloom_broadcast_id_zset, uniswap_cb_broadcast_processing_logs_zset)
 from datetime import datetime
 from dynaconf import settings
 import timeago
@@ -10,8 +10,101 @@ import typer
 import json
 import time
 import redis
+import psutil
+import json
 
 app = typer.Typer()
+
+@app.command()
+def pidStatus(connections: bool = False):
+    
+    def print_formatted_status(process_name, pid):
+        try:
+            process = psutil.Process(pid=pid)
+            print(f"{pid} -")
+            print(f"\t name: {process.name()}")
+            print(f"\t status: {process.status()}")
+            print(f"\t threads: {process.num_threads()}")
+            print(f"\t file descriptors: {process.num_fds()}")
+            print(f"\t memory: {process.memory_info()}")
+            print(f"\t cpu: {process.cpu_times()}")
+            print(f"\t number of connections: {len(process.connections(kind='inet'))}")
+            if connections:
+                print(f"\t number of connections: {process.connections(kind='inet')}")
+            print("\n")
+        except Exception as err:
+            if(type(err).__name__ == "NoSuchProcess"):
+                print(f"{pid} - NoSuchProcess")
+                print(f"\t name: {process_name}\n")
+            else:
+                print(f"Unknown Error: {str(err)}")
+    
+    r = redis.Redis(**REDIS_CONN_CONF, single_connection_client=True)
+    print("\n")
+    for k, v in r.hgetall(name=f'powerloom:uniswap:{settings.NAMESPACE}:Processes').items():
+        key = k.decode('utf-8')
+        value = v.decode('utf-8')
+        
+        if(key == 'callback_workers'):
+            value = json.loads(value)
+            for i, j in value.items():
+                print_formatted_status(j['id'], int(j['pid']))
+        elif value.isdigit():
+            print_formatted_status(key, int(value))
+        else:
+            print(f"# Unknown type of key:{key}, value:{value}")
+    print("\n")
+
+
+@app.command()
+def broadcastEpochStatus(elapsed_time: int):
+    r = redis.Redis(**REDIS_CONN_CONF, single_connection_client=True)
+    cur_ts = int(time.time())
+    res_ = r.zrangebyscore(
+        name=powerloom_broadcast_id_zset,
+        min=cur_ts-elapsed_time,
+        max=cur_ts,
+        withscores=True
+    )
+    print(f"\n=====> {len(res_)} broadcastId exists in last {elapsed_time} secs\n")
+    for k, v in res_:
+        key = k.decode('utf-8')
+        value = v
+        print(f"{key} -")
+        print(f"\t timestamp: {value}\n")
+        logs = r.zrangebyscore(
+            name=uniswap_cb_broadcast_processing_logs_zset.format(f"{key}"),
+            min=cur_ts-elapsed_time,
+            max=cur_ts,
+            withscores=True
+        )
+        contracts_len = 0
+        sub_actions = {
+            "PairReserves.SnapshotBuild": {"success": 0, "failure": 0},
+            "PairReserves.SnapshotCommit": {"success": 0, "failure": 0},
+            "TradeVolume.SnapshotBuild": {"success": 0, "failure": 0},
+            "TradeVolume.SnapshotCommit": {"success": 0, "failure": 0},
+        }
+        if logs:
+            parsed_logs = []
+            for i, j in logs:
+                i = i.decode('utf-8')
+                i = json.loads(i)
+                i['timestamp'] = j
+                if i["update"]["action"].lower().find('publish') != -1:
+                    contracts_len = len(i["update"]["info"]["msg"]["contracts"])
+                    print(f"\t worker: {i['worker']}")
+                    print(f"\t action: {i['update']['action']} - {contracts_len} contracts\n")
+                elif i["update"]["action"] in sub_actions:
+                    if i["update"]["info"]["status"].lower() == "success":
+                        sub_actions[i["update"]["action"]]["success"] += 1
+                    else:
+                        sub_actions[i["update"]["action"]]["failure"] += 1
+            for i, j in sub_actions.items():
+                print(f"\t {i} : {str(j)}")
+        else:
+            print("\t Logs: no log found against this braodcastId")
+        print("\n")
 
 
 @app.command()
