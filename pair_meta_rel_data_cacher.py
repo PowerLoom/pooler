@@ -199,6 +199,14 @@ async def cache_pair_stablecoin_exchange_rates(redis_conn: aioredis.Redis = None
             # else provide full path token1-weth-usdt
 
             if Web3.toChecksumAddress(pair_per_token_metadata['token0']['address']) \
+                    in [
+                        Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDT),
+                        Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDC),
+                        Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.DAI),
+                    ]:
+                    token0_USDT_price = 1
+                    retrieval_logger.debug("Ignored Stablecoin calculation for token0 %s - WETH - USDT conversion: %s", pair_per_token_metadata['token0']['symbol'], token0_USDT_price)
+            elif Web3.toChecksumAddress(pair_per_token_metadata['token0']['address']) \
                     != Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH):
                 # if not,provide conversion path to token0-weth-usdt
                 retrieval_logger.debug("Calculating %s - WETH conversion...", pair_per_token_metadata['token0']['symbol'])
@@ -224,6 +232,14 @@ async def cache_pair_stablecoin_exchange_rates(redis_conn: aioredis.Redis = None
             # check if token1 is WETH. If it is, weth-usdt conversion can be figured right here,
             # else provide full path token1-weth-usdt
             if Web3.toChecksumAddress(pair_per_token_metadata['token1']['address']) \
+                    in [
+                        Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDT),
+                        Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDC),
+                        Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.DAI),
+                    ]:
+                    token1_USDT_price = 1
+                    retrieval_logger.debug("Ignored Stablecoin calculation for token1 %s - WETH - USDT conversion: %s", pair_per_token_metadata['token1']['symbol'], token1_USDT_price)
+            elif Web3.toChecksumAddress(pair_per_token_metadata['token1']['address']) \
                     != Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH):
                 priceFunction_token1 = router_contract_obj.functions.getAmountsOut(
                     10 ** int(pair_per_token_metadata['token1']['decimals']), [
@@ -269,7 +285,6 @@ async def periodic_retrieval():
     while True:
         await asyncio.gather(
             cache_pair_stablecoin_exchange_rates(),
-            v2_pairs_data(session, 500, 'true'),
             asyncio.sleep(120)  # run atleast 'x' seconds not sleep for x seconds
         )
         retrieval_logger.debug('Completed one cycle of pair meta data cache.........')
