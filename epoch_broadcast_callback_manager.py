@@ -77,12 +77,13 @@ class EpochCallbackManager(Process):
                 )
 
             r.zadd(powerloom_broadcast_id_zset, {broadcast_json['broadcast_id']: int(time.time())})
-            # remove entries older than an hour
-            older_broadcast_ids = r.zrangebyscore(powerloom_broadcast_id_zset, min='-inf', max=int(time.time() - 300), withscores=False)
+            # attempt to keep broadcast id processing logs set at 20
+            to_be_pruned_ts = settings.EPOCH.HEIGHT * settings.EPOCH.BLOCK_TIME * 20
+            older_broadcast_ids = r.zrangebyscore(powerloom_broadcast_id_zset, min='-inf', max=int(time.time() - to_be_pruned_ts), withscores=False)
             if older_broadcast_ids:
                 older_broadcast_ids_dec = map(lambda x: x.decode('utf-8'), older_broadcast_ids)
                 [r.delete(uniswap_cb_broadcast_processing_logs_zset.format(k)) for k in older_broadcast_ids_dec]
-            r.zremrangebyscore(powerloom_broadcast_id_zset, min='-inf', max=int(time.time() - 60 * 60))
+            r.zremrangebyscore(powerloom_broadcast_id_zset, min='-inf', max=int(time.time() - to_be_pruned_ts))
 
     def run(self) -> None:
         # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|EpochCallbackManager'))
