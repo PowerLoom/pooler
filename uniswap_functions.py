@@ -437,8 +437,13 @@ async def get_pair_per_token_metadata(pair_contract_obj, pair_address, loop: asy
 
 # asynchronously get liquidity of each token reserve
 @provide_async_redis_conn_insta
-async def get_liquidity_of_each_token_reserve_async(loop: asyncio.AbstractEventLoop, pair_address,
-                                                    block_identifier='latest', redis_conn: aioredis.Redis = None):
+async def get_liquidity_of_each_token_reserve_async(
+        loop: asyncio.AbstractEventLoop,
+        pair_address,
+        block_identifier='latest',
+        fetch_timestamp=False,
+        redis_conn: aioredis.Redis = None
+):
     try:
         pair_address = Web3.toChecksumAddress(pair_address)
         # pair contract
@@ -449,6 +454,8 @@ async def get_liquidity_of_each_token_reserve_async(loop: asyncio.AbstractEventL
         redis_storage = AsyncRedisStorage(await load_rate_limiter_scripts(redis_conn), redis_conn)
         custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
         limit_incr_by = 1  # score to be incremented for each request
+        if fetch_timestamp:
+            limit_incr_by += 1
         app_id = settings.RPC.MATIC[0].split('/')[
             -1]  # future support for loadbalancing over multiple MaticVigil RPC appID
         key_bits = [app_id, 'eth_call']  # TODO: add unique elements that can identify a request
@@ -481,6 +488,14 @@ async def get_liquidity_of_each_token_reserve_async(loop: asyncio.AbstractEventL
             else:
                 can_request = True
         if can_request:
+            if fetch_timestamp:
+                block_det_func = partial(w3.eth.get_block, dict(block_identifier=block_identifier))
+                try:
+                    block_details = await loop.run_in_executor(func=block_det_func, executor=None)
+                except:
+                    block_details = None
+            else:
+                block_details = None
             pair_per_token_metadata = await get_pair_per_token_metadata(
                 pair_contract_obj=pair,
                 pair_address=pair_address,
@@ -497,8 +512,11 @@ async def get_liquidity_of_each_token_reserve_async(loop: asyncio.AbstractEventL
                 "Token0: %s, Reserves: %s | Token1: %s, Reserves: %s", token0_addr, token1_addr,
                 reserves[0] / 10 ** int(token0_decimals), reserves[1] / 10 ** int(token1_decimals)
             )
-            return {"token0": reserves[0] / 10 ** int(token0_decimals),
-                    "token1": reserves[1] / 10 ** int(token1_decimals)}
+            return {
+                'token0': reserves[0] / 10 ** int(token0_decimals),
+                'token1': reserves[1] / 10 ** int(token1_decimals),
+                'timestamp': None if not block_details else block_details.timestamp
+            }
         else:
             raise Exception("exhausted_api_key_rate_limit inside uniswap_functions get async liquidity reservers")
     except Exception as exc:
@@ -513,6 +531,7 @@ async def get_pair_contract_trades_async(
         pair_address,
         from_block,
         to_block,
+        fetch_timestamp=True,
         redis_conn: aioredis.Redis = None
 ):
     try:
@@ -557,6 +576,14 @@ async def get_pair_contract_trades_async(
             else:
                 can_request = True
         if can_request:
+            if fetch_timestamp:
+                block_det_func = partial(w3.eth.get_block, dict(block_identifier=to_block))
+                try:
+                    block_details = await loop.run_in_executor(func=block_det_func, executor=None)
+                except:
+                    block_details = None
+            else:
+                block_details = None
             pair_per_token_metadata = await get_pair_per_token_metadata(
                 pair_contract_obj=pair,
                 pair_address=pair_address,
@@ -599,6 +626,8 @@ async def get_pair_contract_trades_async(
                         )
                     }
                 })
+            max_block_timestamp = None if not block_details else block_details.timestamp
+            rets.update({'timestamp': max_block_timestamp})
             print(rets)
             return rets
             # logger.debug(f"Decimals of token0: {token0_decimals}, Decimals of token1: {token1_decimals}")
