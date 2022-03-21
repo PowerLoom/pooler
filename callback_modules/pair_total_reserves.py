@@ -110,8 +110,12 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             total_token0_vol = 0
             total_token1_vol = 0
             final_events_list = list()
-            # self._logger.debug('Trade volume processed snapshot: %s', trade_vol_processed_snapshot)
+            self._logger.debug('Trade volume processed snapshot: %s', trade_vol_processed_snapshot)
             for each_event in trade_vol_processed_snapshot:
+                if each_event == 'timestamp':
+                    continue
+                # self._logger.debug('Event under process: %s | event subdict: %s', each_event, trade_vol_processed_snapshot[each_event])
+                # self._logger.debug('event trades: %s', trade_vol_processed_snapshot[each_event]['trades'])
                 total_trades_in_usd += trade_vol_processed_snapshot[each_event]['trades']['totalTradesUSD']
                 total_fee_in_usd += trade_vol_processed_snapshot[each_event]['trades'].get('totalFeeUSD', 0)
                 total_token0_vol += trade_vol_processed_snapshot[each_event]['trades']['token0TradeVolume']
