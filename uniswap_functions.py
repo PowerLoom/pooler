@@ -489,7 +489,7 @@ async def get_liquidity_of_each_token_reserve_async(
                 can_request = True
         if can_request:
             if fetch_timestamp:
-                block_det_func = partial(w3.eth.get_block, dict(block_identifier=block_identifier))
+                block_det_func = partial(w3.eth.get_block, block_identifier)
                 try:
                     block_details = await loop.run_in_executor(func=block_det_func, executor=None)
                 except:
@@ -578,7 +578,7 @@ async def get_pair_contract_trades_async(
         if can_request:
             if fetch_timestamp:
                 # logger.debug('Attempting to get block details of to_block %s', to_block)
-                block_det_func = partial(w3.eth.get_block, dict(block_identifier=to_block))
+                block_det_func = partial(w3.eth.get_block, to_block)
                 try:
                     block_details = await ev_loop.run_in_executor(func=block_det_func, executor=None)
                 except Exception as e:
