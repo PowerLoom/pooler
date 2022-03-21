@@ -577,12 +577,15 @@ async def get_pair_contract_trades_async(
                 can_request = True
         if can_request:
             if fetch_timestamp:
+                # logger.debug('Attempting to get block details of to_block %s', to_block)
                 block_det_func = partial(w3.eth.get_block, dict(block_identifier=to_block))
                 try:
-                    block_details = await loop.run_in_executor(func=block_det_func, executor=None)
-                except:
+                    block_details = await ev_loop.run_in_executor(func=block_det_func, executor=None)
+                except Exception as e:
+                    logger.error('Error attempting to get block details of to_block %s: %s', to_block, e, exc_info=True)
                     block_details = None
             else:
+                # logger.debug('Not attempting to get block details of to_block %s', to_block)
                 block_details = None
             pair_per_token_metadata = await get_pair_per_token_metadata(
                 pair_contract_obj=pair,
