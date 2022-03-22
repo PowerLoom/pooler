@@ -619,7 +619,13 @@ async def get_pair_contract_trades_async(
                 # print(f'Event {trade_event_name} logs: ', logs_ret[trade_event_name])
                 rets.update({
                     trade_event_name: {
-                        'logs': [dict(k.args) for k in logs_ret[trade_event_name]],
+                        'logs': [{
+                            **dict(k.args),
+                            "transactionHash": k["transactionHash"].hex(),
+                            "logIndex": k["logIndex"],
+                            "blockNumber": k["blockNumber"],
+                            "event": k["event"]
+                        } for k in logs_ret[trade_event_name]],
                         'trades': await extract_trade_volume_data(
                             event_name=trade_event_name,
                             # event_logs=logs_ret[trade_event_name],
