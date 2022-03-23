@@ -186,6 +186,57 @@ def get_events_logs(contract_address, toBlock, fromBlock, topics, event_abi):
 
     return all_events
 
+def extract_recent_transaction_logs(event_name, event_logs, pair_per_token_metadata, token0Price, token1Price):
+    """
+    Get trade value in USD "for each transaction"
+    with amount of each token, txHash and account addresses
+    """
+    recent_transaction_logs = list()
+    for log in event_logs:
+        token0_amount = 0
+        token1_amount = 0
+        trade_amount_usd = 0
+        if event_name == 'Swap':
+            if log.args.get('amount1In') == 0:
+                token0_amount = log.args.get('amount0In')
+                token1_amount = log.args.get('amount1Out')
+            elif log.args.get('amount0In') == 0:
+                token0_amount = log.args.get('amount0Out')
+                token1_amount = log.args.get('amount1In')
+        elif event_name == 'Mint' or event_name == 'Burn':
+            token0_amount = log.args.get('amount0')
+            token1_amount = log.args.get('amount1')
+        
+        # normalize token volume according to decimals specification
+        token0_amount = token0_amount / 10 ** int(pair_per_token_metadata['token0']['decimals'])
+        token1_amount = token1_amount / 10 ** int(pair_per_token_metadata['token1']['decimals'])
+
+        if event_name == 'Swap':
+            if token0Price:
+                trade_amount_usd = token0_amount * float(token0Price.decode('utf-8'))
+            elif token1Price:
+                trade_amount_usd = token1_amount * float(token1Price.decode('utf-8'))
+        elif event_name == 'Mint' or event_name == 'Burn':
+            if token0Price:
+                trade_amount_usd += token0_amount * float(token0Price.decode('utf-8'))
+            if token1Price:
+                trade_amount_usd += token1_amount * float(token1Price.decode('utf-8'))
+            if not token0Price or not token1Price:
+                trade_amount_usd *= 2
+
+
+        recent_transaction_logs.append({
+            "transactionHash": log["transactionHash"].hex(),
+            "logIndex": log["logIndex"],
+            "blockNumber": log["blockNumber"],
+            "event": log["event"],
+            "token0_amount": token0_amount,
+            "token1_amount": token1_amount,
+            "trade_amount_usd": trade_amount_usd
+        })
+
+    return recent_transaction_logs
+
 
 async def extract_trade_volume_data(event_name, event_logs: List[AttributeDict], redis_conn: aioredis.Redis, pair_per_token_metadata):
     log_topic_values = list()
@@ -214,6 +265,8 @@ async def extract_trade_volume_data(event_name, event_logs: List[AttributeDict],
             token0_swapped += parsed_log_obj_values.get('amount0')
             token1_swapped += parsed_log_obj_values.get('amount1')
 
+
+
     # normalize token volume according to decimals specification
     token0_swapped = token0_swapped / 10 ** int(pair_per_token_metadata['token0']['decimals'])
     token1_swapped = token1_swapped / 10 ** int(pair_per_token_metadata['token1']['decimals'])
@@ -226,7 +279,10 @@ async def extract_trade_volume_data(event_name, event_logs: List[AttributeDict],
     token1Price = await redis_conn.get(
         uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token1']['symbol']}-USDT"))
         
-        
+    
+    #Add Recent Transactions Logs
+    recent_transaction_logs = extract_recent_transaction_logs(event_name, event_logs, pair_per_token_metadata, token0Price, token1Price)
+
 
     # if event is 'Swap' then only add single token in total volume calculation
     if event_name == 'Swap':
@@ -250,7 +306,8 @@ async def extract_trade_volume_data(event_name, event_logs: List[AttributeDict],
             'totalTradesUSD': trade_volume_usd,
             'totalFeeUSD': trade_fee_usd,
             'token0TradeVolume': token0_swapped,
-            'token1TradeVolume': token1_swapped 
+            'token1TradeVolume': token1_swapped, 
+            'recent_transaction_logs': recent_transaction_logs
         }
            
        
@@ -281,7 +338,8 @@ async def extract_trade_volume_data(event_name, event_logs: List[AttributeDict],
     return {
         'totalTradesUSD': trade_volume_usd,
         'token0TradeVolume': token0_swapped,
-        'token1TradeVolume': token1_swapped
+        'token1TradeVolume': token1_swapped,
+        'recent_transaction_logs': recent_transaction_logs
     }
 
 
@@ -980,7 +1038,7 @@ if __name__ == '__main__':
     # print(f"pair_address: {pair_address}")
     loop = asyncio.get_event_loop()
     loop.run_until_complete(
-        get_pair_contract_trades_async(loop, '0x21b8065d10f73ee2e260e5b47d3344d3ced7596e', 14291724, 14293558)
+        get_pair_contract_trades_async(loop, '0x5fa464cefe8901d66c09b85d5fcdc55b3738c688', 14412884, 14428003)
     )
 
     # logger.debug(f"Pair address : {pair_address}")
