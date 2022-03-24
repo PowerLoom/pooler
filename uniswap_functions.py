@@ -186,7 +186,20 @@ def get_events_logs(contract_address, toBlock, fromBlock, topics, event_abi):
 
     return all_events
 
-def extract_recent_transaction_logs(event_name, event_logs, pair_per_token_metadata, token0Price, token1Price):
+async def get_block_details(ev_loop, block_number):
+    try:
+        block_details = dict()
+        block_det_func = partial(w3.eth.get_block, int(block_number))
+        block_details = await ev_loop.run_in_executor(func=block_det_func, executor=None)
+        block_details = dict() if not block_details else block_details
+    except Exception as e:
+        logger.error('Error attempting to get block details of recent transaction timestamp %s: %s', int(log["blockNumber"]), e, exc_info=True)
+        block_details = dict()
+    finally:
+        return block_details
+
+
+async def extract_recent_transaction_logs(ev_loop, event_name, event_logs, pair_per_token_metadata, token0Price, token1Price):
     """
     Get trade value in USD "for each transaction"
     with amount of each token, txHash and account addresses
@@ -224,21 +237,25 @@ def extract_recent_transaction_logs(event_name, event_logs, pair_per_token_metad
             if not token0Price or not token1Price:
                 trade_amount_usd *= 2
 
+        block_details = await get_block_details(ev_loop, log["blockNumber"])
 
         recent_transaction_logs.append({
+            "sender": log.args.get("sender", ""),
+            "to": log.args.get("to", ""),
             "transactionHash": log["transactionHash"].hex(),
             "logIndex": log["logIndex"],
             "blockNumber": log["blockNumber"],
             "event": log["event"],
             "token0_amount": token0_amount,
             "token1_amount": token1_amount,
-            "trade_amount_usd": trade_amount_usd
+            "trade_amount_usd": trade_amount_usd,
+            "timestamp": block_details.get("timestamp", "")
         })
 
     return recent_transaction_logs
 
 
-async def extract_trade_volume_data(event_name, event_logs: List[AttributeDict], redis_conn: aioredis.Redis, pair_per_token_metadata):
+async def extract_trade_volume_data(ev_loop, event_name, event_logs: List[AttributeDict], redis_conn: aioredis.Redis, pair_per_token_metadata):
     log_topic_values = list()
     token0_swapped = 0
     token1_swapped = 0
@@ -281,7 +298,7 @@ async def extract_trade_volume_data(event_name, event_logs: List[AttributeDict],
         
     
     #Add Recent Transactions Logs
-    recent_transaction_logs = extract_recent_transaction_logs(event_name, event_logs, pair_per_token_metadata, token0Price, token1Price)
+    recent_transaction_logs = await extract_recent_transaction_logs(ev_loop, event_name, event_logs, pair_per_token_metadata, token0Price, token1Price)
 
 
     # if event is 'Swap' then only add single token in total volume calculation
@@ -685,6 +702,7 @@ async def get_pair_contract_trades_async(
                             "event": k["event"]
                         } for k in logs_ret[trade_event_name]],
                         'trades': await extract_trade_volume_data(
+                            ev_loop=ev_loop,
                             event_name=trade_event_name,
                             # event_logs=logs_ret[trade_event_name],
                             event_logs=logs_ret[trade_event_name],

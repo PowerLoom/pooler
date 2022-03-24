@@ -110,6 +110,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             total_token0_vol = 0
             total_token1_vol = 0
             final_events_list = list()
+            recent_events_logs = list()
             self._logger.debug('Trade volume processed snapshot: %s', trade_vol_processed_snapshot)
             for each_event in trade_vol_processed_snapshot:
                 if each_event == 'timestamp':
@@ -121,6 +122,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 total_token0_vol += trade_vol_processed_snapshot[each_event]['trades']['token0TradeVolume']
                 total_token1_vol += trade_vol_processed_snapshot[each_event]['trades']['token1TradeVolume']
                 final_events_list.extend(trade_vol_processed_snapshot[each_event]['logs'])
+                recent_events_logs.extend(trade_vol_processed_snapshot[each_event]['trades'].get("recent_transaction_logs", []))
             if not trade_vol_processed_snapshot['timestamp']:
                 self._logger.error(
                     f'Could not fetch timestamp for max block height in broadcast {msg_obj} '
@@ -136,7 +138,8 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 totalFee=float(f'{total_fee_in_usd: .6f}'),
                 token0TradeVolume=float(f'{total_token0_vol: .6f}'),
                 token1TradeVolume=float(f'{total_token1_vol: .6f}'),
-                events=final_events_list
+                events=final_events_list,
+                recent_logs=recent_events_logs
             ))
             return trade_volume_snapshot
 

@@ -107,7 +107,6 @@ func FetchAndFillTokenMetaData(tokenList map[string]TokenData,
 	token1Data.Symbol = token1Sym
 	token1Data.Name = tokenPairMeta["token1_name"]
 
-	//TODO: How to calculate price change??
 	//Fetching from redis for now where price is stored against USDT for each token.
 	if token0Data.Price == 0 || token1Data.Price == 0 {
 		//Fetch token price against USDT for calculations.

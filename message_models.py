@@ -58,6 +58,7 @@ class UniswapTradesSnapshot(BaseModel):
     token0TradeVolume: float  # in token native decimals supply
     token1TradeVolume: float  # in token native decimals supply
     events: list
+    recent_logs: list
     chainHeightRange: EpochBase
     broadcast_id: str
     timestamp: float
