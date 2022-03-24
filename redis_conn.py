@@ -144,7 +144,7 @@ def provide_async_redis_conn_insta(fn):
             kwargs[arg_conn] = connection
             try:
                 return await fn(*args, **kwargs)
-            except:
+            except Exception:
                 raise
             finally:
                 try:  # ignore residual errors

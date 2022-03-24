@@ -28,6 +28,8 @@ class PowerloomCallbackEpoch(SystemEpochStatusReport):
 
 class PowerloomCallbackProcessMessage(SystemEpochStatusReport):
     contract: str
+    coalesced_broadcast_ids: Optional[List[str]] = None
+    coalesced_epochs: Optional[List[EpochBase]] = None
 
 
 class RPCNodesObject(BaseModel):

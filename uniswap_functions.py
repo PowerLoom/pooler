@@ -1,4 +1,5 @@
 from functools import partial
+from tenacity import AsyncRetrying, stop_after_attempt, wait_random
 from typing import List
 from web3 import Web3
 from web3.datastructures import AttributeDict
@@ -511,13 +512,12 @@ async def get_pair_per_token_metadata(pair_contract_obj, pair_address, loop: asy
 
 
 # asynchronously get liquidity of each token reserve
-@provide_async_redis_conn_insta
 async def get_liquidity_of_each_token_reserve_async(
         loop: asyncio.AbstractEventLoop,
         pair_address,
+        redis_conn: aioredis.Redis,
         block_identifier='latest',
         fetch_timestamp=False,
-        redis_conn: aioredis.Redis = None
 ):
     try:
         pair_address = Web3.toChecksumAddress(pair_address)
@@ -574,10 +574,15 @@ async def get_liquidity_of_each_token_reserve_async(
             pair_per_token_metadata = await get_pair_per_token_metadata(
                 pair_contract_obj=pair,
                 pair_address=pair_address,
-                loop=loop
+                loop=loop,
+                redis_conn=redis_conn
             )
             pfunc_get_reserves = partial(pair.functions.getReserves().call, {'block_identifier': block_identifier})
-            reserves = await loop.run_in_executor(func=pfunc_get_reserves, executor=None)
+            async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(3), wait=wait_random(1, 2)):
+                with attempt:
+                    reserves = await loop.run_in_executor(func=pfunc_get_reserves, executor=None)
+                    if reserves:
+                        break
             token0_addr = pair_per_token_metadata['token0']['address']
             token1_addr = pair_per_token_metadata['token1']['address']
             token0_decimals = pair_per_token_metadata['token0']['decimals']

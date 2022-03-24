@@ -26,7 +26,7 @@ import asyncio
 import signal
 import aio_pika
 import aiohttp
-from tenacity import Retrying, stop_after_attempt
+from tenacity import AsyncRetrying, stop_after_attempt
 
 
 # TODO: remove polymarket specific helpers
@@ -56,7 +56,7 @@ class AuditProtocolCommandsHelper:
         if not redis_conn.sismember(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id):
             """ Setup diffRules for this market"""
             # retry below call given at settings.AUDIT_PROTOCOL_ENGINE.RETRY
-            for attempt in Retrying(reraise=True, stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY)):
+            async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY)):
                 with attempt:
                     async with session.post(
                             url=urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{project_id}/diffRules'),
@@ -124,7 +124,7 @@ class AuditProtocolCommandsHelper:
         if not redis_conn.sismember(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id):
             """ Setup diffRules for this market"""
             # retry below call given at settings.AUDIT_PROTOCOL_ENGINE.RETRY
-            for attempt in Retrying(reraise=True, stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY)):
+            async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY)):
                 with attempt:
                     async with session.post(
                             url=urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{project_id}/diffRules'),
@@ -187,7 +187,7 @@ class AuditProtocolCommandsHelper:
     @classmethod
     async def commit_payload(cls, pair_contract_address, stream, report_payload, session: aiohttp.ClientSession):
         # retry below call given at settings.AUDIT_PROTOCOL_ENGINE.RETRY
-        for attempt in Retrying(reraise=True, stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY)):
+        async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY)):
             with attempt:
                 project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
                 async with session.post(
@@ -248,7 +248,7 @@ class CallbackAsyncWorker(multiprocessing.Process):
         self._rmq_channel_pool = Pool(partial(get_rabbitmq_channel, self._rmq_connection_pool), max_size=20,
                                       loop=loop)
         async with self._rmq_channel_pool.acquire() as channel:
-            await channel.set_qos(10)
+            await channel.set_qos(20)
             q_obj = await channel.get_queue(
                 name=self._q,
                 ensure=False

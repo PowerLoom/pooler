@@ -43,8 +43,6 @@ def main_ticker_process(begin=None, end=None):
     linear_ticker_logger.setLevel(logging.DEBUG)
     linear_ticker_logger.handlers = [logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
     setproctitle('PowerLoom|SystemEpochClock|Linear')
-    c = create_rabbitmq_conn()
-    ch = c.channel()
     begin_block_epoch = begin
     end_block_epoch = end
     rpc_obj = ConstructRPC(network_id=137)
@@ -83,8 +81,7 @@ def main_ticker_process(begin=None, end=None):
                 # send epoch report
                 linear_ticker_logger.debug(cmd)
                 begin_block_epoch = end_block_epoch + 1
-                linear_ticker_logger.debug('THROTTLING to push next epoch for 60 seconds...')
-                # throttle the push of piled up epochs
+                linear_ticker_logger.debug('Waiting to push next epoch in 30 seconds...')
                 # fixed wait
-                sleep(60)
+                sleep(30)
 

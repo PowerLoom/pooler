@@ -12,7 +12,9 @@ from callback_modules.helpers import AuditProtocolCommandsHelper, CallbackAsyncW
 from redis_conn import create_redis_conn, REDIS_CONN_CONF
 from redis_keys import (
     uniswap_pair_total_reserves_processing_status, uniswap_pair_total_reserves_last_snapshot,
-    uniswap_cb_broadcast_processing_logs_zset, uniswap_failed_pair_total_reserves_epochs_redis_q_f
+    uniswap_discarded_query_pair_total_reserves_epochs_redis_q_f, uniswap_discarded_query_pair_trade_volume_epochs_redis_q_f,
+    uniswap_cb_broadcast_processing_logs_zset, uniswap_failed_query_pair_total_reserves_epochs_redis_q_f,
+    uniswap_failed_query_pair_trade_volume_epochs_redis_q_f
 )
 from pydantic import ValidationError
 from helper_functions import AsyncHTTPSessionCache
@@ -43,6 +45,47 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         epoch_reserves_snapshot_map_token0 = dict()
         epoch_reserves_snapshot_map_token1 = dict()
         max_block_timestamp = int(time.time())  # fallback value, will be set within fetch loop later
+        # check for enqueued failed query epochs
+        failed_query_epoch = await self._redis_conn.lpop(uniswap_failed_query_pair_total_reserves_epochs_redis_q_f.format(msg_obj.contract))
+        queued_epochs = list()
+        while failed_query_epoch:
+            epoch_broadcast: PowerloomCallbackProcessMessage = PowerloomCallbackProcessMessage.parse_raw(
+                failed_query_epoch.decode('utf-8')
+            )
+            self._logger.info(
+                'Found queued epochs that previously failed in RPC query and construction stage for pair total reserves: %s', epoch_broadcast
+            )
+            queued_epochs.append(epoch_broadcast)
+            failed_query_epoch = await self._redis_conn.lpop(
+                uniswap_failed_query_pair_total_reserves_epochs_redis_q_f.format(msg_obj.contract))
+        queued_epochs.append(msg_obj)
+        # check for continuity in epochs before coalescing them
+        # assuming the best
+        self._logger.info(
+            'Attempting to construct a continous epoch for pair total reserves from query failure epochs and current '
+            'epoch: %s', queued_epochs
+        )
+        continuity = True
+        for idx, each_epoch in enumerate(queued_epochs):
+            if idx == 0:
+                continue
+            if each_epoch.begin != queued_epochs[idx-1].end + 1:
+                continuity = False
+                break
+        if continuity:
+            min_chain_height = queued_epochs[0].begin
+            max_chain_height = queued_epochs[-1].end
+        # if not continuous, record previous epochs as discarded
+        # TODO: can we find a best case scenario to construct a epoch that can be continuous
+        else:
+            # pop off current epoch added to end of this list
+            queued_epochs = queued_epochs[:-1]
+            self._logger.info('Recording epochs as discarded during snapshot construction stage for pair total '
+                              'reserves processing: %s', queued_epochs)
+            [
+                self._redis_conn.rpush(uniswap_discarded_query_pair_total_reserves_epochs_redis_q_f.format(msg_obj.contract), x.json())
+                for x in queued_epochs
+            ]
         for block_num in range(min_chain_height, max_chain_height+1):
             fetch_ts = True if block_num == max_chain_height else False
             try:
@@ -50,7 +93,8 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                     loop=asyncio.get_running_loop(),
                     pair_address=msg_obj.contract,
                     block_identifier=block_num,
-                    fetch_timestamp=fetch_ts
+                    fetch_timestamp=fetch_ts,
+                    redis_conn=self._redis_conn
                 )
             except:
                 # if querying fails, we are going to ensure it is recorded for future processing
@@ -68,8 +112,22 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                         max_block_timestamp = pair_reserve_total['timestamp']
         if enqueue_epoch:
             if enqueue_on_failure:
+                # if coalescing was achieved, ensure that is recorded and enqueued as well
+                if continuity and queued_epochs:
+                    coalesced_broadcast_ids = [x.broadcast_id for x in queued_epochs]
+                    coalesced_broadcast_ids.append(msg_obj.broadcast_id)
+                    coalesced_epochs = [EpochBase(**{'begin': x.begin, 'end': x.end}) for x in queued_epochs]
+                    coalesced_epochs.append(EpochBase(**{'begin': msg_obj.begin, 'end': msg_obj.end}))
+                    msg_obj = PowerloomCallbackProcessMessage(
+                        begin=queued_epochs[0].begin,
+                        end=queued_epochs[-1].end,
+                        broadcast_id=msg_obj.broadcast_id,
+                        contract=msg_obj.contract,
+                        coalesced_broadcast_ids=coalesced_broadcast_ids,
+                        coalesced_epochs=coalesced_epochs
+                    )
                 await self._redis_conn.rpush(
-                    uniswap_failed_pair_total_reserves_epochs_redis_q_f.format(msg_obj.contract),
+                    uniswap_failed_query_pair_total_reserves_epochs_redis_q_f.format(msg_obj.contract),
                     msg_obj.json()
                 )
                 self._logger.debug(f'Enqueued epoch broadcast ID {msg_obj.broadcast_id} because reserve query failed: {msg_obj}')
@@ -88,17 +146,75 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
     async def _construct_trade_volume_epoch_snapshot_data(self, msg_obj: PowerloomCallbackProcessMessage,
                                                            enqueue_on_failure=False):
         max_block_timestamp = int(time.time())  # fallback value, will be set within fetch loop later
+        from_block = msg_obj.begin
+        to_block = msg_obj.end
+        failed_query_epoch = await self._redis_conn.lpop(
+            uniswap_failed_query_pair_trade_volume_epochs_redis_q_f.format(msg_obj.contract))
+        queued_epochs = list()
+        while failed_query_epoch:
+            epoch_broadcast: PowerloomCallbackProcessMessage = PowerloomCallbackProcessMessage.parse_raw(
+                failed_query_epoch.decode('utf-8')
+            )
+            self._logger.info(
+                'Found queued epochs that previously failed in RPC query and construction stage for trade volume: %s', epoch_broadcast
+            )
+            queued_epochs.append(epoch_broadcast)
+            failed_query_epoch = await self._redis_conn.lpop(
+                uniswap_failed_query_pair_trade_volume_epochs_redis_q_f.format(msg_obj.contract))
+        queued_epochs.append(msg_obj)
+        # check for continuity in epochs before coalescing them
+        # assuming the best
+        self._logger.info(
+            'Attempting to construct a continuous epoch for trade volume processing from query failure epochs and '
+            'current epoch: %s', queued_epochs
+        )
+        continuity = True
+        for idx, each_epoch in enumerate(queued_epochs):
+            if idx == 0:
+                continue
+            if each_epoch.begin != queued_epochs[idx - 1].end + 1:
+                continuity = False
+                break
+        if continuity:
+            from_block = queued_epochs[0].begin
+            to_block = queued_epochs[-1].end
+        # if not continuous, record previous epochs as discarded
+        # TODO: can we find a best case scenario to construct a epoch that can be continuous
+        else:
+            # pop off current epoch added to end of this list
+            queued_epochs = queued_epochs[:-1]
+            self._logger.info('Recording epochs as discarded during snapshot construction stage for trade volume '
+                              'processing: %s', queued_epochs)
+            [
+                self._redis_conn.rpush(
+                    uniswap_discarded_query_pair_trade_volume_epochs_redis_q_f.format(msg_obj.contract), x.json())
+                for x in queued_epochs
+            ]
         try:
             trade_vol_processed_snapshot = await get_pair_contract_trades_async(
                 ev_loop=asyncio.get_running_loop(),
                 pair_address=msg_obj.contract,
-                from_block=msg_obj.begin,
-                to_block=msg_obj.end
+                from_block=from_block,
+                to_block=to_block
             )
         except:
             if enqueue_on_failure:
+                # if coalescing was achieved, ensure that is recorded and enqueued as well
+                if continuity and queued_epochs:
+                    coalesced_broadcast_ids = [x.broadcast_id for x in queued_epochs]
+                    coalesced_broadcast_ids.append(msg_obj.broadcast_id)
+                    coalesced_epochs = [EpochBase(**{'begin': x.begin, 'end': x.end}) for x in queued_epochs]
+                    coalesced_epochs.append(EpochBase(**{'begin': msg_obj.begin, 'end': msg_obj.end}))
+                    msg_obj = PowerloomCallbackProcessMessage(
+                        begin=queued_epochs[0].begin,
+                        end=queued_epochs[-1].end,
+                        contract=msg_obj.contract,
+                        broadcast_id=msg_obj.broadcast_id,
+                        coalesced_broadcast_ids=coalesced_broadcast_ids,
+                        coalesced_epochs=coalesced_epochs
+                    )
                 await self._redis_conn.rpush(
-                    uniswap_failed_pair_total_reserves_epochs_redis_q_f.format(msg_obj.contract),
+                    uniswap_failed_query_pair_total_reserves_epochs_redis_q_f.format(msg_obj.contract),
                     msg_obj.json()
                 )
                 self._logger.debug(f'Enqueued epoch broadcast ID {msg_obj.broadcast_id} because '
@@ -333,7 +449,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             payload = trade_vol_epoch_snapshot.dict()
             try:
                 r = await AuditProtocolCommandsHelper.commit_payload(
-                    pair_contract_address=pair_total_reserves_epoch_snapshot.contract,
+                    pair_contract_address=msg_obj.contract,
                     stream='trade_volume',
                     report_payload=payload,
                     session=self._aiohttp_session
