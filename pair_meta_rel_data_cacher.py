@@ -127,6 +127,101 @@ async def cache_pair_meta_data(redis_conn: aioredis.Redis = None):
         retrieval_logger.error("error at cache_pair_meta_data fn: %s", exc, exc_info=True)
         raise
 
+
+async def get_token_price_against_stablecoins(pair_per_token_metadata, ev_loop, redis_conn):
+    token0_USD_price = None
+    token1_USD_price = None
+    WETH_USD_price = None
+    stable_coins_addresses = {
+        "USDT": Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDT),
+        "DAI": Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.DAI),
+        "USDC": Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDC)
+    }
+    stable_coins_decimals = {
+        "USDT": 6,
+        "DAI": 18,
+        "USDC": 6
+    }
+
+    if Web3.toChecksumAddress(pair_per_token_metadata['token0']['address']) in list(stable_coins_addresses.values()):
+            token0_USD_price = 1
+            retrieval_logger.debug("Ignored Stablecoin calculation for token0: %s - WETH - USDT conversion: %s", pair_per_token_metadata['token0']['symbol'], token0_USD_price)
+            await redis_conn.set(uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token0']['symbol']}-USDT"), token0_USD_price)
+    elif Web3.toChecksumAddress(pair_per_token_metadata['token0']['address']) \
+            != Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH):
+        # if the token is not WETH then convert it with path token-weth-usdt
+        
+        # loop on all stable coins until we find price for token or stable coin
+        stable_coins_len = len(stable_coins_addresses)
+        for key, value in stable_coins_addresses.items():
+            priceFunction_token0 = router_contract_obj.functions.getAmountsOut(
+                10 ** int(pair_per_token_metadata['token0']['decimals']), [
+                    Web3.toChecksumAddress(pair_per_token_metadata['token0']['address']),
+                    Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH),
+                    value]
+            ).call
+            token0_USD_price = await ev_loop.run_in_executor(func=priceFunction_token0, executor=None)
+            stable_coins_len -= 1
+
+            if token0_USD_price:
+                token0_USD_price = token0_USD_price[2]/10**stable_coins_decimals[key] if token0_USD_price[2] !=0 else 0  #USDT decimals
+                retrieval_logger.debug("Calculated price for token0: %s - WETH - %s conversion: %s", pair_per_token_metadata['token0']['symbol'], key, token0_USD_price)
+                await redis_conn.set(uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token0']['symbol']}-{key}"), token0_USD_price)
+                break
+            elif stable_coins_len <= 0:
+                break
+    else:
+        # else just get weth-udst conversion
+        priceFunction_token0 = router_contract_obj.functions.getAmountsOut(
+            10 ** int(pair_per_token_metadata['token0']['decimals']), [
+                Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH),
+                Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDT)]
+        ).call
+        WETH_USD_price = await ev_loop.run_in_executor(func=priceFunction_token0, executor=None)
+        WETH_USD_price = WETH_USD_price[1]/10**6 #USDT decimals
+        retrieval_logger.debug("Calculated prices for token0: %s - USDT conversion: %s", pair_per_token_metadata['token0']['symbol'], WETH_USD_price)
+        await redis_conn.set(uniswap_pair_cached_token_price.format("WETH-USDT"), WETH_USD_price)
+    
+    # check if token1 is WETH. If it is, weth-usdt conversion can be figured right here,
+    # else provide full path token1-weth-usdt
+    if Web3.toChecksumAddress(pair_per_token_metadata['token1']['address']) in list(stable_coins_addresses.values()):
+            token1_USD_price = 1
+            retrieval_logger.debug("Ignored Stablecoin calculation for token1: %s - WETH - USDT conversion: %s", pair_per_token_metadata['token1']['symbol'], token1_USD_price)
+            await redis_conn.set(uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token1']['symbol']}-USDT"), token1_USD_price)
+    elif Web3.toChecksumAddress(pair_per_token_metadata['token1']['address']) \
+            != Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH):
+        # loop on all stable coins until we find price for token or stable coin
+        stable_coins_len = len(stable_coins_addresses)
+        for key, value in stable_coins_addresses.items():
+            priceFunction_token1 = router_contract_obj.functions.getAmountsOut(
+                10 ** int(pair_per_token_metadata['token1']['decimals']), [
+                    Web3.toChecksumAddress(pair_per_token_metadata['token1']['address']),
+                    Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH),
+                    value]
+            ).call
+            token1_USD_price = await ev_loop.run_in_executor(func=priceFunction_token1, executor=None)
+            stable_coins_len -= 1
+            
+            if token1_USD_price:                
+                token1_USD_price = token1_USD_price[2]/10**stable_coins_decimals[key] if token1_USD_price[2] !=0 else 0
+                retrieval_logger.debug("Calculated price for token1: %s - WETH - %s conversion: %s", pair_per_token_metadata['token1']['symbol'], key, token1_USD_price)
+                await redis_conn.set(uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token1']['symbol']}-{key}"), token1_USD_price)
+                break
+            elif stable_coins_len <= 0:
+                break
+    else:
+        priceFunction_token1 = router_contract_obj.functions.getAmountsOut(
+            10 ** int(pair_per_token_metadata['token1']['decimals']), [
+                Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH),
+                Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDT)]
+        ).call
+        WETH_USD_price = await ev_loop.run_in_executor(func=priceFunction_token1, executor=None)
+        WETH_USD_price = WETH_USD_price[1]/10**6 #USDT decimals
+        retrieval_logger.debug("Calculated prices for token1: %s - USDT conversion: %s", pair_per_token_metadata['token1']['symbol'], WETH_USD_price)
+        await redis_conn.set(uniswap_pair_cached_token_price.format("WETH-USDT"), WETH_USD_price)
+
+    return [token0_USD_price, token1_USD_price, WETH_USD_price]
+
 #settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS
 @tenacity.retry(
     wait=tenacity.wait_random_exponential(multiplier=1, min=10, max=60),
@@ -178,99 +273,22 @@ async def cache_pair_stablecoin_exchange_rates(redis_conn: aioredis.Redis = None
         # # # rate limit check - end
         if can_request:
             # retrieval_logger.debug('I can request')
-            retrieval_logger.debug("Getting pair contract object for %s", each_pair_contract)
             pair_contract_obj = w3.eth.contract(
                 address=Web3.toChecksumAddress(each_pair_contract),
                 abi=pair_contract_abi
             )
-            retrieval_logger.debug("Got pair contract object for %s", each_pair_contract)
             pair_per_token_metadata = await get_pair_per_token_metadata(
                 pair_contract_obj=pair_contract_obj,
                 pair_address=Web3.toChecksumAddress(each_pair_contract),
                 loop=ev_loop
             )
-            retrieval_logger.debug("Got pair token data for pair contract %s: %s", each_pair_contract, pair_per_token_metadata)
-            
+            retrieval_logger.debug("Got pair token meta-data for pair contract: %s", each_pair_contract)    
 
-            token0_USDT_price = None
-            token1_USDT_price = None
-            WETH_USDT_price = None
-            # check if token1 is WETH. If it is, weth-usdt conversion can be figured right here,
-            # else provide full path token1-weth-usdt
-
-            if Web3.toChecksumAddress(pair_per_token_metadata['token0']['address']) \
-                    in [
-                        Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDT),
-                        Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDC),
-                        Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.DAI),
-                    ]:
-                    token0_USDT_price = 1
-                    retrieval_logger.debug("Ignored Stablecoin calculation for token0 %s - WETH - USDT conversion: %s", pair_per_token_metadata['token0']['symbol'], token0_USDT_price)
-            elif Web3.toChecksumAddress(pair_per_token_metadata['token0']['address']) \
-                    != Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH):
-                # if not,provide conversion path to token0-weth-usdt
-                retrieval_logger.debug("Calculating %s - WETH conversion...", pair_per_token_metadata['token0']['symbol'])
-                priceFunction_token0 = router_contract_obj.functions.getAmountsOut(
-                    10 ** int(pair_per_token_metadata['token0']['decimals']), [
-                        Web3.toChecksumAddress(pair_per_token_metadata['token0']['address']),
-                        Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH),
-                        Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDT)]
-                ).call
-                token0_USDT_price = await ev_loop.run_in_executor(func=priceFunction_token0, executor=None)
-                token0_USDT_price = token0_USDT_price[2]/10**6 if token0_USDT_price[2] !=0 else 0  #USDT decimals
-                retrieval_logger.debug("Calculated price for token0 %s - WETH - USDT conversion: %s", pair_per_token_metadata['token0']['symbol'], token0_USDT_price)
-            else:
-                priceFunction_token0 = router_contract_obj.functions.getAmountsOut(
-                    10 ** int(pair_per_token_metadata['token0']['decimals']), [
-                        Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH),
-                        Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDT)]
-                ).call
-                WETH_USDT_price = await ev_loop.run_in_executor(func=priceFunction_token1, executor=None)
-                WETH_USDT_price = WETH_USDT_price[1]/10**6 #USDT decimals
-                retrieval_logger.debug("Calculated prices for token0 %s - WETH conversion: %s", pair_per_token_metadata['token0']['symbol'], WETH_USDT_price)
-            
-            # check if token1 is WETH. If it is, weth-usdt conversion can be figured right here,
-            # else provide full path token1-weth-usdt
-            if Web3.toChecksumAddress(pair_per_token_metadata['token1']['address']) \
-                    in [
-                        Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDT),
-                        Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDC),
-                        Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.DAI),
-                    ]:
-                    token1_USDT_price = 1
-                    retrieval_logger.debug("Ignored Stablecoin calculation for token1 %s - WETH - USDT conversion: %s", pair_per_token_metadata['token1']['symbol'], token1_USDT_price)
-            elif Web3.toChecksumAddress(pair_per_token_metadata['token1']['address']) \
-                    != Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH):
-                priceFunction_token1 = router_contract_obj.functions.getAmountsOut(
-                    10 ** int(pair_per_token_metadata['token1']['decimals']), [
-                        Web3.toChecksumAddress(pair_per_token_metadata['token1']['address']),
-                        Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH),
-                        Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDT)]
-                ).call
-                token1_USDT_price = await ev_loop.run_in_executor(func=priceFunction_token1, executor=None)
-                token1_USDT_price = token1_USDT_price[2]/10**6 if token1_USDT_price[2] !=0 else 0 #USDT decimals
-                retrieval_logger.debug("Calculated price for token1 %s - WETH - USDT conversion: %s", pair_per_token_metadata['token1']['symbol'], token1_USDT_price)
-            else:
-                priceFunction_token1 = router_contract_obj.functions.getAmountsOut(
-                    10 ** int(pair_per_token_metadata['token1']['decimals']), [
-                        Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH),
-                        Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDT)]
-                ).call
-                WETH_USDT_price = await ev_loop.run_in_executor(func=priceFunction_token1, executor=None)
-                WETH_USDT_price = WETH_USDT_price[1]/10**6 #USDT decimals
-                retrieval_logger.debug("Calculated prices for token1 %s - WETH conversion: %s", pair_per_token_metadata['token1']['symbol'], WETH_USDT_price)
-
-
-            # cache these conversion rates 
-            if(token0_USDT_price):
-                await redis_conn.set(uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token0']['symbol']}-USDT"), token0_USDT_price)
-            if(token1_USDT_price):
-                await redis_conn.set(uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token1']['symbol']}-USDT"), token1_USDT_price)
-            if(WETH_USDT_price):
-                await redis_conn.set(uniswap_pair_cached_token_price.format("WETH-USDT"), WETH_USDT_price)    
-
-            retrieval_logger.debug(f"token0-usdt:{token0_USDT_price}, token1-usdt:{token1_USDT_price}, weth-usdt:{WETH_USDT_price}")
-            #retrieval_logger.debug("key: %s", uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token0']['symbol']}-USDT"))
+            [
+                token0_USD_price, 
+                token1_USD_price, 
+                WETH_USD_price
+            ] = await get_token_price_against_stablecoins(pair_per_token_metadata, ev_loop, redis_conn)
 
         else:
             retrieval_logger.debug('I cant request')

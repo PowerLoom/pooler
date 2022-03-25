@@ -46,8 +46,8 @@ class ProcessHubCommand(BaseModel):
 
 class UniswapPairTotalReservesSnapshot(BaseModel):
     contract: str
-    token0Reserves: dict[str, float]  # block number to corresponding total reserves
-    token1Reserves: dict[str, float]  # block number to corresponding total reserves
+    token0Reserves: Dict[str, float]  # block number to corresponding total reserves
+    token1Reserves: Dict[str, float]  # block number to corresponding total reserves
     chainHeightRange: EpochBase
     broadcast_id: str
     timestamp: float
