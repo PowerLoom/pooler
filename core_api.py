@@ -16,7 +16,8 @@ from redis_conn import provide_async_redis_conn
 from functools import reduce
 from uniswap_functions import v2_pairs_data, read_json_file
 from redis_keys import (
-    uniswap_pair_contract_V2_pair_data
+    uniswap_pair_contract_V2_pair_data,
+    uniswap_pair_cached_recent_logs
 )
 from web3 import Web3
 
@@ -263,6 +264,23 @@ async def get_v2_pairs_data(
     
     return data
 
+@app.get('/v2_pairs_recent_logs')
+async def get_v2_pairs_recent_logs(
+    request: Request,
+    response: Response,
+    pair_contract: str
+):
+    redis_conn_raw = await request.app.redis_pool.acquire()
+    redis_conn: aioredis.Redis = aioredis.Redis(redis_conn_raw)
+    data = await redis_conn.get(uniswap_pair_cached_recent_logs.format(f"{Web3.toChecksumAddress(pair_contract)}"))
+    request.app.redis_pool.release(redis_conn_raw)
+
+    if data:
+        data = json.loads(data)
+    else:
+        data = {"error": "No data found"}
+    
+    return data
 
 @app.get('/request_status/{requestId:str}')
 async def check_request(
@@ -319,7 +337,6 @@ async def check_request(
 
                             return fetch_resp_json
             return resp_json
-
 
 @app.get('/snapshot/{marketId:str}')
 async def get_last_snapshot(
