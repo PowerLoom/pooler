@@ -20,8 +20,10 @@ def chunks(start_idx, stop_idx, n):
     run_idx = 0
     for i in range(start_idx, stop_idx+1, n):
         # Create an index range for l of n items:
-        begin_idx = i
-        end_idx = i + n if i + n <= stop_idx else stop_idx
+        begin_idx = i  # if run_idx == 0 else i+1
+        if begin_idx == stop_idx:
+            return
+        end_idx = i + n - 1 if i + n - 1 <= stop_idx else stop_idx
         run_idx += 1
         yield begin_idx, end_idx, run_idx
 
@@ -80,8 +82,8 @@ def main_ticker_process(begin=None, end=None):
                 q.put(cmd_obj)
                 # send epoch report
                 linear_ticker_logger.debug(cmd)
-                begin_block_epoch = end_block_epoch + 1
-                linear_ticker_logger.debug('Waiting to push next epoch in 30 seconds...')
+                linear_ticker_logger.debug('Waiting to push next epoch in 45 seconds...')
                 # fixed wait
-                sleep(30)
-
+                sleep(60)
+            else:
+                begin_block_epoch = end_block_epoch + 1
