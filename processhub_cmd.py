@@ -120,7 +120,10 @@ def broadcastEpochStatus(elapsed_time: int):
 
 
 @app.command()
-def dagChainVerifier():
+def dagChainVerifier(dag_chain_height: int = typer.Argument(-1)):
+    
+    dag_chain_height = dag_chain_height if dag_chain_height > -1 else '-inf'
+
     r = redis.Redis(**REDIS_CONN_CONF, single_connection_client=True)
     pair_contracts = read_json_file('static/cached_pair_addresses.json')
     pair_projects = [
@@ -190,7 +193,7 @@ def dagChainVerifier():
         for project in projects:
             for addr in contracts:
                 zset_key = project.format(addr)
-                total_zsets[zset_key] = get_zset_data(zset_key, '-inf', '+inf')
+                total_zsets[zset_key] = get_zset_data(zset_key, dag_chain_height, '+inf')
     
     gather_all_zset(pair_contracts, pair_projects)
     print(f"\n======================================> OVERALL ISSUE STATS: \n")
