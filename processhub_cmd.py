@@ -12,8 +12,20 @@ import time
 import redis
 import psutil
 import json
+from web3 import Web3
 
 app = typer.Typer()
+
+def read_json_file(file_path: str):
+    """Read given json file and return its content as a dictionary."""
+    try:
+        f_ = open(file_path, 'r')
+    except Exception as e:
+        print(f"Unable to open the {file_path} file, error msg:{str(e)}")
+    else:
+        print(f"Reading {file_path} file")
+        json_data = json.loads(f_.read())
+    return json_data
 
 @app.command()
 def pidStatus(connections: bool = False):
@@ -106,6 +118,84 @@ def broadcastEpochStatus(elapsed_time: int):
             print("\t Logs: no log found against this braodcastId")
         print("\n")
 
+
+@app.command()
+def dagChainVerifier():
+    r = redis.Redis(**REDIS_CONN_CONF, single_connection_client=True)
+    pair_contracts = read_json_file('static/cached_pair_addresses.json')
+    pair_projects = [
+        'projectID:uniswap_pairContract_trade_volume_{}_'+settings.NAMESPACE+':dagChainGaps',
+        'projectID:uniswap_pairContract_pair_total_reserves_{}_'+settings.NAMESPACE+':dagChainGaps'
+    ]
+    total_zsets = {}
+    total_issue_count = {
+        "LATEST_DAG_CHAIN_HEIGHT": 0
+    }
+    
+    def get_zset_data(key, min, max):
+        res = r.zrangebyscore(
+            name=key,
+            min=min,
+            max=max
+        )
+        key_based_issue_stats = {
+            "LATEST_DAG_CHAIN_HEIGHT": 0
+        }
+        if res:
+            # parse zset entry
+            parsed_res = []
+            for entry in res:
+                entry = json.loads(entry)
+                
+                # create/add issue entry in overall issue structure
+                if not entry["issueType"] + "_ISSUE_COUNT" in total_issue_count:
+                    total_issue_count[entry["issueType"] + "_ISSUE_COUNT" ] = 0
+                if not entry["issueType"] + "_BLOCKS" in total_issue_count:
+                    total_issue_count[entry["issueType"] + "_BLOCKS" ] = 0
+
+                # create/add issue entry in "KEY BASED" issue structure
+                if not entry["issueType"] + "_ISSUE_COUNT" in key_based_issue_stats:
+                    key_based_issue_stats[entry["issueType"] + "_ISSUE_COUNT" ] = 0
+                if not entry["issueType"] + "_BLOCKS" in key_based_issue_stats:
+                    key_based_issue_stats[entry["issueType"] + "_BLOCKS" ] = 0
+                
+                # gather overall issue stats
+                total_issue_count[entry["issueType"] + "_ISSUE_COUNT" ] += 1
+                key_based_issue_stats[entry["issueType"] + "_ISSUE_COUNT" ] +=  1
+
+                if entry["missingBlockHeightEnd"] == entry["missingBlockHeightStart"]:
+                    total_issue_count[entry["issueType"] + "_BLOCKS" ] +=  1
+                    key_based_issue_stats[entry["issueType"] + "_BLOCKS" ] +=  1
+                else:
+                    total_issue_count[entry["issueType"] + "_BLOCKS" ] +=  entry["missingBlockHeightStart"] - entry["missingBlockHeightEnd"] 
+                    key_based_issue_stats[entry["issueType"] + "_BLOCKS" ] +=  entry["missingBlockHeightStart"] - entry["missingBlockHeightEnd"]
+                    
+                # store latest dag block height for overall issues and for projectId
+                if entry["dagBlockHeight"] > total_issue_count["LATEST_DAG_CHAIN_HEIGHT"]:
+                    total_issue_count["LATEST_DAG_CHAIN_HEIGHT"] = entry["dagBlockHeight"]
+                if entry["dagBlockHeight"] > key_based_issue_stats["LATEST_DAG_CHAIN_HEIGHT"]:
+                    key_based_issue_stats["LATEST_DAG_CHAIN_HEIGHT"] = entry["dagBlockHeight"]
+
+                parsed_res.append(entry)
+            res = parsed_res
+
+            print(f"{key} - ")
+            for k, v in key_based_issue_stats.items():
+                print(f"\t {k} : {v}\n")
+        else:
+            res = []
+        return res
+    
+    def gather_all_zset(contracts, projects):
+        for project in projects:
+            for addr in contracts:
+                zset_key = project.format(addr)
+                total_zsets[zset_key] = get_zset_data(zset_key, '-inf', '+inf')
+    
+    gather_all_zset(pair_contracts, pair_projects)
+    print(f"\n======================================> OVERALL ISSUE STATS: \n")
+    for k, v in total_issue_count.items():
+        print(f"\t {k} : {v}\n")
 
 @app.command()
 def listProcesses():
