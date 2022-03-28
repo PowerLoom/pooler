@@ -170,8 +170,8 @@ def dagChainVerifierSummary(dag_chain_height: int = typer.Argument(-1)):
                     total_issue_count[entry["issueType"] + "_BLOCKS" ] +=  1
                     key_based_issue_stats[entry["issueType"] + "_BLOCKS" ] +=  1
                 else:
-                    total_issue_count[entry["issueType"] + "_BLOCKS" ] +=  entry["missingBlockHeightStart"] - entry["missingBlockHeightEnd"] 
-                    key_based_issue_stats[entry["issueType"] + "_BLOCKS" ] +=  entry["missingBlockHeightStart"] - entry["missingBlockHeightEnd"]
+                    total_issue_count[entry["issueType"] + "_BLOCKS" ] +=  entry["missingBlockHeightEnd"] - entry["missingBlockHeightStart"] + 1
+                    key_based_issue_stats[entry["issueType"] + "_BLOCKS" ] +=  entry["missingBlockHeightEnd"] - entry["missingBlockHeightStart"] + 1
                     
                 # store latest dag block height for overall issues and for projectId
                 if entry["dagBlockHeight"] > total_issue_count["LATEST_DAG_CHAIN_HEIGHT"]:
