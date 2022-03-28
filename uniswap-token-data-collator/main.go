@@ -88,7 +88,7 @@ func Run(pairContractAddress string) {
 func FetchAndFillTokenMetaData(tokenList map[string]TokenData,
 	pairContractAddr string) (TokenData, TokenData, error) {
 	var token0Data, token1Data TokenData
-	redisKey := "uniswap:pairContract:UNISWAPV2:" + pairContractAddr + ":PairContractTokensData"
+	redisKey := fmt.Sprintf(REDIS_KEY_TOKEN_PAIR_CONTRACT_TOKENS_DATA, pairContractAddr)
 	log.Debug("Fetching PariContractTokensData from redis with key:", redisKey)
 	tokenPairMeta, err := redisClient.HGetAll(redisKey).Result()
 	if err != nil {
@@ -332,7 +332,7 @@ func FetchTokenV2Data(fromTime float64) map[string]TokenData {
 
 func CalculateAndFillPriceChange(fromTime float64, tokenData *TokenData) {
 	curTimeEpoch := float64(time.Now().Unix())
-	key := "uniswap:tokenInfo:" + settingsObj.Development.Namespace + ":" + tokenData.Symbol + ":priceHistory"
+	key := fmt.Sprintf(REDIS_KEY_TOKEN_PRICE_HISTORY, settingsObj.Development.Namespace, tokenData.Symbol)
 
 	zRangeByScore := redisClient.ZRangeByScore(key, redis.ZRangeBy{
 		Min: fmt.Sprintf("%f", fromTime),
@@ -356,7 +356,7 @@ func CalculateAndFillPriceChange(fromTime float64, tokenData *TokenData) {
 
 func UpdateTokenPriceHistoryRedis(fromTime float64, tokenData TokenData) {
 	curTimeEpoch := float64(time.Now().Unix())
-	key := "uniswap:tokenInfo:" + settingsObj.Development.Namespace + ":" + tokenData.Symbol + ":priceHistory"
+	key := fmt.Sprintf(REDIS_KEY_TOKEN_PRICE_HISTORY, settingsObj.Development.Namespace, tokenData.Symbol)
 	var priceHistoryEntry TokenPriceHistoryEntry = TokenPriceHistoryEntry{curTimeEpoch, tokenData.Price}
 	val, err := json.Marshal(priceHistoryEntry)
 	if err != nil {
@@ -387,7 +387,7 @@ func PrunePriceHistoryInRedis(key string, fromTime float64) {
 
 func FetchLatestPairCachedDataFromRedis(pairContractAddress string) (TokenPairLiquidityProcessedData, error) {
 	var tokenPairCachedData TokenPairLiquidityProcessedData
-	uniswap_pair_contract_V2_pair_data := "uniswap:pairContract:" + settingsObj.Development.Namespace + ":" + pairContractAddress + ":contractV2PairCachedData"
+	uniswap_pair_contract_V2_pair_data := fmt.Sprintf(REDIS_KEY_TOKEN_PAIR_V2_CACHED_DATA, settingsObj.Development.Namespace, pairContractAddress)
 	log.Debug("Fetchin TokenPairContract Cached Data from Redis for:", uniswap_pair_contract_V2_pair_data)
 
 	res := redisClient.Get(uniswap_pair_contract_V2_pair_data)
@@ -427,7 +427,7 @@ func FetchTokenPairUSDTPriceFromRedis(token0Sym string, token1Sym string) (float
 func FetchTokenPairCachedPriceFromRedis(tokenPairs []string) []float64 {
 	keys := make([]string, len(tokenPairs))
 	for i := range tokenPairs {
-		keys[i] = "uniswap:pairContract:" + settingsObj.Development.Namespace + ":" + tokenPairs[i] + ":cachedPairPrice"
+		keys[i] = fmt.Sprintf(REDIS_KEY_TOKEN_PAIR_V2_CACHED_PAIR_PRICE, settingsObj.Development.Namespace, tokenPairs[i])
 	}
 
 	log.Debug("Fetching Token Price from redis for keys:", keys)
@@ -504,7 +504,7 @@ func UpdateTokenDataToRedis(tokenList map[string]TokenData) {
 	log.Info("Updating TokenData to redis for tokens count:", len(tokenList))
 	for _, tokenData := range tokenList {
 		tokenData.LastUpdatedTimeStamp = time.Now().String()
-		redisKey := "uniswap:tokenInfo:" + settingsObj.Development.Namespace + ":" + tokenData.Symbol + ":cachedData"
+		redisKey := fmt.Sprintf(REDIS_KEY_TOKEN_CACHED_DATA, settingsObj.Development.Namespace, tokenData.Symbol)
 		log.Debug("Updating Token Data for token:", tokenData.Symbol, " at key:", redisKey, " data:", tokenData)
 		jsonData, err := json.Marshal(tokenData)
 		if err != nil {
