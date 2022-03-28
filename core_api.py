@@ -17,7 +17,8 @@ from functools import reduce
 from uniswap_functions import v2_pairs_data, read_json_file
 from redis_keys import (
     uniswap_pair_contract_V2_pair_data,
-    uniswap_pair_cached_recent_logs
+    uniswap_pair_cached_recent_logs,
+    uniswap_token_info_cached_data
 )
 from web3 import Web3
 
@@ -277,6 +278,32 @@ async def get_v2_pairs_recent_logs(
 
     if data:
         data = json.loads(data)
+    else:
+        data = {"error": "No data found"}
+    
+    return data
+
+@app.get('/v2_tokens')
+async def get_v2_pairs_recent_logs(
+    request: Request,
+    response: Response
+):
+    redis_conn_raw = await request.app.redis_pool.acquire()
+    redis_conn: aioredis.Redis = aioredis.Redis(redis_conn_raw)
+
+    # get all keys of uniswap v2 tokens
+    keys = await redis_conn.keys(uniswap_token_info_cached_data.format("*"))
+    if keys:
+        keys = [key.decode('utf-8') for key in keys]
+    else:
+        keys=[]
+
+    # get data associated to those key
+    data = await redis_conn.mget(*keys)
+    request.app.redis_pool.release(redis_conn_raw)
+
+    if data:
+        data = [json.loads(obj) for obj in data]
     else:
         data = {"error": "No data found"}
     
