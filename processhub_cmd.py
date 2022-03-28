@@ -69,7 +69,7 @@ def pidStatus(connections: bool = False):
 
 
 @app.command()
-def broadcastEpochStatus(elapsed_time: int):
+def listProcesses(elapsed_time: int):
     r = redis.Redis(**REDIS_CONN_CONF, single_connection_client=True)
     cur_ts = int(time.time())
     res_ = r.zrangebyscore(
@@ -120,7 +120,7 @@ def broadcastEpochStatus(elapsed_time: int):
 
 
 @app.command()
-def dagChainVerifier(dag_chain_height: int = typer.Argument(-1)):
+def dagChainVerifierSummary(dag_chain_height: int = typer.Argument(-1)):
     
     dag_chain_height = dag_chain_height if dag_chain_height > -1 else '-inf'
 
@@ -200,17 +200,6 @@ def dagChainVerifier(dag_chain_height: int = typer.Argument(-1)):
     for k, v in total_issue_count.items():
         print(f"\t {k} : {v}\n")
 
-@app.command()
-def listProcesses():
-    r = redis.Redis(**REDIS_CONN_CONF, single_connection_client=True)
-    typer.secho('='*20+'Processes available to control'+'='*20, fg=typer.colors.CYAN)
-    for each in PROC_STR_ID_TO_CLASS_MAP.keys():
-        typer.echo(each)
-    typer.secho('='*20+'Last recorded running processes:'+'='*20, fg=typer.colors.CYAN)
-    for k, v in r.hgetall(name=f'powerloom:uniswap:{settings.NAMESPACE}:Processes').items():
-        typer.echo(f'{k.decode("utf-8")}: {v.decode("utf-8")}')
-    typer.secho('=' * 60, fg=typer.colors.CYAN)
-
 
 @app.command()
 def listCallbackStatus():
@@ -264,7 +253,6 @@ def listBroadcasts(elapsed_time: int):
         max=cur_ts,
         withscores=True
     )
-    print("HERE ## ", res_)
     for broadcast_id, occurrence in res_:
         broadcast_id = broadcast_id.decode('utf-8')
         occurrence = datetime.fromtimestamp(occurrence)
