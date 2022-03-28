@@ -264,11 +264,12 @@ def listBroadcasts(elapsed_time: int):
         max=cur_ts,
         withscores=True
     )
-    for broadcast_ts_tuple in res_:
-        broadcast_details = json.loads(broadcast_ts_tuple[0])
-        occurrence = datetime.fromtimestamp(broadcast_ts_tuple[1])
-        typer.echo('-' * 40+f'\nBroadcast ID: {broadcast_details["broadcast_id"]}\t{timeago.format(occurrence, now)}')
-        typer.secho(broadcast_ts_tuple[0].decode('utf-8'), fg=typer.colors.YELLOW)
+    print("HERE ## ", res_)
+    for broadcast_id, occurrence in res_:
+        broadcast_id = broadcast_id.decode('utf-8')
+        occurrence = datetime.fromtimestamp(occurrence)
+        typer.echo('-' * 40+f'\nBroadcast ID: {broadcast_id}\t{timeago.format(occurrence, now)}')
+        typer.secho(broadcast_id, fg=typer.colors.YELLOW)
         typer.echo('-' * 40)
 
 
