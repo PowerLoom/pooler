@@ -16,6 +16,7 @@ uniswap_cb_broadcast_processing_logs_zset = 'uniswap:broadcastID:' + settings.NA
 uniswap_cb_broadcast_payload_commit_ids_zset = 'uniswap:broadcastID:'+ settings.NAMESPACE + ':{}:payloadCommitIDs'
 uniswap_pair_cached_recent_logs = 'uniswap:pairContract:'+settings.NAMESPACE+':{}:recent24hLogs'
 uniswap_token_info_cached_data = "uniswap:tokenInfo:" + settings.NAMESPACE + ":{}:cachedData"
+uniswap_pair_cache_daily_stats = 'uniswap:pairContract:'+settings.NAMESPACE+':{}:dailyCache'
 
 powerloom_broadcast_id_zset = 'powerloom:broadcastID:' + settings.NAMESPACE + ':broadcastProcessingStatus'
 eth_log_request_data_f = 'powerloom:ethLogs:'+settings.NAMESPACE+':requestId:{}:results'  # request UUID

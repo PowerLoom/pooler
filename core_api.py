@@ -12,13 +12,19 @@ import aiohttp
 import json
 import os
 import time
+from math import floor
 from redis_conn import provide_async_redis_conn
 from functools import reduce
 from uniswap_functions import v2_pairs_data, read_json_file
 from redis_keys import (
     uniswap_pair_contract_V2_pair_data,
     uniswap_pair_cached_recent_logs,
-    uniswap_token_info_cached_data
+    uniswap_token_info_cached_data,
+    uniswap_pair_cache_daily_stats
+)
+from utility_functions import (
+    v2_pair_data_unpack, 
+    number_to_abbreviated_string
 )
 from web3 import Web3
 
@@ -308,6 +314,77 @@ async def get_v2_pairs_recent_logs(
         data = {"error": "No data found"}
     
     return data
+
+
+
+@app.get('/v2_daily_stats')
+async def get_v2_pairs_daily_stats(
+    request: Request,
+    response: Response
+):
+    redis_conn_raw = await request.app.redis_pool.acquire()
+    redis_conn: aioredis.Redis = aioredis.Redis(redis_conn_raw)
+
+    # get all keys of uniswap v2 tokens
+    keys = await redis_conn.keys(uniswap_pair_cache_daily_stats.format("*"))
+    if not keys:
+        return {"error": "No data found"}
+
+    keys = [key.decode('utf-8') for key in keys]
+    daily_stats = {
+        "volume24": { "currentValue": 0, "previousValue": 0, "change": 0},
+        "tvl": { "currentValue": 0, "previousValue": 0, "change": 0},
+        "fees24": { "currentValue": 0, "previousValue": 0, "change": 0}
+    }
+    for key in keys:
+        data = await redis_conn.zrangebyscore(
+            key=key,
+            min=float('-inf'),
+            max=float('inf')
+        )
+
+        if data:
+            # aggregate trade volume and liquidity across all pairs
+            data = [json.loads(json.loads(obj)) for obj in data]
+            daily_stats["volume24"]["currentValue"] += v2_pair_data_unpack(data[len(data) - 1]["volume_24h"])
+            daily_stats["volume24"]["previousValue"] += v2_pair_data_unpack(data[0]["volume_24h"])
+            
+            daily_stats["tvl"]["currentValue"] += v2_pair_data_unpack(data[len(data) - 1]["liquidity"])
+            daily_stats["tvl"]["previousValue"] += v2_pair_data_unpack(data[0]["liquidity"])
+            
+            daily_stats["fees24"]["currentValue"] += v2_pair_data_unpack(data[len(data) - 1]["fees_24h"])
+            daily_stats["fees24"]["previousValue"] += v2_pair_data_unpack(data[0]["fees_24h"])
+    
+    request.app.redis_pool.release(redis_conn_raw)
+    
+    # calculate percentage change
+    if daily_stats["volume24"]["previousValue"] != 0: 
+        daily_stats["volume24"]["change"] = daily_stats["volume24"]["currentValue"] - daily_stats["volume24"]["previousValue"]
+        daily_stats["volume24"]["change"] = daily_stats["volume24"]["change"] / daily_stats["volume24"]["previousValue"] * 100
+    
+    if daily_stats["tvl"]["previousValue"] != 0:
+        daily_stats["tvl"]["change"] = daily_stats["tvl"]["currentValue"] - daily_stats["tvl"]["previousValue"]
+        daily_stats["tvl"]["change"] = daily_stats["tvl"]["change"] / daily_stats["tvl"]["previousValue"] * 100
+
+    if daily_stats["fees24"]["previousValue"] != 0:
+        daily_stats["fees24"]["change"] = daily_stats["fees24"]["currentValue"] - daily_stats["fees24"]["previousValue"]
+        daily_stats["fees24"]["change"] = daily_stats["fees24"]["change"] / daily_stats["fees24"]["previousValue"] * 100
+
+
+    # format output
+    daily_stats["volume24"]["currentValue"] = f"US${number_to_abbreviated_string(round(daily_stats['volume24']['currentValue'], 2))}"
+    daily_stats["volume24"]["previousValue"] = f"US${number_to_abbreviated_string(round(daily_stats['volume24']['previousValue'], 2))}"
+    daily_stats["volume24"]["change"] = f"{round(daily_stats['volume24']['change'], 2)}%"
+
+    daily_stats["tvl"]["currentValue"] = f"US${number_to_abbreviated_string(round(daily_stats['tvl']['currentValue'], 2))}"
+    daily_stats["tvl"]["previousValue"] = f"US${number_to_abbreviated_string(round(daily_stats['tvl']['previousValue'], 2))}"
+    daily_stats["tvl"]["change"] = f"{round(daily_stats['tvl']['change'], 2)}%"
+
+    daily_stats["fees24"]["currentValue"] = f"US${number_to_abbreviated_string(round(daily_stats['fees24']['currentValue'], 2))}"
+    daily_stats["fees24"]["previousValue"] = f"US${number_to_abbreviated_string(round(daily_stats['fees24']['previousValue'], 2))}"
+    daily_stats["fees24"]["change"] = f"{round(daily_stats['fees24']['change'], 2)}%"
+
+    return daily_stats
 
 @app.get('/request_status/{requestId:str}')
 async def check_request(
