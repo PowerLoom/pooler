@@ -2,7 +2,11 @@ from process_hub_core import PROC_STR_ID_TO_CLASS_MAP
 from init_rabbitmq import create_rabbitmq_conn, processhub_command_publish
 from message_models import ProcessHubCommand
 from redis_conn import REDIS_CONN_CONF
-from redis_keys import (powerloom_broadcast_id_zset, uniswap_cb_broadcast_processing_logs_zset)
+from redis_keys import (
+    powerloom_broadcast_id_zset, 
+    uniswap_cb_broadcast_processing_logs_zset,
+    uniswap_projects_dag_verifier_status
+)
 from datetime import datetime
 from dynaconf import settings
 import timeago
@@ -134,6 +138,13 @@ def dagChainVerifierSummary(dag_chain_height: int = typer.Argument(-1)):
     total_issue_count = {
         "LATEST_DAG_CHAIN_HEIGHT": 0
     }
+
+    # get highest dag chain height
+    project_heights = r.hgetall(uniswap_projects_dag_verifier_status)
+    if project_heights:
+        for key, value in project_heights.items():
+            if int(value.decode('utf-8')) > total_issue_count["LATEST_DAG_CHAIN_HEIGHT"]:
+                total_issue_count["LATEST_DAG_CHAIN_HEIGHT"] = int(value.decode('utf-8'))
     
     def get_zset_data(key, min, max):
         res = r.zrangebyscore(
@@ -173,9 +184,7 @@ def dagChainVerifierSummary(dag_chain_height: int = typer.Argument(-1)):
                     total_issue_count[entry["issueType"] + "_BLOCKS" ] +=  entry["missingBlockHeightEnd"] - entry["missingBlockHeightStart"] + 1
                     key_based_issue_stats[entry["issueType"] + "_BLOCKS" ] +=  entry["missingBlockHeightEnd"] - entry["missingBlockHeightStart"] + 1
                     
-                # store latest dag block height for overall issues and for projectId
-                if entry["dagBlockHeight"] > total_issue_count["LATEST_DAG_CHAIN_HEIGHT"]:
-                    total_issue_count["LATEST_DAG_CHAIN_HEIGHT"] = entry["dagBlockHeight"]
+                # store latest dag block height for projectId
                 if entry["dagBlockHeight"] > key_based_issue_stats["LATEST_DAG_CHAIN_HEIGHT"]:
                     key_based_issue_stats["LATEST_DAG_CHAIN_HEIGHT"] = entry["dagBlockHeight"]
 
@@ -199,6 +208,9 @@ def dagChainVerifierSummary(dag_chain_height: int = typer.Argument(-1)):
     print(f"\n======================================> OVERALL ISSUE STATS: \n")
     for k, v in total_issue_count.items():
         print(f"\t {k} : {v}\n")
+    
+    if len(total_issue_count) < 2:
+        print(f"\n##################### NO GAPS FOUND IN CHAIN #####################\n")
 
 
 @app.command()
