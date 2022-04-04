@@ -18,6 +18,9 @@ uniswap_pair_cached_recent_logs = 'uniswap:pairContract:'+settings.NAMESPACE+':{
 uniswap_token_info_cached_data = "uniswap:tokenInfo:" + settings.NAMESPACE + ":{}:cachedData"
 uniswap_pair_cache_daily_stats = 'uniswap:pairContract:'+settings.NAMESPACE+':{}:dailyCache'
 uniswap_projects_dag_verifier_status = "projects:"+settings.NAMESPACE+":dagVerificationStatus"
+uniswap_pair_tentative_block_height = "projectID:uniswap_pairContract_trade_volume_{}_"+settings.NAMESPACE+":tentativeBlockHeight"
+uniswap_pair_block_height = "projectID:uniswap_pairContract_trade_volume_{}_"+settings.NAMESPACE+":blockHeight"
+
 
 powerloom_broadcast_id_zset = 'powerloom:broadcastID:' + settings.NAMESPACE + ':broadcastProcessingStatus'
 eth_log_request_data_f = 'powerloom:ethLogs:'+settings.NAMESPACE+':requestId:{}:results'  # request UUID

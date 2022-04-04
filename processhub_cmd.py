@@ -5,7 +5,9 @@ from redis_conn import REDIS_CONN_CONF
 from redis_keys import (
     powerloom_broadcast_id_zset, 
     uniswap_cb_broadcast_processing_logs_zset,
-    uniswap_projects_dag_verifier_status
+    uniswap_projects_dag_verifier_status,
+    uniswap_pair_tentative_block_height,
+    uniswap_pair_block_height
 )
 from datetime import datetime
 from dynaconf import settings
@@ -124,7 +126,7 @@ def listProcesses(elapsed_time: int):
 
 
 @app.command()
-def dagChainVerifierSummary(dag_chain_height: int = typer.Argument(-1)):
+def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
     
     dag_chain_height = dag_chain_height if dag_chain_height > -1 else '-inf'
 
@@ -136,24 +138,31 @@ def dagChainVerifierSummary(dag_chain_height: int = typer.Argument(-1)):
     ]
     total_zsets = {}
     total_issue_count = {
-        "LATEST_DAG_CHAIN_HEIGHT": 0
+        "CURRENT_DAG_CHAIN_HEIGHT": 0,
+        "LAG_EXIST_IN_DAG_CHAIN": 0
     }
 
     # get highest dag chain height
     project_heights = r.hgetall(uniswap_projects_dag_verifier_status)
     if project_heights:
         for key, value in project_heights.items():
-            if int(value.decode('utf-8')) > total_issue_count["LATEST_DAG_CHAIN_HEIGHT"]:
-                total_issue_count["LATEST_DAG_CHAIN_HEIGHT"] = int(value.decode('utf-8'))
+            if int(value.decode('utf-8')) > total_issue_count["CURRENT_DAG_CHAIN_HEIGHT"]:
+                total_issue_count["CURRENT_DAG_CHAIN_HEIGHT"] = int(value.decode('utf-8'))
     
-    def get_zset_data(key, min, max):
+    def get_zset_data(key, min, max, pair_address):
         res = r.zrangebyscore(
             name=key,
             min=min,
             max=max
         )
+        tentative_block_height, block_height = r.mget(
+            [
+                uniswap_pair_tentative_block_height.format(f"{pair_address}"),
+                uniswap_pair_block_height.format(f"{pair_address}")
+            ]
+        )
         key_based_issue_stats = {
-            "LATEST_DAG_CHAIN_HEIGHT": 0
+            "CURRENT_DAG_CHAIN_HEIGHT": 0
         }
         if res:
             # parse zset entry
@@ -173,6 +182,20 @@ def dagChainVerifierSummary(dag_chain_height: int = typer.Argument(-1)):
                 if not entry["issueType"] + "_BLOCKS" in key_based_issue_stats:
                     key_based_issue_stats[entry["issueType"] + "_BLOCKS" ] = 0
                 
+
+                # add tentative and current block height
+                if tentative_block_height:
+                    tentative_block_height = int(tentative_block_height.decode("utf-8")) if type(tentative_block_height) is bytes else int(tentative_block_height)
+                else:
+                    tentative_block_height = None
+                if block_height:
+                    block_height = int(block_height.decode("utf-8")) if type(block_height) is bytes else int(block_height)
+                else:
+                    block_height = None
+                key_based_issue_stats["CURRENT_LAG_IN_DAG_CHAIN_HEIGHT"] = tentative_block_height - block_height if tentative_block_height and block_height else "unknown"
+                total_issue_count["LAG_EXIST_IN_DAG_CHAIN"] = key_based_issue_stats["CURRENT_LAG_IN_DAG_CHAIN_HEIGHT"] if key_based_issue_stats["CURRENT_LAG_IN_DAG_CHAIN_HEIGHT"] > total_issue_count["LAG_EXIST_IN_DAG_CHAIN"] else total_issue_count["LAG_EXIST_IN_DAG_CHAIN"]
+
+                    
                 # gather overall issue stats
                 total_issue_count[entry["issueType"] + "_ISSUE_COUNT" ] += 1
                 key_based_issue_stats[entry["issueType"] + "_ISSUE_COUNT" ] +=  1
@@ -185,8 +208,8 @@ def dagChainVerifierSummary(dag_chain_height: int = typer.Argument(-1)):
                     key_based_issue_stats[entry["issueType"] + "_BLOCKS" ] +=  entry["missingBlockHeightEnd"] - entry["missingBlockHeightStart"] + 1
                     
                 # store latest dag block height for projectId
-                if entry["dagBlockHeight"] > key_based_issue_stats["LATEST_DAG_CHAIN_HEIGHT"]:
-                    key_based_issue_stats["LATEST_DAG_CHAIN_HEIGHT"] = entry["dagBlockHeight"]
+                if entry["dagBlockHeight"] > key_based_issue_stats["CURRENT_DAG_CHAIN_HEIGHT"]:
+                    key_based_issue_stats["CURRENT_DAG_CHAIN_HEIGHT"] = entry["dagBlockHeight"]
 
                 parsed_res.append(entry)
             res = parsed_res
@@ -202,9 +225,16 @@ def dagChainVerifierSummary(dag_chain_height: int = typer.Argument(-1)):
         for project in projects:
             for addr in contracts:
                 zset_key = project.format(addr)
-                total_zsets[zset_key] = get_zset_data(zset_key, dag_chain_height, '+inf')
+                total_zsets[zset_key] = get_zset_data(zset_key, dag_chain_height, '+inf', addr)
     
     gather_all_zset(pair_contracts, pair_projects)
+
+    if total_issue_count["LAG_EXIST_IN_DAG_CHAIN"] > 3:
+        total_issue_count["LAG_EXIST_IN_DAG_CHAIN"] = f"THERE IS A LAG WHILE PROCESSING CHAIN, BIGGEST LAG: {total_issue_count['LAG_EXIST_IN_DAG_CHAIN']}"
+    else:
+        total_issue_count["LAG_EXIST_IN_DAG_CHAIN"] = "NO LAG"
+        
+
     print(f"\n======================================> OVERALL ISSUE STATS: \n")
     for k, v in total_issue_count.items():
         print(f"\t {k} : {v}\n")
