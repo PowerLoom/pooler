@@ -164,6 +164,19 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
         key_based_issue_stats = {
             "CURRENT_DAG_CHAIN_HEIGHT": 0
         }
+
+        # add tentative and current block height
+        if tentative_block_height:
+            tentative_block_height = int(tentative_block_height.decode("utf-8")) if type(tentative_block_height) is bytes else int(tentative_block_height)
+        else:
+            tentative_block_height = None
+        if block_height:
+            block_height = int(block_height.decode("utf-8")) if type(block_height) is bytes else int(block_height)
+        else:
+            block_height = None
+        key_based_issue_stats["CURRENT_LAG_IN_DAG_CHAIN_HEIGHT"] = tentative_block_height - block_height if tentative_block_height and block_height else "unknown"
+        total_issue_count["LAG_EXIST_IN_DAG_CHAIN"] = key_based_issue_stats["CURRENT_LAG_IN_DAG_CHAIN_HEIGHT"] if key_based_issue_stats["CURRENT_LAG_IN_DAG_CHAIN_HEIGHT"] > total_issue_count["LAG_EXIST_IN_DAG_CHAIN"] else total_issue_count["LAG_EXIST_IN_DAG_CHAIN"]
+        
         if res:
             # parse zset entry
             parsed_res = []
@@ -182,19 +195,6 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
                 if not entry["issueType"] + "_BLOCKS" in key_based_issue_stats:
                     key_based_issue_stats[entry["issueType"] + "_BLOCKS" ] = 0
                 
-
-                # add tentative and current block height
-                if tentative_block_height:
-                    tentative_block_height = int(tentative_block_height.decode("utf-8")) if type(tentative_block_height) is bytes else int(tentative_block_height)
-                else:
-                    tentative_block_height = None
-                if block_height:
-                    block_height = int(block_height.decode("utf-8")) if type(block_height) is bytes else int(block_height)
-                else:
-                    block_height = None
-                key_based_issue_stats["CURRENT_LAG_IN_DAG_CHAIN_HEIGHT"] = tentative_block_height - block_height if tentative_block_height and block_height else "unknown"
-                total_issue_count["LAG_EXIST_IN_DAG_CHAIN"] = key_based_issue_stats["CURRENT_LAG_IN_DAG_CHAIN_HEIGHT"] if key_based_issue_stats["CURRENT_LAG_IN_DAG_CHAIN_HEIGHT"] > total_issue_count["LAG_EXIST_IN_DAG_CHAIN"] else total_issue_count["LAG_EXIST_IN_DAG_CHAIN"]
-
                     
                 # gather overall issue stats
                 total_issue_count[entry["issueType"] + "_ISSUE_COUNT" ] += 1
