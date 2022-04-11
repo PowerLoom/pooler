@@ -175,7 +175,8 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
         else:
             block_height = None
         key_based_issue_stats["CURRENT_LAG_IN_DAG_CHAIN_HEIGHT"] = tentative_block_height - block_height if tentative_block_height and block_height else "unknown"
-        total_issue_count["LAG_EXIST_IN_DAG_CHAIN"] = key_based_issue_stats["CURRENT_LAG_IN_DAG_CHAIN_HEIGHT"] if key_based_issue_stats["CURRENT_LAG_IN_DAG_CHAIN_HEIGHT"] > total_issue_count["LAG_EXIST_IN_DAG_CHAIN"] else total_issue_count["LAG_EXIST_IN_DAG_CHAIN"]
+        if key_based_issue_stats["CURRENT_LAG_IN_DAG_CHAIN_HEIGHT"] != "unknown":
+            total_issue_count["LAG_EXIST_IN_DAG_CHAIN"] = key_based_issue_stats["CURRENT_LAG_IN_DAG_CHAIN_HEIGHT"] if key_based_issue_stats["CURRENT_LAG_IN_DAG_CHAIN_HEIGHT"] > total_issue_count["LAG_EXIST_IN_DAG_CHAIN"] else total_issue_count["LAG_EXIST_IN_DAG_CHAIN"]
         
         if res:
             # parse zset entry
@@ -218,6 +219,12 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
             for k, v in key_based_issue_stats.items():
                 print(f"\t {k} : {v}\n")
         else:
+            del key_based_issue_stats["CURRENT_DAG_CHAIN_HEIGHT"]
+            key_based_issue_stats["tentative_block_height"] = tentative_block_height
+            key_based_issue_stats["block_height"] = block_height
+            print(f"{key} - ")
+            for k, v in key_based_issue_stats.items():
+                print(f"\t {k} : {v}\n")
             res = []
         return res
     
