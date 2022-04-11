@@ -19,7 +19,7 @@ r = Redis(**REDIS_CONN_CONF)
 
 def redis_cleanup():
     try:
-        r.delete(*r.keys('*projectID*uniswap*'))
+        r.delete(*r.keys(f'*projectID*{settings.NAMESPACE}*'))
     except:
         pass
 
@@ -33,6 +33,12 @@ def redis_cleanup():
     for k in poly_last_snapshots:
         if f'uniswap*{settings.NAMESPACE}*' in k:
             r.hdel('auditprotocol:lastSeenSnapshots', k)
+
+    try:
+        c = r.delete(*r.keys('*dagVerificationStatus*'))
+        print('Dag chain verification keys deleted: ', c)
+    except:
+        pass
 
     try:
         c = r.delete(*r.keys('lastPruned*uniswap*'))
@@ -64,6 +70,15 @@ def redis_cleanup():
         r.delete(*r.keys('payloadCommit:*'))
     except:
         pass
+    try:
+        r.delete(*r.keys('eventData:*'))
+    except:
+        pass
+
+    try:
+        r.delete(*r.keys('txHash*inputData'))
+    except:
+        pass
 
     try:
         r.delete(*r.keys(f'*uniswap*{settings.NAMESPACE}*pendingTransactions:*'))
@@ -71,7 +86,32 @@ def redis_cleanup():
         pass
 
     try:
+        r.delete(*r.keys(f'*uniswap*{settings.NAMESPACE}*pendingBlocks:*'))
+    except:
+        pass
+
+    try:
+        r.delete(*r.keys('pendingPayloadCommits'))
+    except:
+        pass
+
+    try:
+        r.delete(*r.keys('CidDiff*'))
+    except:
+        pass
+
+    try:
         r.delete(*r.keys(f'*uniswap*{settings.NAMESPACE}*discardedTransactions:*'))
+    except:
+        pass
+
+    try:
+        r.delete(*r.keys(f'*uniswap*{settings.NAMESPACE}*priceHistory*'))
+    except:
+        pass
+
+    try:
+        r.delete(*r.keys(f'*uniswap*{settings.NAMESPACE}*cachedData*'))
     except:
         pass
 
