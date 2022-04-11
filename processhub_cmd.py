@@ -217,14 +217,14 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
 
             print(f"{key} - ")
             for k, v in key_based_issue_stats.items():
-                print(f"\t {k} : {v}\n")
+                print(f"\t {k} : {v}")
         else:
             del key_based_issue_stats["CURRENT_DAG_CHAIN_HEIGHT"]
             key_based_issue_stats["tentative_block_height"] = tentative_block_height
             key_based_issue_stats["block_height"] = block_height
             print(f"{key} - ")
             for k, v in key_based_issue_stats.items():
-                print(f"\t {k} : {v}\n")
+                print(f"\t {k} : {v}")
             res = []
         return res
     
@@ -244,10 +244,12 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
 
     print(f"\n======================================> OVERALL ISSUE STATS: \n")
     for k, v in total_issue_count.items():
-        print(f"\t {k} : {v}\n")
-    
+        print(f"\t {k} : {v}")
+
     if len(total_issue_count) < 2:
         print(f"\n##################### NO GAPS FOUND IN CHAIN #####################\n")
+
+    print("\n")
 
 
 @app.command()
