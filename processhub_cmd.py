@@ -133,8 +133,8 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
     r = redis.Redis(**REDIS_CONN_CONF, single_connection_client=True)
     pair_contracts = read_json_file('static/cached_pair_addresses.json')
     pair_projects = [
-        'projectID:uniswap_pairContract_trade_volume_{}_'+settings.NAMESPACE+':dagChainGaps',
-        'projectID:uniswap_pairContract_pair_total_reserves_{}_'+settings.NAMESPACE+':dagChainGaps'
+        'projectID:uniswap_pairContract_trade_volume_{}_'+settings.NAMESPACE+':{}',
+        'projectID:uniswap_pairContract_pair_total_reserves_{}_'+settings.NAMESPACE+':{}'
     ]
     total_zsets = {}
     total_issue_count = {
@@ -151,14 +151,14 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
     
     def get_zset_data(key, min, max, pair_address):
         res = r.zrangebyscore(
-            name=key,
+            name=key.format(pair_address, "dagChainGaps"),
             min=min,
             max=max
         )
         tentative_block_height, block_height = r.mget(
             [
-                uniswap_pair_tentative_block_height.format(f"{pair_address}"),
-                uniswap_pair_block_height.format(f"{pair_address}")
+                key.format(f"{pair_address}", "tentativeBlockHeight"),
+                key.format(f"{pair_address}", "blockHeight")
             ]
         )
         key_based_issue_stats = {
@@ -174,8 +174,8 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
             block_height = int(block_height.decode("utf-8")) if type(block_height) is bytes else int(block_height)
         else:
             block_height = None
-        key_based_issue_stats["CURRENT_LAG_IN_DAG_CHAIN_HEIGHT"] = tentative_block_height - block_height if tentative_block_height and block_height else "unknown"
-        if key_based_issue_stats["CURRENT_LAG_IN_DAG_CHAIN_HEIGHT"] != "unknown":
+        key_based_issue_stats["CURRENT_LAG_IN_DAG_CHAIN_HEIGHT"] = tentative_block_height - block_height if tentative_block_height and block_height else None
+        if key_based_issue_stats["CURRENT_LAG_IN_DAG_CHAIN_HEIGHT"] != None:
             total_issue_count["LAG_EXIST_IN_DAG_CHAIN"] = key_based_issue_stats["CURRENT_LAG_IN_DAG_CHAIN_HEIGHT"] if key_based_issue_stats["CURRENT_LAG_IN_DAG_CHAIN_HEIGHT"] > total_issue_count["LAG_EXIST_IN_DAG_CHAIN"] else total_issue_count["LAG_EXIST_IN_DAG_CHAIN"]
         
         if res:
@@ -215,14 +215,14 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
                 parsed_res.append(entry)
             res = parsed_res
 
-            print(f"{key} - ")
+            print(f"{key.format(pair_address, '')} - ")
             for k, v in key_based_issue_stats.items():
                 print(f"\t {k} : {v}")
         else:
             del key_based_issue_stats["CURRENT_DAG_CHAIN_HEIGHT"]
             key_based_issue_stats["tentative_block_height"] = tentative_block_height
             key_based_issue_stats["block_height"] = block_height
-            print(f"{key} - ")
+            print(f"{key.format(pair_address, '')} - ")
             for k, v in key_based_issue_stats.items():
                 print(f"\t {k} : {v}")
             res = []
@@ -231,8 +231,8 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
     def gather_all_zset(contracts, projects):
         for project in projects:
             for addr in contracts:
-                zset_key = project.format(addr)
-                total_zsets[zset_key] = get_zset_data(zset_key, dag_chain_height, '+inf', addr)
+                zset_key = project.format(addr, "dagChainGaps")
+                total_zsets[zset_key] = get_zset_data(project, dag_chain_height, '+inf', addr)
     
     gather_all_zset(pair_contracts, pair_projects)
 
