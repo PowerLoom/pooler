@@ -47,6 +47,7 @@ def main_ticker_process(begin=None, end=None):
     setproctitle('PowerLoom|SystemEpochClock|Linear')
     begin_block_epoch = begin
     end_block_epoch = end
+    sleep_secs_between_chunks = 60
     rpc_obj = ConstructRPC(network_id=137)
     rpc_nodes_obj = RPCNodesObject(
         NODES=settings.RPC.MATIC,
@@ -82,8 +83,8 @@ def main_ticker_process(begin=None, end=None):
                 q.put(cmd_obj)
                 # send epoch report
                 linear_ticker_logger.debug(cmd)
-                linear_ticker_logger.debug('Waiting to push next epoch in 45 seconds...')
+                linear_ticker_logger.debug('Waiting to push next epoch in %d seconds...',sleep_secs_between_chunks)
                 # fixed wait
-                sleep(60)
+                sleep(sleep_secs_between_chunks)
             else:
                 begin_block_epoch = end_block_epoch + 1
