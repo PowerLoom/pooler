@@ -58,7 +58,7 @@ def main_ticker_process(begin=None, end=None):
         try:
             cur_block = rpc_obj.rpc_eth_blocknumber(rpc_nodes=rpc_nodes_obj)
         except Exception as e:
-            linear_ticker_logger.error("Unable to fetch latest block number due to RPC failure {e}. Retrying after {settings.EPOCH.BLOCK_TIME} seconds.")
+            linear_ticker_logger.error(f"Unable to fetch latest block number due to RPC failure {e}. Retrying after {settings.EPOCH.BLOCK_TIME} seconds.")
             sleep(settings.EPOCH.BLOCK_TIME)
             continue
         else:
