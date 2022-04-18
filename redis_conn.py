@@ -171,6 +171,8 @@ def provide_redis_conn_insta(fn):
                 return fn(*args, **kwargs)
             except:
                 raise
+            finally:
+                connection.close()
     return wrapped
 
 
