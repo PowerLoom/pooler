@@ -18,10 +18,10 @@ import pika
 
 def chunks(start_idx, stop_idx, n):
     run_idx = 0
-    for i in range(start_idx, stop_idx+1, n):
+    for i in range(start_idx, stop_idx + 1, n):
         # Create an index range for l of n items:
         begin_idx = i  # if run_idx == 0 else i+1
-        if begin_idx == stop_idx+1:
+        if begin_idx == stop_idx + 1:
             return
         end_idx = i + n - 1 if i + n - 1 <= stop_idx else stop_idx
         run_idx += 1
@@ -43,7 +43,8 @@ def main_ticker_process(begin=None, end=None):
     # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|EpochTicker|Linear'))
     linear_ticker_logger = logging.getLogger('PowerLoom|EpochTicker|Linear')
     linear_ticker_logger.setLevel(logging.DEBUG)
-    linear_ticker_logger.handlers = [logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
+    linear_ticker_logger.handlers = [
+        logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
     setproctitle('PowerLoom|SystemEpochClock|Linear')
     begin_block_epoch = begin
     end_block_epoch = end
@@ -58,7 +59,8 @@ def main_ticker_process(begin=None, end=None):
         try:
             cur_block = rpc_obj.rpc_eth_blocknumber(rpc_nodes=rpc_nodes_obj)
         except Exception as e:
-            linear_ticker_logger.error(f"Unable to fetch latest block number due to RPC failure {e}. Retrying after {settings.EPOCH.BLOCK_TIME} seconds.")
+            linear_ticker_logger.error(
+                f"Unable to fetch latest block number due to RPC failure {e}. Retrying after {settings.EPOCH.BLOCK_TIME} seconds.")
             sleep(settings.EPOCH.BLOCK_TIME)
             continue
         else:
@@ -73,15 +75,25 @@ def main_ticker_process(begin=None, end=None):
                 # linear_ticker_logger.debug('Picked begin of epoch: %s', begin_block_epoch)
                 end_block_epoch = cur_block - settings.EPOCH.HEAD_OFFSET
                 if not end_block_epoch - begin_block_epoch >= settings.EPOCH.HEIGHT:
-                    linear_ticker_logger.debug('Current end of epoch estimated at block %s | '
-                                            'Can not build epoch yet between %s - %s. Sleeping for %s seconds',
-                                            end_block_epoch, begin_block_epoch, end_block_epoch,
-                                            settings.EPOCH.BLOCK_TIME)
-                    time.sleep(settings.EPOCH.BLOCK_TIME)
+                    sleep_factor = begin_block_epoch + (settings.EPOCH.HEIGHT - 1) + settings.EPOCH.HEAD_OFFSET
+                    linear_ticker_logger.debug('Current head of source chain estimated at block %s after offsetting | '
+                                               'Can not build epoch yet between %s - %s. Sleeping for %s seconds '
+                                               'for %s blocks to accumulate',
+                                               end_block_epoch, begin_block_epoch, end_block_epoch, sleep_factor,
+                                               sleep_factor*settings.EPOCH.BLOCK_TIME)
+                    time.sleep(sleep_factor * settings.EPOCH.BLOCK_TIME)
                     continue
                 linear_ticker_logger.debug('Chunking blocks between %s - %s with chunk size: %s', begin_block_epoch,
-                                        end_block_epoch, settings.EPOCH.HEIGHT)
+                                           end_block_epoch, settings.EPOCH.HEIGHT)
                 for epoch in chunks(begin_block_epoch, end_block_epoch, settings.EPOCH.HEIGHT):
+                    if epoch[1] - epoch[0] + 1 < settings.EPOCH.HEIGHT:
+                        linear_ticker_logger.debug(
+                            'Skipping chunk of blocks %s - %s as minimum epoch size not satisfied | Resetting chunking'
+                            ' to begin from block %s',
+                            epoch[0] - epoch[1], epoch[0]
+                        )
+                        begin_block_epoch = epoch[0]
+                        break
                     _ = {'begin': epoch[0], 'end': epoch[1]}
                     linear_ticker_logger.debug('Epoch of sufficient length found: %s', _)
                     cmd = EpochConsensusReport(**_)
@@ -89,7 +101,7 @@ def main_ticker_process(begin=None, end=None):
                     q.put(cmd_obj)
                     # send epoch report
                     linear_ticker_logger.debug(cmd)
-                    linear_ticker_logger.debug('Waiting to push next epoch in %d seconds...',sleep_secs_between_chunks)
+                    linear_ticker_logger.debug('Waiting to push next epoch in %d seconds...', sleep_secs_between_chunks)
                     # fixed wait
                     sleep(sleep_secs_between_chunks)
                 else:
