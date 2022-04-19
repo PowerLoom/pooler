@@ -19,6 +19,9 @@ from redis_keys import (
 from pydantic import ValidationError
 from helper_functions import AsyncHTTPSessionCache
 from aio_pika import ExchangeType, IncomingMessage
+from rabbitmq_helpers import RabbitmqSelectLoopInteractor
+import queue
+import threading
 import redis
 import asyncio
 import aiohttp
@@ -527,13 +530,15 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
         super(PairTotalReservesProcessorDistributor, self).__init__(name=name, **kwargs)
         setproctitle(self.name)
         self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
+        self._q = queue.Queue()
+        self._rabbitmq_interactor = None
         # logger.add(
         #     sink='logs/' + self._unique_id + '_{time}.log', rotation='20MB', retention=20, compression='gz'
         # )
         # setup_loguru_intercept()
 
-    def _distribute_callbacks(self, ch, method, properties, body):
-        ch.basic_ack(delivery_tag=method.delivery_tag)
+    def _distribute_callbacks(self, dont_use_ch, method, properties, body):
+        self._rabbitmq_interactor._channel.basic_ack(delivery_tag=method.delivery_tag)
         # following check avoids processing messages meant for routing keys for sub workers
         # for eg: 'powerloom-backend-callback.pair_total_reserves.seeder'
         if 'pair_total_reserves' not in method.routing_key or method.routing_key.split('.')[1] != 'pair_total_reserves':
@@ -555,16 +560,10 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
                 contract=contract,
                 broadcast_id=msg_obj.broadcast_id
             )
-            ch.basic_publish(
+            self._rabbitmq_interactor.enqueue_msg_delivery(
                 exchange=f'{settings.RABBITMQ.SETUP.CALLBACKS.EXCHANGE}.subtopics:{settings.NAMESPACE}',
                 routing_key=f'powerloom-backend-callback:{settings.NAMESPACE}.pair_total_reserves_worker.processor',
-                body=pair_total_reserves_process_unit.json().encode('utf-8'),
-                properties=pika.BasicProperties(
-                    delivery_mode=2,
-                    content_type='text/plain',
-                    content_encoding='utf-8'
-                ),
-                mandatory=True
+                msg_body=pair_total_reserves_process_unit.json()
             )
             self._logger.debug(f'Sent out epoch to be processed by worker to calculate total reserves for pair contract: {pair_total_reserves_process_unit}')
         update_log = {
@@ -591,25 +590,11 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
         self._logger.handlers = [
             logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
         self._connection_pool = redis.BlockingConnectionPool(**REDIS_CONN_CONF)
-        c = create_rabbitmq_conn()
-        ch = c.channel()
-
         queue_name = f'powerloom-backend-cb:{settings.NAMESPACE}'
-        ch.basic_qos(prefetch_count=1)
-        ch.basic_consume(
-            queue=queue_name,
-            on_message_callback=self._distribute_callbacks,
-            auto_ack=False
+        self._rabbitmq_interactor: RabbitmqSelectLoopInteractor = RabbitmqSelectLoopInteractor(
+            consume_queue_name=queue_name,
+            consume_callback=self._distribute_callbacks
         )
-        try:
-            self._logger.debug('Starting RabbitMQ consumer on queue %s', queue_name)
-            ch.start_consuming()
-        except Exception as e:
-            self._logger.error('Exception while running consumer on queue %s: %s', queue_name, e)
-        finally:
-            self._logger.error('Attempting to close residual RabbitMQ connections and channels')
-            try:
-                ch.close()
-                c.close()
-            except:
-                pass
+        # self.rabbitmq_interactor.start_publishing()
+        self._logger.debug('Starting RabbitMQ consumer on queue %s', queue_name)
+        self._rabbitmq_interactor.run()
