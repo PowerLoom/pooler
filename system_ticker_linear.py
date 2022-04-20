@@ -75,12 +75,13 @@ def main_ticker_process(begin=None, end=None):
                 # linear_ticker_logger.debug('Picked begin of epoch: %s', begin_block_epoch)
                 end_block_epoch = cur_block - settings.EPOCH.HEAD_OFFSET
                 if not end_block_epoch - begin_block_epoch >= settings.EPOCH.HEIGHT:
-                    sleep_factor = begin_block_epoch + (settings.EPOCH.HEIGHT - 1) + settings.EPOCH.HEAD_OFFSET
+                    sleep_factor = settings.EPOCH.HEIGHT - ((end_block_epoch - begin_block_epoch) + 1)
                     linear_ticker_logger.debug('Current head of source chain estimated at block %s after offsetting | '
-                                               'Can not build epoch yet between %s - %s. Sleeping for %s seconds '
-                                               'for %s blocks to accumulate',
-                                               end_block_epoch, begin_block_epoch, end_block_epoch, sleep_factor,
-                                               sleep_factor*settings.EPOCH.BLOCK_TIME)
+                                               '%s - %s does not satisfy configured epoch length. '
+                                               'Sleeping for %s seconds for %s blocks to accumulate....',
+                                               end_block_epoch, begin_block_epoch, end_block_epoch,
+                                               sleep_factor*settings.EPOCH.BLOCK_TIME, sleep_factor
+                                               )
                     time.sleep(sleep_factor * settings.EPOCH.BLOCK_TIME)
                     continue
                 linear_ticker_logger.debug('Chunking blocks between %s - %s with chunk size: %s', begin_block_epoch,
@@ -90,7 +91,7 @@ def main_ticker_process(begin=None, end=None):
                         linear_ticker_logger.debug(
                             'Skipping chunk of blocks %s - %s as minimum epoch size not satisfied | Resetting chunking'
                             ' to begin from block %s',
-                            epoch[0] - epoch[1], epoch[0]
+                            epoch[0], epoch[1], epoch[0]
                         )
                         begin_block_epoch = epoch[0]
                         break
