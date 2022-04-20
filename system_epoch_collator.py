@@ -94,21 +94,24 @@ class EpochCollatorProcess(Process):
         self._queued_linear_epochs = list()
 
     def _epoch_collator(self, ch, method, properties, body):
-        ch.basic_ack(delivery_tag=method.delivery_tag)
-        self._logger.debug('Received epoch consensus report')
-        cmd = json.loads(body)
-        self._logger.debug(cmd)
-        consensus_report = EpochConsensusReport(**cmd)
-        if consensus_report.reorg:
-            self._last_reorg['begin'] = consensus_report.begin
-            self._last_reorg['end'] = consensus_report.end
-            broadcast = collate_epoch(ch, consensus_report)
-            broadcast = broadcast.dict()
-            broadcast.update({'reorg': True})
-            state_update_q.put(broadcast)
-        else:
-            broadcast = collate_epoch(ch, consensus_report)
-            state_update_q.put(broadcast)
+        try:
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+            self._logger.debug('Received epoch consensus report')
+            cmd = json.loads(body)
+            self._logger.debug(cmd)
+            consensus_report = EpochConsensusReport(**cmd)
+            if consensus_report.reorg:
+                self._last_reorg['begin'] = consensus_report.begin
+                self._last_reorg['end'] = consensus_report.end
+                broadcast = collate_epoch(ch, consensus_report)
+                broadcast = broadcast.dict()
+                broadcast.update({'reorg': True})
+                state_update_q.put(broadcast)
+            else:
+                broadcast = collate_epoch(ch, consensus_report)
+                state_update_q.put(broadcast)
+        except Exception as err:
+            self._logger.error(err, exc_info=True)
 
     def run(self) -> None:
         # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|EpochCollator'))

@@ -78,6 +78,7 @@ class ProcessHubCore(Process):
 
     @provide_redis_conn
     def internal_state_reporter(self, redis_conn: redis.Redis = None):
+        _logger = logging.getLogger('PowerLoom|ProcessHub|Core')
         try:
             while True:
                 proc_id_map = dict()
@@ -95,6 +96,9 @@ class ProcessHubCore(Process):
                 time.sleep(2)
         except SelfExitException:
             redis_conn.delete(f'powerloom:uniswap:{settings.NAMESPACE}:Processes')
+        except Exception as err:
+            _logger.error(f"Error in internal state reporter: {str(err)}", exc_info=True)
+            
 
     @cleanup_children_procs
     def run(self) -> None:
@@ -127,7 +131,13 @@ class ProcessHubCore(Process):
             on_message_callback=self.callback,
             auto_ack=False
         )
-        channel.start_consuming()
+        try:
+            channel.start_consuming()
+        except Exception as err:
+            self._logger.error(f"Error in Process Hub Core: {str(err)}", exc_info=True)
+        finally:
+            channel.stop_consuming()
+            connection.close()
 
     def callback(self, ch, method, properties, body):
         ch.basic_ack(delivery_tag=method.delivery_tag)
@@ -138,43 +148,46 @@ class ProcessHubCore(Process):
             self._logger.error('ProcessHubCore received unrecognized command')
             self._logger.error(command)
             return
-        if cmd_json.command == 'stop':
-            self._logger.debug('Process Hub Core received stop command: %s', cmd_json)
-            process_id = cmd_json.pid
-            proc_str_id = cmd_json.proc_str_id
-            if process_id:
-                kill_process(process_id)
-            if proc_str_id:
-                if proc_str_id == 'self':
-                    self._logger.error('Received stop command on self. Initiating shutdown...')
-                    raise SelfExitException
-                mapped_p = self._spawned_processes_map.get(proc_str_id)
-                if not mapped_p:
-                    self._logger.error('Did not find process ID in local process string map: %s', proc_str_id)
-                    return
+        try:
+            if cmd_json.command == 'stop':
+                self._logger.debug('Process Hub Core received stop command: %s', cmd_json)
+                process_id = cmd_json.pid
+                proc_str_id = cmd_json.proc_str_id
+                if process_id:
+                    kill_process(process_id)
+                if proc_str_id:
+                    if proc_str_id == 'self':
+                        self._logger.error('Received stop command on self. Initiating shutdown...')
+                        raise SelfExitException
+                    mapped_p = self._spawned_processes_map.get(proc_str_id)
+                    if not mapped_p:
+                        self._logger.error('Did not find process ID in local process string map: %s', proc_str_id)
+                        return
+                    else:
+                        kill_process(mapped_p.pid)
+                        self._spawned_processes_map[proc_str_id] = None
+            elif cmd_json.command == 'start':
+                self._logger.debug('Process Hub Core received start command: %s', cmd_json)
+                proc_name = cmd_json.proc_str_id
+                self._logger.debug('Process Hub Core launching process for %s', proc_name)
+                proc_details: dict = PROC_STR_ID_TO_CLASS_MAP.get(proc_name)
+                init_kwargs = dict(name=proc_details['name'])
+                init_kwargs.update(cmd_json.init_kwargs)
+                if proc_details.get('class'):
+                    proc_obj = proc_details['class'](**init_kwargs)
+                    proc_obj.start()
                 else:
-                    kill_process(mapped_p.pid)
-                    self._spawned_processes_map[proc_str_id] = None
-        elif cmd_json.command == 'start':
-            self._logger.debug('Process Hub Core received start command: %s', cmd_json)
-            proc_name = cmd_json.proc_str_id
-            self._logger.debug('Process Hub Core launching process for %s', proc_name)
-            proc_details: dict = PROC_STR_ID_TO_CLASS_MAP.get(proc_name)
-            init_kwargs = dict(name=proc_details['name'])
-            init_kwargs.update(cmd_json.init_kwargs)
-            if proc_details.get('class'):
-                proc_obj = proc_details['class'](**init_kwargs)
-                proc_obj.start()
-            else:
-                proc_obj = Process(target=proc_details['target'], kwargs=cmd_json.init_kwargs)
-                proc_obj.start()
-            self._logger.debug('Process Hub Core launched process for %s with PID: %s', proc_name, proc_obj.pid)
-            self._spawned_processes_map[proc_name] = proc_obj
-        elif cmd_json.command == 'restart':
-            # TODO
-            self._logger.debug('Process Hub Core received restart command: %s', cmd_json)
-            proc_identifier = cmd_json.proc_str_id
-            # first kill
-            self._logger.debug('Attempting to kill process: %s', cmd_json.pid)
-            kill_process(cmd_json.pid)
-            self._logger.debug('Attempting to start process: %s', cmd_json.proc_str_id)
+                    proc_obj = Process(target=proc_details['target'], kwargs=cmd_json.init_kwargs)
+                    proc_obj.start()
+                self._logger.debug('Process Hub Core launched process for %s with PID: %s', proc_name, proc_obj.pid)
+                self._spawned_processes_map[proc_name] = proc_obj
+            elif cmd_json.command == 'restart':
+                # TODO
+                self._logger.debug('Process Hub Core received restart command: %s', cmd_json)
+                proc_identifier = cmd_json.proc_str_id
+                # first kill
+                self._logger.debug('Attempting to kill process: %s', cmd_json.pid)
+                kill_process(cmd_json.pid)
+                self._logger.debug('Attempting to start process: %s', cmd_json.proc_str_id)
+        except Exception as err:
+            self._logger.error(f"Error in Process Hub Core callback: {str(err)}", exc_info=True)

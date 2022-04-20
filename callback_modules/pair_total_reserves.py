@@ -154,45 +154,49 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         failed_query_epoch = await self._redis_conn.lpop(
             uniswap_failed_query_pair_trade_volume_epochs_redis_q_f.format(msg_obj.contract))
         queued_epochs = list()
-        while failed_query_epoch:
-            epoch_broadcast: PowerloomCallbackProcessMessage = PowerloomCallbackProcessMessage.parse_raw(
-                failed_query_epoch.decode('utf-8')
-            )
+        try:
+            while failed_query_epoch:
+                epoch_broadcast: PowerloomCallbackProcessMessage = PowerloomCallbackProcessMessage.parse_raw(
+                    failed_query_epoch.decode('utf-8')
+                )
+                self._logger.info(
+                    'Found queued epochs that previously failed in RPC query and construction stage for trade volume: %s', epoch_broadcast
+                )
+                queued_epochs.append(epoch_broadcast)
+                failed_query_epoch = await self._redis_conn.lpop(
+                    uniswap_failed_query_pair_trade_volume_epochs_redis_q_f.format(msg_obj.contract))
+            queued_epochs.append(msg_obj)
+            # check for continuity in epochs before coalescing them
+            # assuming the best
             self._logger.info(
-                'Found queued epochs that previously failed in RPC query and construction stage for trade volume: %s', epoch_broadcast
+                'Attempting to construct a continuous epoch for trade volume processing from query failure epochs and '
+                'current epoch: %s', queued_epochs
             )
-            queued_epochs.append(epoch_broadcast)
-            failed_query_epoch = await self._redis_conn.lpop(
-                uniswap_failed_query_pair_trade_volume_epochs_redis_q_f.format(msg_obj.contract))
-        queued_epochs.append(msg_obj)
-        # check for continuity in epochs before coalescing them
-        # assuming the best
-        self._logger.info(
-            'Attempting to construct a continuous epoch for trade volume processing from query failure epochs and '
-            'current epoch: %s', queued_epochs
-        )
-        continuity = True
-        for idx, each_epoch in enumerate(queued_epochs):
-            if idx == 0:
-                continue
-            if each_epoch.begin != queued_epochs[idx - 1].end + 1:
-                continuity = False
-                break
-        if continuity:
-            from_block = queued_epochs[0].begin
-            to_block = queued_epochs[-1].end
-        # if not continuous, record previous epochs as discarded
-        # TODO: can we find a best case scenario to construct a epoch that can be continuous
-        else:
-            # pop off current epoch added to end of this list
-            queued_epochs = queued_epochs[:-1]
-            self._logger.info('Recording epochs as discarded during snapshot construction stage for trade volume '
-                              'processing: %s', queued_epochs)
-            [
-                self._redis_conn.rpush(
-                    uniswap_discarded_query_pair_trade_volume_epochs_redis_q_f.format(msg_obj.contract), x.json())
-                for x in queued_epochs
-            ]
+            continuity = True
+            for idx, each_epoch in enumerate(queued_epochs):
+                if idx == 0:
+                    continue
+                if each_epoch.begin != queued_epochs[idx - 1].end + 1:
+                    continuity = False
+                    break
+            if continuity:
+                from_block = queued_epochs[0].begin
+                to_block = queued_epochs[-1].end
+            # if not continuous, record previous epochs as discarded
+            # TODO: can we find a best case scenario to construct a epoch that can be continuous
+            else:
+                # pop off current epoch added to end of this list
+                queued_epochs = queued_epochs[:-1]
+                self._logger.info('Recording epochs as discarded during snapshot construction stage for trade volume '
+                                'processing: %s', queued_epochs)
+                [
+                    self._redis_conn.rpush(
+                        uniswap_discarded_query_pair_trade_volume_epochs_redis_q_f.format(msg_obj.contract), x.json())
+                    for x in queued_epochs
+                ]
+        except Exception as e:
+            self._logger.error(f'Failed to construct epochs for trade volume processing: {str(e)}')
+        
         try:
             trade_vol_processed_snapshot = await get_pair_contract_trades_async(
                 ev_loop=asyncio.get_running_loop(),
@@ -552,36 +556,40 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
         except Exception as e:
             self._logger.error('Unexpected message format of epoch callback', exc_info=True)
             return
-        for contract in msg_obj.contracts:
-            contract = contract.lower()
-            pair_total_reserves_process_unit = PowerloomCallbackProcessMessage(
-                begin=msg_obj.begin,
-                end=msg_obj.end,
-                contract=contract,
-                broadcast_id=msg_obj.broadcast_id
-            )
-            self._rabbitmq_interactor.enqueue_msg_delivery(
-                exchange=f'{settings.RABBITMQ.SETUP.CALLBACKS.EXCHANGE}.subtopics:{settings.NAMESPACE}',
-                routing_key=f'powerloom-backend-callback:{settings.NAMESPACE}.pair_total_reserves_worker.processor',
-                msg_body=pair_total_reserves_process_unit.json()
-            )
-            self._logger.debug(f'Sent out epoch to be processed by worker to calculate total reserves for pair contract: {pair_total_reserves_process_unit}')
-        update_log = {
-            'worker': self._unique_id,
-            'update': {
-                'action': 'RabbitMQ.Publish',
-                'info': {
-                    'routing_key': f'powerloom-backend-callback:{settings.NAMESPACE}.pair_total_reserves_worker.processor',
-                    'exchange': f'{settings.RABBITMQ.SETUP.CALLBACKS.EXCHANGE}.subtopics:{settings.NAMESPACE}',
-                    'msg': msg_obj.dict()
+
+        try:
+            for contract in msg_obj.contracts:
+                contract = contract.lower()
+                pair_total_reserves_process_unit = PowerloomCallbackProcessMessage(
+                    begin=msg_obj.begin,
+                    end=msg_obj.end,
+                    contract=contract,
+                    broadcast_id=msg_obj.broadcast_id
+                )
+                self._rabbitmq_interactor.enqueue_msg_delivery(
+                    exchange=f'{settings.RABBITMQ.SETUP.CALLBACKS.EXCHANGE}.subtopics:{settings.NAMESPACE}',
+                    routing_key=f'powerloom-backend-callback:{settings.NAMESPACE}.pair_total_reserves_worker.processor',
+                    msg_body=pair_total_reserves_process_unit.json()
+                )
+                self._logger.debug(f'Sent out epoch to be processed by worker to calculate total reserves for pair contract: {pair_total_reserves_process_unit}')
+            update_log = {
+                'worker': self._unique_id,
+                'update': {
+                    'action': 'RabbitMQ.Publish',
+                    'info': {
+                        'routing_key': f'powerloom-backend-callback:{settings.NAMESPACE}.pair_total_reserves_worker.processor',
+                        'exchange': f'{settings.RABBITMQ.SETUP.CALLBACKS.EXCHANGE}.subtopics:{settings.NAMESPACE}',
+                        'msg': msg_obj.dict()
+                    }
                 }
             }
-        }
-        with create_redis_conn(self._connection_pool) as r:
-            r.zadd(
-                uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
-                {json.dumps(update_log): int(time.time())}
-            )
+            with create_redis_conn(self._connection_pool) as r:
+                r.zadd(
+                    uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
+                    {json.dumps(update_log): int(time.time())}
+                )
+        except Exception as err:
+            self._logger.error(f"Error in _distribute_callbacks for total reserves of a pair | error_msg:{err}", exc_info=True)
 
     def run(self):
         # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|Callbacks|TradeVolumeProcessDistributor'))

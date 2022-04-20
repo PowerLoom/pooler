@@ -172,13 +172,16 @@ class RabbitmqSelectLoopInteractor(object):
         self._channel = channel
         self.add_on_channel_close_callback()
         # self.setup_exchange(self.EXCHANGE)
-        self.start_publishing()
-        if self._consume_queue and self._consume_callback:
-            self.start_consuming(
-                queue_name=self._consume_queue,
-                consume_cb=self._consume_callback,
-                auto_ack=False
-            )
+        try:
+            self.start_publishing()
+            if self._consume_queue and self._consume_callback:
+                self.start_consuming(
+                    queue_name=self._consume_queue,
+                    consume_cb=self._consume_callback,
+                    auto_ack=False
+                )
+        except Exception as err:
+            logger.error(f"Failed in rabbitmq on_channel_open: {str(err)}", exc_info=True)
 
     def add_on_channel_close_callback(self):
         """This method tells pika to call the on_channel_closed method if
@@ -354,31 +357,34 @@ class RabbitmqSelectLoopInteractor(object):
         # check for queued messages
         pushed_outputs = list()
         # logger.debug('queued msgs: %s', self.queued_messages)
-        for unique_id in self.queued_messages:
-            msg_info = self.queued_messages[unique_id]
-            msg, exchange, routing_key = msg_info
-            logger.debug(
-                'Got queued message body to send to exchange %s via routing key %s: %s',
-                exchange, routing_key, msg
-            )
-            properties = pika.BasicProperties(
-                delivery_mode=2,
-                content_type='text/plain',
-                content_encoding='utf-8'
-            )
-            self._channel.basic_publish(
-                exchange=exchange,
-                routing_key=routing_key,
-                body=msg.encode('utf-8'),
-                properties=properties
-            )
-            self._message_number += 1
-            self._deliveries.append(self._message_number)
-            logger.info('Published message # %i to exchange %s via routing key %s: %s',
-                        self._message_number, exchange, routing_key, msg)
-            pushed_outputs.append(unique_id)
-        self.queued_messages = {k: self.queued_messages[k] for k in self.queued_messages if k not in pushed_outputs}
-        self.schedule_next_message()
+        try:
+            for unique_id in self.queued_messages:
+                msg_info = self.queued_messages[unique_id]
+                msg, exchange, routing_key = msg_info
+                logger.debug(
+                    'Got queued message body to send to exchange %s via routing key %s: %s',
+                    exchange, routing_key, msg
+                )
+                properties = pika.BasicProperties(
+                    delivery_mode=2,
+                    content_type='text/plain',
+                    content_encoding='utf-8'
+                )
+                self._channel.basic_publish(
+                    exchange=exchange,
+                    routing_key=routing_key,
+                    body=msg.encode('utf-8'),
+                    properties=properties
+                )
+                self._message_number += 1
+                self._deliveries.append(self._message_number)
+                logger.info('Published message # %i to exchange %s via routing key %s: %s',
+                            self._message_number, exchange, routing_key, msg)
+                pushed_outputs.append(unique_id)
+            self.queued_messages = {k: self.queued_messages[k] for k in self.queued_messages if k not in pushed_outputs}
+            self.schedule_next_message()
+        except Exception as err:
+            logger.error(f"Error rabbitmq publishing message: {err}", exc_info=True)
 
     def run(self):
         """Run the example code by connecting and then starting the IOLoop.

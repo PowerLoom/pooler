@@ -277,18 +277,21 @@ async def cache_pair_stablecoin_exchange_rates(redis_conn: aioredis.Redis = None
                 address=Web3.toChecksumAddress(each_pair_contract),
                 abi=pair_contract_abi
             )
-            pair_per_token_metadata = await get_pair_per_token_metadata(
-                pair_contract_obj=pair_contract_obj,
-                pair_address=Web3.toChecksumAddress(each_pair_contract),
-                loop=ev_loop
-            )
-            retrieval_logger.debug("Got pair token meta-data for pair contract: %s", each_pair_contract)    
+            try:
+                pair_per_token_metadata = await get_pair_per_token_metadata(
+                    pair_contract_obj=pair_contract_obj,
+                    pair_address=Web3.toChecksumAddress(each_pair_contract),
+                    loop=ev_loop
+                )
+                retrieval_logger.debug("Got pair token meta-data for pair contract: %s", each_pair_contract)    
 
-            [
-                token0_USD_price, 
-                token1_USD_price, 
-                WETH_USD_price
-            ] = await get_token_price_against_stablecoins(pair_per_token_metadata, ev_loop, redis_conn)
+                [
+                    token0_USD_price, 
+                    token1_USD_price, 
+                    WETH_USD_price
+                ] = await get_token_price_against_stablecoins(pair_per_token_metadata, ev_loop, redis_conn)
+            except Exception as err:
+                retrieval_logger.error(f"Failed to fetch token price | error_msg: {str(err)} | contract: {each_pair_contract}", exc_info=True)
 
         else:
             retrieval_logger.debug('I cant request')
