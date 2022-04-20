@@ -195,7 +195,13 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                     for x in queued_epochs
                 ]
         except Exception as e:
-            self._logger.error(f'Failed to construct epochs for trade volume processing: {str(e)}')
+            # Stroing epoch for next time to be processed or discarded
+            await self._redis_conn.rpush(
+                uniswap_failed_query_pair_total_reserves_epochs_redis_q_f.format(msg_obj.contract),
+                msg_obj.json()
+            )
+            self._logger.error(f'Error while retrying old failed epoch: {str(e)}')
+            return None
         
         try:
             trade_vol_processed_snapshot = await get_pair_contract_trades_async(
@@ -557,39 +563,36 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
             self._logger.error('Unexpected message format of epoch callback', exc_info=True)
             return
 
-        try:
-            for contract in msg_obj.contracts:
-                contract = contract.lower()
-                pair_total_reserves_process_unit = PowerloomCallbackProcessMessage(
-                    begin=msg_obj.begin,
-                    end=msg_obj.end,
-                    contract=contract,
-                    broadcast_id=msg_obj.broadcast_id
-                )
-                self._rabbitmq_interactor.enqueue_msg_delivery(
-                    exchange=f'{settings.RABBITMQ.SETUP.CALLBACKS.EXCHANGE}.subtopics:{settings.NAMESPACE}',
-                    routing_key=f'powerloom-backend-callback:{settings.NAMESPACE}.pair_total_reserves_worker.processor',
-                    msg_body=pair_total_reserves_process_unit.json()
-                )
-                self._logger.debug(f'Sent out epoch to be processed by worker to calculate total reserves for pair contract: {pair_total_reserves_process_unit}')
-            update_log = {
-                'worker': self._unique_id,
-                'update': {
-                    'action': 'RabbitMQ.Publish',
-                    'info': {
-                        'routing_key': f'powerloom-backend-callback:{settings.NAMESPACE}.pair_total_reserves_worker.processor',
-                        'exchange': f'{settings.RABBITMQ.SETUP.CALLBACKS.EXCHANGE}.subtopics:{settings.NAMESPACE}',
-                        'msg': msg_obj.dict()
-                    }
+        for contract in msg_obj.contracts:
+            contract = contract.lower()
+            pair_total_reserves_process_unit = PowerloomCallbackProcessMessage(
+                begin=msg_obj.begin,
+                end=msg_obj.end,
+                contract=contract,
+                broadcast_id=msg_obj.broadcast_id
+            )
+            self._rabbitmq_interactor.enqueue_msg_delivery(
+                exchange=f'{settings.RABBITMQ.SETUP.CALLBACKS.EXCHANGE}.subtopics:{settings.NAMESPACE}',
+                routing_key=f'powerloom-backend-callback:{settings.NAMESPACE}.pair_total_reserves_worker.processor',
+                msg_body=pair_total_reserves_process_unit.json()
+            )
+            self._logger.debug(f'Sent out epoch to be processed by worker to calculate total reserves for pair contract: {pair_total_reserves_process_unit}')
+        update_log = {
+            'worker': self._unique_id,
+            'update': {
+                'action': 'RabbitMQ.Publish',
+                'info': {
+                    'routing_key': f'powerloom-backend-callback:{settings.NAMESPACE}.pair_total_reserves_worker.processor',
+                    'exchange': f'{settings.RABBITMQ.SETUP.CALLBACKS.EXCHANGE}.subtopics:{settings.NAMESPACE}',
+                    'msg': msg_obj.dict()
                 }
             }
-            with create_redis_conn(self._connection_pool) as r:
-                r.zadd(
-                    uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
-                    {json.dumps(update_log): int(time.time())}
-                )
-        except Exception as err:
-            self._logger.error(f"Error in _distribute_callbacks for total reserves of a pair | error_msg:{err}", exc_info=True)
+        }
+        with create_redis_conn(self._connection_pool) as r:
+            r.zadd(
+                uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
+                {json.dumps(update_log): int(time.time())}
+            )
 
     def run(self):
         # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|Callbacks|TradeVolumeProcessDistributor'))

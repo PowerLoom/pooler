@@ -511,7 +511,8 @@ async def get_pair_per_token_metadata(pair_contract_obj, pair_address, loop: asy
             }
         }
     except Exception as e:
-        logger.error(e, exc_info=True)
+        # this will be retried in next cycle
+        logger.error(f"RPC error while fetcing metadata for pair {pair_address}, error_msg:{e}", exc_info=True)
         return {}
 
 
@@ -605,6 +606,7 @@ async def get_liquidity_of_each_token_reserve_async(
             raise Exception("exhausted_api_key_rate_limit inside uniswap_functions get async liquidity reservers")
     except Exception as exc:
         logger.error("error at async_get_liquidity_of_each_token_reserve fn: %s", exc, exc_info=True)
+        # snapshot constructor expect exception and handle it with queue
         raise exc
 
 
@@ -729,6 +731,7 @@ async def get_pair_contract_trades_async(
             raise Exception("exhausted_api_key_rate_limit inside uniswap_functions get async liquidity reservers")
     except Exception as exc:
         logger.error("error at get_pair_contract_trades_async fn: %s", exc, exc_info=True)
+        # snapshot constructor expect exception and handle it with queue
         raise exc
 
 

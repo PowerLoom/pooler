@@ -97,6 +97,7 @@ class ProcessHubCore(Process):
         except SelfExitException:
             redis_conn.delete(f'powerloom:uniswap:{settings.NAMESPACE}:Processes')
         except Exception as err:
+            # KeyboardInterrupt can be raised and should be ignored
             _logger.error(f"Error in internal state reporter: {str(err)}", exc_info=True)
             
 
@@ -148,8 +149,9 @@ class ProcessHubCore(Process):
             self._logger.error('ProcessHubCore received unrecognized command')
             self._logger.error(command)
             return
-        try:
-            if cmd_json.command == 'stop':
+        
+        if cmd_json.command == 'stop':
+            try:
                 self._logger.debug('Process Hub Core received stop command: %s', cmd_json)
                 process_id = cmd_json.pid
                 proc_str_id = cmd_json.proc_str_id
@@ -166,7 +168,10 @@ class ProcessHubCore(Process):
                     else:
                         kill_process(mapped_p.pid)
                         self._spawned_processes_map[proc_str_id] = None
-            elif cmd_json.command == 'start':
+            except Exception as err:
+                self._logger.error(f"Error while killing/stopping a process:{cmd_json} | error_msg: {str(err)}", exc_info=True)
+        elif cmd_json.command == 'start':
+            try:
                 self._logger.debug('Process Hub Core received start command: %s', cmd_json)
                 proc_name = cmd_json.proc_str_id
                 self._logger.debug('Process Hub Core launching process for %s', proc_name)
@@ -181,7 +186,10 @@ class ProcessHubCore(Process):
                     proc_obj.start()
                 self._logger.debug('Process Hub Core launched process for %s with PID: %s', proc_name, proc_obj.pid)
                 self._spawned_processes_map[proc_name] = proc_obj
-            elif cmd_json.command == 'restart':
+            except Exception as err:
+                self._logger.error(f"Error while starting a process:{cmd_json} | error_msg: {str(err)}", exc_info=True)
+        elif cmd_json.command == 'restart':
+            try:
                 # TODO
                 self._logger.debug('Process Hub Core received restart command: %s', cmd_json)
                 proc_identifier = cmd_json.proc_str_id
@@ -189,5 +197,5 @@ class ProcessHubCore(Process):
                 self._logger.debug('Attempting to kill process: %s', cmd_json.pid)
                 kill_process(cmd_json.pid)
                 self._logger.debug('Attempting to start process: %s', cmd_json.proc_str_id)
-        except Exception as err:
-            self._logger.error(f"Error in Process Hub Core callback: {str(err)}", exc_info=True)
+            except Exception as err:
+                self._logger.error(f"Error while restarting a process:{cmd_json} | error_msg: {str(err)}", exc_info=True)

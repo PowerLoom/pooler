@@ -181,7 +181,9 @@ class RabbitmqSelectLoopInteractor(object):
                     auto_ack=False
                 )
         except Exception as err:
-            logger.error(f"Failed in rabbitmq on_channel_open: {str(err)}", exc_info=True)
+            logger.error(f"Failed on_channel_open hook with error_msg: {str(err)}", exc_info=True)
+            # must be raised back to caller to be handled there
+            raise err
 
     def add_on_channel_close_callback(self):
         """This method tells pika to call the on_channel_closed method if
@@ -384,7 +386,8 @@ class RabbitmqSelectLoopInteractor(object):
             self.queued_messages = {k: self.queued_messages[k] for k in self.queued_messages if k not in pushed_outputs}
             self.schedule_next_message()
         except Exception as err:
-            logger.error(f"Error rabbitmq publishing message: {err}", exc_info=True)
+            logger.error(f"Error while publishing message to rabbitmq error_msg: {str(err)}, exchange: {exchange}, routing_key:{routing_key}, msg:{msg}", exc_info=True)
+            raise err
 
     def run(self):
         """Run the example code by connecting and then starting the IOLoop.

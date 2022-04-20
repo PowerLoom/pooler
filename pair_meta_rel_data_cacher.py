@@ -291,6 +291,7 @@ async def cache_pair_stablecoin_exchange_rates(redis_conn: aioredis.Redis = None
                     WETH_USD_price
                 ] = await get_token_price_against_stablecoins(pair_per_token_metadata, ev_loop, redis_conn)
             except Exception as err:
+                # pair_contract price can't retrieved, this is mostly with sepcific coins log it and fetch price for newer ones
                 retrieval_logger.error(f"Failed to fetch token price | error_msg: {str(err)} | contract: {each_pair_contract}", exc_info=True)
 
         else:
