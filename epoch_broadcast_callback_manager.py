@@ -13,6 +13,7 @@ import logging.handlers
 import sys
 import json
 import os
+from setproctitle import setproctitle
 
 
 def append_epoch_context(msg_json: dict):
@@ -87,6 +88,7 @@ class EpochCallbackManager(Process):
 
     def run(self) -> None:
         # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|EpochCallbackManager'))
+        setproctitle(f'PowerLoom|EpochCallbackManager')
         self._logger = logging.getLogger('PowerLoom|EpochCallbackManager')
         self._logger.setLevel(logging.DEBUG)
         stdout_handler = logging.StreamHandler(sys.stdout)

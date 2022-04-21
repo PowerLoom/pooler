@@ -22,6 +22,7 @@ import logging.handlers
 import importlib
 import json
 import time
+from setproctitle import setproctitle
 
 
 PROC_STR_ID_TO_CLASS_MAP = {
@@ -105,7 +106,8 @@ class ProcessHubCore(Process):
     def run(self) -> None:
         # self._logger = get_mp_logger()
         # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|ProcessHub|Core'))
-        self._logger = logging.getLogger('PowerLoom|ProcessHub|Core')
+        setproctitle(f'PowerLoom|ProcessHub|Core')
+        self._logger = logging.getLogger('PowerLoom|ProcessHub|Core') 
         self._logger.setLevel(logging.DEBUG)
         self._logger.handlers = [logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
         for callback_worker_file, worker_list in CALLBACK_WORKERS_MAP.items():

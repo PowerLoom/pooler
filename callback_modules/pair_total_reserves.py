@@ -40,6 +40,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             rmq_routing=f'powerloom-backend-callback:{settings.NAMESPACE}.pair_total_reserves_worker.processor',
             **kwargs
         )
+        setproctitle(self.name)
 
     async def _construct_pair_reserves_epoch_snapshot_data(self, msg_obj: PowerloomCallbackProcessMessage, enqueue_on_failure=False):
         max_chain_height = msg_obj.end

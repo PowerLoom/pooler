@@ -38,6 +38,7 @@ def collate_epoch(
 def state_report_thread():
     t_logger = logging.getLogger('PowerLoom|EpochCollator')
     # t_logger.handlers = [logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
+    setproctitle(f'PowerLoom|SystemEpochCollator')
     member_id = f'powerloom:epoch:collator:{settings.NAMESPACE}'
     coordinator = coordination.get_coordinator(f'kazoo://{construct_kazoo_url()}', member_id)
     coordinator.start(start_heart=True)

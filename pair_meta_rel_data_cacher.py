@@ -25,7 +25,10 @@ import logging
 import json
 import os
 import sys
+from setproctitle import setproctitle
 
+
+setproctitle(f'PowerLoom|UniswapFunctions|PairMetadataCacher')
 
 """ Inititalize the logger """
 retrieval_logger = logging.getLogger('PowerLoom|UniswapFunctions|PairMetadataCacher')

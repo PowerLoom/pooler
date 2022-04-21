@@ -13,6 +13,7 @@ import queue
 import tooz
 import time
 import pika
+from setproctitle import setproctitle
 
 # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|EpochFinalizer'))
 finalizer_logger = logging.getLogger('PowerLoom|EpochFinalizer')
@@ -57,6 +58,7 @@ def main():
 
     last_reorg_state = SystemEpochStatusReport(begin=0, end=0, reorg=False, broadcast_id='dummy')
     last_epoch_broadcast = EpochBroadcast(begin=0, end=0, broadcast_id='dummy')
+    setproctitle(f'PowerLoom|SystemEpochFinalizer')
     member_id = f'powerloom:epoch:finalizer:{settings.NAMESPACE}'
     coordinator = coordination.get_coordinator(f'kazoo://{construct_kazoo_url()}', member_id)
     coordinator.start(start_heart=True)

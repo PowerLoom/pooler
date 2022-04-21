@@ -9,10 +9,14 @@ import logging
 import sys
 import hmac
 import asyncio
+from setproctitle import setproctitle
+
+
 trade_logger = logging.getLogger(__name__)
 socket_log_handler = logging.handlers.SocketHandler('localhost', logging.handlers.DEFAULT_TCP_LOGGING_PORT)
 trade_logger.addHandler(socket_log_handler)
 app = FastAPI()
+setproctitle(f'PowerLoom|ContractEventListener') 
 
 
 # TODO: if we support the callback confirmation call feature from AuditProtocol, this module would need a rewrite
