@@ -7,7 +7,6 @@ from gunicorn.glogging import Logger
 from loguru import logger
 from dynaconf import settings
 from core_api import app
-from setproctitle import setproctitle
 
 
 LOG_LEVEL = logging.getLevelName(os.environ.get("LOG_LEVEL", "DEBUG"))
@@ -68,7 +67,6 @@ if __name__ == '__main__':
     # logging.basicConfig(handlers=[intercept_handler], level=LOG_LEVEL)
     # logging.root.handlers = [intercept_handler]
     logging.root.setLevel(LOG_LEVEL)
-    setproctitle(f'PowerLoom|Gunicorn|Core|launcher')
 
     seen = set()
     for name in [

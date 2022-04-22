@@ -19,7 +19,7 @@ def main():
     signal.signal(signal.SIGTERM, sigterm_handler)
     # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|ProcessHub|Core|Launcher'))
     # logging.config.dictConfig(config_logger_with_namespace(namespace=None))
-    setproctitle(f'PowerLoom|ProcessHub|Core|Launcher')
+    setproctitle(f'PowerLoom|UniswapPoolerProcessHub|Core|Launcher')
     logger = logging.getLogger('PowerLoom|UniswapPoolerProcessHub|Core|Launcher')
     logger.setLevel(logging.DEBUG)
     logger.handlers = [logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
