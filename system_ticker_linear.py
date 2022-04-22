@@ -74,7 +74,7 @@ def main_ticker_process(begin=None, end=None):
             else:
                 # linear_ticker_logger.debug('Picked begin of epoch: %s', begin_block_epoch)
                 end_block_epoch = cur_block - settings.EPOCH.HEAD_OFFSET
-                if not end_block_epoch - begin_block_epoch >= settings.EPOCH.HEIGHT:
+                if not (end_block_epoch - begin_block_epoch + 1) >= settings.EPOCH.HEIGHT:
                     sleep_factor = settings.EPOCH.HEIGHT - ((end_block_epoch - begin_block_epoch) + 1)
                     linear_ticker_logger.debug('Current head of source chain estimated at block %s after offsetting | '
                                                '%s - %s does not satisfy configured epoch length. '
