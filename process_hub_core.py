@@ -63,39 +63,40 @@ with open('callback_modules/module_queues_config.json', 'r') as f:
 CALLBACK_WORKERS_MAP = contents['callback_workers']
 
 
-def signal_handler(self, signum, _):
-    if signum == SIGCHLD:
-        pid, status = os.waitpid(-1, os.WNOHANG|os.WUNTRACED|os.WCONTINUED)
-        if os.WIFCONTINUED(status) or os.WIFSTOPPED(status):
-            return
-        if os.WIFSIGNALED(status) or os.WIFEXITED(status):
-            for k, v in self._spawned_cb_processes_map.items():
-                if v['process'].pid == pid:
-                    v['process'].start()
-            for k, v in self._spawned_processes_map.items():
-                if v != -1 and v.pid == pid:
-                    v.start()
-
-    else:
-        # mother shouldn't be notified when it terminates children
-        signal(SIGCHLD, SIG_DFL)
-        for k, v in self._spawned_cb_processes_map.items():
-            if v['process'].is_alive():
-                v['process'].terminate()
-                v['process'].join()
-        for k, v in self._spawned_processes_map.items():
-            if v != -1 and v.is_alive():
-                v.terminate()
-                v.join()
-
-        sys.exit(0)
-
-
 class ProcessHubCore(Process):
     def __init__(self, name, **kwargs):
         Process.__init__(self, name=name, **kwargs)
         self._spawned_processes_map: Dict[str, Union[Process, None]] = dict()
         self._spawned_cb_processes_map = dict()  # separate map for callback worker spawns
+
+    def signal_handler(self, signum, frame):
+        if signum == SIGCHLD:
+            pid, status = os.waitpid(-1, os.WNOHANG|os.WUNTRACED|os.WCONTINUED)
+            if os.WIFCONTINUED(status) or os.WIFSTOPPED(status):
+                return
+            if os.WIFSIGNALED(status) or os.WIFEXITED(status):
+                for k, v in self._spawned_cb_processes_map.items():
+                    if v['process'].pid == pid:
+                        v['process'].start()
+                for k, v in self._spawned_processes_map.items():
+                    if v != -1 and v.pid == pid:
+                        v.start()
+        else:
+
+            print(f"signal_handler is running with PID:{os.getpid()}")
+
+            # mother shouldn't be notified when it terminates children
+            signal(SIGCHLD, SIG_DFL)
+            for k, v in self._spawned_cb_processes_map.items():
+                if v['process'].is_alive():
+                    v['process'].terminate()
+                    v['process'].join()
+            for k, v in self._spawned_processes_map.items():
+                if v != -1 and v.is_alive():
+                    v.terminate()
+                    v.join()
+
+            sys.exit(0)
 
     def kill_process(self, pid: int):
         _logger = logging.getLogger('PowerLoom|ProcessHub|Core')
@@ -152,7 +153,7 @@ class ProcessHubCore(Process):
         self._logger.handlers = [logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
         
         for signame in [SIGINT, SIGTERM, SIGQUIT, SIGCHLD]:
-            signal(signame, signal_handler)
+            signal(signame, self.signal_handler)
 
         for callback_worker_file, worker_list in CALLBACK_WORKERS_MAP.items():
             self._logger.debug('='*80)
