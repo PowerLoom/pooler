@@ -148,9 +148,9 @@ async def make_post_call_async(url: str, params: dict, session: aiohttp.ClientSe
 
 def cleanup_children_procs(fn):
     @wraps(fn)
-    def wrapper(*args, **kwargs):
+    def wrapper(self, *args, **kwargs):
         try:
-            fn(*args, **kwargs)
+            fn(self, *args, **kwargs)
         except (SelfExitException, Exception) as e:
             if not isinstance(e, SelfExitException):
                 logging.error(e, exc_info=True)
@@ -162,6 +162,11 @@ def cleanup_children_procs(fn):
             gone, alive = psutil.wait_procs(procs, timeout=3)
             for p in alive:
                 p.kill()
+                if hasattr(self, '_spawned_cb_processes_map'):
+                    for k, v in self._spawned_cb_processes_map.items():
+                        if v['pid'] == p.pid:
+                            v['process'].join()
+                    
         finally:
             return None
 
