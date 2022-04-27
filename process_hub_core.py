@@ -77,26 +77,18 @@ class ProcessHubCore(Process):
             if os.WIFSIGNALED(status) or os.WIFEXITED(status):
                 for k, v in self._spawned_cb_processes_map.items():
                     if v['process'].pid == pid:
+                        # TODO: should create a new process object here
                         v['process'].start()
                 for k, v in self._spawned_processes_map.items():
                     if v != -1 and v.pid == pid:
+                        # TODO: should create a new process object here
                         v.start()
         else:
 
             print(f"signal_handler is running with PID:{os.getpid()}")
-
             # mother shouldn't be notified when it terminates children
-            signal(SIGCHLD, SIG_DFL)
-            for k, v in self._spawned_cb_processes_map.items():
-                if v['process'].is_alive():
-                    v['process'].terminate()
-                    v['process'].join()
-            for k, v in self._spawned_processes_map.items():
-                if v != -1 and v.is_alive():
-                    v.terminate()
-                    v.join()
-
-            sys.exit(0)
+            # signal(SIGCHLD, SIG_DFL)
+            raise SelfExitException
 
     def kill_process(self, pid: int):
         _logger = logging.getLogger('PowerLoom|ProcessHub|Core')
