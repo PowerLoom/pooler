@@ -79,16 +79,20 @@ class ProcessHubCore(Process):
                     if v['process'].pid == pid:
                         # TODO: should create a new process object here
                         v['process'].start()
+                        
                 for k, v in self._spawned_processes_map.items():
                     if v != -1 and v.pid == pid:
-                        # TODO: should create a new process object here
-                        v.start()
-        else:
-
-            print(f"signal_handler is running with PID:{os.getpid()}")
-            # mother shouldn't be notified when it terminates children
-            # signal(SIGCHLD, SIG_DFL)
-            raise SelfExitException
+                        self._logger.debug('RESPAWNING: process for %s', k)
+                        proc_details: dict = PROC_STR_ID_TO_CLASS_MAP.get(k)
+                        init_kwargs = dict(name=proc_details['name'])
+                        if proc_details.get('class'):
+                            proc_obj = proc_details['class'](**init_kwargs)
+                            proc_obj.start()
+                        else:
+                            proc_obj = Process(target=proc_details['target'])
+                            proc_obj.start()
+                        self._logger.debug('RESPAWNED: process for %s with PID: %s', k, proc_obj.pid)
+                        self._spawned_processes_map[k] = proc_obj
 
     def kill_process(self, pid: int):
         _logger = logging.getLogger('PowerLoom|ProcessHub|Core')
@@ -182,25 +186,22 @@ class ProcessHubCore(Process):
             return
         
         if cmd_json.command == 'stop':
-            try:
-                self._logger.debug('Process Hub Core received stop command: %s', cmd_json)
-                process_id = cmd_json.pid
-                proc_str_id = cmd_json.proc_str_id
-                if process_id:
-                    self.kill_process(process_id)
-                if proc_str_id:
-                    if proc_str_id == 'self':
-                        self._logger.error('Received stop command on self. Initiating shutdown...')
-                        raise SelfExitException
-                    mapped_p = self._spawned_processes_map.get(proc_str_id)
-                    if not mapped_p:
-                        self._logger.error('Did not find process ID in local process string map: %s', proc_str_id)
-                        return
-                    else:
-                        self.kill_process(mapped_p.pid)
-                        self._spawned_processes_map[proc_str_id] = None
-            except Exception as err:
-                self._logger.error(f"Error while killing/stopping a process:{cmd_json} | error_msg: {str(err)}", exc_info=True)
+            self._logger.debug('Process Hub Core received stop command: %s', cmd_json)
+            process_id = cmd_json.pid
+            proc_str_id = cmd_json.proc_str_id
+            if process_id:
+                self.kill_process(process_id)
+            if proc_str_id:
+                if proc_str_id == 'self':
+                    self._logger.error('Received stop command on self. Initiating shutdown...')
+                    raise SelfExitException
+                mapped_p = self._spawned_processes_map.get(proc_str_id)
+                if not mapped_p:
+                    self._logger.error('Did not find process ID in local process string map: %s', proc_str_id)
+                    return
+                else:
+                    self.kill_process(mapped_p.pid)
+                    self._spawned_processes_map[proc_str_id] = None
         elif cmd_json.command == 'start':
             try:
                 self._logger.debug('Process Hub Core received start command: %s', cmd_json)
