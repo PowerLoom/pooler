@@ -164,8 +164,13 @@ def cleanup_children_procs(fn):
                 p.kill()
                 if hasattr(self, '_spawned_cb_processes_map'):
                     for k, v in self._spawned_cb_processes_map.items():
-                        if v['pid'] == p.pid:
+                        if v['process'].pid == p.pid:
                             v['process'].join()
+                if hasattr(self, '_spawned_processes_map'):
+                    for k, v in self._spawned_processes_map.items():
+                        # internal state reporter might set proc_id_map[k] = -1 
+                        if v != -1 and v.pid == p.pid:
+                            v.join()
                     
         finally:
             return None
