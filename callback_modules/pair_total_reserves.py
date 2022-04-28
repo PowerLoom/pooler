@@ -40,7 +40,6 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             rmq_routing=f'powerloom-backend-callback:{settings.NAMESPACE}.pair_total_reserves_worker.processor',
             **kwargs
         )
-        setproctitle(self.name)
 
     async def _construct_pair_reserves_epoch_snapshot_data(self, msg_obj: PowerloomCallbackProcessMessage, enqueue_on_failure=False):
         max_chain_height = msg_obj.end
@@ -530,6 +529,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                     )
 
     def run(self):
+        setproctitle(self.name)
         # setup_loguru_intercept()
         self._aiohttp_session_interface = AsyncHTTPSessionCache()
         # self._logger.debug('Launching epochs summation actor for total reserves of pairs...')
@@ -539,7 +539,6 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
 class PairTotalReservesProcessorDistributor(multiprocessing.Process):
     def __init__(self, name, **kwargs):
         super(PairTotalReservesProcessorDistributor, self).__init__(name=name, **kwargs)
-        setproctitle(self.name)
         self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
         self._q = queue.Queue()
         self._rabbitmq_interactor = None
@@ -598,6 +597,7 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
     def run(self):
         # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|Callbacks|TradeVolumeProcessDistributor'))
         self._logger = logging.getLogger('PowerLoom|Callbacks|PairTotalReservesProcessDistributor')
+        setproctitle(self.name)
         self._logger.setLevel(logging.DEBUG)
         self._logger.handlers = [
             logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]

@@ -217,12 +217,10 @@ class CallbackAsyncWorker(multiprocessing.Process):
         self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
         self._redis_conn: Union[None, aioredis.Redis] = None
         super(CallbackAsyncWorker, self).__init__(name=name, **kwargs)
-        setproctitle(self._unique_id)
         # logger.add(
         #     sink='logs/' + self._unique_id + '_{time}.log', rotation='20MB', retention=20, compression='gz'
         # )
         # setup_loguru_intercept()
-
         self._shutdown_signal_received_count = 0
 
     async def _shutdown_handler(self, sig, loop: asyncio.AbstractEventLoop):
@@ -285,6 +283,7 @@ class CallbackAsyncWorker(multiprocessing.Process):
                 )
 
     def run(self) -> None:
+        setproctitle(self._unique_id)
         # logging.config.dictConfig(config_logger_with_namespace(self.name))
         self._logger = logging.getLogger(self.name)
         self._logger.setLevel(logging.DEBUG)
