@@ -313,11 +313,11 @@ async def extract_trade_volume_data(ev_loop, event_name, event_logs: List[Attrib
         # calculate uniswap LP fee
         if token0_fee and token0Price:
             token0_fee = token0_fee / 10 ** int(pair_per_token_metadata['token0']['decimals'])
-            token0_fee = token0_fee * 0.003 # uniswap LP fee rate
+            token0_fee = token0_fee * 0.3 # uniswap LP fee rate
             trade_fee_usd = token0_fee * float(token0Price.decode('utf-8'))
         elif token1_fee and token1Price:
             token1_fee = token1_fee / 10 ** int(pair_per_token_metadata['token1']['decimals'])
-            token1_fee = token1_fee * 0.003 # uniswap LP fee rate
+            token1_fee = token1_fee * 0.3 # uniswap LP fee rate
             trade_fee_usd = token1_fee * float(token1Price.decode('utf-8'))
 
         return {

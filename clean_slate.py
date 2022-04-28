@@ -115,6 +115,11 @@ def redis_cleanup():
     except:
         pass
 
+    try:
+        r.delete(*r.keys(f'*uniswap*{settings.NAMESPACE}*slidingWindowData*'))
+    except:
+        pass
+
 
 if __name__ == '__main__':
     redis_cleanup()
