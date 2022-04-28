@@ -23,6 +23,10 @@ import importlib
 import json
 import time
 from setproctitle import setproctitle
+from signal import signal, pause, SIGINT, SIGTERM, SIGQUIT, SIGCHLD, SIG_DFL
+import os
+import sys
+from rabbitmq_helpers import RabbitmqSelectLoopInteractor
 
 
 PROC_STR_ID_TO_CLASS_MAP = {
@@ -59,23 +63,56 @@ with open('callback_modules/module_queues_config.json', 'r') as f:
 CALLBACK_WORKERS_MAP = contents['callback_workers']
 
 
-def kill_process(pid: int):
-    _logger = logging.getLogger('PowerLoom|ProcessHub|Core')
-    p = psutil.Process(pid)
-    _logger.debug('Attempting to send SIGTERM to process ID %s for following command', pid)
-    p.terminate()
-    _logger.debug('Waiting for 3 seconds to confirm termination of process')
-    gone, alive = psutil.wait_procs([p], timeout=3)
-    for p_ in alive:
-        _logger.debug('Process ID %s not terminated by SIGTERM. Sending SIGKILL...', p_.pid)
-        p_.kill()
-
-
 class ProcessHubCore(Process):
     def __init__(self, name, **kwargs):
         Process.__init__(self, name=name, **kwargs)
         self._spawned_processes_map: Dict[str, Union[Process, None]] = dict()
         self._spawned_cb_processes_map = dict()  # separate map for callback worker spawns
+
+    def signal_handler(self, signum, frame):
+        if signum == SIGCHLD:
+            pid, status = os.waitpid(-1, os.WNOHANG|os.WUNTRACED|os.WCONTINUED)
+            if os.WIFCONTINUED(status) or os.WIFSTOPPED(status):
+                return
+            if os.WIFSIGNALED(status) or os.WIFEXITED(status):
+                for k, v in self._spawned_cb_processes_map.items():
+                    if v['process'].pid == pid:
+                        # TODO: should create a new process object here
+                        v['process'].start()
+                        
+                for k, v in self._spawned_processes_map.items():
+                    if v != -1 and v.pid == pid:
+                        self._logger.debug('RESPAWNING: process for %s', k)
+                        proc_details: dict = PROC_STR_ID_TO_CLASS_MAP.get(k)
+                        init_kwargs = dict(name=proc_details['name'])
+                        if proc_details.get('class'):
+                            proc_obj = proc_details['class'](**init_kwargs)
+                            proc_obj.start()
+                        else:
+                            proc_obj = Process(target=proc_details['target'])
+                            proc_obj.start()
+                        self._logger.debug('RESPAWNED: process for %s with PID: %s', k, proc_obj.pid)
+                        self._spawned_processes_map[k] = proc_obj
+
+    def kill_process(self, pid: int):
+        _logger = logging.getLogger('PowerLoom|ProcessHub|Core')
+        p = psutil.Process(pid)
+        _logger.debug('Attempting to send SIGTERM to process ID %s for following command', pid)
+        p.terminate() 
+        _logger.debug('Waiting for 3 seconds to confirm termination of process')
+        gone, alive = psutil.wait_procs([p], timeout=3)
+        for p_ in alive:
+            _logger.debug('Process ID %s not terminated by SIGTERM. Sending SIGKILL...', p_.pid)
+            p_.kill()
+        if hasattr(self, '_spawned_cb_processes_map'):
+            for k, v in self._spawned_cb_processes_map.items():
+                if v['process'].pid == pid:
+                    v['process'].join()
+        if hasattr(self, '_spawned_processes_map'):
+            for k, v in self._spawned_processes_map.items():
+                # internal state reporter might set proc_id_map[k] = -1 
+                if v != -1 and v.pid == pid:
+                    v.join()
 
     @provide_redis_conn
     def internal_state_reporter(self, redis_conn: redis.Redis = None):
@@ -110,6 +147,10 @@ class ProcessHubCore(Process):
         self._logger = logging.getLogger('PowerLoom|ProcessHub|Core') 
         self._logger.setLevel(logging.DEBUG)
         self._logger.handlers = [logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
+        
+        for signame in [SIGINT, SIGTERM, SIGQUIT, SIGCHLD]:
+            signal(signame, self.signal_handler)
+
         for callback_worker_file, worker_list in CALLBACK_WORKERS_MAP.items():
             self._logger.debug('='*80)
             self._logger.debug('Launching workers for functionality %s', callback_worker_file)
@@ -125,22 +166,14 @@ class ProcessHubCore(Process):
         self._reporter_thread = Thread(target=self.internal_state_reporter)
         self._reporter_thread.start()
         self._logger.debug('Starting Process Hub Core...')
-        connection = create_rabbitmq_conn()
-        channel = connection.channel()
+
         queue_name = f"powerloom-processhub-commands-q:{settings.NAMESPACE}"
-        channel.basic_qos(prefetch_count=1)
-        channel.basic_consume(
-            queue=queue_name,
-            on_message_callback=self.callback,
-            auto_ack=False
+        self.rabbitmq_interactor: RabbitmqSelectLoopInteractor = RabbitmqSelectLoopInteractor(
+            consume_queue_name=queue_name,
+            consume_callback=self.callback
         )
-        try:
-            channel.start_consuming()
-        except Exception as err:
-            self._logger.error(f"Error in Process Hub Core: {str(err)}", exc_info=True)
-        finally:
-            channel.stop_consuming()
-            connection.close()
+        self._logger.debug('Starting RabbitMQ consumer on queue %s', queue_name)
+        self.rabbitmq_interactor.run()
 
     def callback(self, ch, method, properties, body):
         ch.basic_ack(delivery_tag=method.delivery_tag)
@@ -153,25 +186,22 @@ class ProcessHubCore(Process):
             return
         
         if cmd_json.command == 'stop':
-            try:
-                self._logger.debug('Process Hub Core received stop command: %s', cmd_json)
-                process_id = cmd_json.pid
-                proc_str_id = cmd_json.proc_str_id
-                if process_id:
-                    kill_process(process_id)
-                if proc_str_id:
-                    if proc_str_id == 'self':
-                        self._logger.error('Received stop command on self. Initiating shutdown...')
-                        raise SelfExitException
-                    mapped_p = self._spawned_processes_map.get(proc_str_id)
-                    if not mapped_p:
-                        self._logger.error('Did not find process ID in local process string map: %s', proc_str_id)
-                        return
-                    else:
-                        kill_process(mapped_p.pid)
-                        self._spawned_processes_map[proc_str_id] = None
-            except Exception as err:
-                self._logger.error(f"Error while killing/stopping a process:{cmd_json} | error_msg: {str(err)}", exc_info=True)
+            self._logger.debug('Process Hub Core received stop command: %s', cmd_json)
+            process_id = cmd_json.pid
+            proc_str_id = cmd_json.proc_str_id
+            if process_id:
+                self.kill_process(process_id)
+            if proc_str_id:
+                if proc_str_id == 'self':
+                    self._logger.error('Received stop command on self. Initiating shutdown...')
+                    raise SelfExitException
+                mapped_p = self._spawned_processes_map.get(proc_str_id)
+                if not mapped_p:
+                    self._logger.error('Did not find process ID in local process string map: %s', proc_str_id)
+                    return
+                else:
+                    self.kill_process(mapped_p.pid)
+                    self._spawned_processes_map[proc_str_id] = None
         elif cmd_json.command == 'start':
             try:
                 self._logger.debug('Process Hub Core received start command: %s', cmd_json)
@@ -197,7 +227,7 @@ class ProcessHubCore(Process):
                 proc_identifier = cmd_json.proc_str_id
                 # first kill
                 self._logger.debug('Attempting to kill process: %s', cmd_json.pid)
-                kill_process(cmd_json.pid)
+                self.kill_process(cmd_json.pid)
                 self._logger.debug('Attempting to start process: %s', cmd_json.proc_str_id)
             except Exception as err:
                 self._logger.error(f"Error while restarting a process:{cmd_json} | error_msg: {str(err)}", exc_info=True)

@@ -148,20 +148,42 @@ async def make_post_call_async(url: str, params: dict, session: aiohttp.ClientSe
 
 def cleanup_children_procs(fn):
     @wraps(fn)
-    def wrapper(*args, **kwargs):
+    def wrapper(self, *args, **kwargs):
         try:
-            fn(*args, **kwargs)
+            fn(self, *args, **kwargs)
         except (SelfExitException, Exception) as e:
             if not isinstance(e, SelfExitException):
                 logging.error(e, exc_info=True)
-            logging.error('Initiating kill children...')
+            logging.error('Initiating kill children....')
             # silently kill all children
             procs = psutil.Process().children()
             for p in procs:
                 p.terminate()
             gone, alive = psutil.wait_procs(procs, timeout=3)
             for p in alive:
+                logging.error(f'killing process: {p.name()}')
                 p.kill()
+                if hasattr(self, '_spawned_cb_processes_map'):
+                    for k, v in self._spawned_cb_processes_map.items():
+                        if v['process'].pid == p.pid:
+                            v['process'].join()
+                if hasattr(self, '_spawned_processes_map'):
+                    for k, v in self._spawned_processes_map.items():
+                        # internal state reporter might set proc_id_map[k] = -1 
+                        if v != -1 and v.pid == p.pid:
+                            v.join()
+            logging.error('Killed all child processes')
+            
+            current_process_pid = os.getpid()
+            p = psutil.Process(current_process_pid)
+            logging.error(f"Current process name: {p.name()} | pid: {current_process_pid}")
+            logging.error('Attempting to send SIGTERM to process ID %s for following command', current_process_pid)
+            p.terminate() 
+            logging.error('Waiting for 3 seconds to confirm termination of process')
+            gone, alive = psutil.wait_procs([p], timeout=3)
+            for p_ in alive:
+                logging.error('Process ID %s not terminated by SIGTERM. Sending SIGKILL...', p_.pid)
+                p_.kill()
         finally:
             return None
 
