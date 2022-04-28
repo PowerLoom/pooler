@@ -16,13 +16,15 @@ type TokenPriceHistoryEntry struct {
 }
 
 type TokenData struct {
-	LastUpdatedTimeStamp   string  `json:lastUpdatedTime`
-	Name                   string  `json:name`
-	Symbol                 string  `json:symbol`
-	Price                  float64 `json:price`
-	Liquidity              float64 `json:liquidity`
-	TradeVolume_24h        float64 `json:tradeVolume_24h`
-	PriceChangePercent_24h float64 `json:priceChangePercent_24h`
+	LastUpdatedTimeStamp      string  `json:lastUpdatedTime`
+	Block_height_Liquidity    int     `json:block_height_liquidity`
+	Block_height_trade_volume int     `json:block_height_trade_volume`
+	Name                      string  `json:name`
+	Symbol                    string  `json:symbol`
+	Price                     float64 `json:price`
+	Liquidity                 float64 `json:liquidity`
+	TradeVolume_24h           float64 `json:tradeVolume_24h`
+	PriceChangePercent_24h    float64 `json:priceChangePercent_24h`
 }
 
 //This is the data stored in redis.
@@ -37,7 +39,7 @@ type TokenPairLiquidityProcessedData struct {
 	Cid_volume_7d              string  `json:cid_volume_7d`
 	Fees_24h                   string  `json:fees_24h`
 	Block_height_total_reserve int     `json:block_height_total_reserve`
-	Block_heigh_trade_volume   int     `json:block_heigh_trade_volume`
+	Block_height_trade_volume  int     `json:block_height_trade_volume`
 	DeltaToken0Reserves        float64 `json:deltaToken0Reserves`
 	DeltaToken1Reserves        float64 `json:deltaToken1Reserves`
 	DeltaTime                  float64 `json:deltaTime`
