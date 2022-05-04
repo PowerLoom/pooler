@@ -1,5 +1,5 @@
 from redis_conn import provide_redis_conn_insta
-from proto_system_logging import setup_loguru_intercept, config_logger_with_namespace
+from functools import wraps
 from urllib.parse import urljoin
 from dynaconf import settings
 from eth_utils import keccak
@@ -212,12 +212,13 @@ class AuditProtocolCommandsHelper:
 
 class CallbackAsyncWorker(multiprocessing.Process):
     def __init__(self, name, rmq_q, rmq_routing, **kwargs):
+        self._core_rmq_consumer: asyncio.Task
         self._q = rmq_q
         self._rmq_routing = rmq_routing
         self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
         self._redis_conn: Union[None, aioredis.Redis] = None
+        self._running_callback_tasks = dict()
         super(CallbackAsyncWorker, self).__init__(name=name, **kwargs)
-        setproctitle(self._unique_id)
         # logger.add(
         #     sink='logs/' + self._unique_id + '_{time}.log', rotation='20MB', retention=20, compression='gz'
         # )
@@ -228,20 +229,23 @@ class CallbackAsyncWorker(multiprocessing.Process):
     async def _shutdown_handler(self, sig, loop: asyncio.AbstractEventLoop):
         self._shutdown_signal_received_count += 1
         if self._shutdown_signal_received_count > 1:
-            logging.info(
+            self._logger.info(
                 f'Received exit signal {sig.name}. Not processing as shutdown sequence was already initiated...')
         else:
-            logging.info(
+            self._logger.info(
                 f'Received exit signal {sig.name}. Processing shutdown sequence...')
-            tasks = [t for t in asyncio.all_tasks() if t is not
-                     asyncio.current_task()]
+
+            await asyncio.gather(*self._running_callback_tasks.values(), return_exceptions=True)
+
+            tasks = [t for t in asyncio.all_tasks(loop) if t is not
+                     asyncio.current_task(loop)]
 
             [task.cancel() for task in tasks]
 
-            logging.info(f'Cancelling {len(tasks)} outstanding tasks')
-            await asyncio.gather(*tasks)
+            self._logger.info(f'Cancelling {len(tasks)} outstanding tasks')
+            await asyncio.gather(*tasks, return_exceptions=True)
             loop.stop()
-            logging.info('Shutdown complete.')
+            self._logger.info('Shutdown complete.')
 
     async def _rabbitmq_consumer(self, loop):
         self._rmq_connection_pool = Pool(get_rabbitmq_connection, max_size=5, loop=loop)
@@ -286,6 +290,7 @@ class CallbackAsyncWorker(multiprocessing.Process):
 
     def run(self) -> None:
         # logging.config.dictConfig(config_logger_with_namespace(self.name))
+        setproctitle(self._unique_id)
         self._logger = logging.getLogger(self.name)
         self._logger.setLevel(logging.DEBUG)
         stdout_handler = logging.StreamHandler(sys.stdout)
@@ -296,68 +301,17 @@ class CallbackAsyncWorker(multiprocessing.Process):
         # self._logger.debug('Launched PID: %s', self.pid)
         self._logger.handlers = [
             logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT),
+            stdout_handler, stderr_handler
         ]
         self._redis_pool_interface = RedisPoolCache()
         ev_loop = asyncio.get_event_loop()
-        signals = (signal.SIGTERM, signal.SIGINT)
+        signals = (signal.SIGTERM, signal.SIGINT, signal.SIGQUIT)
         for s in signals:
             ev_loop.add_signal_handler(
                 s, lambda x=s: ev_loop.create_task(self._shutdown_handler(x, ev_loop)))
         self._logger.debug(f'Starting asynchronous epoch callback worker {self._unique_id}...')
-        asyncio.ensure_future(self._rabbitmq_consumer(ev_loop))
+        self._core_rmq_consumer = asyncio.ensure_future(self._rabbitmq_consumer(ev_loop))
         try:
             ev_loop.run_forever()
         finally:
             ev_loop.close()
-
-
-def get_event_name_from_sig(event_sig: str):
-    if event_sig == get_event_sig("FPMMBuy"):
-        return "FPMMBuy"
-    elif event_sig == get_event_sig("FPMMSell"):
-        return "FPMMSell"
-    return -1
-
-
-def get_trade_vol_for_events(events: list):
-    trade_volume = 0
-    buy_events = list(filter(
-        lambda x: get_event_name_from_sig(x['event_sig']) == "FPMMBuy",
-        events
-    ))
-
-    sell_events = list(filter(
-        lambda x: get_event_name_from_sig(x['event_sig']) == "FPMMSell",
-        events
-    ))
-
-    delta_buy_vol = 0
-    delta_sell_vol = 0
-    if len(buy_events) > 0:
-        delta_buy_vol = float(reduce(
-            lambda x, y: x + y,
-            map(lambda x: x['investmentAmount'], buy_events)
-        ) / pow(10, 6))
-
-    if len(sell_events) > 0:
-        delta_sell_vol = float(reduce(
-            lambda x, y: x + y,
-            map(lambda x: x['returnAmount'], sell_events)
-        ) / pow(10, 6))
-
-    trade_volume = delta_sell_vol + delta_buy_vol
-    return trade_volume
-
-
-def get_cumulative_trade_vol(
-        results: list
-):
-    """
-    find the cumulative trade vol from buy and sell event logs
-    :param results : list of event logs returned from eth_getLogs query
-    """
-    events = parse_logs(results)
-
-    trade_vol = get_trade_vol_for_events(events)
-
-    return trade_vol

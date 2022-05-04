@@ -1,19 +1,19 @@
-import time
-
+from signal import SIGINT, SIGTERM, SIGQUIT, signal
+from exceptions import GenericExitOnSignal
 from rpc_helper import ConstructRPC
 from message_models import RPCNodesObject, EpochConsensusReport
-from init_rabbitmq import create_rabbitmq_conn
 from dynaconf import settings
 from time import sleep
 from multiprocessing import Process
 from setproctitle import setproctitle
-from rabbitmq_helpers import resume_on_rabbitmq_fail, RabbitmqThreadedSelectLoopInteractor
+from functools import wraps
+from rabbitmq_helpers import RabbitmqThreadedSelectLoopInteractor
+import time
 import queue
-import logging
 import threading
 import logging
-import json
-import pika
+import signal
+import sys
 
 
 def chunks(start_idx, stop_idx, n):
@@ -28,82 +28,116 @@ def chunks(start_idx, stop_idx, n):
         yield begin_idx, end_idx, run_idx
 
 
-def interactor_wrapper_obj(q: queue.Queue):
-    s = RabbitmqThreadedSelectLoopInteractor(publish_queue=q)
-    s.run()
-
-
-def main_ticker_process(begin=None, end=None):
-    exchange = f'{settings.RABBITMQ.SETUP.CORE.EXCHANGE}:{settings.NAMESPACE}'
-    routing_key = f'epoch-consensus:{settings.NAMESPACE}'
-
-    q = queue.Queue()
-    t = threading.Thread(target=interactor_wrapper_obj, kwargs={'q': q})
-    t.start()
-    # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|EpochTicker|Linear'))
-    linear_ticker_logger = logging.getLogger('PowerLoom|EpochTicker|Linear')
-    linear_ticker_logger.setLevel(logging.DEBUG)
-    linear_ticker_logger.handlers = [
-        logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
-    setproctitle('PowerLoom|SystemEpochClock|Linear')
-    begin_block_epoch = begin
-    end_block_epoch = end
-    sleep_secs_between_chunks = 60
-    rpc_obj = ConstructRPC(network_id=137)
-    rpc_nodes_obj = RPCNodesObject(
-        NODES=settings.RPC.MATIC,
-        RETRY_LIMIT=settings.RPC.RETRY
-    )
-    linear_ticker_logger.debug('Starting %s', Process.name)
-    while True:
+def rabbitmq_cleanup(fn):
+    @wraps(fn)
+    def wrapper(self, *args, **kwargs):
         try:
-            cur_block = rpc_obj.rpc_eth_blocknumber(rpc_nodes=rpc_nodes_obj)
-        except Exception as e:
-            linear_ticker_logger.error(
-                f"Unable to fetch latest block number due to RPC failure {e}. Retrying after {settings.EPOCH.BLOCK_TIME} seconds.")
-            sleep(settings.EPOCH.BLOCK_TIME)
-            continue
-        else:
-            linear_ticker_logger.debug('Got current head of chain: %s', cur_block)
-            if not begin_block_epoch:
-                linear_ticker_logger.debug('Begin of epoch not set')
-                begin_block_epoch = cur_block
-                linear_ticker_logger.debug('Set begin of epoch to current head of chain: %s', cur_block)
-                linear_ticker_logger.debug('Sleeping for: %s seconds', settings.EPOCH.BLOCK_TIME)
+            fn(self, *args, **kwargs)
+        except (GenericExitOnSignal, KeyboardInterrupt):
+            try:
+                self._logger.debug('Waiting for RabbitMQ interactor thread to join...')
+                self._rabbitmq_thread.join()
+            except:
+                pass
+        finally:
+            sys.exit(0)
+    return wrapper
+
+
+class LinearTickerProcess(Process):
+    def __init__(self, name, **kwargs):
+        Process.__init__(self, name=name)
+        self._rabbitmq_thread: threading.Thread
+        self._rabbitmq_queue = queue.Queue()
+        self._begin = kwargs.get('begin')
+        self._end = kwargs.get('end')
+        self._shutdown_initiated = False
+
+    def _interactor_wrapper(self, q: queue.Queue):
+        self._rabbitmq_interactor = RabbitmqThreadedSelectLoopInteractor(
+            publish_queue=q, consumer_worker_name=self.name
+        )
+        self._rabbitmq_interactor.run()
+
+    def _generic_exit_handler(self, signum, sigframe):
+        if signum in [SIGINT, SIGTERM, SIGQUIT] and not self._shutdown_initiated:
+            self._shutdown_initiated = True
+            self._rabbitmq_interactor.stop()
+            raise GenericExitOnSignal
+
+    @rabbitmq_cleanup
+    def run(self):
+        # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|EpochCollator'))
+        for signame in [signal.SIGINT, signal.SIGTERM, signal.SIGQUIT]:
+            signal.signal(signame, self._generic_exit_handler)
+        exchange = f'{settings.RABBITMQ.SETUP.CORE.EXCHANGE}:{settings.NAMESPACE}'
+        routing_key = f'epoch-consensus:{settings.NAMESPACE}'
+        self._rabbitmq_thread = threading.Thread(target=self._interactor_wrapper, kwargs={'q': self._rabbitmq_queue})
+        self._rabbitmq_thread.start()
+        # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|EpochTicker|Linear'))
+        self._logger = logging.getLogger('PowerLoom|EpochTicker|Linear')
+        self._logger.setLevel(logging.DEBUG)
+        self._logger.handlers = [
+            logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
+        setproctitle('PowerLoom|SystemEpochClock|Linear')
+        begin_block_epoch = self._begin
+        end_block_epoch = self._end
+        sleep_secs_between_chunks = 60
+        rpc_obj = ConstructRPC(network_id=137)
+        rpc_nodes_obj = RPCNodesObject(
+            NODES=settings.RPC.MATIC,
+            RETRY_LIMIT=settings.RPC.RETRY
+        )
+        self._logger.debug('Starting %s', Process.name)
+        while True:
+            try:
+                cur_block = rpc_obj.rpc_eth_blocknumber(rpc_nodes=rpc_nodes_obj)
+            except Exception as e:
+                self._logger.error(
+                    f"Unable to fetch latest block number due to RPC failure {e}. Retrying after {settings.EPOCH.BLOCK_TIME} seconds.")
                 sleep(settings.EPOCH.BLOCK_TIME)
+                continue
             else:
-                # linear_ticker_logger.debug('Picked begin of epoch: %s', begin_block_epoch)
-                end_block_epoch = cur_block - settings.EPOCH.HEAD_OFFSET
-                if not (end_block_epoch - begin_block_epoch + 1) >= settings.EPOCH.HEIGHT:
-                    sleep_factor = settings.EPOCH.HEIGHT - ((end_block_epoch - begin_block_epoch) + 1)
-                    linear_ticker_logger.debug('Current head of source chain estimated at block %s after offsetting | '
-                                               '%s - %s does not satisfy configured epoch length. '
-                                               'Sleeping for %s seconds for %s blocks to accumulate....',
-                                               end_block_epoch, begin_block_epoch, end_block_epoch,
-                                               sleep_factor*settings.EPOCH.BLOCK_TIME, sleep_factor
-                                               )
-                    time.sleep(sleep_factor * settings.EPOCH.BLOCK_TIME)
-                    continue
-                linear_ticker_logger.debug('Chunking blocks between %s - %s with chunk size: %s', begin_block_epoch,
-                                           end_block_epoch, settings.EPOCH.HEIGHT)
-                for epoch in chunks(begin_block_epoch, end_block_epoch, settings.EPOCH.HEIGHT):
-                    if epoch[1] - epoch[0] + 1 < settings.EPOCH.HEIGHT:
-                        linear_ticker_logger.debug(
-                            'Skipping chunk of blocks %s - %s as minimum epoch size not satisfied | Resetting chunking'
-                            ' to begin from block %s',
-                            epoch[0], epoch[1], epoch[0]
-                        )
-                        begin_block_epoch = epoch[0]
-                        break
-                    _ = {'begin': epoch[0], 'end': epoch[1]}
-                    linear_ticker_logger.debug('Epoch of sufficient length found: %s', _)
-                    cmd = EpochConsensusReport(**_)
-                    cmd_obj = (cmd.json().encode('utf-8'), exchange, routing_key)
-                    q.put(cmd_obj)
-                    # send epoch report
-                    linear_ticker_logger.debug(cmd)
-                    linear_ticker_logger.debug('Waiting to push next epoch in %d seconds...', sleep_secs_between_chunks)
-                    # fixed wait
-                    sleep(sleep_secs_between_chunks)
+                self._logger.debug('Got current head of chain: %s', cur_block)
+                if not begin_block_epoch:
+                    self._logger.debug('Begin of epoch not set')
+                    begin_block_epoch = cur_block
+                    self._logger.debug('Set begin of epoch to current head of chain: %s', cur_block)
+                    self._logger.debug('Sleeping for: %s seconds', settings.EPOCH.BLOCK_TIME)
+                    sleep(settings.EPOCH.BLOCK_TIME)
                 else:
-                    begin_block_epoch = end_block_epoch + 1
+                    # self._logger.debug('Picked begin of epoch: %s', begin_block_epoch)
+                    end_block_epoch = cur_block - settings.EPOCH.HEAD_OFFSET
+                    if not (end_block_epoch - begin_block_epoch + 1) >= settings.EPOCH.HEIGHT:
+                        sleep_factor = settings.EPOCH.HEIGHT - ((end_block_epoch - begin_block_epoch) + 1)
+                        self._logger.debug('Current head of source chain estimated at block %s after offsetting | '
+                                                   '%s - %s does not satisfy configured epoch length. '
+                                                   'Sleeping for %s seconds for %s blocks to accumulate....',
+                                                   end_block_epoch, begin_block_epoch, end_block_epoch,
+                                                   sleep_factor*settings.EPOCH.BLOCK_TIME, sleep_factor
+                                                   )
+                        time.sleep(sleep_factor * settings.EPOCH.BLOCK_TIME)
+                        continue
+                    self._logger.debug('Chunking blocks between %s - %s with chunk size: %s', begin_block_epoch,
+                                               end_block_epoch, settings.EPOCH.HEIGHT)
+                    for epoch in chunks(begin_block_epoch, end_block_epoch, settings.EPOCH.HEIGHT):
+                        if epoch[1] - epoch[0] + 1 < settings.EPOCH.HEIGHT:
+                            self._logger.debug(
+                                'Skipping chunk of blocks %s - %s as minimum epoch size not satisfied | Resetting chunking'
+                                ' to begin from block %s',
+                                epoch[0], epoch[1], epoch[0]
+                            )
+                            begin_block_epoch = epoch[0]
+                            break
+                        _ = {'begin': epoch[0], 'end': epoch[1]}
+                        self._logger.debug('Epoch of sufficient length found: %s', _)
+                        cmd = EpochConsensusReport(**_)
+                        cmd_obj = (cmd.json().encode('utf-8'), exchange, routing_key)
+                        self._rabbitmq_queue.put(cmd_obj)
+                        # send epoch report
+                        self._logger.debug(cmd)
+                        self._logger.debug('Waiting to push next epoch in %d seconds...', sleep_secs_between_chunks)
+                        # fixed wait
+                        sleep(sleep_secs_between_chunks)
+                    else:
+                        begin_block_epoch = end_block_epoch + 1

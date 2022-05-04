@@ -1,14 +1,15 @@
-from init_rabbitmq import create_rabbitmq_conn
+from exceptions import GenericExitOnSignal
 from setproctitle import setproctitle
 from uniswap_functions import get_pair_contract_trades_async, get_liquidity_of_each_token_reserve_async
 from eth_utils import keccak
 from uuid import uuid4
+from signal import SIGINT, SIGTERM, SIGQUIT
 from message_models import (
     PowerloomCallbackEpoch, PowerloomCallbackProcessMessage, UniswapPairTotalReservesSnapshot,
     EpochBase, UniswapTradesSnapshot
 )
 from dynaconf import settings
-from callback_modules.helpers import AuditProtocolCommandsHelper, CallbackAsyncWorker, get_cumulative_trade_vol
+from callback_modules.helpers import AuditProtocolCommandsHelper, CallbackAsyncWorker
 from redis_conn import create_redis_conn, REDIS_CONN_CONF
 from redis_keys import (
     uniswap_pair_total_reserves_processing_status, uniswap_pair_total_reserves_last_snapshot,
@@ -21,7 +22,7 @@ from helper_functions import AsyncHTTPSessionCache
 from aio_pika import ExchangeType, IncomingMessage
 from rabbitmq_helpers import RabbitmqSelectLoopInteractor
 import queue
-import threading
+import signal
 import redis
 import asyncio
 import aiohttp
@@ -40,7 +41,6 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             rmq_routing=f'powerloom-backend-callback:{settings.NAMESPACE}.pair_total_reserves_worker.processor',
             **kwargs
         )
-        setproctitle(self.name)
 
     async def _construct_pair_reserves_epoch_snapshot_data(self, msg_obj: PowerloomCallbackProcessMessage, enqueue_on_failure=False):
         max_chain_height = msg_obj.end
@@ -282,12 +282,15 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
         await message.ack()
+        self_unique_id = uuid4()
+        self._running_callback_tasks[self_unique_id] = asyncio.current_task(asyncio.get_running_loop())
         try:
             msg_obj = PowerloomCallbackProcessMessage.parse_raw(message.body)
         except ValidationError as e:
             self._logger.error(
                 'Bad message structure of callback in processor for total pair reserves: %s', e, exc_info=True
             )
+            del self._running_callback_tasks[self_unique_id]
             return
         except Exception as e:
             self._logger.error(
@@ -295,6 +298,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 e,
                 exc_info=True
             )
+            del self._running_callback_tasks[self_unique_id]
             return
         await self.init_redis_pool()
         self._logger.debug('Got epoch to process for calculating total reserves for pair: %s', msg_obj)
@@ -528,9 +532,11 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                         score=int(time.time()),
                         member=json.dumps(update_log)
                     )
+        del self._running_callback_tasks[self_unique_id]
 
     def run(self):
         # setup_loguru_intercept()
+        setproctitle(self.name)
         self._aiohttp_session_interface = AsyncHTTPSessionCache()
         # self._logger.debug('Launching epochs summation actor for total reserves of pairs...')
         super(PairTotalReservesProcessor, self).run()
@@ -539,10 +545,10 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
 class PairTotalReservesProcessorDistributor(multiprocessing.Process):
     def __init__(self, name, **kwargs):
         super(PairTotalReservesProcessorDistributor, self).__init__(name=name, **kwargs)
-        setproctitle(self.name)
         self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
         self._q = queue.Queue()
         self._rabbitmq_interactor = None
+        self._shutdown_initiated = False
         # logger.add(
         #     sink='logs/' + self._unique_id + '_{time}.log', rotation='20MB', retention=20, compression='gz'
         # )
@@ -595,7 +601,15 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
                 {json.dumps(update_log): int(time.time())}
             )
 
+    def _exit_signal_handler(self, signum, sigframe):
+        if signum in [SIGINT, SIGTERM, SIGQUIT] and not self._shutdown_initiated:
+            self._shutdown_initiated = True
+            self._rabbitmq_interactor.stop()
+
     def run(self):
+        setproctitle(self.name)
+        for signame in [SIGINT, SIGTERM, SIGQUIT]:
+            signal.signal(signame, self._exit_signal_handler)
         # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|Callbacks|TradeVolumeProcessDistributor'))
         self._logger = logging.getLogger('PowerLoom|Callbacks|PairTotalReservesProcessDistributor')
         self._logger.setLevel(logging.DEBUG)
@@ -605,7 +619,8 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
         queue_name = f'powerloom-backend-cb:{settings.NAMESPACE}'
         self._rabbitmq_interactor: RabbitmqSelectLoopInteractor = RabbitmqSelectLoopInteractor(
             consume_queue_name=queue_name,
-            consume_callback=self._distribute_callbacks
+            consume_callback=self._distribute_callbacks,
+            consumer_worker_name='PowerLoom|Callbacks|PairTotalReservesProcessDistributor'
         )
         # self.rabbitmq_interactor.start_publishing()
         self._logger.debug('Starting RabbitMQ consumer on queue %s', queue_name)

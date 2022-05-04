@@ -1,7 +1,6 @@
 from uniswap_functions import (
     get_pair_per_token_metadata, SCRIPT_CLEAR_KEYS, SCRIPT_SET_EXPIRE, SCRIPT_INCR_EXPIRE, GLOBAL_RPC_RATE_LIMIT_STR,
-    load_rate_limiter_scripts, PARSED_LIMITS, pair_contract_abi, get_all_pairs, get_pair, read_json_file,
-    v2_pairs_data
+    load_rate_limiter_scripts, PARSED_LIMITS, pair_contract_abi, get_all_pairs, get_pair, read_json_file
 )
 from redis_keys import (
     uniswap_pair_cached_token_price
