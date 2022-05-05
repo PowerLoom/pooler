@@ -555,7 +555,6 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
         # setup_loguru_intercept()
 
     def _distribute_callbacks(self, dont_use_ch, method, properties, body):
-        self._rabbitmq_interactor._channel.basic_ack(delivery_tag=method.delivery_tag)
         # following check avoids processing messages meant for routing keys for sub workers
         # for eg: 'powerloom-backend-callback.pair_total_reserves.seeder'
         if 'pair_total_reserves' not in method.routing_key or method.routing_key.split('.')[1] != 'pair_total_reserves':
@@ -600,6 +599,7 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
                 uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
                 {json.dumps(update_log): int(time.time())}
             )
+        self._rabbitmq_interactor._channel.basic_ack(delivery_tag=method.delivery_tag)
 
     def _exit_signal_handler(self, signum, sigframe):
         if signum in [SIGINT, SIGTERM, SIGQUIT] and not self._shutdown_initiated:

@@ -45,7 +45,6 @@ class EpochCallbackManager(Process):
         pass
 
     def _epoch_broadcast_callback(self, dont_use_ch, method, properties, body):
-        self.rabbitmq_interactor._channel.basic_ack(delivery_tag=method.delivery_tag)
         broadcast_json = json.loads(body)
         self._logger.debug('Got epoch broadcast: %s', broadcast_json)
         append_epoch_context(broadcast_json)
@@ -85,6 +84,7 @@ class EpochCallbackManager(Process):
                 older_broadcast_ids_dec = map(lambda x: x.decode('utf-8'), older_broadcast_ids)
                 [r.delete(uniswap_cb_broadcast_processing_logs_zset.format(k)) for k in older_broadcast_ids_dec]
             r.zremrangebyscore(powerloom_broadcast_id_zset, min='-inf', max=int(time.time() - to_be_pruned_ts))
+        self.rabbitmq_interactor._channel.basic_ack(delivery_tag=method.delivery_tag)
 
     def _exit_signal_handler(self, signum, sigframe):
         if signum in [SIGINT, SIGTERM, SIGQUIT] and not self._shutdown_initiated:
