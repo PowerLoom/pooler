@@ -290,7 +290,7 @@ class CallbackAsyncWorker(multiprocessing.Process):
 
     def run(self) -> None:
         # logging.config.dictConfig(config_logger_with_namespace(self.name))
-        setproctitle(self._unique_id)
+        setproctitle(self.name+'-'+self._unique_id)
         self._logger = logging.getLogger(self.name)
         self._logger.setLevel(logging.DEBUG)
         stdout_handler = logging.StreamHandler(sys.stdout)
