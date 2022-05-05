@@ -189,7 +189,7 @@ class RabbitmqSelectLoopInteractor(object):
         self.add_on_channel_close_callback()
         # self.setup_exchange(self.EXCHANGE)
         try:
-            # self.start_publishing()
+            self.start_publishing()
             if self._consume_queue and self._consume_callback:
                 self.start_consuming(
                     queue_name=self._consume_queue,
@@ -303,6 +303,9 @@ class RabbitmqSelectLoopInteractor(object):
             len(self._deliveries), self._acked, self._nacked)
 
     def enqueue_msg_delivery(self, exchange, routing_key, msg_body):
+        # NOTE: if used in a multi threaded/multi processing context, this will introduce a race condition given that
+        #       publish_message() may try to read the queued messages map while it is being concurrently updated by
+        #       another process/thread
         self.queued_messages[str(uuid.uuid4())] = [msg_body, exchange, routing_key]
 
     def schedule_next_message(self):
@@ -334,7 +337,6 @@ class RabbitmqSelectLoopInteractor(object):
         pushed_outputs = list()
         # logger.debug('queued msgs: %s', self.queued_messages)
         try:
-            # NOTE: potential place for race condition
             for unique_id in self.queued_messages:
                 msg_info = self.queued_messages[unique_id]
                 msg, exchange, routing_key = msg_info
@@ -361,16 +363,15 @@ class RabbitmqSelectLoopInteractor(object):
                     self._consumer_worker_name, self._message_number, exchange, routing_key, msg
                 )
                 pushed_outputs.append(unique_id)
-            # NOTE: potential place for race condition
             self.queued_messages = {k: self.queued_messages[k] for k in self.queued_messages if k not in pushed_outputs}
-            self.schedule_next_message()
         except Exception as err:
             logger.error(
                 "%s: RabbitMQ select loop interactor: Error while publishing message to rabbitmq error_msg: "
                 "%s, exchange: %s, routing_key: %s, msg: %s",
                 self._consumer_worker_name, str(err), exchange, routing_key, msg, exc_info=True
             )
-            raise err
+        finally:
+            self.schedule_next_message()
 
     def run(self):
         """Run the example code by connecting and then starting the IOLoop.
