@@ -34,6 +34,25 @@ def collate_epoch(
     return broadcast_msg
 
 
+def rabbitmq_tooz_cleanup(fn):
+    @wraps(fn)
+    def wrapper(self, *args, **kwargs):
+        try:
+            fn(self, *args, **kwargs)
+        except (GenericExitOnSignal, KeyboardInterrupt):
+            try:
+                self._logger.debug('Waiting for RabbitMQ interactor ioloop to stop...')
+                self.rabbitmq_interactor.stop()
+                self._logger.debug('Waiting for tooz reporter thread to join...')
+                self._tooz_reporter.join()
+                self._logger.debug('Tooz reporter thread joined...')
+            except:
+                pass
+        finally:
+            sys.exit(0)
+    return wrapper
+
+
 class EpochCollatorProcess(Process):
     def __init__(self, name, **kwargs):
         Process.__init__(self, name=name, **kwargs)
@@ -45,9 +64,11 @@ class EpochCollatorProcess(Process):
         self._state_update_q = queue.Queue()
 
     def _exit_signal_handler(self, signum, sigframe):
+        self._logger.debug('Received signal %s', signum)
         if signum in [SIGINT, SIGTERM, SIGQUIT] and not self._shutdown_initiated:
             self._shutdown_initiated = True
             self._rabbitmq_interactor.stop()
+            self._reporter_thread_shutdown_event.set()
 
     def state_report_thread(self):
         member_id = f'powerloom:epoch:collator:{settings.NAMESPACE}'
@@ -96,6 +117,7 @@ class EpochCollatorProcess(Process):
             self._state_update_q.task_done()
         try:
             coordinator.leave_group(group_id).get()
+            coordinator.stop()
         except:
             pass
 
@@ -119,6 +141,7 @@ class EpochCollatorProcess(Process):
         except Exception as err:
             self._logger.error(f"Error while passing acknowledgement in EpochCollator error_msg:{str(err)}", exc_info=True)
 
+    @rabbitmq_tooz_cleanup
     def run(self):
         # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|EpochCollator'))
         setproctitle(f'PowerLoom|EpochCollator')
