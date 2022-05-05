@@ -238,7 +238,7 @@ class ProcessHubCore(Process):
             process_id = cmd_json.pid
             proc_str_id = cmd_json.proc_str_id
             if process_id:
-                self.kill_process(process_id)
+                return
             if proc_str_id:
                 if proc_str_id == 'self':
                     return
@@ -246,11 +246,18 @@ class ProcessHubCore(Process):
                     # raise SelfExitException
                 mapped_p = self._spawned_processes_map.get(proc_str_id)
                 if not mapped_p:
-                    self._logger.error('Did not find process ID in local process string map: %s', proc_str_id)
-                    return
+                    self._logger.error('Did not find process ID in core processes string map: %s', proc_str_id)
+                    mapped_p = self._spawned_cb_processes_map.get(proc_str_id)
+                    if not mapped_p:
+                        self._logger.error('Did not find process ID in callback processes string map: %s', proc_str_id)
+                        return
+                    else:
+                        self.kill_process(mapped_p.pid)
+                        self._spawned_cb_processes_map[proc_str_id] = None
                 else:
                     self.kill_process(mapped_p.pid)
                     self._spawned_processes_map[proc_str_id] = None
+
         elif cmd_json.command == 'start':
             try:
                 self._logger.debug('Process Hub Core received start command: %s', cmd_json)
