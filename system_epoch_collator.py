@@ -1,6 +1,6 @@
 from signal import SIGINT, SIGTERM, SIGQUIT, signal
 from message_models import EpochConsensusReport, EpochBroadcast, SystemEpochStatusReport
-from exceptions import GenericExitOnSignal
+from exceptions import GenericExitOnSignal, SelfExitException
 from dynaconf import settings
 from helper_functions import construct_kazoo_url
 from multiprocessing import Process
@@ -166,3 +166,4 @@ class EpochCollatorProcess(Process):
         self._logger.debug('Starting RabbitMQ consumer on queue %s', queue_name)
         self.rabbitmq_interactor.run()
         self._logger.debug('%s: RabbitMQ interactor ioloop ended...', self.name)
+        raise GenericExitOnSignal

@@ -553,8 +553,8 @@ async def get_liquidity_of_each_token_reserve_async(
                     can_request = False
                     break  # make sure to break once false condition is hit
             except (
-                    aioredis.errors.ConnectionClosedError, aioredis.errors.ConnectionForcedCloseError,
-                    aioredis.errors.PoolClosedError
+                    aioredis.exceptions.ConnectionError, aioredis.exceptions.TimeoutError,
+                    aioredis.exceptions.ResponseError
             ) as e:
                 # shit can happen while each limit check call hits Redis, handle appropriately
                 logger.debug('Bypassing rate limit check for appID because of Redis exception: ' + str(

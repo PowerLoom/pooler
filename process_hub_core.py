@@ -171,7 +171,7 @@ class ProcessHubCore(Process):
                 if v:
                     proc_id_map['callback_workers'][k] = {'pid': v['process'].pid, 'id': v['id']}
             proc_id_map['callback_workers'] = json.dumps(proc_id_map['callback_workers'])
-            redis_conn.hmset(f'powerloom:uniswap:{settings.NAMESPACE}:Processes', proc_id_map)
+            redis_conn.hset(name=f'powerloom:uniswap:{settings.NAMESPACE}:Processes', mapping=proc_id_map)
         self._logger.error('Caught thread shutdown notification event. Deleting process worker map in redis...')
         redis_conn.delete(f'powerloom:uniswap:{settings.NAMESPACE}:Processes')
 

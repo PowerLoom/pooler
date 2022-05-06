@@ -1,4 +1,3 @@
-from redis_conn import provide_redis_conn_insta
 from functools import wraps
 from urllib.parse import urljoin
 from dynaconf import settings
@@ -10,13 +9,11 @@ from uuid import uuid4
 from redis_conn import RedisPoolCache, REDIS_CONN_CONF
 from aio_pika import ExchangeType, IncomingMessage
 from aio_pika.pool import Pool
-from helper_functions import get_event_sig, parse_logs
 from functools import reduce
-from typing import Union
+from typing import Union, Dict
 import sys
 import os
 import aioredis
-import aioredis_cluster
 import requests
 import logging
 import logging.handlers
@@ -49,9 +46,10 @@ async def get_rabbitmq_channel(connection_pool) -> aio_pika.Channel:
 
 class AuditProtocolCommandsHelper:
     @classmethod
-    @provide_redis_conn_insta
-    async def set_diff_rule_for_pair_reserves(cls, pair_contract_address, session: aiohttp.ClientSession,
-                                              stream='pair_total_reserves', redis_conn: redis.Redis = None):
+    async def set_diff_rule_for_pair_reserves(
+            cls, pair_contract_address, session: aiohttp.ClientSession,
+            redis_conn: aioredis.Redis, stream='pair_total_reserves'
+    ):
         project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
         if not redis_conn.sismember(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id):
             """ Setup diffRules for this market"""
@@ -103,7 +101,7 @@ class AuditProtocolCommandsHelper:
                         response = await response_obj.json() or {}
                         logger.debug('Response code on setting diff rule on audit protocol: %s', response_status_code)
                         if response_status_code in range(200, 300):
-                            redis_conn.sadd(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id)
+                            await redis_conn.sadd(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id)
                             return {"message": f"success status code: {response_status_code}", "response": response}
                         elif response_status_code == 500 or response_status_code == 502:
                             return {
@@ -115,13 +113,13 @@ class AuditProtocolCommandsHelper:
                                     response_status_code, response))
 
     @classmethod
-    @provide_redis_conn_insta
     async def set_diff_rule_for_trade_volume(
-            cls, pair_contract_address, session: aiohttp.ClientSession, stream='trade_volume',
-            redis_conn: redis.Redis = None
+            cls, pair_contract_address, session: aiohttp.ClientSession,
+            redis_conn: aioredis.Redis = None, stream='trade_volume',
+
     ):
         project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
-        if not redis_conn.sismember(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id):
+        if not await redis_conn.sismember(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id):
             """ Setup diffRules for this market"""
             # retry below call given at settings.AUDIT_PROTOCOL_ENGINE.RETRY
             async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY)):
@@ -158,7 +156,7 @@ class AuditProtocolCommandsHelper:
                         response = await response_obj.json() or {}
                         logger.debug('Response code on setting diff rule on audit protocol: %s', response_status_code)
                         if response_status_code in range(200, 300):
-                            redis_conn.sadd(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id)
+                            await redis_conn.sadd(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id)
                             return {"message": f"success status code: {response_status_code}", "response": response}
                         elif response_status_code == 500 or response_status_code == 502:
                             return {
@@ -170,8 +168,7 @@ class AuditProtocolCommandsHelper:
                                     response_status_code, response))
 
     @classmethod
-    @provide_redis_conn_insta
-    def set_commit_callback_url(cls, pair_contract_address, stream, redis_conn: redis.Redis = None):
+    def set_commit_callback_url(cls, pair_contract_address, stream, redis_conn: aioredis.Redis):
         project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
         if not redis_conn.sismember(f'uniswap:{settings.NAMESPACE}:callbackURLSetFor', project_id):
             r = requests.post(
@@ -216,8 +213,9 @@ class CallbackAsyncWorker(multiprocessing.Process):
         self._q = rmq_q
         self._rmq_routing = rmq_routing
         self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
+        self._aioredis_pool = None
         self._redis_conn: Union[None, aioredis.Redis] = None
-        self._running_callback_tasks = dict()
+        self._running_callback_tasks: Dict[str, asyncio.Task] = dict()
         super(CallbackAsyncWorker, self).__init__(name=name, **kwargs)
         # logger.add(
         #     sink='logs/' + self._unique_id + '_{time}.log', rotation='20MB', retention=20, compression='gz'
@@ -234,8 +232,36 @@ class CallbackAsyncWorker(multiprocessing.Process):
         else:
             self._logger.info(
                 f'Received exit signal {sig.name}. Processing shutdown sequence...')
-
-            await asyncio.gather(*self._running_callback_tasks.values(), return_exceptions=True)
+            # check the done or cancelled status of self._running_callback_tasks.values()
+            for u_uid, t in self._running_callback_tasks.items():
+                self._logger.debug(
+                    'Shutdown handler: Checking result and status of aio_pika consumer callback task %s', t.get_name()
+                )
+                try:
+                    task_result = t.result()
+                except asyncio.CancelledError:
+                    self._logger.info(
+                        'Shutdown handler: aio_pika consumer callback task %s was cancelled', t.get_name()
+                    )
+                except asyncio.InvalidStateError:
+                    self._logger.info(
+                        'Shutdown handler: aio_pika consumer callback task %s result not available yet. '
+                        'Still running.',
+                        t.get_name()
+                    )
+                except Exception as e:
+                    self._logger.info(
+                        'Shutdown handler: aio_pika consumer callback task %s raised Exception. '
+                        '%s',
+                        t.get_name(), e
+                    )
+                else:
+                    self._logger.info(
+                        'Shutdown handler: aio_pika consumer callback task returned with result %s',
+                        t.get_name(),
+                        task_result
+                    )
+            # await asyncio.gather(*self._running_callback_tasks.values(), return_exceptions=True)
 
             tasks = [t for t in asyncio.all_tasks(loop) if t is not
                      asyncio.current_task(loop)]
@@ -264,33 +290,15 @@ class CallbackAsyncWorker(multiprocessing.Process):
         await message.ack()
 
     async def init_redis_pool(self):
-        if not self._redis_conn:
-            RedisPoolCache.append_ssl_connection_params(REDIS_CONN_CONF, settings['redis'])
-            redis_cluster_mode_conn = False
-            try:
-                if settings.REDIS.CLUSTER_MODE:
-                    redis_cluster_mode_conn = True
-            except:
-                pass
-            if redis_cluster_mode_conn:
-                self._redis_conn = await aioredis_cluster.create_redis_cluster(
-                    startup_nodes=[(REDIS_CONN_CONF['host'], REDIS_CONN_CONF['port'])],
-                    password=REDIS_CONN_CONF['password'],
-                    pool_maxsize=10,
-                    ssl=REDIS_CONN_CONF['ssl']
-                )
-            else:
-                self._redis_conn = await aioredis.create_redis_pool(
-                    address=(REDIS_CONN_CONF['host'], REDIS_CONN_CONF['port']),
-                    db=REDIS_CONN_CONF['db'],
-                    password=REDIS_CONN_CONF['password'],
-                    maxsize=10,
-                    ssl=REDIS_CONN_CONF['ssl']
-                )
+        if not self._aioredis_pool:
+            self._aioredis_pool = RedisPoolCache()
+            await self._aioredis_pool.populate()
+            # RedisPoolCache.append_ssl_connection_params(REDIS_CONN_CONF, settings['redis'])
+            self._redis_conn = self._aioredis_pool._aioredis_pool
 
     def run(self) -> None:
         # logging.config.dictConfig(config_logger_with_namespace(self.name))
-        setproctitle(self.name+'-'+self._unique_id)
+        setproctitle(self._unique_id)
         self._logger = logging.getLogger(self.name)
         self._logger.setLevel(logging.DEBUG)
         stdout_handler = logging.StreamHandler(sys.stdout)
@@ -303,7 +311,6 @@ class CallbackAsyncWorker(multiprocessing.Process):
             logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT),
             stdout_handler, stderr_handler
         ]
-        self._redis_pool_interface = RedisPoolCache()
         ev_loop = asyncio.get_event_loop()
         signals = (signal.SIGTERM, signal.SIGINT, signal.SIGQUIT)
         for s in signals:

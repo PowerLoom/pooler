@@ -282,15 +282,14 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
         await message.ack()
-        self_unique_id = uuid4()
-        self._running_callback_tasks[self_unique_id] = asyncio.current_task(asyncio.get_running_loop())
+        self_unique_id = str(uuid4())
+        # cur_task.add_done_callback()
         try:
             msg_obj = PowerloomCallbackProcessMessage.parse_raw(message.body)
         except ValidationError as e:
             self._logger.error(
                 'Bad message structure of callback in processor for total pair reserves: %s', e, exc_info=True
             )
-            del self._running_callback_tasks[self_unique_id]
             return
         except Exception as e:
             self._logger.error(
@@ -298,8 +297,11 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 e,
                 exc_info=True
             )
-            del self._running_callback_tasks[self_unique_id]
             return
+        cur_task: asyncio.Task = asyncio.current_task(asyncio.get_running_loop())
+        cur_task.set_name(f'aio_pika.consumer|PairTotalReservesProcessor|{msg_obj.contract}')
+        self._running_callback_tasks[self_unique_id] = cur_task
+
         await self.init_redis_pool()
         self._logger.debug('Got epoch to process for calculating total reserves for pair: %s', msg_obj)
 
@@ -320,10 +322,9 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 }
             }
 
-            self._redis_conn.zadd(
-                key=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
-                score=int(time.time()),
-                member=json.dumps(update_log)
+            await self._redis_conn.zadd(
+                name=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
+                mapping={json.dumps(update_log): int(time.time())}
             )
         else:
             update_log = {
@@ -338,16 +339,16 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 }
             }
 
-            self._redis_conn.zadd(
-                key=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
-                score=int(time.time()),
-                member=json.dumps(update_log)
+            await self._redis_conn.zadd(
+                name=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
+                mapping={json.dumps(update_log): int(time.time())}
             )
             # TODO: should we attach previous total reserves epoch from cache?
             await AuditProtocolCommandsHelper.set_diff_rule_for_pair_reserves(
                 pair_contract_address=pair_total_reserves_epoch_snapshot.contract,
                 stream='pair_total_reserves',
-                session=self._aiohttp_session
+                session=self._aiohttp_session,
+                redis_conn=self._redis_conn
             )
             payload = pair_total_reserves_epoch_snapshot.dict()
             try:
@@ -372,10 +373,9 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                     }
                 }
 
-                self._redis_conn.zadd(
-                    key=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
-                    score=int(time.time()),
-                    member=json.dumps(update_log)
+                await self._redis_conn.zadd(
+                    name=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
+                    mapping={json.dumps(update_log): int(time.time())}
                 )
             else:
                 if type(r) is dict and 'message' in r.keys():
@@ -393,10 +393,9 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                         }
                     }
 
-                    self._redis_conn.zadd(
-                        key=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
-                        score=int(time.time()),
-                        member=json.dumps(update_log)
+                    await self._redis_conn.zadd(
+                        name=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
+                        mapping={json.dumps(update_log): int(time.time())}
                     )
                 else:
                     self._logger.debug('Sent snapshot to audit protocol: %s | Helper Response: %s', pair_total_reserves_epoch_snapshot, r)
@@ -412,10 +411,9 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                         }
                     }
 
-                    self._redis_conn.zadd(
-                        key=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
-                        score=int(time.time()),
-                        member=json.dumps(update_log)
+                    await self._redis_conn.zadd(
+                        name=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
+                        mapping={json.dumps(update_log): int(time.time())}
                     )
 
         # prepare trade volume snapshot
@@ -435,10 +433,9 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 }
             }
 
-            self._redis_conn.zadd(
-                key=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
-                score=int(time.time()),
-                member=json.dumps(update_log)
+            await self._redis_conn.zadd(
+                name=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
+                mapping={json.dumps(update_log): int(time.time())}
             )
         else:
             update_log = {
@@ -453,16 +450,16 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 }
             }
 
-            self._redis_conn.zadd(
-                key=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
-                score=int(time.time()),
-                member=json.dumps(update_log)
+            await self._redis_conn.zadd(
+                name=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
+                mapping={json.dumps(update_log): int(time.time())}
             )
             # TODO: should we attach previous trade volume epoch from cache?
             await AuditProtocolCommandsHelper.set_diff_rule_for_trade_volume(
                 pair_contract_address=msg_obj.contract,
                 stream='trade_volume',
-                session=self._aiohttp_session
+                session=self._aiohttp_session,
+                redis_conn=self._redis_conn
             )
             payload = trade_vol_epoch_snapshot.dict()
             try:
@@ -487,10 +484,9 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                     }
                 }
 
-                self._redis_conn.zadd(
-                    key=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
-                    score=int(time.time()),
-                    member=json.dumps(update_log)
+                await self._redis_conn.zadd(
+                    name=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
+                    mapping={json.dumps(update_log): int(time.time())}
                 )
             else:
                 if type(r) is dict and 'message' in r.keys():
@@ -508,10 +504,9 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                         }
                     }
 
-                    self._redis_conn.zadd(
-                        key=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
-                        score=int(time.time()),
-                        member=json.dumps(update_log)
+                    await self._redis_conn.zadd(
+                        name=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
+                        mapping={json.dumps(update_log): int(time.time())}
                     )
                 else:
                     self._logger.debug('Sent snapshot to audit protocol: %s | Helper Response: %s', trade_vol_epoch_snapshot, r)
@@ -527,16 +522,14 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                         }
                     }
 
-                    self._redis_conn.zadd(
-                        key=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
-                        score=int(time.time()),
-                        member=json.dumps(update_log)
+                    await self._redis_conn.zadd(
+                        name=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
+                        mapping={json.dumps(update_log): int(time.time())}
                     )
         del self._running_callback_tasks[self_unique_id]
 
     def run(self):
         # setup_loguru_intercept()
-        setproctitle(self.name)
         self._aiohttp_session_interface = AsyncHTTPSessionCache()
         # self._logger.debug('Launching epochs summation actor for total reserves of pairs...')
         super(PairTotalReservesProcessor, self).run()

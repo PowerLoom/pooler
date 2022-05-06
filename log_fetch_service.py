@@ -42,8 +42,9 @@ app.add_middleware(
 @app.on_event('startup')
 async def startup_boilerplate():
     app.aiohttp_session = await get_aiohttp_cache()
-    app.redis_pool_cache_async = RedisPoolCache()
-    app.redis = await app.redis_pool_cache_async.connect_redis_main
+    app.aioredis_pool = RedisPoolCache()
+    await app.aioredis_pool.populate()
+    app.redis: aioredis.Redis = app.aioredis_pool._aioredis_pool
     app._rmq_connection_pool = Pool(get_rabbitmq_connection_async, max_size=5)
     app._rmq_channel_pool = Pool(partial(get_rabbitmq_channel_async, app._rmq_connection_pool), max_size=20)
     

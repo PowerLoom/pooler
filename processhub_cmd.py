@@ -253,43 +253,6 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
 
 
 @app.command()
-def listCallbackStatus():
-    r = redis.Redis(**REDIS_CONN_CONF, single_connection_client=True)
-    typer.secho('='*20+'TRADE VOLUME PROCESSING STATUS'+'='*20, fg=typer.colors.CYAN)
-    for k in r.scan_iter(match=f'polymarket:marketMaker:{settings.NAMESPACE}:*:tradesProcessingStatus'):
-        key = k.decode('utf-8')
-        contract_addr = key.split(':')[3]
-        typer.secho(contract_addr, fg=typer.colors.YELLOW)
-        typer.echo(r.get(k).decode('utf-8'))
-        typer.echo('-'*40)
-    typer.secho('='*20+'LIQUIDITY PROCESSING STATUS'+'='*20, fg=typer.colors.CYAN)
-    for k in r.scan_iter(match=f'polymarket:marketMaker:{settings.NAMESPACE}:*:liquidityProcessingStatus'):
-        key = k.decode('utf-8')
-        contract_addr = key.split(':')[3]
-        typer.secho(contract_addr, fg=typer.colors.YELLOW)
-        typer.echo(r.get(k).decode('utf-8'))
-        typer.echo('-'*40)
-
-@app.command()
-def listSeedLocks():
-    r = redis.Redis(**REDIS_CONN_CONF, single_connection_client=True)
-    typer.secho('='*20+'TRADE VOLUME SEEDING LOCKS'+'='*20, fg=typer.colors.CYAN)
-    for k in r.scan_iter(match=f'polymarket:marketMaker:{settings.NAMESPACE}:*:tradeVolume:Lock'):
-        key = k.decode('utf-8')
-        contract_addr = key.split(':')[3]
-        typer.secho(contract_addr, fg=typer.colors.YELLOW)
-        typer.echo(r.get(k).decode('utf-8'))
-        typer.echo('-'*40)
-    typer.secho('='*20+'LIQUIDITY SEEDING LOCKS'+'='*20, fg=typer.colors.CYAN)
-    for k in r.scan_iter(match=f'polymarket:marketMaker:{settings.NAMESPACE}:*:liquidity:Lock'):
-        key = k.decode('utf-8')
-        contract_addr = key.split(':')[3]
-        typer.secho(contract_addr, fg=typer.colors.YELLOW)
-        typer.echo(r.get(k).decode('utf-8'))
-        typer.echo('-'*40)
-
-
-@app.command()
 def listBroadcasts(elapsed_time: int):
     """
     Lists broadcasts sent out in the last `elapsed_time` seconds
