@@ -91,7 +91,6 @@ def read_json_file(file_path: str):
         logger.error(e, exc_info=True)
         raise e
     else:
-        logger.debug(f"Reading {file_path} file")
         json_data = json.loads(f_.read())
     return json_data
 

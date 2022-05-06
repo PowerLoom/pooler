@@ -15,7 +15,7 @@ import time
 from math import floor
 from redis_conn import provide_async_redis_conn
 from functools import reduce
-from uniswap_functions import v2_pairs_data, read_json_file
+from uniswap_functions import read_json_file
 from redis_keys import (
     uniswap_pair_contract_V2_pair_data,
     uniswap_pair_cached_recent_logs,

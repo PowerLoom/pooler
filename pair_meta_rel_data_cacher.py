@@ -38,10 +38,6 @@ stdout_handler.setFormatter(formatter)
 stdout_handler.setLevel(logging.DEBUG)
 stderr_handler = logging.StreamHandler(sys.stderr)
 stderr_handler.setLevel(logging.ERROR)
-retrieval_logger.handlers = [
-    logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT),
-    stdout_handler, stderr_handler
-]
 
 if os.path.exists('static/cached_pair_addresses.json'):
     f = open('static/cached_pair_addresses.json', 'r')
