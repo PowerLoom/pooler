@@ -7,7 +7,6 @@ from eth_account.account import Account
 from eth_utils import keccak
 from functools import wraps, reduce
 from dynaconf import settings
-from redis_conn import provide_redis_conn, provide_redis_conn_insta, provide_async_redis_conn_insta, REDIS_CONN_CONF
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception, RetryCallState
 from proto_system_logging import config_logger_with_namespace
 from uuid import uuid4
@@ -151,42 +150,37 @@ def cleanup_children_procs(fn):
     def wrapper(self, *args, **kwargs):
         try:
             fn(self, *args, **kwargs)
-        except (SelfExitException, Exception) as e:
-            if not isinstance(e, SelfExitException):
-                logging.error(e, exc_info=True)
-            logging.error('Initiating kill children....')
-            # silently kill all children
-            procs = psutil.Process().children()
-            for p in procs:
-                p.terminate()
-            gone, alive = psutil.wait_procs(procs, timeout=3)
-            for p in alive:
-                logging.error(f'killing process: {p.name()}')
-                p.kill()
-                if hasattr(self, '_spawned_cb_processes_map'):
-                    for k, v in self._spawned_cb_processes_map.items():
-                        if v['process'].pid == p.pid:
-                            v['process'].join()
-                if hasattr(self, '_spawned_processes_map'):
-                    for k, v in self._spawned_processes_map.items():
-                        # internal state reporter might set proc_id_map[k] = -1 
-                        if v != -1 and v.pid == p.pid:
-                            v.join()
-            logging.error('Killed all child processes')
-            
-            current_process_pid = os.getpid()
-            p = psutil.Process(current_process_pid)
-            logging.error(f"Current process name: {p.name()} | pid: {current_process_pid}")
-            logging.error('Attempting to send SIGTERM to process ID %s for following command', current_process_pid)
-            p.terminate() 
-            logging.error('Waiting for 3 seconds to confirm termination of process')
-            gone, alive = psutil.wait_procs([p], timeout=3)
-            for p_ in alive:
-                logging.error('Process ID %s not terminated by SIGTERM. Sending SIGKILL...', p_.pid)
-                p_.kill()
-        finally:
-            return None
+            logging.info('Finished running process hub core...')
+        except Exception as e:
+            logging.error('Received an exception on process hub core run(): %s', e, exc_info=True)
+            # logging.error('Initiating kill children....')
+            # # silently kill all children
+            # procs = psutil.Process().children()
+            # for p in procs:
+            #     p.terminate()
+            # gone, alive = psutil.wait_procs(procs, timeout=3)
+            # for p in alive:
+            #     logging.error(f'killing process: {p.name()}')
+            #     p.kill()
+            logging.error('Waiting on spawned callback workers to join...')
+            for k, v in self._spawned_cb_processes_map.items():
+                if v['process'].pid:
+                    logging.error('Waiting on spawned callback worker %s | PID %s  to join...', k, v['process'].pid)
+                    v['process'].join()
 
+            logging.error('Waiting on spawned core workers to join... %s',self._spawned_processes_map)
+            for k, v in self._spawned_processes_map.items():
+                logging.error('spawned Process Pid to wait on %s',v.pid)
+                # internal state reporter might set proc_id_map[k] = -1
+                if v != -1:
+                    logging.error('Waiting on spawned core worker %s | PID %s  to join...', k, v.pid)
+                    v.join()
+            logging.error('Finished waiting for all children...now can exit.')
+        finally:
+            logging.error('Finished waiting for all children...now can exit.')
+            self._reporter_thread.join()
+            sys.exit(0)
+            #sys.exit(0)
     return wrapper
 
 
@@ -209,184 +203,5 @@ def acquire_threading_semaphore(fn):
     return semaphore_wrapper
 
 
-@provide_redis_conn_insta
-def acquire_maticivigil_rpc_semaphore(app_id=settings.RPC.MATIC[0].split('/')[-1], redis_conn: redis.Redis = None):
-    p = redis_conn.pipeline()
-    identifier = str(uuid4())
-    now = time.time()
-    semaphore_name = f'{app_id}:maticivigil:rpcSemaphore'
-    logging.info('About to acquire RPC semaphore via zset %s', semaphore_name)
-    # cleanout stagnant entries older than 60 seconds
-    p.zremrangebyscore(semaphore_name, '-inf', now - 60)
-    # logging.info('Removed old acquisition entries for RPC semaphore via zset %s', semaphore_name)
-    p.zadd(semaphore_name, {identifier: now})
-    # logging.info('Added new identifier for acquisition request %s in RPC semaphore via zset %s', identifier, semaphore_name)
-    p.zrank(semaphore_name, identifier)
-    # logging.info('Getting rank of new identifier %s for acquisition request in RPC semaphore via zset %s', identifier, semaphore_name)
-    result = p.execute()
-    logging.debug('Pipeline results in acquiring RPC semaphore via zset %s', result)
-    if result[-1] < settings.SNAPSHOT_MAX_WORKERS:
-        return identifier
-    else:
-        redis_conn.zrem(semaphore_name, identifier)
-        return None
-
-
-@provide_async_redis_conn_insta
-async def acquire_maticivigil_rpc_semaphore_async(app_id=settings.RPC.MATIC[0].split('/')[-1],
-                                                  redis_conn: aioredis.Redis = None):
-    cmds_gather = list()
-    # p = redis_conn.pipeline()
-    identifier = str(uuid4())
-    now = time.time()
-    semaphore_name = f'{app_id}:maticivigil:rpcSemaphore'
-    logging.info('About to acquire RPC semaphore via zset %s', semaphore_name)
-    # cleanout stagnant entries older than 60 seconds
-    cmds_gather.append(redis_conn.zremrangebyscore(key=semaphore_name, max=now - 60))
-    cmds_gather.append(redis_conn.zadd(semaphore_name, now, identifier))
-    cmds_gather.append(redis_conn.zrank(semaphore_name, identifier))
-    # result = await p.execute()
-    result = await asyncio.gather(*cmds_gather)
-    logging.debug('Pipeline results in acquiring RPC semaphore via zset %s', result)
-    if result[-1] < settings.SNAPSHOT_MAX_WORKERS:
-        return identifier
-    else:
-        redis_conn.zrem(semaphore_name, identifier)
-        return None
-
-
-@provide_redis_conn_insta
-def release_maticivigil_rpc_semaphore(identifier, app_id=settings.RPC.MATIC[0].split('/')[-1],
-                                      redis_conn: redis.Redis = None):
-    semaphore_name = f'{app_id}:maticivigil:rpcSemaphore'
-    return redis_conn.zrem(semaphore_name, identifier)
-
-
-@provide_async_redis_conn_insta
-async def release_maticivigil_rpc_semaphore_async(identifier, app_id=settings.RPC.MATIC[0].split('/')[-1],
-                                                  redis_conn: aioredis.Redis = None):
-    semaphore_name = f'{app_id}:maticivigil:rpcSemaphore'
-    return await redis_conn.zrem(semaphore_name, identifier)
-
-
-# # # TODO: BEGIN: placeholder for supporting liquidity events
-
-def get_event_name_from_sig(event_sig: str):
-    if event_sig == get_event_sig("FPMMBuy"):
-        return "FPMMBuy"
-    elif event_sig == get_event_sig("FPMMSell"):
-        return "FPMMSell"
-    return -1
-
-
-def get_event_params_from_sig(event_sig: str):
-    indexed_params = {}
-    unindexed_params = {}
-    if event_sig == get_event_sig("FPMMBuy"):
-        indexed_params = {
-            'buyer': 'address',
-            'outcomeIndex': 'uint256'
-        }
-
-        unindexed_params = {
-            'investmentAmount': 'uint256',
-            'feeAmount': 'uint256',
-            'outcomeTokensBought': 'uint256'
-        }
-    elif event_sig == get_event_sig("FPMMSell"):
-        indexed_params = {
-            'seller': 'address',
-            'outcomeIndex': 'uint256'
-        }
-
-        unindexed_params = {
-            'returnAmount': 'uint256',
-            'feeAmount': 'uint256',
-            'outcomeTokensSold': 'uint256'
-        }
-
-    return indexed_params, unindexed_params
-
-
-def get_event_sig(event_name: str):
-    if event_name == "FPMMBuy":
-        event_def = "FPMMBuy(address,uint256,uint256,uint256,uint256)"
-    elif event_name == "FPMMSell":
-        event_def = f"FPMMSell(address,uint256,uint256,uint256,uint256)"
-    else:
-        logging.debug("Unknow event_name passed: ")
-        logging.debug(event_name)
-        return -1
-
-    event_sig = '0x' + keccak(text=event_def).hex()
-    # logging.debug("Generated event sig: ")
-    # logging.debug(event_sig)
-
-    return event_sig
-
-
-def decode_event_data(topics: list, data: str):
-    """
-        - Given the topic and data, decode the values and return back
-        the parameters
-    """
-    assert len(topics) > 0, "Empty topic sent as a parameter"
-
-    event_sig = topics[0]
-
-    # Decode the indexed_params
-    indexed_params, unindexed_params = get_event_params_from_sig(event_sig=event_sig)
-
-    indexed_data = {}
-    unindexed_data = {}
-
-    for i in range(1, len(topics)):
-        param_name = list(indexed_params.keys())[i - 1]
-        indexed_data[param_name] = eth_abi.decode_single(
-            typ=indexed_params[param_name],
-            data=bytes.fromhex(topics[i][2:])
-        )
-    _data = eth_abi.decode_abi(
-        types=unindexed_params.values(),
-        data=bytes.fromhex(data[2:])
-    )
-    for i in range(len(_data)):
-        param_name = list(unindexed_params.keys())[i]
-        unindexed_data[param_name] = _data[i]
-
-    final_data = {'event_sig': topics[0]}
-    final_data.update(indexed_data)
-    final_data.update(unindexed_data)
-
-    return final_data
-
-
-def parse_logs(result: list):
-    """
-        Given a list of logs, parse them
-    """
-
-    events = []
-    for log in result:
-        if 'topics' not in log.keys():
-            logging.debug("Unknown log found. Skipping...")
-            logging.debug(log)
-            continue
-
-        try:
-            event_data = decode_event_data(
-                topics=log['topics'],
-                data=log['data']
-            )
-        except AssertionError as aerr:
-            logging.debug("Empty topics log. Skipping...")
-            logging.debug(log)
-            continue
-
-        block_num = int(log['blockNumber'], base=16)
-        event_data['blockNumber'] = block_num
-        events.append(event_data)
-
-    return events
 
 # # # END: placeholder for supporting liquidity events

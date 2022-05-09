@@ -1,9 +1,6 @@
 from dynaconf import settings as settings_conf
-from cached_property import cached_property as cached_property_async
 from functools import wraps
-from proto_system_logging import config_logger_with_namespace
 import aioredis
-import aioredis_cluster
 import contextlib
 import tenacity
 import redis.exceptions as redis_exc
@@ -29,6 +26,21 @@ REDIS_CONN_CONF = {
     "password": settings_conf['redis']['password'],
     "db": settings_conf['redis']['db']
 }
+
+
+def construct_redis_url():
+    if REDIS_CONN_CONF["password"]:
+        return f'redis://{REDIS_CONN_CONF["password"]}@{REDIS_CONN_CONF["host"]}:{REDIS_CONN_CONF["port"]}'\
+               f'/{REDIS_CONN_CONF["db"]}'
+    else:
+        return f'redis://{REDIS_CONN_CONF["host"]}:{REDIS_CONN_CONF["port"]}/{REDIS_CONN_CONF["db"]}'
+
+
+async def get_aioredis_pool(pool_size=200):
+    return await aioredis.from_url(
+        url=construct_redis_url(),
+        max_connections=pool_size
+    )
 
 
 @contextlib.contextmanager
@@ -88,27 +100,8 @@ def provide_async_redis_conn(fn):
     return async_redis_conn_wrapper
 
 
-def setup_teardown_boilerplate(fn):
-    @wraps(fn)
-    async def wrapped(*args, **kwargs):
-        arg_conn = 'redis_conn'
-        # func_params = fn.__code__.co_varnames
-        redis_conn_raw = await kwargs['request'].app.redis_pool.acquire()
-        redis_conn = aioredis.Redis(redis_conn_raw)
-        # conn_in_args = arg_conn in func_params and func_params.index(arg_conn) < len(args)
-        # conn_in_kwargs = arg_conn in kwargs
-        kwargs[arg_conn] = redis_conn
-        try:
-            return await fn(*args, **kwargs)
-        except Exception as e:
-            print("An Exception occured: ")
-            print(e)
-            return {'error': 'Internal Server Error'}
-        finally:
-            kwargs['request'].app.redis_pool.release(redis_conn_raw)
-    return wrapped
-
-
+# TODO: check wherever this is used and instead
+#       attempt to supply the aioredis.Redis object from an instantiated connection pool
 def provide_async_redis_conn_insta(fn):
     @wraps(fn)
     async def wrapped(*args, **kwargs):
@@ -119,27 +112,28 @@ def provide_async_redis_conn_insta(fn):
         if conn_in_args or conn_in_kwargs:
             return await fn(*args, **kwargs)
         else:
-            RedisPoolCache.append_ssl_connection_params(REDIS_CONN_CONF, settings_conf['redis'])
+            # RedisPoolCache.append_ssl_connection_params(REDIS_CONN_CONF, settings_conf['redis'])
             redis_cluster_mode_conn = False
-            try:
-                if settings_conf.REDIS.CLUSTER_MODE:
-                    redis_cluster_mode_conn = True
-            except:
-                pass
+            # try:
+            #     if settings_conf.REDIS.CLUSTER_MODE:
+            #         redis_cluster_mode_conn = True
+            # except:
+            #     pass
             if redis_cluster_mode_conn:
-                connection = await aioredis_cluster.create_redis_cluster(
-                    startup_nodes=[(REDIS_CONN_CONF['host'], REDIS_CONN_CONF['port'])],
-                    password=REDIS_CONN_CONF['password'],
-                    pool_maxsize=1,
-                    ssl=REDIS_CONN_CONF['ssl']
-                )
+                # connection = await aioredis_cluster.create_redis_cluster(
+                #     startup_nodes=[(REDIS_CONN_CONF['host'], REDIS_CONN_CONF['port'])],
+                #     password=REDIS_CONN_CONF['password'],
+                #     pool_maxsize=1,
+                #     ssl=REDIS_CONN_CONF['ssl']
+                # )
+                pass
             else:
                 logging.debug('Creating single connection via high level aioredis interface')
-                connection = await aioredis.create_redis(
-                    address=(REDIS_CONN_CONF['host'], REDIS_CONN_CONF['port']),
+                connection = await aioredis.Redis(
+                    host=REDIS_CONN_CONF['host'],
+                    port=REDIS_CONN_CONF['port'],
                     db=REDIS_CONN_CONF['db'],
-                    password=REDIS_CONN_CONF['password'],
-                    ssl=REDIS_CONN_CONF['ssl']
+                    password=REDIS_CONN_CONF['password']
                 )
             kwargs[arg_conn] = connection
             try:
@@ -155,83 +149,11 @@ def provide_async_redis_conn_insta(fn):
     return wrapped
 
 
-def provide_redis_conn_insta(fn):
-    @wraps(fn)
-    def wrapped(*args, **kwargs):
-        arg_conn = 'redis_conn'
-        func_params = fn.__code__.co_varnames
-        conn_in_args = arg_conn in func_params and func_params.index(arg_conn) < len(args)
-        conn_in_kwargs = arg_conn in kwargs
-        if conn_in_args or conn_in_kwargs:
-            return fn(*args, **kwargs)
-        else:
-            connection = redis.Redis(**REDIS_CONN_CONF, single_connection_client=True)
-            kwargs[arg_conn] = connection
-            try:
-                return fn(*args, **kwargs)
-            except:
-                raise
-            finally:
-                connection.close()
-    return wrapped
-
-
 class RedisPoolCache:
-    @classmethod
-    def append_ssl_connection_params(cls, conn_conf: dict, settings_config):
-        ssl_mode = False
-        try:
-            if settings_config['ssl']:
-                ssl_mode = True
-        except:
-            pass
-        conn_conf.update({'ssl': ssl_mode})
+    def __init__(self, pool_size=200):
+        self._aioredis_pool = None
+        self._pool_size = pool_size
 
-    @cached_property_async
-    async def connect_redis_main(self) -> aioredis.Redis:
-        self.append_ssl_connection_params(REDIS_CONN_CONF, settings_conf['redis'])
-        redis_cluster_mode_conn = False
-        try:
-            if settings_conf.REDIS.CLUSTER_MODE:
-                redis_cluster_mode_conn = True
-        except:
-            pass
-        if redis_cluster_mode_conn:
-            return await aioredis_cluster.create_redis_cluster(
-                startup_nodes=[(REDIS_CONN_CONF['host'], REDIS_CONN_CONF['port'])],
-                password=REDIS_CONN_CONF['password'],
-                pool_maxsize=10,
-                ssl=REDIS_CONN_CONF['ssl']
-            )
-        else:
-            return await aioredis.create_redis_pool(
-                address=(REDIS_CONN_CONF['host'], REDIS_CONN_CONF['port']),
-                db=REDIS_CONN_CONF['db'],
-                password=REDIS_CONN_CONF['password'],
-                maxsize=10,
-                ssl=REDIS_CONN_CONF['ssl']
-            )
-
-    @cached_property_async
-    async def connect_redis_main_unpooled(self) -> aioredis.Redis:
-        self.append_ssl_connection_params(REDIS_CONN_CONF, settings_conf['redis'])
-        redis_cluster_mode_conn = False
-        try:
-            if settings_conf.REDIS.CLUSTER_MODE:
-                redis_cluster_mode_conn = True
-        except:
-            pass
-        if redis_cluster_mode_conn:
-            return await aioredis_cluster.create_redis_cluster(
-                startup_nodes=[(REDIS_CONN_CONF['host'], REDIS_CONN_CONF['port'])],
-                password=REDIS_CONN_CONF['password'],
-                pool_maxsize=1,
-                ssl=REDIS_CONN_CONF['ssl']
-            )
-        else:
-            return await aioredis.create_redis(
-                address=(REDIS_CONN_CONF['host'], REDIS_CONN_CONF['port']),
-                db=REDIS_CONN_CONF['db'],
-                password=REDIS_CONN_CONF['password'],
-                ssl=REDIS_CONN_CONF['ssl']
-            )
+    async def populate(self):
+        if not self._aioredis_pool:
+            self._aioredis_pool: aioredis.Redis = await get_aioredis_pool(self._pool_size)

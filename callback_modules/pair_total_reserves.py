@@ -1,14 +1,15 @@
-from init_rabbitmq import create_rabbitmq_conn
+from exceptions import GenericExitOnSignal
 from setproctitle import setproctitle
 from uniswap_functions import get_pair_contract_trades_async, get_liquidity_of_each_token_reserve_async
 from eth_utils import keccak
 from uuid import uuid4
+from signal import SIGINT, SIGTERM, SIGQUIT
 from message_models import (
     PowerloomCallbackEpoch, PowerloomCallbackProcessMessage, UniswapPairTotalReservesSnapshot,
     EpochBase, UniswapTradesSnapshot
 )
 from dynaconf import settings
-from callback_modules.helpers import AuditProtocolCommandsHelper, CallbackAsyncWorker, get_cumulative_trade_vol
+from callback_modules.helpers import AuditProtocolCommandsHelper, CallbackAsyncWorker
 from redis_conn import create_redis_conn, REDIS_CONN_CONF
 from redis_keys import (
     uniswap_pair_total_reserves_processing_status, uniswap_pair_total_reserves_last_snapshot,
@@ -21,7 +22,7 @@ from helper_functions import AsyncHTTPSessionCache
 from aio_pika import ExchangeType, IncomingMessage
 from rabbitmq_helpers import RabbitmqSelectLoopInteractor
 import queue
-import threading
+import signal
 import redis
 import asyncio
 import aiohttp
@@ -210,7 +211,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 from_block=from_block,
                 to_block=to_block
             )
-        except:
+        except Exception as e:
             if enqueue_on_failure:
                 # if coalescing was achieved, ensure that is recorded and enqueued as well
                 if continuity and queued_epochs:
@@ -230,8 +231,8 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                     uniswap_failed_query_pair_total_reserves_epochs_redis_q_f.format(msg_obj.contract),
                     msg_obj.json()
                 )
-                self._logger.debug(f'Enqueued epoch broadcast ID {msg_obj.broadcast_id} because '
-                                   f'trade volume query failed: {msg_obj}')
+                self._logger.error(f'Enqueued epoch broadcast ID {msg_obj.broadcast_id} because '
+                                   f'trade volume query failed: {msg_obj}: {e}', exc_info=True)
             return None
         else:
             total_trades_in_usd = 0
@@ -281,6 +282,8 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
         await message.ack()
+        self_unique_id = str(uuid4())
+        # cur_task.add_done_callback()
         try:
             msg_obj = PowerloomCallbackProcessMessage.parse_raw(message.body)
         except ValidationError as e:
@@ -295,6 +298,10 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 exc_info=True
             )
             return
+        cur_task: asyncio.Task = asyncio.current_task(asyncio.get_running_loop())
+        cur_task.set_name(f'aio_pika.consumer|PairTotalReservesProcessor|{msg_obj.contract}')
+        self._running_callback_tasks[self_unique_id] = cur_task
+
         await self.init_redis_pool()
         self._logger.debug('Got epoch to process for calculating total reserves for pair: %s', msg_obj)
 
@@ -315,10 +322,9 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 }
             }
 
-            self._redis_conn.zadd(
-                key=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
-                score=int(time.time()),
-                member=json.dumps(update_log)
+            await self._redis_conn.zadd(
+                name=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
+                mapping={json.dumps(update_log): int(time.time())}
             )
         else:
             update_log = {
@@ -333,16 +339,16 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 }
             }
 
-            self._redis_conn.zadd(
-                key=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
-                score=int(time.time()),
-                member=json.dumps(update_log)
+            await self._redis_conn.zadd(
+                name=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
+                mapping={json.dumps(update_log): int(time.time())}
             )
             # TODO: should we attach previous total reserves epoch from cache?
             await AuditProtocolCommandsHelper.set_diff_rule_for_pair_reserves(
                 pair_contract_address=pair_total_reserves_epoch_snapshot.contract,
                 stream='pair_total_reserves',
-                session=self._aiohttp_session
+                session=self._aiohttp_session,
+                redis_conn=self._redis_conn
             )
             payload = pair_total_reserves_epoch_snapshot.dict()
             try:
@@ -367,10 +373,9 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                     }
                 }
 
-                self._redis_conn.zadd(
-                    key=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
-                    score=int(time.time()),
-                    member=json.dumps(update_log)
+                await self._redis_conn.zadd(
+                    name=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
+                    mapping={json.dumps(update_log): int(time.time())}
                 )
             else:
                 if type(r) is dict and 'message' in r.keys():
@@ -388,10 +393,9 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                         }
                     }
 
-                    self._redis_conn.zadd(
-                        key=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
-                        score=int(time.time()),
-                        member=json.dumps(update_log)
+                    await self._redis_conn.zadd(
+                        name=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
+                        mapping={json.dumps(update_log): int(time.time())}
                     )
                 else:
                     self._logger.debug('Sent snapshot to audit protocol: %s | Helper Response: %s', pair_total_reserves_epoch_snapshot, r)
@@ -407,10 +411,9 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                         }
                     }
 
-                    self._redis_conn.zadd(
-                        key=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
-                        score=int(time.time()),
-                        member=json.dumps(update_log)
+                    await self._redis_conn.zadd(
+                        name=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
+                        mapping={json.dumps(update_log): int(time.time())}
                     )
 
         # prepare trade volume snapshot
@@ -430,10 +433,9 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 }
             }
 
-            self._redis_conn.zadd(
-                key=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
-                score=int(time.time()),
-                member=json.dumps(update_log)
+            await self._redis_conn.zadd(
+                name=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
+                mapping={json.dumps(update_log): int(time.time())}
             )
         else:
             update_log = {
@@ -448,16 +450,16 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 }
             }
 
-            self._redis_conn.zadd(
-                key=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
-                score=int(time.time()),
-                member=json.dumps(update_log)
+            await self._redis_conn.zadd(
+                name=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
+                mapping={json.dumps(update_log): int(time.time())}
             )
             # TODO: should we attach previous trade volume epoch from cache?
             await AuditProtocolCommandsHelper.set_diff_rule_for_trade_volume(
                 pair_contract_address=msg_obj.contract,
                 stream='trade_volume',
-                session=self._aiohttp_session
+                session=self._aiohttp_session,
+                redis_conn=self._redis_conn
             )
             payload = trade_vol_epoch_snapshot.dict()
             try:
@@ -482,10 +484,9 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                     }
                 }
 
-                self._redis_conn.zadd(
-                    key=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
-                    score=int(time.time()),
-                    member=json.dumps(update_log)
+                await self._redis_conn.zadd(
+                    name=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
+                    mapping={json.dumps(update_log): int(time.time())}
                 )
             else:
                 if type(r) is dict and 'message' in r.keys():
@@ -503,10 +504,9 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                         }
                     }
 
-                    self._redis_conn.zadd(
-                        key=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
-                        score=int(time.time()),
-                        member=json.dumps(update_log)
+                    await self._redis_conn.zadd(
+                        name=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
+                        mapping={json.dumps(update_log): int(time.time())}
                     )
                 else:
                     self._logger.debug('Sent snapshot to audit protocol: %s | Helper Response: %s', trade_vol_epoch_snapshot, r)
@@ -522,11 +522,11 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                         }
                     }
 
-                    self._redis_conn.zadd(
-                        key=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
-                        score=int(time.time()),
-                        member=json.dumps(update_log)
+                    await self._redis_conn.zadd(
+                        name=uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
+                        mapping={json.dumps(update_log): int(time.time())}
                     )
+        del self._running_callback_tasks[self_unique_id]
 
     def run(self):
         setproctitle(self.name)
@@ -542,13 +542,13 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
         self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
         self._q = queue.Queue()
         self._rabbitmq_interactor = None
+        self._shutdown_initiated = False
         # logger.add(
         #     sink='logs/' + self._unique_id + '_{time}.log', rotation='20MB', retention=20, compression='gz'
         # )
         # setup_loguru_intercept()
 
     def _distribute_callbacks(self, dont_use_ch, method, properties, body):
-        self._rabbitmq_interactor._channel.basic_ack(delivery_tag=method.delivery_tag)
         # following check avoids processing messages meant for routing keys for sub workers
         # for eg: 'powerloom-backend-callback.pair_total_reserves.seeder'
         if 'pair_total_reserves' not in method.routing_key or method.routing_key.split('.')[1] != 'pair_total_reserves':
@@ -593,8 +593,17 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
                 uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
                 {json.dumps(update_log): int(time.time())}
             )
+        self._rabbitmq_interactor._channel.basic_ack(delivery_tag=method.delivery_tag)
+
+    def _exit_signal_handler(self, signum, sigframe):
+        if signum in [SIGINT, SIGTERM, SIGQUIT] and not self._shutdown_initiated:
+            self._shutdown_initiated = True
+            self._rabbitmq_interactor.stop()
 
     def run(self):
+        setproctitle(self.name)
+        for signame in [SIGINT, SIGTERM, SIGQUIT]:
+            signal.signal(signame, self._exit_signal_handler)
         # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|Callbacks|TradeVolumeProcessDistributor'))
         self._logger = logging.getLogger('PowerLoom|Callbacks|PairTotalReservesProcessDistributor')
         setproctitle(self.name)
@@ -605,7 +614,8 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
         queue_name = f'powerloom-backend-cb:{settings.NAMESPACE}'
         self._rabbitmq_interactor: RabbitmqSelectLoopInteractor = RabbitmqSelectLoopInteractor(
             consume_queue_name=queue_name,
-            consume_callback=self._distribute_callbacks
+            consume_callback=self._distribute_callbacks,
+            consumer_worker_name='PowerLoom|Callbacks|PairTotalReservesProcessDistributor'
         )
         # self.rabbitmq_interactor.start_publishing()
         self._logger.debug('Starting RabbitMQ consumer on queue %s', queue_name)

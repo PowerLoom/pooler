@@ -1,11 +1,11 @@
-import pika
-from init_rabbitmq import create_rabbitmq_conn
+from exceptions import GenericExitOnSignal
+from signal import SIGINT, SIGTERM, SIGQUIT
 from rabbitmq_helpers import RabbitmqSelectLoopInteractor
 from redis_keys import powerloom_broadcast_id_zset, uniswap_cb_broadcast_processing_logs_zset
 from redis_conn import create_redis_conn, REDIS_CONN_CONF
 from dynaconf import settings
 from multiprocessing import Process
-import threading
+import signal
 import redis
 import time
 import logging
@@ -36,8 +36,8 @@ class EpochCallbackManager(Process):
         with open(callback_q_conf_path, 'r') as f:
             # TODO: code the callback modules rabbitmq queue setup into pydantic model
             self._callback_q_config = json.load(f)
-        self._rmq_callback_threads = list()
         self.rabbitmq_interactor = None
+        self._shutdown_initiated = False
 
     # TODO: to make a tryly async consumer, define the work bit in here and let it run as a thread
     #       use self._rmq_callback_threads to monitor, join and clean up launched 'works'
@@ -45,7 +45,6 @@ class EpochCallbackManager(Process):
         pass
 
     def _epoch_broadcast_callback(self, dont_use_ch, method, properties, body):
-        self.rabbitmq_interactor._channel.basic_ack(delivery_tag=method.delivery_tag)
         broadcast_json = json.loads(body)
         self._logger.debug('Got epoch broadcast: %s', broadcast_json)
         append_epoch_context(broadcast_json)
@@ -85,9 +84,17 @@ class EpochCallbackManager(Process):
                 older_broadcast_ids_dec = map(lambda x: x.decode('utf-8'), older_broadcast_ids)
                 [r.delete(uniswap_cb_broadcast_processing_logs_zset.format(k)) for k in older_broadcast_ids_dec]
             r.zremrangebyscore(powerloom_broadcast_id_zset, min='-inf', max=int(time.time() - to_be_pruned_ts))
+        self.rabbitmq_interactor._channel.basic_ack(delivery_tag=method.delivery_tag)
+
+    def _exit_signal_handler(self, signum, sigframe):
+        if signum in [SIGINT, SIGTERM, SIGQUIT] and not self._shutdown_initiated:
+            self._shutdown_initiated = True
+            self.rabbitmq_interactor.stop()
 
     def run(self) -> None:
         # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|EpochCallbackManager'))
+        for signame in [SIGINT, SIGTERM, SIGQUIT]:
+            signal.signal(signame, self._exit_signal_handler)
         setproctitle(f'PowerLoom|EpochCallbackManager')
         self._logger = logging.getLogger('PowerLoom|EpochCallbackManager')
         self._logger.setLevel(logging.DEBUG)

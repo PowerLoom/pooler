@@ -13,9 +13,9 @@ import json
 import os
 import time
 from math import floor
-from redis_conn import provide_async_redis_conn
+from redis_conn import RedisPoolCache
 from functools import reduce
-from uniswap_functions import v2_pairs_data, read_json_file
+from uniswap_functions import read_json_file
 from redis_keys import (
     uniswap_pair_contract_V2_pair_data,
     uniswap_pair_cached_recent_logs,
@@ -69,12 +69,9 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.on_event('startup')
 async def startup_boilerplate():
-    app.redis_pool = await aioredis.create_pool(
-        address=(REDIS_CONN_CONF['host'], REDIS_CONN_CONF['port']),
-        db=REDIS_CONN_CONF['db'],
-        password=REDIS_CONN_CONF['password'],
-        maxsize=100
-    )
+    app.aioredis_pool = RedisPoolCache()
+    await app.aioredis_pool.populate()
+    app.redis_pool = app.aioredis_pool._aioredis_pool
 
 
 def check_onchain_param(onChain):
@@ -341,7 +338,7 @@ async def get_v2_pairs_daily_stats(
         }
         for key in keys:
             data = await redis_conn.zrangebyscore(
-                key=key,
+                name=key,
                 min=float('-inf'),
                 max=float('inf')
             )
@@ -509,13 +506,12 @@ async def get_last_snapshot(
 
 
 @app.get('/trade/{marketIdentity}')
-@provide_async_redis_conn
 async def get_trade_vol_value(
         request: Request,
         response: Response,
-        marketIdentity: str,
-        redis_conn=None
+        marketIdentity: str
 ):
+    redis_conn: aioredis.Redis = request.app.redis_pool
     if marketIdentity[:2] != "0x":
         contract_address = await get_market_address(market_id=marketIdentity, redis_conn=redis_conn)
         if contract_address == -1:
@@ -536,13 +532,12 @@ async def get_trade_vol_value(
 
 
 @app.get('/liquidity/{marketIdentity}')
-@provide_async_redis_conn
 async def get_liquidity(
         request: Request,
         response: Response,
-        marketIdentity: str,
-        redis_conn=None
+        marketIdentity: str
 ):
+    redis_conn: aioredis.Redis = request.app.redis_pool
     if marketIdentity[:2] != "0x":
         contract_address = await get_market_address(market_id=marketIdentity, redis_conn=redis_conn)
         if contract_address == -1:
@@ -563,14 +558,12 @@ async def get_liquidity(
 
 
 @app.get('/outcomePrices/{marketIdentity}')
-@provide_async_redis_conn
 async def get_outcome_prices(
         request: Request,
         response: Response,
-        marketIdentity:  str,
-        redis_conn=None
+        marketIdentity:  str
 ):
-
+    redis_conn: aioredis.Redis = request.app.redis_pool
     if marketIdentity[:2] != "0x":
         contract_address = await get_market_address(market_id=marketIdentity, redis_conn=redis_conn)
         if contract_address == -1:

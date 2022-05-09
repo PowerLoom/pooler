@@ -1,7 +1,6 @@
 from uniswap_functions import (
     get_pair_per_token_metadata, SCRIPT_CLEAR_KEYS, SCRIPT_SET_EXPIRE, SCRIPT_INCR_EXPIRE, GLOBAL_RPC_RATE_LIMIT_STR,
-    load_rate_limiter_scripts, PARSED_LIMITS, pair_contract_abi, get_all_pairs, get_pair, read_json_file,
-    v2_pairs_data
+    load_rate_limiter_scripts, PARSED_LIMITS, pair_contract_abi, get_all_pairs, get_pair, read_json_file
 )
 from redis_keys import (
     uniswap_pair_cached_token_price
@@ -39,10 +38,6 @@ stdout_handler.setFormatter(formatter)
 stdout_handler.setLevel(logging.DEBUG)
 stderr_handler = logging.StreamHandler(sys.stderr)
 stderr_handler.setLevel(logging.ERROR)
-retrieval_logger.handlers = [
-    logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT),
-    stdout_handler, stderr_handler
-]
 
 if os.path.exists('static/cached_pair_addresses.json'):
     f = open('static/cached_pair_addresses.json', 'r')
@@ -95,8 +90,8 @@ async def cache_pair_meta_data(redis_conn: aioredis.Redis = None):
                         can_request = False
                         break  # make sure to break once false condition is hit
                 except (
-                        aioredis.errors.ConnectionClosedError, aioredis.errors.ConnectionForcedCloseError,
-                        aioredis.errors.PoolClosedError
+                        aioredis.exceptions.ConnectionError, aioredis.exceptions.TimeoutError,
+                        aioredis.exceptions.ResponseError
                 ) as e:
                     # shit can happen while each limit check call hits Redis, handle appropriately
                     retrieval_logger.debug('Bypassing rate limit check for appID because of Redis exception: ' + str(

@@ -48,9 +48,16 @@ class UniswapPairTotalReservesSnapshot(BaseModel):
     contract: str
     token0Reserves: Dict[str, float]  # block number to corresponding total reserves
     token1Reserves: Dict[str, float]  # block number to corresponding total reserves
+    token0ReservesUSD: Dict[str, float]
+    token1ReservesUSD: Dict[str, float]
     chainHeightRange: EpochBase
     broadcast_id: str
     timestamp: float
+
+
+class logsTradeModel(BaseModel):
+    logs: List
+    inUSD: float
 
 
 class UniswapTradesSnapshot(BaseModel):
@@ -59,7 +66,20 @@ class UniswapTradesSnapshot(BaseModel):
     totalFee: float # in USD
     token0TradeVolume: float  # in token native decimals supply
     token1TradeVolume: float  # in token native decimals supply
-    events: list
+    token0TradeVolumeUSD: float
+    token1TradeVolumeUSD: float
+    # {'Swap': [array of event logs],'Mint': [array of event logs], 'Burn': [array of event logs]}
+    # TODO:
+    #   {
+    #       'Swap': {
+    #           'logs': [],
+    #           'inUSD': xxxx
+    #       }
+    #   }
+    #
+    #
+    #
+    events: Dict[str, logsTradeModel]
     recent_logs: list
     chainHeightRange: EpochBase
     broadcast_id: str

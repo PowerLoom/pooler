@@ -1,3 +1,4 @@
+from typing import Optional
 from process_hub_core import PROC_STR_ID_TO_CLASS_MAP
 from init_rabbitmq import create_rabbitmq_conn, processhub_command_publish
 from message_models import ProcessHubCommand
@@ -75,7 +76,7 @@ def pidStatus(connections: bool = False):
 
 
 @app.command()
-def listProcesses(elapsed_time: int):
+def broadcastStatus(elapsed_time: int, verbose: Optional[bool] = False):
     r = redis.Redis(**REDIS_CONN_CONF, single_connection_client=True)
     cur_ts = int(time.time())
     res_ = r.zrangebyscore(
@@ -88,8 +89,8 @@ def listProcesses(elapsed_time: int):
     for k, v in res_:
         key = k.decode('utf-8')
         value = v
-        print(f"{key} -")
-        print(f"\t timestamp: {value}\n")
+        typer.secho(f"{key} -", fg=typer.colors.YELLOW, bold=True)
+        typer.echo(typer.style(f"\t timestamp: ", fg=typer.colors.MAGENTA, bold=True) + f"{value}\n")
         logs = r.zrangebyscore(
             name=uniswap_cb_broadcast_processing_logs_zset.format(f"{key}"),
             min=cur_ts-elapsed_time,
@@ -103,6 +104,12 @@ def listProcesses(elapsed_time: int):
             "TradeVolume.SnapshotBuild": {"success": 0, "failure": 0},
             "TradeVolume.SnapshotCommit": {"success": 0, "failure": 0},
         }
+        failure_info = {
+            "PairReserves.SnapshotBuild": [],
+            "PairReserves.SnapshotCommit": [],
+            "TradeVolume.SnapshotBuild": [],
+            "TradeVolume.SnapshotCommit": [],
+        }
         if logs:
             parsed_logs = []
             for i, j in logs:
@@ -111,15 +118,31 @@ def listProcesses(elapsed_time: int):
                 i['timestamp'] = j
                 if i["update"]["action"].lower().find('publish') != -1:
                     contracts_len = len(i["update"]["info"]["msg"]["contracts"])
-                    print(f"\t worker: {i['worker']}")
-                    print(f"\t action: {i['update']['action']} - {contracts_len} contracts\n")
+                    typer.echo(typer.style(f"\t worker: ", fg=typer.colors.MAGENTA, bold=True) + f"{i['worker']}")
+                    typer.echo(typer.style(f"\t action: ", fg=typer.colors.MAGENTA, bold=True) + f"{i['update']['action']} - {contracts_len} contracts\n")
                 elif i["update"]["action"] in sub_actions:
                     if i["update"]["info"]["status"].lower() == "success":
                         sub_actions[i["update"]["action"]]["success"] += 1
                     else:
                         sub_actions[i["update"]["action"]]["failure"] += 1
+                        fail_obj = {
+                            'msg': i["update"]["info"]["msg"]
+                        }
+                        if i["update"]["info"].get('exception'):
+                            fail_obj["exception"] = i["update"]["info"]["exception"]
+                        if i["update"]["info"].get('error'):
+                            fail_obj["error"] = i["update"]["info"]["error"]
+
+                        failure_info[i["update"]["action"]].append(fail_obj)
             for i, j in sub_actions.items():
-                print(f"\t {i} : {str(j)}")
+                typer.echo(typer.style(f"\t {i}: ", fg=typer.colors.MAGENTA, bold=True) + f"{str(j)}")
+            print("\n")
+            if verbose:
+                for i, j in failure_info.items():
+                    if len(j) > 0:
+                        typer.secho(f"\t Failure in {i} : ", fg=typer.colors.RED, bold=True)
+                        for k in j:
+                            typer.secho(json.dumps(k, sort_keys=True, indent=4), fg=typer.colors.CYAN)
         else:
             print("\t Logs: no log found against this braodcastId")
         print("\n")
@@ -250,43 +273,6 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
         print(f"\n##################### NO GAPS FOUND IN CHAIN #####################\n")
 
     print("\n")
-
-
-@app.command()
-def listCallbackStatus():
-    r = redis.Redis(**REDIS_CONN_CONF, single_connection_client=True)
-    typer.secho('='*20+'TRADE VOLUME PROCESSING STATUS'+'='*20, fg=typer.colors.CYAN)
-    for k in r.scan_iter(match=f'polymarket:marketMaker:{settings.NAMESPACE}:*:tradesProcessingStatus'):
-        key = k.decode('utf-8')
-        contract_addr = key.split(':')[3]
-        typer.secho(contract_addr, fg=typer.colors.YELLOW)
-        typer.echo(r.get(k).decode('utf-8'))
-        typer.echo('-'*40)
-    typer.secho('='*20+'LIQUIDITY PROCESSING STATUS'+'='*20, fg=typer.colors.CYAN)
-    for k in r.scan_iter(match=f'polymarket:marketMaker:{settings.NAMESPACE}:*:liquidityProcessingStatus'):
-        key = k.decode('utf-8')
-        contract_addr = key.split(':')[3]
-        typer.secho(contract_addr, fg=typer.colors.YELLOW)
-        typer.echo(r.get(k).decode('utf-8'))
-        typer.echo('-'*40)
-
-@app.command()
-def listSeedLocks():
-    r = redis.Redis(**REDIS_CONN_CONF, single_connection_client=True)
-    typer.secho('='*20+'TRADE VOLUME SEEDING LOCKS'+'='*20, fg=typer.colors.CYAN)
-    for k in r.scan_iter(match=f'polymarket:marketMaker:{settings.NAMESPACE}:*:tradeVolume:Lock'):
-        key = k.decode('utf-8')
-        contract_addr = key.split(':')[3]
-        typer.secho(contract_addr, fg=typer.colors.YELLOW)
-        typer.echo(r.get(k).decode('utf-8'))
-        typer.echo('-'*40)
-    typer.secho('='*20+'LIQUIDITY SEEDING LOCKS'+'='*20, fg=typer.colors.CYAN)
-    for k in r.scan_iter(match=f'polymarket:marketMaker:{settings.NAMESPACE}:*:liquidity:Lock'):
-        key = k.decode('utf-8')
-        contract_addr = key.split(':')[3]
-        typer.secho(contract_addr, fg=typer.colors.YELLOW)
-        typer.echo(r.get(k).decode('utf-8'))
-        typer.echo('-'*40)
 
 
 @app.command()
