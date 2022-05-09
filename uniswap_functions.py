@@ -188,7 +188,7 @@ async def get_block_details(ev_loop, block_number):
         block_details = await ev_loop.run_in_executor(func=block_det_func, executor=None)
         block_details = dict() if not block_details else block_details
     except Exception as e:
-        logger.error('Error attempting to get block details of recent transaction timestamp %s: %s', int(log["blockNumber"]), e, exc_info=True)
+        logger.error('Error attempting to get block details of recent transaction timestamp %s: %s', block_number, e, exc_info=True)
         block_details = dict()
     finally:
         return block_details
@@ -440,8 +440,12 @@ async def get_pair_per_token_metadata(pair_contract_obj, pair_address, loop: asy
             token1Addr = await loop.run_in_executor(func=pfunc_1, executor=None)
             token0Addr = Web3.toChecksumAddress(token0Addr)
             token1Addr = Web3.toChecksumAddress(token1Addr)
-            await redis_conn.hmset(uniswap_pair_contract_tokens_addresses.format(pair_address), 'token0Addr', token0Addr,
-                                'token1Addr', token1Addr)
+            await redis_conn.hset(
+                name=uniswap_pair_contract_tokens_addresses.format(pair_address),
+                mapping={
+                    'token0Addr': token0Addr,
+                    'token1Addr': token1Addr
+                })
         # token0 contract
         token0 = w3.eth.contract(
             address=Web3.toChecksumAddress(token0Addr),
@@ -475,15 +479,17 @@ async def get_pair_per_token_metadata(pair_contract_obj, pair_address, loop: asy
                 token1_name, token1_symbol, token1_decimals
             ] = await asyncio.gather(*executor_gather)
 
-            await redis_conn.hmset(
-                uniswap_pair_contract_tokens_data.format(pair_address),
-                "token0_name", token0_name,
-                "token0_symbol", token0_symbol,
-                "token0_decimals", token0_decimals,
-                "token1_name", token1_name,
-                "token1_symbol", token1_symbol,
-                "token1_decimals", token1_decimals,
-                "pair_symbol", f"{token0_symbol}-{token1_symbol}"
+            await redis_conn.hset(
+                name=uniswap_pair_contract_tokens_data.format(pair_address),
+                mapping={
+                    "token0_name": token0_name,
+                    "token0_symbol": token0_symbol,
+                    "token0_decimals": token0_decimals,
+                    "token1_name": token1_name,
+                    "token1_symbol": token1_symbol,
+                    "token1_decimals": token1_decimals,
+                    "pair_symbol": f"{token0_symbol}-{token1_symbol}"
+                }
             )
             # print(f"pair_symbol {token0_symbol}-{token1_symbol}")
         # TODO: formalize return structure in a pydantic model for better readability
@@ -525,7 +531,9 @@ async def get_liquidity_of_each_token_reserve_async(
             address=pair_address,
             abi=pair_contract_abi
         )
-        redis_storage = AsyncRedisStorage(await load_rate_limiter_scripts(redis_conn), redis_conn)
+        lua_scripts = await load_rate_limiter_scripts(redis_conn)
+        logger.debug('Got sha load results for rate limiter scripts: %s', lua_scripts)
+        redis_storage = AsyncRedisStorage(lua_scripts, redis_conn)
         custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
         limit_incr_by = 1  # score to be incremented for each request
         if fetch_timestamp:
@@ -559,6 +567,9 @@ async def get_liquidity_of_each_token_reserve_async(
                 # shit can happen while each limit check call hits Redis, handle appropriately
                 logger.debug('Bypassing rate limit check for appID because of Redis exception: ' + str(
                     {'appID': app_id, 'exception': e}))
+            except Exception as e:
+                logger.error('Caught exception on rate limiter operations: %s', e, exc_info=True)
+                raise
             else:
                 can_request = True
         if can_request:

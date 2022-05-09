@@ -211,7 +211,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 from_block=from_block,
                 to_block=to_block
             )
-        except:
+        except Exception as e:
             if enqueue_on_failure:
                 # if coalescing was achieved, ensure that is recorded and enqueued as well
                 if continuity and queued_epochs:
@@ -231,8 +231,8 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                     uniswap_failed_query_pair_total_reserves_epochs_redis_q_f.format(msg_obj.contract),
                     msg_obj.json()
                 )
-                self._logger.debug(f'Enqueued epoch broadcast ID {msg_obj.broadcast_id} because '
-                                   f'trade volume query failed: {msg_obj}')
+                self._logger.error(f'Enqueued epoch broadcast ID {msg_obj.broadcast_id} because '
+                                   f'trade volume query failed: {msg_obj}: {e}', exc_info=True)
             return None
         else:
             total_trades_in_usd = 0
