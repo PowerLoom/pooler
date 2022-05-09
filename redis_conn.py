@@ -133,8 +133,7 @@ def provide_async_redis_conn_insta(fn):
                     host=REDIS_CONN_CONF['host'],
                     port=REDIS_CONN_CONF['port'],
                     db=REDIS_CONN_CONF['db'],
-                    password=REDIS_CONN_CONF['password'],
-                    ssl=REDIS_CONN_CONF['ssl']
+                    password=REDIS_CONN_CONF['password']
                 )
             kwargs[arg_conn] = connection
             try:
