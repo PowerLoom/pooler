@@ -68,7 +68,6 @@ class EpochCollatorProcess(Process):
         if signum in [SIGINT, SIGTERM, SIGQUIT] and not self._shutdown_initiated:
             self._shutdown_initiated = True
             self._rabbitmq_interactor.stop()
-            self._reporter_thread_shutdown_event.set()
 
     def state_report_thread(self):
         member_id = f'powerloom:epoch:collator:{settings.NAMESPACE}'
@@ -115,6 +114,7 @@ class EpochCollatorProcess(Process):
             ).get()
             self._logger.debug('Reported latest epoch collation state to tooz: %s', latest_state)
             self._state_update_q.task_done()
+        self._logger.info('Tooz reporter thread received shut down event...')
         try:
             coordinator.leave_group(group_id).get()
             coordinator.stop()
@@ -166,4 +166,5 @@ class EpochCollatorProcess(Process):
         self._logger.debug('Starting RabbitMQ consumer on queue %s', queue_name)
         self.rabbitmq_interactor.run()
         self._logger.debug('%s: RabbitMQ interactor ioloop ended...', self.name)
+        self._reporter_thread_shutdown_event.set()
         raise GenericExitOnSignal
