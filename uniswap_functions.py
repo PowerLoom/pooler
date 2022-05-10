@@ -317,8 +317,8 @@ async def extract_trade_volume_data(ev_loop, event_name, event_logs: List[Attrib
             trade_fee_usd = token1_fee * float(token1Price.decode('utf-8'))
 
         # calculate token trade volume in USD
-        trade_volume_token0_usd = token0_swapped * token0Price if token0Price else 0
-        trade_volume_token1_usd = token1_swapped * token1Price if token1Price else 0
+        trade_volume_token0_usd = token0_swapped * float(token0Price.decode('utf-8')) if token0Price else 0
+        trade_volume_token1_usd = token1_swapped * float(token1Price.decode('utf-8')) if token1Price else 0
 
         return {
             'totalTradesUSD': trade_volume_usd,
