@@ -126,10 +126,8 @@ async def get_stats(
         request: Request,
         response: Response
 ):
-    redis_conn_raw = await request.app.redis_pool.acquire()
-    redis_conn: aioredis.Redis = aioredis.Redis(redis_conn_raw)
+    redis_conn = await request.app.redis_pool
     c = await redis_conn.get('polymarket:markets:stats')
-    request.app.redis_pool.release(redis_conn_raw)
     if not c:
         return {
             'totalMarkets': 0,
@@ -169,8 +167,7 @@ async def save_request_data(
 ):
     # Acquire redis connection
     request_info_key = f"pendingRequestInfo:{request_id}"
-    redis_conn_raw = await request.app.redis_pool.acquire()
-    redis_conn: aioredis.Redis = aioredis.Redis(redis_conn_raw)
+    redis_conn = await request.app.redis_pool
     request_info_data = {
         'maxCount': max_count,
         'fromHeight': from_height,
@@ -180,7 +177,6 @@ async def save_request_data(
     }
     request_info_json = json.dumps(request_info_data)
     _ = await redis_conn.set(request_info_key, request_info_json)
-    request.app.redis_pool.release(redis_conn_raw)
 
 
 async def delete_request_data(
@@ -188,13 +184,10 @@ async def delete_request_data(
         request_id: str
 ):
     request_info_key = f"pendingRequestInfo:{request_id}"
-    redis_conn_raw = await request.app.redis_pool.acquire()
-    redis_conn: aioredis.Redis = aioredis.Redis(redis_conn_raw)
+    redis_conn = await request.app.redis_pool
 
     # Delete the request info data
     _ = await redis_conn.delete(key=request_info_key)
-
-    request.app.redis_pool.release(redis_conn_raw)
 
 
 @app.get('/snapshots/{pair_contract_address:str}')
@@ -255,11 +248,9 @@ async def get_v2_pairs_data(
     if all_pair_contracts and len(all_pair_contracts) <= 0:
         return {"error": "No data found"}
 
-    redis_conn_raw = await request.app.redis_pool.acquire()
-    redis_conn: aioredis.Redis = aioredis.Redis(redis_conn_raw)
+    redis_conn = await request.app.redis_pool
     all_pair_contracts = [uniswap_pair_contract_V2_pair_data.format(f"{Web3.toChecksumAddress(addr)}") for addr in all_pair_contracts]
     data = await redis_conn.mget(*all_pair_contracts)
-    request.app.redis_pool.release(redis_conn_raw)
 
     if data:
         data = [json.loads(pair_data) for pair_data in data if pair_data is not None]
@@ -274,10 +265,8 @@ async def get_v2_pairs_recent_logs(
     response: Response,
     pair_contract: str
 ):
-    redis_conn_raw = await request.app.redis_pool.acquire()
-    redis_conn: aioredis.Redis = aioredis.Redis(redis_conn_raw)
+    redis_conn = await request.app.redis_pool
     data = await redis_conn.get(uniswap_pair_cached_recent_logs.format(f"{Web3.toChecksumAddress(pair_contract)}"))
-    request.app.redis_pool.release(redis_conn_raw)
 
     if data:
         data = json.loads(data)
@@ -291,8 +280,7 @@ async def get_v2_pairs_recent_logs(
     request: Request,
     response: Response
 ):
-    redis_conn_raw = await request.app.redis_pool.acquire()
-    redis_conn: aioredis.Redis = aioredis.Redis(redis_conn_raw)
+    redis_conn = await request.app.redis_pool
 
     # get all keys of uniswap v2 tokens
     keys = await redis_conn.keys(uniswap_token_info_cached_data.format("*"))
@@ -303,7 +291,6 @@ async def get_v2_pairs_recent_logs(
 
     # get data associated to those key
     data = await redis_conn.mget(*keys)
-    request.app.redis_pool.release(redis_conn_raw)
 
     if data:
         data = [json.loads(obj) for obj in data]
@@ -321,8 +308,7 @@ async def get_v2_pairs_daily_stats(
 ):
     try:
 
-        redis_conn_raw = await request.app.redis_pool.acquire()
-        redis_conn: aioredis.Redis = aioredis.Redis(redis_conn_raw)
+        redis_conn = await request.app.redis_pool
 
         # get all keys of uniswap v2 tokens
         keys = await redis_conn.keys(uniswap_pair_cache_daily_stats.format("*"))
@@ -354,8 +340,6 @@ async def get_v2_pairs_daily_stats(
                 
                 daily_stats["fees24"]["currentValue"] += v2_pair_data_unpack(data[len(data) - 1]["fees_24h"])
                 daily_stats["fees24"]["previousValue"] += v2_pair_data_unpack(data[0]["fees_24h"])
-        
-        request.app.redis_pool.release(redis_conn_raw)
         
         # calculate percentage change
         if daily_stats["volume24"]["previousValue"] != 0: 
@@ -403,15 +387,13 @@ async def check_request(
             if 'requestStatus' in resp_json:
                 if resp_json['requestStatus'] == 'Completed':
                     # Retrieve the request info data from redis
-                    redis_conn_raw = await request.app.redis_pool.acquire()
-                    redis_conn: aioredis.Redis = aioredis.Redis(redis_conn_raw)
+                    redis_conn = await request.app.redis_pool
                     request_info_key = f"pendingRequestInfo:{requestId}"
                     out = await redis_conn.get(request_info_key)
                     if out:
                         request_data = json.loads(out.decode('utf-8'))
                     else:
                         return {'error': 'Invalid requestId'}
-                    request.app.redis_pool.release(redis_conn_raw)
 
                     # Make a call to payloads to retrieve the data
                     query_params = {
@@ -467,8 +449,7 @@ async def get_last_snapshot(
         diffs = True
     else:
         diffs = False
-    redis_conn_raw = await request.app.redis_pool.acquire()
-    redis_conn: aioredis.Redis = aioredis.Redis(redis_conn_raw)
+    redis_conn = await request.app.redis_pool
     last_payload = None
     # TODO: handle when fetch from cache is set to false
     if not fetch_from_cache:
@@ -497,7 +478,6 @@ async def get_last_snapshot(
                     continue
                 if v != last_to_last_payload[k]:
                     diff_map[k] = {'old': last_to_last_payload[k], 'new': v}
-        request.app.redis_pool.release(redis_conn_raw)
         return {
             'lastSnapshot': last_payload,
             'lastToLastSnapshot': last_to_last_payload,
