@@ -597,14 +597,36 @@ async def get_liquidity_of_each_token_reserve_async(
             token1_addr = pair_per_token_metadata['token1']['address']
             token0_decimals = pair_per_token_metadata['token0']['decimals']
             token1_decimals = pair_per_token_metadata['token1']['decimals']
+            
+            token0Amount = reserves[0] / 10 ** int(token0_decimals)
+            token1Amount = reserves[1] / 10 ** int(token1_decimals)
+            
             # logger.debug(f"Decimals of token0: {token0_decimals}, Decimals of token1: {token1_decimals}")
-            logger.debug(
-                "Token0: %s, Reserves: %s | Token1: %s, Reserves: %s", token0_addr, token1_addr,
-                reserves[0] / 10 ** int(token0_decimals), reserves[1] / 10 ** int(token1_decimals)
-            )
+            logger.debug("Token0: %s, Reserves: %s | Token1: %s, Reserves: %s", token0_addr, token1_addr, token0Amount, token1Amount)
+                
+            token0Price, token1Price = await redis_conn.mget([
+                uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token0']['symbol']}-USDT"),
+                uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token1']['symbol']}-USDT")
+            ])
+
+            token0USD = 0
+            token1USD = 0
+            if token0Price:
+                token0USD = token0Amount * float(token0Price.decode('utf-8'))
+            else:
+                logger.error(f"Liquidity: Could not find token0 price for {pair_per_token_metadata['token0']['symbol']}-USDT, setting it to 0")
+            
+            if token1Price:
+                token1USD = token1Amount * float(token1Price.decode('utf-8'))
+            else:
+                logger.error(f"Liquidity: Could not find token1 price for {pair_per_token_metadata['token1']['symbol']}-USDT, setting it to 0")
+                
+
             return {
-                'token0': reserves[0] / 10 ** int(token0_decimals),
-                'token1': reserves[1] / 10 ** int(token1_decimals),
+                'token0': token0Amount,
+                'token1': token1Amount,
+                'token0USD': token0USD,
+                'token1USD': token1USD,
                 'timestamp': None if not block_details else block_details.timestamp
             }
         else:

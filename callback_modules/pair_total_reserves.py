@@ -48,6 +48,8 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         enqueue_epoch = False
         epoch_reserves_snapshot_map_token0 = dict()
         epoch_reserves_snapshot_map_token1 = dict()
+        epoch_usd_reserves_snapshot_map_token0 = dict()
+        epoch_usd_reserves_snapshot_map_token1 = dict()
         max_block_timestamp = int(time.time())  # fallback value, will be set within fetch loop later
         # check for enqueued failed query epochs
         failed_query_epoch = await self._redis_conn.lpop(uniswap_failed_query_pair_total_reserves_epochs_redis_q_f.format(msg_obj.contract))
@@ -107,6 +109,8 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             else:
                 epoch_reserves_snapshot_map_token0[f'block{block_num}'] = pair_reserve_total['token0']
                 epoch_reserves_snapshot_map_token1[f'block{block_num}'] = pair_reserve_total['token1']
+                epoch_usd_reserves_snapshot_map_token0[f'block{block_num}'] = pair_reserve_total['token0USD']
+                epoch_usd_reserves_snapshot_map_token1[f'block{block_num}'] = pair_reserve_total['token1USD']
                 if fetch_ts:
                     if not pair_reserve_total['timestamp']:
                         self._logger.error(
@@ -140,6 +144,8 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         pair_total_reserves_snapshot = UniswapPairTotalReservesSnapshot(**{
             'token0Reserves': epoch_reserves_snapshot_map_token0,
             'token1Reserves': epoch_reserves_snapshot_map_token1,
+            'token0ReservesUSD': epoch_usd_reserves_snapshot_map_token0,
+            'token1ReservesUSD': epoch_usd_reserves_snapshot_map_token1,
             'chainHeightRange': EpochBase(begin=min_chain_height, end=max_chain_height),
             'timestamp': max_block_timestamp,
             'contract': msg_obj.contract,
