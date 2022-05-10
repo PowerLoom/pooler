@@ -254,6 +254,8 @@ async def extract_trade_volume_data(ev_loop, event_name, event_logs: List[Attrib
     log_topic_values = list()
     token0_swapped = 0
     token1_swapped = 0
+    trade_volume_token0_usd = 0
+    trade_volume_token1_usd = 0
     token0_fee = None
     token1_fee = None
     for log in event_logs:
@@ -314,43 +316,48 @@ async def extract_trade_volume_data(ev_loop, event_name, event_logs: List[Attrib
             token1_fee = token1_fee * 0.3 # uniswap LP fee rate
             trade_fee_usd = token1_fee * float(token1Price.decode('utf-8'))
 
+        # calculate token trade volume in USD
+        trade_volume_token0_usd = token0_swapped * token0Price if token0Price else 0
+        trade_volume_token1_usd = token1_swapped * token1Price if token1Price else 0
+
         return {
             'totalTradesUSD': trade_volume_usd,
             'totalFeeUSD': trade_fee_usd,
             'token0TradeVolume': token0_swapped,
-            'token1TradeVolume': token1_swapped, 
+            'token1TradeVolume': token1_swapped,
+            'token0TradeVolumeUSD': trade_volume_token0_usd,
+            'token1TradeVolumeUSD': trade_volume_token1_usd,
             'recent_transaction_logs': recent_transaction_logs
         }
            
-       
-    
     if token0Price:
         token0Price = float(token0Price.decode('utf-8'))
         trade_volume_usd += token0_swapped * token0Price
+        trade_volume_token0_usd = token0_swapped * token0Price
     else:
         logger.warning(
-            f"Error in trade volume calculation: can't find {pair_per_token_metadata['token0']['symbol']}-"
+            f"Trade Volume: can't find {pair_per_token_metadata['token0']['symbol']}-"
             f"USDT Price. Attempting to find {pair_per_token_metadata['token1']['symbol']}-USDT price and 2x it"
         )
-        print(
-                    f"Error in trade volume calculation: can't find {pair_per_token_metadata['token0']['symbol']}-"
-                    f"USDT Price. Attempting to find {pair_per_token_metadata['token1']['symbol']}-USDT price and 2x it"
-                )
 
     if token1Price:
         token1Price = float(token1Price.decode('utf-8'))
         trade_volume_usd += token1_swapped * token1Price
+        trade_volume_token1_usd = token1_swapped * token1Price
     else:
         logger.warning(
-            f"Error: can't find {pair_per_token_metadata['token1']['symbol']}-USDT Price")
-        print(
-            f"Error: can't find {pair_per_token_metadata['token1']['symbol']}-USDT Price")
+            f"Trade Volume: can't find {pair_per_token_metadata['token1']['symbol']}-USDT Price")
+    
+    
     if not token0Price or not token1Price:
         trade_volume_usd *= 2
+    
     return {
         'totalTradesUSD': trade_volume_usd,
         'token0TradeVolume': token0_swapped,
         'token1TradeVolume': token1_swapped,
+        'token0TradeVolumeUSD': trade_volume_token0_usd,
+        'token1TradeVolumeUSD': trade_volume_token1_usd,
         'recent_transaction_logs': recent_transaction_logs
     }
 
@@ -751,9 +758,7 @@ async def get_pair_contract_trades_async(
                 })
             max_block_timestamp = None if not block_details else block_details.timestamp
             rets.update({'timestamp': max_block_timestamp})
-            print(rets)
             return rets
-            # logger.debug(f"Decimals of token0: {token0_decimals}, Decimals of token1: {token1_decimals}")
         else:
             raise Exception("exhausted_api_key_rate_limit inside uniswap_functions get async liquidity reservers")
     except Exception as exc:

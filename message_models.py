@@ -57,7 +57,7 @@ class UniswapPairTotalReservesSnapshot(BaseModel):
 
 class logsTradeModel(BaseModel):
     logs: List
-    inUSD: float
+    trades: Dict[str, float]
 
 
 class UniswapTradesSnapshot(BaseModel):
@@ -68,17 +68,6 @@ class UniswapTradesSnapshot(BaseModel):
     token1TradeVolume: float  # in token native decimals supply
     token0TradeVolumeUSD: float
     token1TradeVolumeUSD: float
-    # {'Swap': [array of event logs],'Mint': [array of event logs], 'Burn': [array of event logs]}
-    # TODO:
-    #   {
-    #       'Swap': {
-    #           'logs': [],
-    #           'inUSD': xxxx
-    #       }
-    #   }
-    #
-    #
-    #
     events: Dict[str, logsTradeModel]
     recent_logs: list
     chainHeightRange: EpochBase

@@ -245,7 +245,8 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             total_fee_in_usd = 0
             total_token0_vol = 0
             total_token1_vol = 0
-            final_events_list = list()
+            total_token0_vol_usd = 0
+            total_token1_vol_usd = 0
             recent_events_logs = list()
             self._logger.debug('Trade volume processed snapshot: %s', trade_vol_processed_snapshot)
             for each_event in trade_vol_processed_snapshot:
@@ -257,14 +258,17 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 total_fee_in_usd += trade_vol_processed_snapshot[each_event]['trades'].get('totalFeeUSD', 0)
                 total_token0_vol += trade_vol_processed_snapshot[each_event]['trades']['token0TradeVolume']
                 total_token1_vol += trade_vol_processed_snapshot[each_event]['trades']['token1TradeVolume']
-                final_events_list.extend(trade_vol_processed_snapshot[each_event]['logs'])
+                total_token0_vol_usd += trade_vol_processed_snapshot[each_event]['trades']['token0TradeVolumeUSD']
+                total_token1_vol_usd += trade_vol_processed_snapshot[each_event]['trades']['token1TradeVolumeUSD']
                 recent_events_logs.extend(trade_vol_processed_snapshot[each_event]['trades'].get("recent_transaction_logs", []))
+                trade_vol_processed_snapshot[each_event]['trades'].pop('recent_transaction_logs', None)
             if not trade_vol_processed_snapshot['timestamp']:
                 self._logger.error(
                     f'Could not fetch timestamp for max block height in broadcast {msg_obj} '
                     f'against trade volume calculation')
             else:
                 max_block_timestamp = trade_vol_processed_snapshot['timestamp']
+                trade_vol_processed_snapshot.pop('timestamp', None)
             trade_volume_snapshot = UniswapTradesSnapshot(**dict(
                 contract=msg_obj.contract,
                 broadcast_id=msg_obj.broadcast_id,
@@ -274,7 +278,9 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 totalFee=float(f'{total_fee_in_usd: .6f}'),
                 token0TradeVolume=float(f'{total_token0_vol: .6f}'),
                 token1TradeVolume=float(f'{total_token1_vol: .6f}'),
-                events=final_events_list,
+                token0TradeVolumeUSD=float(f'{total_token0_vol_usd: .6f}'),
+                token1TradeVolumeUSD=float(f'{total_token1_vol_usd: .6f}'),
+                events=trade_vol_processed_snapshot,
                 recent_logs=recent_events_logs
             ))
             return trade_volume_snapshot
