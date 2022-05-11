@@ -25,7 +25,7 @@ import time
 from datetime import datetime, timedelta
 from redis_keys import (
     uniswap_pair_contract_tokens_addresses, uniswap_pair_contract_tokens_data, uniswap_pair_cached_token_price,
-    uniswap_pair_contract_V2_pair_data
+    uniswap_pair_contract_V2_pair_data, uniswap_pair_cached_block_height_token_price
 )
 from helper_functions import (
     acquire_threading_semaphore
@@ -193,6 +193,45 @@ async def get_block_details(ev_loop, block_number):
     finally:
         return block_details
 
+async def store_price_at_block_range(begin_block, end_block, token0, token1, price, redis_conn: aioredis.Redis):
+    """Store price at block range in redis."""
+
+    block_prices = {}
+    for i in range(begin_block, end_block + 1):
+        block_prices[json.dumps({
+            "price": price,
+            "block_number": i,
+            "timestamp": int(time.time())
+        })]= i
+        
+
+    await redis_conn.zadd(
+        name=uniswap_pair_cached_block_height_token_price.format(f"{token0}-{token1}"),
+        mapping=block_prices
+    )
+    return len(block_prices)
+
+@provide_async_redis_conn_insta
+async def get_price_at_block_height_in_zset(token0, token1, block_number, redis_conn: aioredis.Redis=None):
+    
+    # get the price at the given block height
+    price = await redis_conn.zrangebyscore(
+        name=uniswap_pair_cached_block_height_token_price.format(f"{token0}-{token1}"),
+        min=block_number,
+        max=block_number
+    )
+
+    # if price is not found, then return lastest price available for token
+    if not price:
+        price = await redis_conn.zrevrange(
+            name=uniswap_pair_cached_block_height_token_price.format(f"{token0}-{token1}"),
+            start=0,
+            end=0
+        )
+
+    price = json.loads(price[0]) if price else None
+    return price
+
 
 async def extract_recent_transaction_logs(ev_loop, event_name, event_logs, pair_per_token_metadata, token0Price, token1Price):
     """
@@ -250,7 +289,7 @@ async def extract_recent_transaction_logs(ev_loop, event_name, event_logs, pair_
     return recent_transaction_logs
 
 
-async def extract_trade_volume_data(ev_loop, event_name, event_logs: List[AttributeDict], redis_conn: aioredis.Redis, pair_per_token_metadata):
+async def extract_trade_volume_data(ev_loop, event_name, event_logs: List[AttributeDict], redis_conn: aioredis.Redis, pair_per_token_metadata, from_block):
     log_topic_values = list()
     token0_swapped = 0
     token1_swapped = 0
@@ -292,6 +331,24 @@ async def extract_trade_volume_data(ev_loop, event_name, event_logs: List[Attrib
         uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token0']['symbol']}-USDT"))
     token1Price = await redis_conn.get(
         uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token1']['symbol']}-USDT"))
+    
+    
+    #TODO: instead using to or from block we can make a call for each transaction with its block number
+    # but right now whilte storing price in a epoch and not by each block, so does it matter here?
+    price_block = int(event_logs[0]['blockNumber']) if event_logs else int(from_block)
+    price_pruning_block = price_block - 20 # prune anything older than 20 block from current (each epoch is 10 block rn)
+    token0PriceNew, token1PriceNew, *_ = await asyncio.gather(
+        get_price_at_block_height_in_zset(pair_per_token_metadata['token0']['symbol'], 'USDT', price_block, redis_conn),
+        get_price_at_block_height_in_zset(pair_per_token_metadata['token1']['symbol'], 'USDT', price_block, redis_conn),
+        redis_conn.zremrangebyscore(
+            uniswap_pair_cached_block_height_token_price.format(f"{pair_per_token_metadata['token0']['symbol']}-USDT"), 
+            min='-inf', max=price_pruning_block
+        ),
+        redis_conn.zremrangebyscore(
+            uniswap_pair_cached_block_height_token_price.format(f"{pair_per_token_metadata['token1']['symbol']}-USDT"), 
+            min='-inf', max=price_pruning_block
+        )
+    )
         
     
     #Add Recent Transactions Logs
@@ -752,7 +809,8 @@ async def get_pair_contract_trades_async(
                             # event_logs=logs_ret[trade_event_name],
                             event_logs=logs_ret[trade_event_name],
                             redis_conn=redis_conn,
-                            pair_per_token_metadata=pair_per_token_metadata
+                            pair_per_token_metadata=pair_per_token_metadata,
+                            from_block=from_block
                         )
                     }
                 })

@@ -20,6 +20,7 @@ uniswap_pair_cache_daily_stats = 'uniswap:pairContract:'+settings.NAMESPACE+':{}
 uniswap_projects_dag_verifier_status = "projects:"+settings.NAMESPACE+":dagVerificationStatus"
 uniswap_pair_tentative_block_height = "projectID:uniswap_pairContract_trade_volume_{}_"+settings.NAMESPACE+":tentativeBlockHeight"
 uniswap_pair_block_height = "projectID:uniswap_pairContract_trade_volume_{}_"+settings.NAMESPACE+":blockHeight"
+uniswap_pair_cached_block_height_token_price = 'uniswap:pairContract:'+settings.NAMESPACE+':{}:cachedPairBlockHeightTokenPrice'
 
 
 powerloom_broadcast_id_zset = 'powerloom:broadcastID:' + settings.NAMESPACE + ':broadcastProcessingStatus'
