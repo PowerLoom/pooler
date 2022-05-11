@@ -294,10 +294,23 @@ func FetchTokenV2Data(fromTime float64) map[string]TokenData {
 			log.Error("Not updating liquidity for this pairContract as..unable to fetch even after max retries.", pairContractAddress)
 		} else {
 			token0Data.Liquidity += tokenPairProcessedData.Token0Liquidity
+			token0Data.LiquidityUSD += tokenPairProcessedData.Token0LiquidityUSD
+
 			token1Data.Liquidity += tokenPairProcessedData.Token1Liquidity
+			token1Data.LiquidityUSD += tokenPairProcessedData.Token1LiquidityUSD
 
 			token0Data.TradeVolume_24h += tokenPairProcessedData.Token0TradeVolume_24h
+			token0Data.TradeVolumeUSD_24h += tokenPairProcessedData.Token0TradeVolumeUSD_24h
+
 			token1Data.TradeVolume_24h += tokenPairProcessedData.Token1TradeVolume_24h
+			token1Data.TradeVolumeUSD_24h += tokenPairProcessedData.Token1TradeVolumeUSD_24h
+
+			token0Data.TradeVolume_7d += tokenPairProcessedData.Token0TradeVolume_7d
+			token0Data.TradeVolumeUSD_7d += tokenPairProcessedData.Token0TradeVolumeUSD_7d
+
+			token1Data.TradeVolume_7d += tokenPairProcessedData.Token1TradeVolume_7d
+			token1Data.TradeVolumeUSD_7d += tokenPairProcessedData.Token1TradeVolumeUSD_7d
+
 			//Assuming that liquidity and tradeVolume for all tokenPairs is available at same height
 			//hence taking the same from any pair should be fine.
 			token0Data.Block_height_Liquidity = tokenPairProcessedData.Block_height_total_reserve
@@ -313,22 +326,16 @@ func FetchTokenV2Data(fromTime float64) map[string]TokenData {
 		tokenList[token1Data.Symbol] = token1Data
 		//tokenPairCachedMetaDataList[pairContractAddress] = tokenPairCachedMetaData
 	}
-	// Loop through all data and multiply liquidity and tradeVolume with TokenPrice
-	//No need to multiplty with price as we are fetching cached data from redis which is already multiplied by price.
+
+	//Update tokenPrice
 	for key, tokenData := range tokenList {
 		if tokenData.Price != 0 {
-			log.Debug("Token:", key, ".Multiplying liquidity with tokenPrice. Liquidity Before:", tokenData.Liquidity, ",TradeVolume_24h Before:", tokenData.TradeVolume_24h)
-			tokenData.TradeVolume_24h *= tokenData.Price
-			tokenData.Liquidity *= tokenData.Price
 			//Update TokenPrice in History Zset
 			UpdateTokenPriceHistoryRedis(fromTime, tokenData)
 			CalculateAndFillPriceChange(fromTime, &tokenData)
 			tokenList[key] = tokenData
-			log.Debug("Token:", key, ".Multiplying liquidity with tokenPrice. Liquidity After:", tokenData.Liquidity, ",TradeVolume_24h After:", tokenData.TradeVolume_24h)
-
 		} else {
 			//Not resetting values in redis, hence it will reflect values 5 mins older.
-			//TODO: Ideally, indicate staleness of data somehow so that User-exp is better on UI.
 			log.Error("Price couldn't be retrieved for token:" + key + " hence removing token from the list.")
 			delete(tokenList, key)
 		}
@@ -405,6 +412,7 @@ func FetchLatestPairCachedDataFromRedis(pairContractAddress string) (TokenPairLi
 	if err := json.Unmarshal(bytes, &tokenPairCachedData); err != nil {
 		log.Error("Can not unmarshal JSON. err", err, " payload:", bytes)
 	}
+	log.Debugf("Fetched TokenPairContract Cached Data from redis (%+v)", tokenPairCachedData)
 	return tokenPairCachedData, nil
 }
 
