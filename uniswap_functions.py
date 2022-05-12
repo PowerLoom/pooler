@@ -324,32 +324,14 @@ async def extract_trade_volume_data(ev_loop, event_name, event_logs: List[Attrib
     token0_swapped = token0_swapped / 10 ** int(pair_per_token_metadata['token0']['decimals'])
     token1_swapped = token1_swapped / 10 ** int(pair_per_token_metadata['token1']['decimals'])
 
+    #TODO: instead of fetching the price from the redis cache, fetch price from rpc using block_number
     # get conversion
     trade_volume_usd = 0
     trade_fee_usd = 0
     token0Price = await redis_conn.get(
         uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token0']['symbol']}-USDT"))
     token1Price = await redis_conn.get(
-        uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token1']['symbol']}-USDT"))
-    
-    
-    #TODO: instead using to or from block we can make a call for each transaction with its block number
-    # but right now whilte storing price in a epoch and not by each block, so does it matter here?
-    price_block = int(event_logs[0]['blockNumber']) if event_logs else int(from_block)
-    price_pruning_block = price_block - 20 # prune anything older than 20 block from current (each epoch is 10 block rn)
-    token0PriceNew, token1PriceNew, *_ = await asyncio.gather(
-        get_price_at_block_height_in_zset(pair_per_token_metadata['token0']['symbol'], 'USDT', price_block, redis_conn),
-        get_price_at_block_height_in_zset(pair_per_token_metadata['token1']['symbol'], 'USDT', price_block, redis_conn),
-        redis_conn.zremrangebyscore(
-            uniswap_pair_cached_block_height_token_price.format(f"{pair_per_token_metadata['token0']['symbol']}-USDT"), 
-            min='-inf', max=price_pruning_block
-        ),
-        redis_conn.zremrangebyscore(
-            uniswap_pair_cached_block_height_token_price.format(f"{pair_per_token_metadata['token1']['symbol']}-USDT"), 
-            min='-inf', max=price_pruning_block
-        )
-    )
-        
+        uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token1']['symbol']}-USDT"))   
     
     #Add Recent Transactions Logs
     recent_transaction_logs = await extract_recent_transaction_logs(ev_loop, event_name, event_logs, pair_per_token_metadata, token0Price, token1Price)

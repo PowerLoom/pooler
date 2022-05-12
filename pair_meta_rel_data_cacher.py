@@ -177,20 +177,10 @@ class PairMetaDataCacher(CallbackAsyncWorker):
         }
 
         if Web3.toChecksumAddress(pair_per_token_metadata['token0']['address']) in list(stable_coins_addresses.values()):
-                token0_USD_price = 1
-                retrieval_logger.debug("Ignored Stablecoin calculation for token0: %s - WETH - USDT conversion: %s", pair_per_token_metadata['token0']['symbol'], token0_USD_price)
+            token0_USD_price = 1
+            retrieval_logger.debug("Ignored Stablecoin calculation for token0: %s - WETH - USDT conversion: %s", pair_per_token_metadata['token0']['symbol'], token0_USD_price)
 
-                await asyncio.gather(
-                    redis_conn.set(uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token0']['symbol']}-USDT"), token0_USD_price),
-                    store_price_at_block_range(
-                        begin_block=begin_block, 
-                        end_block=end_block, 
-                        token0=pair_per_token_metadata['token0']['symbol'], 
-                        token1='USDT', 
-                        price=token0_USD_price, 
-                        redis_conn=redis_conn
-                    )
-                )
+            await redis_conn.set(uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token0']['symbol']}-USDT"), token0_USD_price)
 
         elif Web3.toChecksumAddress(pair_per_token_metadata['token0']['address']) \
                 != Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH):
@@ -211,17 +201,7 @@ class PairMetaDataCacher(CallbackAsyncWorker):
                 if token0_USD_price:
                     token0_USD_price = token0_USD_price[2]/10**stable_coins_decimals[key] if token0_USD_price[2] !=0 else 0  #USDT decimals
                     retrieval_logger.debug("Calculated price for token0: %s - WETH - %s conversion: %s", pair_per_token_metadata['token0']['symbol'], key, token0_USD_price)
-                    await asyncio.gather(
-                        redis_conn.set(uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token0']['symbol']}-{key}"), token0_USD_price),
-                        store_price_at_block_range(
-                            begin_block=begin_block, 
-                            end_block=end_block, 
-                            token0=pair_per_token_metadata['token0']['symbol'], 
-                            token1=key, 
-                            price=token0_USD_price, 
-                            redis_conn=redis_conn
-                        )
-                    )
+                    await redis_conn.set(uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token0']['symbol']}-{key}"), token0_USD_price)
                     break
                 elif stable_coins_len <= 0:
                     break
@@ -235,34 +215,14 @@ class PairMetaDataCacher(CallbackAsyncWorker):
             WETH_USD_price = await ev_loop.run_in_executor(func=priceFunction_token0, executor=None)
             WETH_USD_price = WETH_USD_price[1]/10**6 #USDT decimals
             retrieval_logger.debug("Calculated prices for token0: %s - USDT conversion: %s", pair_per_token_metadata['token0']['symbol'], WETH_USD_price)
-            await asyncio.gather(
-                redis_conn.set(uniswap_pair_cached_token_price.format("WETH-USDT"), WETH_USD_price),
-                store_price_at_block_range(
-                    begin_block=begin_block, 
-                    end_block=end_block, 
-                    token0='WETH', 
-                    token1='USDT', 
-                    price=WETH_USD_price,
-                    redis_conn=redis_conn
-                )
-            )
+            await redis_conn.set(uniswap_pair_cached_token_price.format("WETH-USDT"), WETH_USD_price)
         
         # check if token1 is WETH. If it is, weth-usdt conversion can be figured right here,
         # else provide full path token1-weth-usdt
         if Web3.toChecksumAddress(pair_per_token_metadata['token1']['address']) in list(stable_coins_addresses.values()):
                 token1_USD_price = 1
                 retrieval_logger.debug("Ignored Stablecoin calculation for token1: %s - WETH - USDT conversion: %s", pair_per_token_metadata['token1']['symbol'], token1_USD_price)
-                await asyncio.gather(
-                    redis_conn.set(uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token1']['symbol']}-USDT"), token1_USD_price),
-                    store_price_at_block_range(
-                        begin_block=begin_block, 
-                        end_block=end_block, 
-                        token0=pair_per_token_metadata['token1']['symbol'], 
-                        token1='USDT', 
-                        price=token1_USD_price,
-                        redis_conn=redis_conn
-                    )
-                )
+                await redis_conn.set(uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token1']['symbol']}-USDT"), token1_USD_price)
         elif Web3.toChecksumAddress(pair_per_token_metadata['token1']['address']) \
                 != Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH):
             # loop on all stable coins until we find price for token or stable coin
@@ -280,17 +240,7 @@ class PairMetaDataCacher(CallbackAsyncWorker):
                 if token1_USD_price:                
                     token1_USD_price = token1_USD_price[2]/10**stable_coins_decimals[key] if token1_USD_price[2] !=0 else 0
                     retrieval_logger.debug("Calculated price for token1: %s - WETH - %s conversion: %s", pair_per_token_metadata['token1']['symbol'], key, token1_USD_price)
-                    await asyncio.gather(
-                        redis_conn.set(uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token1']['symbol']}-{key}"), token1_USD_price),
-                        store_price_at_block_range(
-                            begin_block=begin_block, 
-                            end_block=end_block, 
-                            token0=pair_per_token_metadata['token1']['symbol'],
-                            token1=key, 
-                            price=token1_USD_price,
-                            redis_conn=redis_conn
-                        )
-                    )
+                    await redis_conn.set(uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token1']['symbol']}-{key}"), token1_USD_price)
                     break
                 elif stable_coins_len <= 0:
                     break
@@ -303,17 +253,7 @@ class PairMetaDataCacher(CallbackAsyncWorker):
             WETH_USD_price = await ev_loop.run_in_executor(func=priceFunction_token1, executor=None)
             WETH_USD_price = WETH_USD_price[1]/10**6 #USDT decimals
             retrieval_logger.debug("Calculated prices for token1: %s - USDT conversion: %s", pair_per_token_metadata['token1']['symbol'], WETH_USD_price)
-            await asyncio.gather(
-                redis_conn.set(uniswap_pair_cached_token_price.format("WETH-USDT"), WETH_USD_price),
-                store_price_at_block_range(
-                    begin_block=begin_block, 
-                    end_block=end_block, 
-                    token0='WETH', 
-                    token1='USDT',
-                    price=WETH_USD_price,
-                    redis_conn=redis_conn
-                )
-            )
+            await redis_conn.set(uniswap_pair_cached_token_price.format("WETH-USDT"), WETH_USD_price)
 
         return [token0_USD_price, token1_USD_price, WETH_USD_price]
     
