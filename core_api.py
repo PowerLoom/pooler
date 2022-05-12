@@ -286,6 +286,19 @@ async def get_v2_pairs_recent_logs(
     keys = await redis_conn.keys(uniswap_token_info_cached_data.format("*"))
     if keys:
         keys = [key.decode('utf-8') for key in keys]
+        temp = []
+        for i in range(len(keys)):
+            temp.append({
+                "index": i+1,
+                "name": keys[i]["name"],
+                "symbol": keys[i]["symbol"],
+                "liquidity": f"US${round(abs(keys[i]['liquidity'])):,}",
+                "volume_24h": f"US${round(abs(keys[i]['tradeVolume_24h'])):,}",
+                "price": f"US${round(abs(keys[i]['price'])):,}",
+                "price_change_24h": f"{keys[i]['priceChangePercent_24h']}%",
+                "block_height": int(keys[i]["block_height"])
+            })
+        keys = temp
     else:
         keys=[]
 
