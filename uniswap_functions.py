@@ -365,15 +365,6 @@ async def extract_trade_volume_data(ev_loop, event_name, event_logs: List[Attrib
         # calculate uniswap LP fee
         trade_fee_usd = token1_swapped_usd  * 0.003 if token1_swapped_usd else token0_swapped_usd * 0.003 # uniswap LP fee rate
 
-        print({
-            'totalTradesUSD': trade_volume_usd,
-            'totalFeeUSD': trade_fee_usd,
-            'token0TradeVolume': token0_swapped,
-            'token1TradeVolume': token1_swapped,
-            'token0TradeVolumeUSD': token0_swapped_usd,
-            'token1TradeVolumeUSD': token1_swapped_usd,
-            'recent_transaction_logs': recent_transaction_logs
-        })
         return {
             'totalTradesUSD': trade_volume_usd,
             'totalFeeUSD': trade_fee_usd,
