@@ -303,7 +303,7 @@ async def get_v2_pairs_recent_logs(
                 "liquidity": f"US${round(abs(data[i]['liquidity'])):,}",
                 "volume_24h": f"US${round(abs(data[i]['tradeVolumeUSD_24h'])):,}",
                 "price": f"US${round(abs(data[i]['price']), 5):,}",
-                "price_change_24h": f"{data[i]['priceChangePercent_24h']}%",
+                "price_change_24h": f"{round(data[i]['priceChangePercent_24h'], 2)}%",
                 "block_height": int(data[i]["block_height"])
             })
         data = temp

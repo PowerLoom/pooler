@@ -233,7 +233,7 @@ async def get_price_at_block_height_in_zset(token0, token1, block_number, redis_
     return price
 
 
-async def extract_recent_transaction_logs(ev_loop, event_name, event_logs, pair_per_token_metadata, token0Price, token1Price):
+async def extract_recent_transaction_logs(ev_loop, event_name, event_logs, pair_per_token_metadata, token0_price_map, token1_price_map):
     """
     Get trade value in USD "for each transaction"
     with amount of each token, txHash and account addresses
@@ -242,34 +242,42 @@ async def extract_recent_transaction_logs(ev_loop, event_name, event_logs, pair_
     for log in event_logs:
         token0_amount = 0
         token1_amount = 0
+        token1_swapped_usd = 0
+        token0_swapped_usd = 0
         trade_amount_usd = 0
         if event_name == 'Swap':
             if log.args.get('amount1In') == 0:
-                token0_amount = log.args.get('amount0In')
-                token1_amount = log.args.get('amount1Out')
+
+                current0_swapped = log.args.get('amount0In') / 10 ** int(pair_per_token_metadata['token0']['decimals'])
+                token0_amount = current0_swapped
+                token0_swapped_usd = current0_swapped * token0_price_map.get(log["blockNumber"], list(token0_price_map.values())[0])
+                
+                current1_swapped = log.args.get('amount1Out') / 10 ** int(pair_per_token_metadata['token1']['decimals'])
+                token1_amount = current1_swapped
+                token1_swapped_usd = current1_swapped * token1_price_map.get(log["blockNumber"], list(token1_price_map.values())[0])
             elif log.args.get('amount0In') == 0:
-                token0_amount = log.args.get('amount0Out')
-                token1_amount = log.args.get('amount1In')
+                current0_swapped = log.args.get('amount0Out') / 10 ** int(pair_per_token_metadata['token0']['decimals']) 
+                token0_amount = current0_swapped
+                token0_swapped_usd = current0_swapped * token0_price_map.get(log["blockNumber"], list(token0_price_map.values())[0])
+
+                current1_swapped = log.args.get('amount1In') / 10 ** int(pair_per_token_metadata['token1']['decimals'])
+                token1_amount = current1_swapped
+                token1_swapped_usd = current1_swapped * token1_price_map.get(log["blockNumber"], list(token1_price_map.values())[0])
+
         elif event_name == 'Mint' or event_name == 'Burn':
-            token0_amount = log.args.get('amount0')
-            token1_amount = log.args.get('amount1')
+            current0_swapped = log.args.get('amount0') / 10 ** int(pair_per_token_metadata['token0']['decimals'])
+            token0_amount = current0_swapped
+            token0_swapped_usd = current0_swapped * token0_price_map.get(log["blockNumber"], list(token0_price_map.values())[0])
+            
+            current1_swapped = log.args.get('amount1') / 10 ** int(pair_per_token_metadata['token1']['decimals']) 
+            token1_amount = current1_swapped
+            token1_swapped_usd = current1_swapped * token1_price_map.get(log["blockNumber"], list(token1_price_map.values())[0])
         
-        # normalize token volume according to decimals specification
-        token0_amount = token0_amount / 10 ** int(pair_per_token_metadata['token0']['decimals'])
-        token1_amount = token1_amount / 10 ** int(pair_per_token_metadata['token1']['decimals'])
 
         if event_name == 'Swap':
-            if token0Price:
-                trade_amount_usd = token0_amount * float(token0Price.decode('utf-8'))
-            elif token1Price:
-                trade_amount_usd = token1_amount * float(token1Price.decode('utf-8'))
+            trade_amount_usd = token1_swapped_usd if token1_swapped_usd else token0_swapped_usd
         elif event_name == 'Mint' or event_name == 'Burn':
-            if token0Price:
-                trade_amount_usd += token0_amount * float(token0Price.decode('utf-8'))
-            if token1Price:
-                trade_amount_usd += token1_amount * float(token1Price.decode('utf-8'))
-            if not token0Price or not token1Price:
-                trade_amount_usd *= 2
+            trade_amount_usd = token1_swapped_usd + token0_swapped_usd
 
         block_details = await get_block_details(ev_loop, log["blockNumber"])
 
@@ -289,114 +297,102 @@ async def extract_recent_transaction_logs(ev_loop, event_name, event_logs, pair_
     return recent_transaction_logs
 
 
-async def extract_trade_volume_data(ev_loop, event_name, event_logs: List[AttributeDict], redis_conn: aioredis.Redis, pair_per_token_metadata, from_block):
+async def extract_trade_volume_data(ev_loop, event_name, event_logs: List[AttributeDict], redis_conn: aioredis.Redis, pair_per_token_metadata, token0_price_map, token1_price_map):
     log_topic_values = list()
     token0_swapped = 0
     token1_swapped = 0
-    trade_volume_token0_usd = 0
-    trade_volume_token1_usd = 0
-    token0_fee = None
-    token1_fee = None
+    token0_swapped_usd = 0
+    token1_swapped_usd = 0
     for log in event_logs:
+        log_parent = log
         log = log.args
         topics = dict()
         for field in uniswap_trade_events_abi[event_name]['inputs']:
             field = field['name']
             topics[field] = log.get(field)
+        topics['blockNumber'] = log_parent.get('blockNumber')
         log_topic_values.append(topics)
+
     for parsed_log_obj_values in log_topic_values:
         if event_name == 'Swap':
             if parsed_log_obj_values.get('amount1In') == 0:
-                token0_swapped += parsed_log_obj_values.get('amount0In')
-                token1_swapped += parsed_log_obj_values.get('amount1Out')
-                token0_fee = parsed_log_obj_values.get('amount0In')
+            
+                current0_swapped = parsed_log_obj_values.get('amount0In') / 10 ** int(pair_per_token_metadata['token0']['decimals'])
+                token0_swapped += current0_swapped
+                token0_swapped_usd += current0_swapped * token0_price_map.get(parsed_log_obj_values.get('blockNumber'), list(token0_price_map.values())[0])
+                
+                current1_swapped = parsed_log_obj_values.get('amount1Out') / 10 ** int(pair_per_token_metadata['token1']['decimals'])
+                token1_swapped += current1_swapped
+                token1_swapped_usd += current1_swapped * token1_price_map.get(parsed_log_obj_values.get('blockNumber'), list(token1_price_map.values())[0])
+
             elif parsed_log_obj_values.get('amount0In') == 0:
-                token0_swapped += parsed_log_obj_values.get('amount0Out')
-                token1_swapped += parsed_log_obj_values.get('amount1In')
-                token1_fee = parsed_log_obj_values.get('amount1In')
+
+                current0_swapped = parsed_log_obj_values.get('amount0Out') / 10 ** int(pair_per_token_metadata['token0']['decimals']) 
+                token0_swapped += current0_swapped
+                token0_swapped_usd += current0_swapped * token0_price_map.get(parsed_log_obj_values.get('blockNumber'), list(token0_price_map.values())[0])
+
+                current1_swapped = parsed_log_obj_values.get('amount1In') / 10 ** int(pair_per_token_metadata['token1']['decimals'])
+                token1_swapped += current1_swapped
+                token1_swapped_usd += current1_swapped * token1_price_map.get(parsed_log_obj_values.get('blockNumber'), list(token1_price_map.values())[0])
+
+
         elif event_name == 'Mint' or event_name == 'Burn':
-            token0_swapped += parsed_log_obj_values.get('amount0')
-            token1_swapped += parsed_log_obj_values.get('amount1')
+            
+            current0_swapped = parsed_log_obj_values.get('amount0') / 10 ** int(pair_per_token_metadata['token0']['decimals'])
+            token0_swapped += current0_swapped
+            token0_swapped_usd += current0_swapped * token0_price_map.get(parsed_log_obj_values.get('blockNumber'), list(token0_price_map.values())[0])
+            
+            current1_swapped = parsed_log_obj_values.get('amount1') / 10 ** int(pair_per_token_metadata['token1']['decimals']) 
+            token1_swapped += current1_swapped
+            token1_swapped_usd += current1_swapped * token1_price_map.get(parsed_log_obj_values.get('blockNumber'), list(token1_price_map.values())[0])
 
-
-
-    # normalize token volume according to decimals specification
-    token0_swapped = token0_swapped / 10 ** int(pair_per_token_metadata['token0']['decimals'])
-    token1_swapped = token1_swapped / 10 ** int(pair_per_token_metadata['token1']['decimals'])
 
     #TODO: instead of fetching the price from the redis cache, fetch price from rpc using block_number
     # get conversion
     trade_volume_usd = 0
     trade_fee_usd = 0
-    token0Price = await redis_conn.get(
-        uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token0']['symbol']}-USDT"))
-    token1Price = await redis_conn.get(
-        uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token1']['symbol']}-USDT"))   
     
     #Add Recent Transactions Logs
-    recent_transaction_logs = await extract_recent_transaction_logs(ev_loop, event_name, event_logs, pair_per_token_metadata, token0Price, token1Price)
+    recent_transaction_logs = await extract_recent_transaction_logs(ev_loop, event_name, event_logs, pair_per_token_metadata, token0_price_map, token1_price_map)
 
 
     # if event is 'Swap' then only add single token in total volume calculation
     if event_name == 'Swap':
-        # calculate trade volume in USD
-        if token0Price:
-           trade_volume_usd += token0_swapped * float(token0Price.decode('utf-8'))
-        elif token1Price:
-           trade_volume_usd += token1_swapped * float(token1Price.decode('utf-8'))
+        
+        # set one side token value in swap case
+        trade_volume_usd = token1_swapped_usd if token1_swapped_usd else token0_swapped_usd
 
         # calculate uniswap LP fee
-        if token0_fee and token0Price:
-            token0_fee = token0_fee / 10 ** int(pair_per_token_metadata['token0']['decimals'])
-            token0_fee = token0_fee * 0.003 # uniswap LP fee rate
-            trade_fee_usd = token0_fee * float(token0Price.decode('utf-8'))
-        elif token1_fee and token1Price:
-            token1_fee = token1_fee / 10 ** int(pair_per_token_metadata['token1']['decimals'])
-            token1_fee = token1_fee * 0.003 # uniswap LP fee rate
-            trade_fee_usd = token1_fee * float(token1Price.decode('utf-8'))
+        trade_fee_usd = token1_swapped_usd  * 0.003 if token1_swapped_usd else token0_swapped_usd * 0.003 # uniswap LP fee rate
 
-        # calculate token trade volume in USD
-        trade_volume_token0_usd = token0_swapped * float(token0Price.decode('utf-8')) if token0Price else 0
-        trade_volume_token1_usd = token1_swapped * float(token1Price.decode('utf-8')) if token1Price else 0
-
+        print({
+            'totalTradesUSD': trade_volume_usd,
+            'totalFeeUSD': trade_fee_usd,
+            'token0TradeVolume': token0_swapped,
+            'token1TradeVolume': token1_swapped,
+            'token0TradeVolumeUSD': token0_swapped_usd,
+            'token1TradeVolumeUSD': token1_swapped_usd,
+            'recent_transaction_logs': recent_transaction_logs
+        })
         return {
             'totalTradesUSD': trade_volume_usd,
             'totalFeeUSD': trade_fee_usd,
             'token0TradeVolume': token0_swapped,
             'token1TradeVolume': token1_swapped,
-            'token0TradeVolumeUSD': trade_volume_token0_usd,
-            'token1TradeVolumeUSD': trade_volume_token1_usd,
+            'token0TradeVolumeUSD': token0_swapped_usd,
+            'token1TradeVolumeUSD': token1_swapped_usd,
             'recent_transaction_logs': recent_transaction_logs
         }
-           
-    if token0Price:
-        token0Price = float(token0Price.decode('utf-8'))
-        trade_volume_usd += token0_swapped * token0Price
-        trade_volume_token0_usd = token0_swapped * token0Price
-    else:
-        logger.warning(
-            f"Trade Volume: can't find {pair_per_token_metadata['token0']['symbol']}-"
-            f"USDT Price. Attempting to find {pair_per_token_metadata['token1']['symbol']}-USDT price and 2x it"
-        )
+    
 
-    if token1Price:
-        token1Price = float(token1Price.decode('utf-8'))
-        trade_volume_usd += token1_swapped * token1Price
-        trade_volume_token1_usd = token1_swapped * token1Price
-    else:
-        logger.warning(
-            f"Trade Volume: can't find {pair_per_token_metadata['token1']['symbol']}-USDT Price")
-    
-    
-    if not token0Price or not token1Price:
-        trade_volume_usd *= 2
+    trade_volume_usd = token0_swapped_usd + token1_swapped_usd
     
     return {
         'totalTradesUSD': trade_volume_usd,
         'token0TradeVolume': token0_swapped,
         'token1TradeVolume': token1_swapped,
-        'token0TradeVolumeUSD': trade_volume_token0_usd,
-        'token1TradeVolumeUSD': trade_volume_token1_usd,
+        'token0TradeVolumeUSD': token0_swapped_usd,
+        'token1TradeVolumeUSD': token1_swapped_usd,
         'recent_transaction_logs': recent_transaction_logs
     }
 
@@ -562,6 +558,69 @@ async def get_pair_per_token_metadata(pair_contract_obj, pair_address, loop: asy
         return {}
 
 
+async def get_token_price_at_block_height(token_contract_obj, token_metadata, block_height, loop: asyncio.AbstractEventLoop, debug_log=True):
+    """
+        returns the price of a token at a given block height
+    """
+    try:
+        token_price = 0
+        stable_coins_addresses = {
+            "USDT": Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDT),
+            "DAI": Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.DAI),
+            "USDC": Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDC)
+        }
+        stable_coins_decimals = {
+            "USDT": 6,
+            "DAI": 18,
+            "USDC": 6
+        }
+
+        if Web3.toChecksumAddress(token_metadata['address']) in list(stable_coins_addresses.values()):
+                token_price = 1
+                if debug_log:
+                    logger.debug("Ignored Stablecoin calculation for token0: %s - WETH - USDT conversion: %s", token_metadata['symbol'], token_price)
+        elif Web3.toChecksumAddress(token_metadata['address']) \
+                != Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH):
+            # if the token is not WETH then convert it with path token-weth-usdt
+            # loop on all stable coins until we find price for token or stable coin
+            stable_coins_len = len(stable_coins_addresses)
+            for key, value in stable_coins_addresses.items():
+                priceFunction_token0 = partial(token_contract_obj.functions.getAmountsOut(
+                    10 ** int(token_metadata['decimals']), 
+                    [
+                        Web3.toChecksumAddress(token_metadata['address']),
+                        Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH),
+                        value
+                    ]
+                ).call, block_identifier=block_height)
+                token_price = await loop.run_in_executor(func=priceFunction_token0, executor=None)
+                stable_coins_len -= 1
+
+                if token_price:
+                    token_price = token_price[2]/10**stable_coins_decimals[key] if token_price[2] !=0 else 0  #USDT decimals
+                    if debug_log:
+                        logger.debug("Calculated price for token0: %s - WETH - %s conversion: %s", token_metadata['symbol'], key, token_price)
+                    break
+                elif stable_coins_len <= 0:
+                    break
+        else:
+            # else just get weth-udst conversion
+            priceFunction_token0 = partial(token_contract_obj.functions.getAmountsOut(
+                10 ** int(token_metadata['decimals']), [
+                    Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH),
+                    Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDT)]
+            ).call, block_identifier=block_height)
+            token_price = await loop.run_in_executor(func=priceFunction_token0, executor=None)
+            token_price = token_price[1]/10**6 #USDT decimals
+            if debug_log:
+                logger.debug("Calculated prices for token0: %s - USDT conversion: %s", token_metadata['symbol'], token_price)
+
+    except Exception as err:
+        logger.error(f"Failed to fetch token price | error_msg: {str(err)} | contract: {token_metadata['address']}", exc_info=True)
+    finally:
+        return token_price
+
+
 # asynchronously get liquidity of each token reserve
 async def get_liquidity_of_each_token_reserve_async(
         loop: asyncio.AbstractEventLoop,
@@ -576,6 +635,10 @@ async def get_liquidity_of_each_token_reserve_async(
         pair = w3.eth.contract(
             address=pair_address,
             abi=pair_contract_abi
+        )
+        router_contract_obj = w3.eth.contract(
+            address=Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.IUNISWAP_V2_ROUTER),
+            abi=router_contract_abi
         )
         lua_scripts = await load_rate_limiter_scripts(redis_conn)
         logger.debug('Got sha load results for rate limiter scripts: %s', lua_scripts)
@@ -633,11 +696,19 @@ async def get_liquidity_of_each_token_reserve_async(
                 loop=loop,
                 redis_conn=redis_conn
             )
-            pfunc_get_reserves = partial(pair.functions.getReserves().call, {'block_identifier': block_identifier})
+            
+
+            pfunc_get_reserves = partial(pair.functions.getReserves().call, block_identifier=block_identifier)
             async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(3), wait=wait_random(1, 2)):
                 with attempt:
-                    reserves = await loop.run_in_executor(func=pfunc_get_reserves, executor=None)
-                    if reserves:
+                    executor_gather = list()
+                    executor_gather.append(loop.run_in_executor(func=pfunc_get_reserves, executor=None))
+                    executor_gather.append(get_token_price_at_block_height(router_contract_obj, pair_per_token_metadata['token0'], block_identifier, loop))
+                    executor_gather.append(get_token_price_at_block_height(router_contract_obj, pair_per_token_metadata['token1'], block_identifier, loop))
+                    [
+                        reserves, token0Price, token1Price
+                    ] = await asyncio.gather(*executor_gather)
+                    if reserves and token0Price and token1Price:
                         break
             token0_addr = pair_per_token_metadata['token0']['address']
             token1_addr = pair_per_token_metadata['token1']['address']
@@ -648,22 +719,17 @@ async def get_liquidity_of_each_token_reserve_async(
             token1Amount = reserves[1] / 10 ** int(token1_decimals)
             
             # logger.debug(f"Decimals of token0: {token0_decimals}, Decimals of token1: {token1_decimals}")
-            logger.debug("Token0: %s, Reserves: %s | Token1: %s, Reserves: %s", token0_addr, token1_addr, token0Amount, token1Amount)
-                
-            token0Price, token1Price = await redis_conn.mget([
-                uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token0']['symbol']}-USDT"),
-                uniswap_pair_cached_token_price.format(f"{pair_per_token_metadata['token1']['symbol']}-USDT")
-            ])
+            logger.debug("Token0: %s, Reserves: %s | Token1: %s, Reserves: %s", token0_addr, token0Amount, token1_addr, token1Amount)
 
             token0USD = 0
             token1USD = 0
             if token0Price:
-                token0USD = token0Amount * float(token0Price.decode('utf-8'))
+                token0USD = token0Amount * token0Price
             else:
                 logger.error(f"Liquidity: Could not find token0 price for {pair_per_token_metadata['token0']['symbol']}-USDT, setting it to 0")
             
             if token1Price:
-                token1USD = token1Amount * float(token1Price.decode('utf-8'))
+                token1USD = token1Amount * token1Price
             else:
                 logger.error(f"Liquidity: Could not find token1 price for {pair_per_token_metadata['token1']['symbol']}-USDT, setting it to 0")
                 
@@ -681,6 +747,68 @@ async def get_liquidity_of_each_token_reserve_async(
         logger.error("error at async_get_liquidity_of_each_token_reserve fn: %s", exc, exc_info=True)
         # snapshot constructor expect exception and handle it with queue
         raise exc
+
+
+async def get_trade_volume_epoch_price_map(loop, to_block, from_block, token_metadata, redis_conn: aioredis.Redis, debug_log=False):
+    #ev_loop = asyncio.get_running_loop()
+    # # # prepare for rate limit check
+    router_contract_obj = w3.eth.contract(
+        address=Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.IUNISWAP_V2_ROUTER),
+        abi=router_contract_abi
+    )
+    redis_storage = AsyncRedisStorage(await load_rate_limiter_scripts(redis_conn), redis_conn)
+    custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
+    limit_incr_by = 1  # score to be incremented for each request
+    app_id = settings.RPC.MATIC[0].split('/')[
+        -1]  # future support for loadbalancing over multiple MaticVigil RPC appID
+    key_bits = [app_id, 'eth_call']  # TODO: add unique elements that can identify a request
+    
+    price_map = {}
+    for block in range(from_block, to_block + 1):
+        # TODO: refactor rate limit check into something modular and easier to use
+        # # # rate limit check - begin
+        can_request = False
+        rate_limit_exception = False
+        retry_after = 1
+        response = None
+        for each_lim in PARSED_LIMITS:
+            # window_stats = custom_limiter.get_window_stats(each_lim, key_bits)
+            # local_app_cacher_logger.debug(window_stats)
+            # logger.debug('Limit %s expiry: %s', each_lim, each_lim.get_expiry())
+            try:
+                if await custom_limiter.hit(each_lim, limit_incr_by, *[key_bits]) is False:
+                    window_stats = await custom_limiter.get_window_stats(each_lim, key_bits)
+                    reset_in = 1 + window_stats[0]
+                    # if you need information on back offs
+                    retry_after = reset_in - int(time.time())
+                    retry_after = (datetime.now() + timedelta(0, retry_after)).isoformat()
+                    can_request = False
+                    break  # make sure to break once false condition is hit
+            except (
+                    aioredis.errors.ConnectionClosedError, aioredis.errors.ConnectionForcedCloseError,
+                    aioredis.errors.PoolClosedError
+            ) as e:
+                # shit can happen while each limit check call hits Redis, handle appropriately
+                logger.debug('Bypassing rate limit check for appID because of Redis exception: ' + str(
+                    {'appID': app_id, 'exception': e}))
+            else:
+                can_request = True
+        # # # rate limit check - end
+        if can_request:
+            try:
+                async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(3), wait=wait_random(1, 2)):
+                    with attempt:
+                        price = await get_token_price_at_block_height(router_contract_obj, token_metadata, block, loop, debug_log)
+                        price_map[block] = price
+                        if price:
+                            break
+            except Exception as err:
+                # pair_contract price can't retrieved, this is mostly with sepcific coins log it and fetch price for newer ones
+                logger.error(f"Failed to fetch token price | error_msg: {str(err)} | epoch: {to_block}-{from_block}", exc_info=True)
+        else:
+            logger.error('Trade Volume block map: I cant request, retry after sometime')
+    
+    return price_map
 
 
 # asynchronously get trades on a pair contract
@@ -751,6 +879,10 @@ async def get_pair_contract_trades_async(
                 pair_address=pair_address,
                 loop=ev_loop
             )
+            token0_price_map, token1_price_map = await asyncio.gather(
+                get_trade_volume_epoch_price_map(loop=ev_loop, to_block=to_block, from_block=from_block, token_metadata=pair_per_token_metadata['token0'], redis_conn=redis_conn),
+                get_trade_volume_epoch_price_map(loop=ev_loop, to_block=to_block, from_block=from_block, token_metadata=pair_per_token_metadata['token1'], redis_conn=redis_conn)
+            )
             event_log_fetch_coros = list()
             for trade_event_name in ['Swap', 'Mint', 'Burn']:
                 event_sig, event_abi = get_event_sig_and_abi(trade_event_name)
@@ -792,7 +924,8 @@ async def get_pair_contract_trades_async(
                             event_logs=logs_ret[trade_event_name],
                             redis_conn=redis_conn,
                             pair_per_token_metadata=pair_per_token_metadata,
-                            from_block=from_block
+                            token0_price_map=token0_price_map, 
+                            token1_price_map=token1_price_map
                         )
                     }
                 })
@@ -868,7 +1001,7 @@ if __name__ == '__main__':
     # print(f"pair_address: {pair_address}")
     loop = asyncio.get_event_loop()
     loop.run_until_complete(
-        get_pair_contract_trades_async(loop, '0x5fa464cefe8901d66c09b85d5fcdc55b3738c688', 14412884, 14428003)
+        get_pair_contract_trades_async(loop, '0x3041cbd36888becc7bbcbc0045e3b1f144466f5f', 14761633, 14761695)
     )
 
     # logger.debug(f"Pair address : {pair_address}")
