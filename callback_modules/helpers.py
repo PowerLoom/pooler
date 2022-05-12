@@ -51,7 +51,7 @@ class AuditProtocolCommandsHelper:
             redis_conn: aioredis.Redis, stream='pair_total_reserves'
     ):
         project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
-        if not redis_conn.sismember(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id):
+        if not await redis_conn.sismember(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id):
             """ Setup diffRules for this market"""
             # retry below call given at settings.AUDIT_PROTOCOL_ENGINE.RETRY
             async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY)):
