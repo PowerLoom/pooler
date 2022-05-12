@@ -313,10 +313,8 @@ func FetchTokenV2Data(fromTime float64) map[string]TokenData {
 
 			//Assuming that liquidity and tradeVolume for all tokenPairs is available at same height
 			//hence taking the same from any pair should be fine.
-			token0Data.Block_height_Liquidity = tokenPairProcessedData.Block_height_total_reserve
-			token0Data.Block_height_trade_volume = tokenPairProcessedData.Block_height_trade_volume
-			token1Data.Block_height_Liquidity = tokenPairProcessedData.Block_height_total_reserve
-			token1Data.Block_height_trade_volume = tokenPairProcessedData.Block_height_trade_volume
+			token0Data.Block_height = tokenPairProcessedData.Block_height
+			token1Data.Block_height = tokenPairProcessedData.Block_height
 		}
 
 		//AggregateTokenTradeVolumeFromPair(lastBlockHeight, fromTime, pairContractAddress, &token0Data, &token1Data)*/

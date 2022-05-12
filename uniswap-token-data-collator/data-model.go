@@ -3,7 +3,7 @@ package main
 const MAX_TOKEN_PRICE_HISTORY_INDEX int = 300
 
 type AuditProtocolErrorResp struct {
-	Error string `json:error`
+	Error string `json:"error"`
 }
 
 type AuditProtocolBlockHeightResp struct {
@@ -11,56 +11,54 @@ type AuditProtocolBlockHeightResp struct {
 }
 
 type TokenPriceHistoryEntry struct {
-	Timestamp float64 `json:timeStamp`
-	Price     float64 `json:price`
+	Timestamp float64 `json:"timeStamp"`
+	Price     float64 `json:"price"`
 }
 
 type TokenData struct {
-	LastUpdatedTimeStamp      string  `json:"lastUpdatedTime"`
-	Block_height_Liquidity    int     `json:"block_height_liquidity"`
-	Block_height_trade_volume int     `json:"block_height_trade_volume"`
-	Name                      string  `json:"name"`
-	Symbol                    string  `json:"symbol"`
-	Price                     float64 `json:"price"`
-	Liquidity                 float64 `json:"liquidity"`
-	LiquidityUSD              float64 `json:"liquidityUSD"`
-	TradeVolume_24h           float64 `json:"tradeVolume_24h"`
-	TradeVolumeUSD_24h        float64 `json:"tradeVolumeUSD_24h"`
-	TradeVolume_7d            float64 `json:"tradeVolume_7d"`
-	TradeVolumeUSD_7d         float64 `json:"tradeVolumeUSD_7d"`
-	PriceChangePercent_24h    float64 `json:"priceChangePercent_24h"`
+	LastUpdatedTimeStamp   string  `json:"lastUpdatedTime"`
+	Block_height           int     `json:"block_height"`
+	Name                   string  `json:"name"`
+	Symbol                 string  `json:"symbol"`
+	Price                  float64 `json:"price"`
+	Liquidity              float64 `json:"liquidity"`
+	LiquidityUSD           float64 `json:"liquidityUSD"`
+	TradeVolume_24h        float64 `json:"tradeVolume_24h"`
+	TradeVolumeUSD_24h     float64 `json:"tradeVolumeUSD_24h"`
+	TradeVolume_7d         float64 `json:"tradeVolume_7d"`
+	TradeVolumeUSD_7d      float64 `json:"tradeVolumeUSD_7d"`
+	PriceChangePercent_24h float64 `json:"priceChangePercent_24h"`
 }
 
 //This is the data stored in redis.
 //TODO: Do we need to decode data that are not needed?
 type TokenPairLiquidityProcessedData struct {
-	ContractAddress            string  `json:"contractAddress"`
-	Name                       string  `json:"name"`
-	Liquidity                  string  `json:"liquidity"`
-	Volume_24h                 string  `json:"volume_24h"`
-	Volume_7d                  string  `json:"volume_7d"`
-	Cid_volume_24h             string  `json:"cid_volume_24h"`
-	Cid_volume_7d              string  `json:"cid_volume_7d"`
-	Fees_24h                   string  `json:"fees_24h"`
-	Block_height_total_reserve int     `json:"block_height_total_reserve"`
-	Block_height_trade_volume  int     `json:"block_height_trade_volume"`
-	DeltaToken0Reserves        float64 `json:"deltaToken0Reserves"`
-	DeltaToken1Reserves        float64 `json:"deltaToken1Reserves"`
-	DeltaTime                  float64 `json:"deltaTime"`
-	LatestTimestamp            float64 `json:"latestTimestamp"`
-	EarliestTimestamp          float64 `json:"earliestTimestamp"`
-	Token0Liquidity            float64 `json:"token0Liquidity"`
-	Token1Liquidity            float64 `json:"token1Liquidity"`
-	Token0LiquidityUSD         float64 `json:"token0LiquidityUSD"`
-	Token1LiquidityUSD         float64 `json:"token1LiquidityUSD"`
-	Token0TradeVolume_24h      float64 `json:"token0TradeVolume_24h"`
-	Token1TradeVolume_24h      float64 `json:"token1TradeVolume_24h"`
-	Token0TradeVolumeUSD_24h   float64 `json:"token0TradeVolumeUSD_24h"`
-	Token1TradeVolumeUSD_24h   float64 `json:"token1TradeVolumeUSD_24h"`
-	Token0TradeVolume_7d       float64 `json:"token0TradeVolume_7d"`
-	Token1TradeVolume_7d       float64 `json:"token1TradeVolume_7d"`
-	Token0TradeVolumeUSD_7d    float64 `json:"token0TradeVolumeUSD_7d"`
-	Token1TradeVolumeUSD_7d    float64 `json:"token1TradeVolumeUSD_7d"`
+	ContractAddress          string  `json:"contractAddress"`
+	Name                     string  `json:"name"`
+	Liquidity                string  `json:"liquidity"`
+	Volume_24h               string  `json:"volume_24h"`
+	Volume_7d                string  `json:"volume_7d"`
+	Cid_volume_24h           string  `json:"cid_volume_24h"`
+	Cid_volume_7d            string  `json:"cid_volume_7d"`
+	Fees_24h                 string  `json:"fees_24h"`
+	Block_height             int     `json:"block_height"`
+	DeltaToken0Reserves      float64 `json:"deltaToken0Reserves"`
+	DeltaToken1Reserves      float64 `json:"deltaToken1Reserves"`
+	DeltaTime                float64 `json:"deltaTime"`
+	LatestTimestamp          float64 `json:"latestTimestamp"`
+	EarliestTimestamp        float64 `json:"earliestTimestamp"`
+	Token0Liquidity          float64 `json:"token0Liquidity"`
+	Token1Liquidity          float64 `json:"token1Liquidity"`
+	Token0LiquidityUSD       float64 `json:"token0LiquidityUSD"`
+	Token1LiquidityUSD       float64 `json:"token1LiquidityUSD"`
+	Token0TradeVolume_24h    float64 `json:"token0TradeVolume_24h"`
+	Token1TradeVolume_24h    float64 `json:"token1TradeVolume_24h"`
+	Token0TradeVolumeUSD_24h float64 `json:"token0TradeVolumeUSD_24h"`
+	Token1TradeVolumeUSD_24h float64 `json:"token1TradeVolumeUSD_24h"`
+	Token0TradeVolume_7d     float64 `json:"token0TradeVolume_7d"`
+	Token1TradeVolume_7d     float64 `json:"token1TradeVolume_7d"`
+	Token0TradeVolumeUSD_7d  float64 `json:"token0TradeVolumeUSD_7d"`
+	Token1TradeVolumeUSD_7d  float64 `json:"token1TradeVolumeUSD_7d"`
 }
 
 // Struct auto-generated from https://mholt.github.io/json-to-go/ by pasting sample json
