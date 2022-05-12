@@ -148,6 +148,11 @@ class AuditProtocolCommandsHelper:
                                         "ruleType": "ignore",
                                         "field": "events",
                                         "fieldType": "float"
+                                    },
+                                    {
+                                        "ruleType": "ignore",
+                                        "field": "recent_logs",
+                                        "fieldType": "float"
                                     }
                                 ]
                             }
