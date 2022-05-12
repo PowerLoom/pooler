@@ -607,7 +607,7 @@ async def get_token_price_at_block_height(token_contract_obj, token_metadata, bl
                 logger.debug("Calculated prices for token0: %s - USDT conversion: %s", token_metadata['symbol'], token_price)
 
     except Exception as err:
-        logger.error(f"Failed to fetch token price | error_msg: {str(err)} | contract: {token_metadata['address']}", exc_info=True)
+        logger.debug(f"Error: failed to fetch token price | error_msg: {str(err)} | contract: {token_metadata['address']}")
     finally:
         return token_price
 
