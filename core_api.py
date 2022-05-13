@@ -275,6 +275,9 @@ async def get_v2_pairs_recent_logs(
     
     return data
 
+def get_token_liquidity_for_sort(tokenData):
+    return tokenData["liquidity"]
+
 @app.get('/v2_tokens')
 async def get_v2_pairs_recent_logs(
     request: Request,
@@ -294,6 +297,7 @@ async def get_v2_pairs_recent_logs(
 
     if data:
         data = [json.loads(obj) for obj in data]
+        data.sort(key=get_token_liquidity_for_sort, reverse=True)
         temp = []
         for i in range(len(data)):
             temp.append({
