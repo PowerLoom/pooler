@@ -238,6 +238,10 @@ async def get_past_snapshots(
 
             return resp_json
 
+
+def get_tokens_liquidity_for_sort(pairData):
+    return pairData["token0LiquidityUSD"] + pairData["token1LiquidityUSD"]
+
 @app.get('/v2-pairs')
 async def get_v2_pairs_data(
     request: Request,
@@ -254,6 +258,7 @@ async def get_v2_pairs_data(
 
     if data:
         data = [json.loads(pair_data) for pair_data in data if pair_data is not None]
+        data.sort(key=get_tokens_liquidity_for_sort, reverse=True)
     else:
         data = {"error": "No data found"}
     
@@ -275,7 +280,7 @@ async def get_v2_pairs_recent_logs(
     
     return data
 
-def get_token_liquidity_for_sort(tokenData):
+def get_pair_liquidity_for_sort(tokenData):
     return tokenData["liquidity"]
 
 @app.get('/v2_tokens')
@@ -297,7 +302,7 @@ async def get_v2_pairs_recent_logs(
 
     if data:
         data = [json.loads(obj) for obj in data]
-        data.sort(key=get_token_liquidity_for_sort, reverse=True)
+        data.sort(key=get_pair_liquidity_for_sort, reverse=True)
         temp = []
         for i in range(len(data)):
             temp.append({
