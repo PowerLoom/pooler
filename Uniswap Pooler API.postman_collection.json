@@ -1,6 +1,6 @@
 {
 	"info": {
-		"_postman_id": "de408af6-a230-4e8e-9a29-f684f1a70fee",
+		"_postman_id": "0b520ff9-e74e-4eae-ba3e-e7864b7d977b",
 		"name": "Uniswap Pooler API",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
@@ -111,6 +111,88 @@
 							"key": "onChain",
 							"value": "true"
 						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get uniswap v2 pairs aggregated data",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:9002/v2-pairs",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "9002",
+					"path": [
+						"v2-pairs"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get uniswap v2 pairs overall daily stats",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:9002/v2_daily_stats",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "9002",
+					"path": [
+						"v2_daily_stats"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get uniswap v2 pair contract recent logs ",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:9002/v2_pairs_recent_logs?pair_contract=0x3041cbd36888becc7bbcbc0045e3b1f144466f5f",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "9002",
+					"path": [
+						"v2_pairs_recent_logs"
+					],
+					"query": [
+						{
+							"key": "pair_contract",
+							"value": "0x3041cbd36888becc7bbcbc0045e3b1f144466f5f"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get uniswap v2 tokens aggregated data",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:9002/v2_tokens",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "9002",
+					"path": [
+						"v2_tokens"
 					]
 				}
 			},
