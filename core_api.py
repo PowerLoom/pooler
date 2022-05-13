@@ -281,7 +281,7 @@ async def get_v2_pairs_recent_logs(
     return data
 
 def get_pair_liquidity_for_sort(tokenData):
-    return tokenData["liquidity"]
+    return tokenData["liquidityUSD"]
 
 @app.get('/v2_tokens')
 async def get_v2_pairs_recent_logs(
@@ -309,7 +309,7 @@ async def get_v2_pairs_recent_logs(
                 "index": i+1,
                 "name": data[i]["name"],
                 "symbol": data[i]["symbol"],
-                "liquidity": f"US${round(abs(data[i]['liquidity'])):,}",
+                "liquidity": f"US${round(abs(data[i]['liquidityUSD'])):,}",
                 "volume_24h": f"US${round(abs(data[i]['tradeVolumeUSD_24h'])):,}",
                 "price": f"US${round(abs(data[i]['price']), 5):,}",
                 "price_change_24h": f"{round(data[i]['priceChangePercent_24h'], 2)}%",
