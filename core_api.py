@@ -17,10 +17,8 @@ from redis_conn import RedisPoolCache
 from functools import reduce
 from uniswap_functions import read_json_file
 from redis_keys import (
-    uniswap_pair_contract_V2_pair_data,
-    uniswap_pair_cached_recent_logs,
-    uniswap_token_info_cached_data,
-    uniswap_pair_cache_daily_stats
+    uniswap_pair_contract_V2_pair_data, uniswap_pair_cached_recent_logs, uniswap_token_info_cached_data,
+    uniswap_pair_cache_daily_stats, uniswap_V2_summarized_snapshots_zset, uniswap_V2_snapshot_at_blockheight
 )
 from utility_functions import (
     v2_pair_data_unpack, 
@@ -242,6 +240,7 @@ async def get_past_snapshots(
 def get_tokens_liquidity_for_sort(pairData):
     return pairData["token0LiquidityUSD"] + pairData["token1LiquidityUSD"]
 
+
 @app.get('/v2-pairs')
 async def get_v2_pairs_data(
     request: Request,
@@ -252,7 +251,7 @@ async def get_v2_pairs_data(
     if all_pair_contracts and len(all_pair_contracts) <= 0:
         return {"error": "No data found"}
 
-    redis_conn = await request.app.redis_pool
+    redis_conn = request.app.redis_pool
     all_pair_contracts = [uniswap_pair_contract_V2_pair_data.format(f"{Web3.toChecksumAddress(addr)}") for addr in all_pair_contracts]
     data = await redis_conn.mget(*all_pair_contracts)
 
@@ -263,6 +262,26 @@ async def get_v2_pairs_data(
         data = {"error": "No data found"}
     
     return data
+
+
+@app.get('/v2-pairs/snapshots')
+async def get_v2_pairs_data(
+    request: Request,
+    response: Response
+):
+    redis_conn: aioredis.Redis = request.app.redis_pool
+    return {
+        'snapshots': list(map(
+            lambda x: int(x[1]),
+            await redis_conn.zrange(
+                name=uniswap_V2_summarized_snapshots_zset,
+                start=0,
+                end=-1,
+                withscores=True
+            )
+        ))
+    }
+
 
 @app.get('/v2_pairs_recent_logs')
 async def get_v2_pairs_recent_logs(
