@@ -13,6 +13,8 @@ import json
 import os
 import time
 from math import floor
+
+import redis_keys
 from redis_conn import RedisPoolCache
 from functools import reduce
 from uniswap_functions import read_json_file
@@ -280,6 +282,29 @@ async def get_v2_pairs_data(
                 withscores=True
             )
         ))
+    }
+
+
+@app.get('/v2-pairs/{block_height:int}')
+async def get_v2_pairs_data(
+    request: Request,
+    response: Response,
+    block_height: int
+):
+    redis_conn: aioredis.Redis = request.app.redis_pool
+    _ = await redis_conn.zrangebyscore(
+        name=redis_keys.uniswap_V2_summarized_snapshots_zset,
+        min=block_height,
+        max=block_height,
+        withscores=False
+    )
+
+    if _:
+        return json.loads(await redis_conn.get(
+            name=redis_keys.uniswap_V2_snapshot_at_blockheight.format(block_height)
+        ))['data']
+    return {
+        'data': None
     }
 
 
