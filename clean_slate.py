@@ -2,6 +2,7 @@ from redis import Redis
 from redis_conn import REDIS_CONN_CONF
 from dynaconf import settings
 import json
+import fnmatch
 
 
 r = Redis(**REDIS_CONN_CONF)
@@ -28,11 +29,16 @@ def redis_cleanup():
     except:
         pass
 
-    poly_last_snapshots = r.hgetall('auditprotocol:lastSeenSnapshots')
-    poly_last_snapshots = list(map(lambda x: x.decode('utf-8'), poly_last_snapshots.keys()))
-    for k in poly_last_snapshots:
-        if f'uniswap*{settings.NAMESPACE}*' in k:
+    last_snapshots = r.hgetall('auditprotocol:lastSeenSnapshots')
+    last_snapshots = list(map(lambda x: x.decode('utf-8'), last_snapshots.keys()))
+    for k in last_snapshots:
+        if fnmatch.fnmatch(k,f'uniswap*{settings.NAMESPACE}*'):
             r.hdel('auditprotocol:lastSeenSnapshots', k)
+
+    try:
+        r.delete(*r.keys(f'*uniswap:V2PairsSummarySnapshot*{settings.NAMESPACE}*snapshotsZset*'))
+    except:
+        pass
 
     try:
         c = r.delete(*r.keys('*dagVerificationStatus*'))
