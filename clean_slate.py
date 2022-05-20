@@ -25,7 +25,12 @@ def redis_cleanup():
         pass
 
     try:
-        r.delete(*r.keys('*Cid*'))
+        r.delete(*r.keys(f'*{settings.NAMESPACE}*Cid*'))
+    except:
+        pass
+
+    try:
+        r.delete(*r.keys(f'*{settings.NAMESPACE}*lastDagCid*'))
     except:
         pass
 
@@ -41,7 +46,7 @@ def redis_cleanup():
         pass
 
     try:
-        c = r.delete(*r.keys('*dagVerificationStatus*'))
+        c = r.delete(*r.keys(f'*{settings.NAMESPACE}*dagVerificationStatus*'))
         print('Dag chain verification keys deleted: ', c)
     except:
         pass
@@ -72,19 +77,20 @@ def redis_cleanup():
 
 
     r.delete(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}')
-    try:
-        r.delete(*r.keys('payloadCommit:*'))
-    except:
-        pass
-    try:
-        r.delete(*r.keys('eventData:*'))
-    except:
-        pass
+    # try:
+    #     r.delete(*r.keys('payloadCommit:*'))
+    # except:
+    #     pass
 
-    try:
-        r.delete(*r.keys('txHash*inputData'))
-    except:
-        pass
+    # try:
+    #     r.delete(*r.keys('eventData:*'))
+    # except:
+    #     pass
+
+    # try:
+    #     r.delete(*r.keys('txHash*inputData'))
+    # except:
+    #     pass
 
     try:
         r.delete(*r.keys(f'*uniswap*{settings.NAMESPACE}*pendingTransactions:*'))
@@ -96,15 +102,15 @@ def redis_cleanup():
     except:
         pass
 
-    try:
-        r.delete(*r.keys('pendingPayloadCommits'))
-    except:
-        pass
+    # try:
+    #     r.delete(*r.keys('pendingPayloadCommits'))
+    # except:
+    #     pass
 
-    try:
-        r.delete(*r.keys('CidDiff*'))
-    except:
-        pass
+    # try:
+    #     r.delete(*r.keys('CidDiff*'))
+    # except:
+    #     pass
 
     try:
         r.delete(*r.keys(f'*uniswap*{settings.NAMESPACE}*discardedTransactions:*'))
