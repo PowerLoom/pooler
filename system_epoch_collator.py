@@ -41,8 +41,8 @@ def rabbitmq_tooz_cleanup(fn):
             fn(self, *args, **kwargs)
         except (GenericExitOnSignal, KeyboardInterrupt):
             try:
-                self._logger.debug('Waiting for RabbitMQ interactor ioloop to stop...')
-                self.rabbitmq_interactor.stop()
+                #self._logger.debug('Waiting for RabbitMQ interactor ioloop to stop...')
+                #self._rabbitmq_interactor.stop()
                 self._logger.debug('Waiting for tooz reporter thread to join...')
                 self._tooz_reporter.join()
                 self._logger.debug('Tooz reporter thread joined...')
@@ -123,7 +123,7 @@ class EpochCollatorProcess(Process):
 
     def _epoch_collator(self, do_not_use_ch, method, properties, body):
         try:
-            self.rabbitmq_interactor._channel.basic_ack(delivery_tag=method.delivery_tag)
+            self._rabbitmq_interactor._channel.basic_ack(delivery_tag=method.delivery_tag)
             self._logger.debug('Received epoch consensus report')
             cmd = json.loads(body)
             self._logger.debug(cmd)
@@ -157,14 +157,14 @@ class EpochCollatorProcess(Process):
         self._logger.debug('Started Epoch Collator tooz reporter thread')
 
         queue_name = f"powerloom-epoch-consensus-q:{settings.NAMESPACE}"
-        self.rabbitmq_interactor: RabbitmqSelectLoopInteractor = RabbitmqSelectLoopInteractor(
+        self._rabbitmq_interactor: RabbitmqSelectLoopInteractor = RabbitmqSelectLoopInteractor(
             consume_queue_name=queue_name,
             consume_callback=self._epoch_collator,
             consumer_worker_name='PowerLoom|EpochCollator'
         )
         # self.rabbitmq_interactor.start_publishing()
         self._logger.debug('Starting RabbitMQ consumer on queue %s', queue_name)
-        self.rabbitmq_interactor.run()
+        self._rabbitmq_interactor.run()
         self._logger.debug('%s: RabbitMQ interactor ioloop ended...', self.name)
         self._reporter_thread_shutdown_event.set()
         raise GenericExitOnSignal
