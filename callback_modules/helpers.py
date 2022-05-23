@@ -212,6 +212,7 @@ class AuditProtocolCommandsHelper:
                                 response_status_code, response))
 
 
+
 class CallbackAsyncWorker(multiprocessing.Process):
     def __init__(self, name, rmq_q, rmq_routing, **kwargs):
         self._core_rmq_consumer: asyncio.Task
@@ -306,10 +307,14 @@ class CallbackAsyncWorker(multiprocessing.Process):
         setproctitle(self._unique_id)
         self._logger = logging.getLogger(self.name)
         self._logger.setLevel(logging.DEBUG)
+        formatter = logging.Formatter(
+            "%(levelname)-8s %(name)-4s %(asctime)s %(msecs)d %(module)s-%(funcName)s: %(message)s")
         stdout_handler = logging.StreamHandler(sys.stdout)
         stdout_handler.setLevel(logging.DEBUG)
+        stdout_handler.setFormatter(formatter)
         stderr_handler = logging.StreamHandler(sys.stderr)
         stderr_handler.setLevel(logging.ERROR)
+        stderr_handler.setFormatter(formatter)
         # self._logger.debug('Launched %s ', self._unique_id)
         # self._logger.debug('Launched PID: %s', self.pid)
         self._logger.handlers = [
