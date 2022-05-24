@@ -1,5 +1,5 @@
 from functools import partial
-from tenacity import AsyncRetrying, stop_after_attempt, wait_random
+from tenacity import retry, AsyncRetrying, stop_after_attempt, wait_random, wait_random_exponential, retry_if_exception_type
 from typing import List
 from web3 import Web3
 from web3.datastructures import AttributeDict
@@ -613,6 +613,12 @@ async def get_token_price_at_block_height(token_contract_obj, token_metadata, bl
 
 
 # asynchronously get liquidity of each token reserve
+@retry(
+    reraise=True, 
+    retry=retry_if_exception_type(RPCException), 
+    wait=wait_random_exponential(multiplier=1, max=10), 
+    stop=stop_after_attempt(settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS)
+)
 async def get_liquidity_of_each_token_reserve_async(
         loop: asyncio.AbstractEventLoop,
         pair_address,
@@ -733,7 +739,9 @@ async def get_liquidity_of_each_token_reserve_async(
                 'timestamp': None if not block_details else block_details.timestamp
             }
         else:
-            raise Exception("exhausted_api_key_rate_limit inside uniswap_functions get async liquidity reservers")
+            raise RPCException(request={"contract": pair_address, "block_identifier": block_identifier}, 
+            response={}, underlying_exception=None, 
+            extra_info={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get async liquidity reserves"})
     except Exception as exc:
         logger.error("error at async_get_liquidity_of_each_token_reserve fn: %s", exc, exc_info=True)
         # snapshot constructor expect exception and handle it with queue
@@ -804,13 +812,19 @@ async def get_trade_volume_epoch_price_map(loop, to_block, from_block, token_met
 
 # asynchronously get trades on a pair contract
 @provide_async_redis_conn_insta
+@retry(
+    reraise=True, 
+    retry=retry_if_exception_type(RPCException), 
+    wait=wait_random_exponential(multiplier=1, max=10), 
+    stop=stop_after_attempt(settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS)
+)
 async def get_pair_contract_trades_async(
-        ev_loop: asyncio.AbstractEventLoop,
-        pair_address,
-        from_block,
-        to_block,
-        fetch_timestamp=True,
-        redis_conn: aioredis.Redis = None
+    ev_loop: asyncio.AbstractEventLoop,
+    pair_address,
+    from_block,
+    to_block,
+    fetch_timestamp=True,
+    redis_conn: aioredis.Redis = None
 ):
     try:
         pair_address = Web3.toChecksumAddress(pair_address)
@@ -924,7 +938,9 @@ async def get_pair_contract_trades_async(
             rets.update({'timestamp': max_block_timestamp})
             return rets
         else:
-            raise Exception("exhausted_api_key_rate_limit inside uniswap_functions get async liquidity reservers")
+            raise RPCException(request={"contract": pair_address, "fromBlock": from_block, "toBlock": to_block}, 
+            response={}, underlying_exception=None, 
+            extra_info={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get async trade volume"})
     except Exception as exc:
         logger.error("error at get_pair_contract_trades_async fn: %s", exc, exc_info=True)
         # snapshot constructor expect exception and handle it with queue
@@ -990,17 +1006,14 @@ if __name__ == '__main__':
     # weth = "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619"
     # pair_address = get_pair("0x29bf8Df7c9a005a080E4599389Bf11f15f6afA6A", "0xc2132d05d31c914a87c6611c10748aeb04b58e8f")
     # print(f"pair_address: {pair_address}")
+    # loop = asyncio.get_event_loop()
+    # data = loop.run_until_complete(
+    #     get_pair_contract_trades_async(loop, '0x3041cbd36888becc7bbcbc0045e3b1f144466f5f', 14761633, 14761695)
+    # )
+
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(
-        get_pair_contract_trades_async(loop, '0x3041cbd36888becc7bbcbc0045e3b1f144466f5f', 14761633, 14761695)
+    data = loop.run_until_complete(
+        get_liquidity_of_each_token_reserve_async(loop, '0x3041cbd36888becc7bbcbc0045e3b1f144466f5f')
     )
 
-    # logger.debug(f"Pair address : {pair_address}")
-    # logger.debug(get_liquidity_of_each_token_reserve(pair_address))
-
-    # # #we can pass block_identifier=chain_height
-    # # print(get_liquidity_of_each_token_reserve(pair_address, block_identifier=24265790))
-
-    # # async liqudity function
-    # reservers = loop.run_until_complete(async_get_liquidity_of_each_token_reserve(loop, pair_address="0x9d3cd87FFEB9eBa14F63DeC135Da5153eC5CA698"))
-    # loop.close()
+    print(data)
