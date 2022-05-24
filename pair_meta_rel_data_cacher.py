@@ -1,5 +1,5 @@
 from uniswap_functions import (
-    get_pair_per_token_metadata, LUA_SCRIPT_SHAS, GLOBAL_RPC_RATE_LIMIT_STR,
+    get_pair_per_token_metadata, LUA_SCRIPT_SHAS, GLOBAL_RPC_RATE_LIMIT_STR, load_rate_limiter_scripts,
     load_rate_limiter_scripts, PARSED_LIMITS, pair_contract_abi, get_all_pairs, get_pair, read_json_file
 )
 from redis_keys import (
@@ -54,7 +54,7 @@ router_contract_obj = w3.eth.contract(
 retrieval_logger.debug("Got uniswap v2 router object")
 
 
-async def cache_pair_meta_data(redis_conn: aioredis.Redis):
+async def cache_pair_meta_data(redis_conn: aioredis.Redis, rate_limit_lua_script_shas: dict):
     try:
         # TODO: we can cache cached_pair_addresses content with expiry date
 
@@ -65,8 +65,7 @@ async def cache_pair_meta_data(redis_conn: aioredis.Redis):
 
             pair_address = Web3.toChecksumAddress(pair_contract_address)
             # print(f"pair_add:{pair_contract_address}")
-            await load_rate_limiter_scripts(redis_conn)
-            redis_storage = AsyncRedisStorage(LUA_SCRIPT_SHAS, redis_conn)
+            redis_storage = AsyncRedisStorage(rate_limit_lua_script_shas, redis_conn)
             custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
             limit_incr_by = 1  # score to be incremented for each request
             app_id = settings.RPC.MATIC[0].split('/')[
@@ -226,13 +225,12 @@ async def get_token_price_against_stablecoins(pair_per_token_metadata, ev_loop, 
     stop=stop_after_attempt(1),
     reraise=True
 )
-async def cache_pair_stablecoin_exchange_rates(redis_conn: aioredis.Redis):
-    await cache_pair_meta_data(redis_conn)
+async def cache_pair_stablecoin_exchange_rates(redis_conn: aioredis.Redis, rate_limit_lua_script_shas: dict):
+    await cache_pair_meta_data(redis_conn, rate_limit_lua_script_shas)
     all_pair_contracts = read_json_file('static/cached_pair_addresses.json')
     ev_loop = asyncio.get_running_loop()
     # # # prepare for rate limit check
-    await load_rate_limiter_scripts(redis_conn)
-    redis_storage = AsyncRedisStorage(LUA_SCRIPT_SHAS, redis_conn)
+    redis_storage = AsyncRedisStorage(rate_limit_lua_script_shas, redis_conn)
     custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
     limit_incr_by = 1  # score to be incremented for each request
     app_id = settings.RPC.MATIC[0].split('/')[
@@ -304,9 +302,13 @@ async def get_aiohttp_cache() -> aiohttp.ClientSession:
 async def periodic_retrieval():
     aioredis_pool = RedisPoolCache(pool_size=20)
     await aioredis_pool.populate()
+    rate_limit_lua_script_shas = await load_rate_limiter_scripts(aioredis_pool._aioredis_pool)
     while True:
         await asyncio.gather(
-            cache_pair_stablecoin_exchange_rates(redis_conn=aioredis_pool._aioredis_pool),
+            cache_pair_stablecoin_exchange_rates(
+                redis_conn=aioredis_pool._aioredis_pool,
+                rate_limit_lua_script_shas=rate_limit_lua_script_shas
+            ),
             asyncio.sleep(120)  # run atleast 'x' seconds not sleep for x seconds
         )
         retrieval_logger.debug('Completed one cycle of pair meta data cache.........')

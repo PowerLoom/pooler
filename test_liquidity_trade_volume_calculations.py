@@ -127,7 +127,7 @@ async def verify_trade_volume_calculations(loop, pair_contract, start_block, end
             end = i+batch_size-1
         
         print(f"Batch: {start} - {end}")
-        # TODO: supply aioredis connection
+        # TODO: supply aioredis connection and rate limiter lua scripts
         data = await get_pair_contract_trades_async(loop, pair_contract, start, end)
         processed_logs_batches.append(data)
 

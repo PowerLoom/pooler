@@ -1,6 +1,8 @@
 from httpx import AsyncClient
 from setproctitle import setproctitle
-from uniswap_functions import get_pair_contract_trades_async, get_liquidity_of_each_token_reserve_async
+from uniswap_functions import (
+    get_pair_contract_trades_async, get_liquidity_of_each_token_reserve_async, load_rate_limiter_scripts
+)
 from eth_utils import keccak
 from uuid import uuid4
 from signal import SIGINT, SIGTERM, SIGQUIT
@@ -39,6 +41,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             rmq_routing=f'powerloom-backend-callback:{settings.NAMESPACE}.pair_total_reserves_worker.processor',
             **kwargs
         )
+        self._rate_limiting_lua_scripts = dict()
 
     async def _construct_pair_reserves_epoch_snapshot_data(self, msg_obj: PowerloomCallbackProcessMessage, enqueue_on_failure=False):
         max_chain_height = msg_obj.end
@@ -98,7 +101,8 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                     pair_address=msg_obj.contract,
                     block_identifier=block_num,
                     fetch_timestamp=fetch_ts,
-                    redis_conn=self._redis_conn
+                    redis_conn=self._redis_conn,
+                    rate_limit_lua_script_shas=self._rate_limiting_lua_scripts
                 )
             except:
                 # if querying fails, we are going to ensure it is recorded for future processing
@@ -211,6 +215,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         try:
             trade_vol_processed_snapshot = await get_pair_contract_trades_async(
                 ev_loop=asyncio.get_running_loop(),
+                rate_limit_lua_script_shas=self._rate_limiting_lua_scripts,
                 pair_address=msg_obj.contract,
                 from_block=from_block,
                 to_block=to_block,
@@ -314,6 +319,8 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         self._running_callback_tasks[self_unique_id] = cur_task
 
         await self.init_redis_pool()
+        if not self._rate_limiting_lua_scripts:
+            self._rate_limiting_lua_scripts = await load_rate_limiter_scripts(self._redis_conn)
         self._logger.debug('Got epoch to process for calculating total reserves for pair: %s', msg_obj)
 
         self._httpx_session_client: AsyncClient = await self._aiohttp_session_interface.get_httpx_session_client

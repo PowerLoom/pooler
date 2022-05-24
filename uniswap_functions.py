@@ -139,14 +139,12 @@ class RPCException(Exception):
 
 # needs to be run only once
 async def load_rate_limiter_scripts(redis_conn: aioredis.Redis):
-    global LUA_SCRIPT_SHAS
-    if not LUA_SCRIPT_SHAS:
-        script_clear_keys_sha = await redis_conn.script_load(SCRIPT_CLEAR_KEYS)
-        script_incr_expire = await redis_conn.script_load(SCRIPT_INCR_EXPIRE)
-        LUA_SCRIPT_SHAS = {
-            "script_incr_expire": script_incr_expire,
-            "script_clear_keys": script_clear_keys_sha
-        }
+    script_clear_keys_sha = await redis_conn.script_load(SCRIPT_CLEAR_KEYS)
+    script_incr_expire = await redis_conn.script_load(SCRIPT_INCR_EXPIRE)
+    return {
+        "script_incr_expire": script_incr_expire,
+        "script_clear_keys": script_clear_keys_sha
+    }
 
 
 # initiate all contracts
@@ -604,10 +602,11 @@ async def get_token_price_at_block_height(token_contract_obj, token_metadata, bl
 )
 async def get_liquidity_of_each_token_reserve_async(
         loop: asyncio.AbstractEventLoop,
+        rate_limit_lua_script_shas: dict,
         pair_address,
         redis_conn: aioredis.Redis,
         block_identifier='latest',
-        fetch_timestamp=False,
+        fetch_timestamp=False
 ):
     try:
         pair_address = Web3.toChecksumAddress(pair_address)
@@ -620,9 +619,8 @@ async def get_liquidity_of_each_token_reserve_async(
             address=Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.IUNISWAP_V2_ROUTER),
             abi=router_contract_abi
         )
-        await load_rate_limiter_scripts(redis_conn)
         # logger.debug('Got sha load results for rate limiter scripts: %s', lua_scripts)
-        redis_storage = AsyncRedisStorage(LUA_SCRIPT_SHAS, redis_conn)
+        redis_storage = AsyncRedisStorage(rate_limit_lua_script_shas, redis_conn)
         custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
         limit_incr_by = 1  # score to be incremented for each request
         if fetch_timestamp:
@@ -731,15 +729,21 @@ async def get_liquidity_of_each_token_reserve_async(
         raise exc
 
 
-async def get_trade_volume_epoch_price_map(loop, to_block, from_block, token_metadata, redis_conn: aioredis.Redis, debug_log=False):
+async def get_trade_volume_epoch_price_map(
+        loop,
+        rate_limit_lua_script_shas: dict,
+        to_block, from_block,
+        token_metadata,
+        redis_conn: aioredis.Redis,
+        debug_log=False
+):
     #ev_loop = asyncio.get_running_loop()
     # # # prepare for rate limit check
     router_contract_obj = w3.eth.contract(
         address=Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.IUNISWAP_V2_ROUTER),
         abi=router_contract_abi
     )
-    await load_rate_limiter_scripts(redis_conn)
-    redis_storage = AsyncRedisStorage(LUA_SCRIPT_SHAS, redis_conn)
+    redis_storage = AsyncRedisStorage(rate_limit_lua_script_shas, redis_conn)
     custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
     limit_incr_by = 1  # score to be incremented for each request
     app_id = settings.RPC.MATIC[0].split('/')[
@@ -803,6 +807,7 @@ async def get_trade_volume_epoch_price_map(loop, to_block, from_block, token_met
 )
 async def get_pair_contract_trades_async(
     ev_loop: asyncio.AbstractEventLoop,
+    rate_limit_lua_script_shas: dict,
     pair_address,
     from_block,
     to_block,
@@ -816,8 +821,7 @@ async def get_pair_contract_trades_async(
             address=pair_address,
             abi=pair_contract_abi
         )
-        await load_rate_limiter_scripts(redis_conn)
-        redis_storage = AsyncRedisStorage(LUA_SCRIPT_SHAS, redis_conn)
+        redis_storage = AsyncRedisStorage(rate_limit_lua_script_shas, redis_conn)
         custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
         limit_incr_by = 3  # be honest, we will make 3 eth_getLogs queries here
         app_id = settings.RPC.MATIC[0].split('/')[
@@ -870,8 +874,8 @@ async def get_pair_contract_trades_async(
                 redis_conn=redis_conn
             )
             token0_price_map, token1_price_map = await asyncio.gather(
-                get_trade_volume_epoch_price_map(loop=ev_loop, to_block=to_block, from_block=from_block, token_metadata=pair_per_token_metadata['token0'], redis_conn=redis_conn),
-                get_trade_volume_epoch_price_map(loop=ev_loop, to_block=to_block, from_block=from_block, token_metadata=pair_per_token_metadata['token1'], redis_conn=redis_conn)
+                get_trade_volume_epoch_price_map(loop=ev_loop, rate_limit_lua_script_shas=rate_limit_lua_script_shas, to_block=to_block, from_block=from_block, token_metadata=pair_per_token_metadata['token0'], redis_conn=redis_conn),
+                get_trade_volume_epoch_price_map(loop=ev_loop, rate_limit_lua_script_shas=rate_limit_lua_script_shas, to_block=to_block, from_block=from_block, token_metadata=pair_per_token_metadata['token1'], redis_conn=redis_conn)
             )
             event_log_fetch_coros = list()
             for trade_event_name in ['Swap', 'Mint', 'Burn']:
