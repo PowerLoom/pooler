@@ -69,7 +69,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.on_event('startup')
 async def startup_boilerplate():
-    app.aioredis_pool = RedisPoolCache()
+    app.aioredis_pool = RedisPoolCache(pool_size=100)
     await app.aioredis_pool.populate()
     app.redis_pool = app.aioredis_pool._aioredis_pool
 

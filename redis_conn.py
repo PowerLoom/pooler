@@ -150,7 +150,7 @@ def provide_async_redis_conn_insta(fn):
 
 
 class RedisPoolCache:
-    def __init__(self, pool_size=200):
+    def __init__(self, pool_size=500):
         self._aioredis_pool = None
         self._pool_size = pool_size
 
