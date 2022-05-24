@@ -1,6 +1,7 @@
 from web3 import Web3, WebsocketProvider, HTTPProvider
 from exceptions import SelfExitException
 from cached_property import cached_property as cached_property_async
+from httpx import AsyncClient, Limits, Timeout
 from typing import Union
 from eth_account.messages import encode_defunct
 from eth_account.account import Account
@@ -56,12 +57,13 @@ class FailedRequestToMaticVigil(Exception):
 
 class AsyncHTTPSessionCache:
     @cached_property_async
-    async def get_aiohttp_cache(self) -> aiohttp.ClientSession:
-        basic_rpc_connector = aiohttp.TCPConnector(limit=settings['rlimit']['file_descriptors'])
-        aiohttp_client_basic_rpc_session = aiohttp.ClientSession(
-            connector=basic_rpc_connector
+    async def get_httpx_session_client(self) -> AsyncClient:
+        async_httpx_client = AsyncClient(
+            timeout=Timeout(timeout=5.0),
+            follow_redirects=False,
+            limits=Limits(max_connections=settings['rlimit']['file_descriptors'], max_keepalive_connections=250, keepalive_expiry=5.0)
         )
-        return aiohttp_client_basic_rpc_session
+        return async_httpx_client
 
 
 def make_post_call(url: str, params: dict):

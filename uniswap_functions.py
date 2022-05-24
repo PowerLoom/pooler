@@ -42,6 +42,7 @@ logger.handlers = [logging.handlers.SocketHandler(host='localhost', port=logging
 # Initialize rate limits when program starts
 GLOBAL_RPC_RATE_LIMIT_STR = settings.RPC.rate_limit
 PARSED_LIMITS = limit_parse_many(GLOBAL_RPC_RATE_LIMIT_STR)
+LUA_SCRIPT_SHAS = None
 
 # # # RATE LIMITER LUA SCRIPTS
 SCRIPT_CLEAR_KEYS = """
@@ -138,13 +139,14 @@ class RPCException(Exception):
 
 # needs to be run only once
 async def load_rate_limiter_scripts(redis_conn: aioredis.Redis):
-    script_clear_keys_sha = await redis_conn.script_load(SCRIPT_CLEAR_KEYS)
-    script_incr_expire = await redis_conn.script_load(SCRIPT_INCR_EXPIRE)
-    LUA_SCRIPT_SHAS = {
-        "script_incr_expire": script_incr_expire,
-        "script_clear_keys": script_clear_keys_sha
-    }
-    return LUA_SCRIPT_SHAS
+    global LUA_SCRIPT_SHAS
+    if not LUA_SCRIPT_SHAS:
+        script_clear_keys_sha = await redis_conn.script_load(SCRIPT_CLEAR_KEYS)
+        script_incr_expire = await redis_conn.script_load(SCRIPT_INCR_EXPIRE)
+        LUA_SCRIPT_SHAS = {
+            "script_incr_expire": script_incr_expire,
+            "script_clear_keys": script_clear_keys_sha
+        }
 
 
 # initiate all contracts
@@ -618,9 +620,9 @@ async def get_liquidity_of_each_token_reserve_async(
             address=Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.IUNISWAP_V2_ROUTER),
             abi=router_contract_abi
         )
-        lua_scripts = await load_rate_limiter_scripts(redis_conn)
-        logger.debug('Got sha load results for rate limiter scripts: %s', lua_scripts)
-        redis_storage = AsyncRedisStorage(lua_scripts, redis_conn)
+        await load_rate_limiter_scripts(redis_conn)
+        # logger.debug('Got sha load results for rate limiter scripts: %s', lua_scripts)
+        redis_storage = AsyncRedisStorage(LUA_SCRIPT_SHAS, redis_conn)
         custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
         limit_incr_by = 1  # score to be incremented for each request
         if fetch_timestamp:
@@ -736,7 +738,8 @@ async def get_trade_volume_epoch_price_map(loop, to_block, from_block, token_met
         address=Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.IUNISWAP_V2_ROUTER),
         abi=router_contract_abi
     )
-    redis_storage = AsyncRedisStorage(await load_rate_limiter_scripts(redis_conn), redis_conn)
+    await load_rate_limiter_scripts(redis_conn)
+    redis_storage = AsyncRedisStorage(LUA_SCRIPT_SHAS, redis_conn)
     custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
     limit_incr_by = 1  # score to be incremented for each request
     app_id = settings.RPC.MATIC[0].split('/')[
@@ -813,7 +816,8 @@ async def get_pair_contract_trades_async(
             address=pair_address,
             abi=pair_contract_abi
         )
-        redis_storage = AsyncRedisStorage(await load_rate_limiter_scripts(redis_conn), redis_conn)
+        await load_rate_limiter_scripts(redis_conn)
+        redis_storage = AsyncRedisStorage(LUA_SCRIPT_SHAS, redis_conn)
         custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
         limit_incr_by = 3  # be honest, we will make 3 eth_getLogs queries here
         app_id = settings.RPC.MATIC[0].split('/')[

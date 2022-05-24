@@ -1,5 +1,5 @@
 from uniswap_functions import (
-    get_pair_per_token_metadata, SCRIPT_CLEAR_KEYS, SCRIPT_SET_EXPIRE, SCRIPT_INCR_EXPIRE, GLOBAL_RPC_RATE_LIMIT_STR,
+    get_pair_per_token_metadata, LUA_SCRIPT_SHAS, GLOBAL_RPC_RATE_LIMIT_STR,
     load_rate_limiter_scripts, PARSED_LIMITS, pair_contract_abi, get_all_pairs, get_pair, read_json_file
 )
 from redis_keys import (
@@ -65,8 +65,8 @@ async def cache_pair_meta_data(redis_conn: aioredis.Redis):
 
             pair_address = Web3.toChecksumAddress(pair_contract_address)
             # print(f"pair_add:{pair_contract_address}")
-
-            redis_storage = AsyncRedisStorage(await load_rate_limiter_scripts(redis_conn), redis_conn)
+            await load_rate_limiter_scripts(redis_conn)
+            redis_storage = AsyncRedisStorage(LUA_SCRIPT_SHAS, redis_conn)
             custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
             limit_incr_by = 1  # score to be incremented for each request
             app_id = settings.RPC.MATIC[0].split('/')[
@@ -231,7 +231,8 @@ async def cache_pair_stablecoin_exchange_rates(redis_conn: aioredis.Redis):
     all_pair_contracts = read_json_file('static/cached_pair_addresses.json')
     ev_loop = asyncio.get_running_loop()
     # # # prepare for rate limit check
-    redis_storage = AsyncRedisStorage(await load_rate_limiter_scripts(redis_conn), redis_conn)
+    await load_rate_limiter_scripts(redis_conn)
+    redis_storage = AsyncRedisStorage(LUA_SCRIPT_SHAS, redis_conn)
     custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
     limit_incr_by = 1  # score to be incremented for each request
     app_id = settings.RPC.MATIC[0].split('/')[
@@ -301,7 +302,6 @@ async def get_aiohttp_cache() -> aiohttp.ClientSession:
 
 
 async def periodic_retrieval():
-    session = await get_aiohttp_cache()
     aioredis_pool = RedisPoolCache(pool_size=20)
     await aioredis_pool.populate()
     while True:
@@ -310,7 +310,6 @@ async def periodic_retrieval():
             asyncio.sleep(120)  # run atleast 'x' seconds not sleep for x seconds
         )
         retrieval_logger.debug('Completed one cycle of pair meta data cache.........')
-    session.close()
 
 
 def verifier_crash_cb(fut: asyncio.Future):

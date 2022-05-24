@@ -1,4 +1,4 @@
-from functools import wraps
+from httpx import AsyncClient
 from urllib.parse import urljoin
 from dynaconf import settings
 from eth_utils import keccak
@@ -12,7 +12,7 @@ from aio_pika.pool import Pool
 from functools import reduce
 from typing import Union, Dict
 import sys
-import os
+import resource
 import aioredis
 import requests
 import logging
@@ -47,7 +47,7 @@ async def get_rabbitmq_channel(connection_pool) -> aio_pika.Channel:
 class AuditProtocolCommandsHelper:
     @classmethod
     async def set_diff_rule_for_pair_reserves(
-            cls, pair_contract_address, session: aiohttp.ClientSession,
+            cls, pair_contract_address, session: AsyncClient,
             redis_conn: aioredis.Redis, stream='pair_total_reserves'
     ):
         project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
@@ -56,7 +56,7 @@ class AuditProtocolCommandsHelper:
             # retry below call given at settings.AUDIT_PROTOCOL_ENGINE.RETRY
             async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY)):
                 with attempt:
-                    async with session.post(
+                    response_obj = await session.post(
                             url=urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{project_id}/diffRules'),
                             json={
                                 'rules': [
@@ -93,28 +93,26 @@ class AuditProtocolCommandsHelper:
                                         "fieldType": "float"
                                     }
                                 ]
-                            },
-                            timeout=aiohttp.ClientTimeout(total=None, sock_read=settings.TIMEOUTS.ARCHIVAL,
-                                                          sock_connect=settings.TIMEOUTS.CONNECTION_INIT)
-                    ) as response_obj:
-                        response_status_code = response_obj.status
-                        response = await response_obj.json() or {}
-                        logger.debug('Response code on setting diff rule on audit protocol: %s', response_status_code)
-                        if response_status_code in range(200, 300):
-                            await redis_conn.sadd(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id)
-                            return {"message": f"success status code: {response_status_code}", "response": response}
-                        elif response_status_code == 500 or response_status_code == 502:
-                            return {
-                                "message": f"failed with status code: {response_status_code}", "response": response
-                            }  # ignore 500 and 502 errors
-                        else:
-                            raise Exception(
-                                'Failed audit protocol engine call with status code: {} and response: {}'.format(
-                                    response_status_code, response))
+                            }
+                    )
+                    response_status_code = response_obj.status_code
+                    response = response_obj.json() or {}
+                    logger.debug('Response code on setting diff rule on audit protocol: %s', response_status_code)
+                    if response_status_code in range(200, 300):
+                        await redis_conn.sadd(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id)
+                        return {"message": f"success status code: {response_status_code}", "response": response}
+                    elif response_status_code == 500 or response_status_code == 502:
+                        return {
+                            "message": f"failed with status code: {response_status_code}", "response": response
+                        }  # ignore 500 and 502 errors
+                    else:
+                        raise Exception(
+                            'Failed audit protocol engine call with status code: {} and response: {}'.format(
+                                response_status_code, response))
 
     @classmethod
     async def set_diff_rule_for_trade_volume(
-            cls, pair_contract_address, session: aiohttp.ClientSession,
+            cls, pair_contract_address, session: AsyncClient,
             redis_conn: aioredis.Redis = None, stream='trade_volume',
 
     ):
@@ -124,7 +122,7 @@ class AuditProtocolCommandsHelper:
             # retry below call given at settings.AUDIT_PROTOCOL_ENGINE.RETRY
             async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY)):
                 with attempt:
-                    async with session.post(
+                    response_obj = await session.post(
                             url=urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{project_id}/diffRules'),
                             json={
                                 'rules': [
@@ -156,21 +154,21 @@ class AuditProtocolCommandsHelper:
                                     }
                                 ]
                             }
-                    ) as response_obj:
-                        response_status_code = response_obj.status
-                        response = await response_obj.json() or {}
-                        logger.debug('Response code on setting diff rule on audit protocol: %s', response_status_code)
-                        if response_status_code in range(200, 300):
-                            await redis_conn.sadd(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id)
-                            return {"message": f"success status code: {response_status_code}", "response": response}
-                        elif response_status_code == 500 or response_status_code == 502:
-                            return {
-                                "message": f"failed with status code: {response_status_code}", "response": response
-                            }  # ignore 500 and 502 errors
-                        else:
-                            raise Exception(
-                                'Failed audit protocol engine call with status code: {} and response: {}'.format(
-                                    response_status_code, response))
+                    )
+                    response_status_code = response_obj.status_code
+                    response = response_obj.json() or {}
+                    logger.debug('Response code on setting diff rule on audit protocol: %s', response_status_code)
+                    if response_status_code in range(200, 300):
+                        await redis_conn.sadd(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id)
+                        return {"message": f"success status code: {response_status_code}", "response": response}
+                    elif response_status_code == 500 or response_status_code == 502:
+                        return {
+                            "message": f"failed with status code: {response_status_code}", "response": response
+                        }  # ignore 500 and 502 errors
+                    else:
+                        raise Exception(
+                            'Failed audit protocol engine call with status code: {} and response: {}'.format(
+                                response_status_code, response))
 
     @classmethod
     def set_commit_callback_url(cls, pair_contract_address, stream, redis_conn: aioredis.Redis):
@@ -187,29 +185,27 @@ class AuditProtocolCommandsHelper:
                 redis_conn.sadd(f'uniswap:{settings.NAMESPACE}:callbackURLSetFor', project_id)
 
     @classmethod
-    async def commit_payload(cls, pair_contract_address, stream, report_payload, session: aiohttp.ClientSession):
+    async def commit_payload(cls, pair_contract_address, stream, report_payload, session: AsyncClient):
         # retry below call given at settings.AUDIT_PROTOCOL_ENGINE.RETRY
         async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY)):
             with attempt:
                 project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
-                async with session.post(
+                response_obj = await session.post(
                         url=urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, 'commit_payload'),
-                        json={'payload': report_payload, 'projectId': project_id},
-                        timeout=aiohttp.ClientTimeout(total=None, sock_read=settings.TIMEOUTS.ARCHIVAL,
-                                                      sock_connect=settings.TIMEOUTS.CONNECTION_INIT)
-                ) as response_obj:
-                    response_status_code = response_obj.status
-                    response = await response_obj.json() or {}
-                    if response_status_code in range(200, 300):
-                        return response
-                    elif response_status_code == 500 or response_status_code == 502:
-                        return {
-                            "message": f"failed with status code: {response_status_code}", "response": response
-                        }  # ignore 500 and 502 errors
-                    else:
-                        raise Exception(
-                            'Failed audit protocol engine call with status code: {} and response: {}'.format(
-                                response_status_code, response))
+                        json={'payload': report_payload, 'projectId': project_id}
+                )
+                response_status_code = response_obj.status_code
+                response = response_obj.json() or {}
+                if response_status_code in range(200, 300):
+                    return response
+                elif response_status_code == 500 or response_status_code == 502:
+                    return {
+                        "message": f"failed with status code: {response_status_code}", "response": response
+                    }  # ignore 500 and 502 errors
+                else:
+                    raise Exception(
+                        'Failed audit protocol engine call with status code: {} and response: {}'.format(
+                            response_status_code, response))
 
 
 
@@ -303,8 +299,9 @@ class CallbackAsyncWorker(multiprocessing.Process):
 
     def run(self) -> None:
         setproctitle(self._unique_id)
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        resource.setrlimit(resource.RLIMIT_NOFILE, (settings['rlimit']['file_descriptors'], hard))
         # logging.config.dictConfig(config_logger_with_namespace(self.name))
-        setproctitle(self._unique_id)
         self._logger = logging.getLogger(self.name)
         self._logger.setLevel(logging.DEBUG)
         formatter = logging.Formatter(

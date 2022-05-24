@@ -1,4 +1,4 @@
-from exceptions import GenericExitOnSignal
+from httpx import AsyncClient
 from setproctitle import setproctitle
 from uniswap_functions import get_pair_contract_trades_async, get_liquidity_of_each_token_reserve_async
 from eth_utils import keccak
@@ -25,10 +25,8 @@ import queue
 import signal
 import redis
 import asyncio
-import aiohttp
 import json
 import logging
-import pika
 import time
 import multiprocessing
 
@@ -318,7 +316,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         await self.init_redis_pool()
         self._logger.debug('Got epoch to process for calculating total reserves for pair: %s', msg_obj)
 
-        self._aiohttp_session: aiohttp.ClientSession = await self._aiohttp_session_interface.get_aiohttp_cache
+        self._httpx_session_client: AsyncClient = await self._aiohttp_session_interface.get_httpx_session_client
         self._logger.debug('Got aiohttp session cache. Attempting to snapshot total reserves data in epoch %s...', msg_obj)
 
         pair_total_reserves_epoch_snapshot = await self._construct_pair_reserves_epoch_snapshot_data(msg_obj=msg_obj, enqueue_on_failure=True)
@@ -360,7 +358,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             await AuditProtocolCommandsHelper.set_diff_rule_for_pair_reserves(
                 pair_contract_address=pair_total_reserves_epoch_snapshot.contract,
                 stream='pair_total_reserves',
-                session=self._aiohttp_session,
+                session=self._httpx_session_client,
                 redis_conn=self._redis_conn
             )
             payload = pair_total_reserves_epoch_snapshot.dict()
@@ -369,7 +367,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                     pair_contract_address=pair_total_reserves_epoch_snapshot.contract,
                     stream='pair_total_reserves',
                     report_payload=payload,
-                    session=self._aiohttp_session
+                    session=self._httpx_session_client
                 )
             except Exception as e:
                 self._logger.error('Exception committing snapshot to audit protocol: %s | dump: %s',
@@ -471,7 +469,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             await AuditProtocolCommandsHelper.set_diff_rule_for_trade_volume(
                 pair_contract_address=msg_obj.contract,
                 stream='trade_volume',
-                session=self._aiohttp_session,
+                session=self._httpx_session_client,
                 redis_conn=self._redis_conn
             )
             payload = trade_vol_epoch_snapshot.dict()
@@ -480,7 +478,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                     pair_contract_address=msg_obj.contract,
                     stream='trade_volume',
                     report_payload=payload,
-                    session=self._aiohttp_session
+                    session=self._httpx_session_client
                 )
             except Exception as e:
                 self._logger.error('Exception committing snapshot to audit protocol: %s | dump: %s',
