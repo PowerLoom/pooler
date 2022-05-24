@@ -133,8 +133,8 @@ async def make_post_call_async(url: str, params: dict, session: aiohttp.ClientSe
                     can_request = False
                     break  # make sure to break once false condition is hit
             except (
-                    aioredis.errors.ConnectionClosedError, aioredis.errors.ConnectionForcedCloseError,
-                    aioredis.errors.PoolClosedError
+                    aioredis.exceptions.ConnectionError, aioredis.exceptions.ResponseError,
+                    aioredis.exceptions.RedisError, Exception
             ) as e:
                 # shit can happen while each limit check call hits Redis, handle appropriately
                 log_entry_logger.debug('Bypassing rate limit check for appID because of Redis exception: ' + str({'appID': app_id, 'exception': e}))

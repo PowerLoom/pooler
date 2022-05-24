@@ -784,8 +784,8 @@ async def get_trade_volume_epoch_price_map(loop, to_block, from_block, token_met
                     can_request = False
                     break  # make sure to break once false condition is hit
             except (
-                    aioredis.errors.ConnectionClosedError, aioredis.errors.ConnectionForcedCloseError,
-                    aioredis.errors.PoolClosedError
+                    aioredis.exceptions.ConnectionError, aioredis.exceptions.ResponseError,
+                    aioredis.exceptions.RedisError, Exception
             ) as e:
                 # shit can happen while each limit check call hits Redis, handle appropriately
                 logger.debug('Bypassing rate limit check for appID because of Redis exception: ' + str(
@@ -859,8 +859,8 @@ async def get_pair_contract_trades_async(
                     can_request = False
                     break  # make sure to break once false condition is hit
             except (
-                    aioredis.errors.ConnectionClosedError, aioredis.errors.ConnectionForcedCloseError,
-                    aioredis.errors.PoolClosedError
+                aioredis.exceptions.ConnectionError, aioredis.exceptions.ResponseError,
+                aioredis.exceptions.RedisError, Exception
             ) as e:
                 # shit can happen while each limit check call hits Redis, handle appropriately
                 logger.debug('Bypassing rate limit check for appID because of Redis exception: ' + str(
