@@ -277,7 +277,8 @@ async def cache_pair_stablecoin_exchange_rates(redis_conn: aioredis.Redis, rate_
                 pair_per_token_metadata = await get_pair_per_token_metadata(
                     pair_contract_obj=pair_contract_obj,
                     pair_address=Web3.toChecksumAddress(each_pair_contract),
-                    loop=ev_loop
+                    loop=ev_loop,
+                    redis_conn=redis_conn
                 )
                 retrieval_logger.debug("Got pair token meta-data for pair contract: %s", each_pair_contract)    
 
