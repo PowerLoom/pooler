@@ -65,6 +65,12 @@ def redis_cleanup_audit_protocol():
     except:
         pass
 
+    last_snapshots = r.hgetall('auditprotocol:lastSeenSnapshots')
+    last_snapshots = list(map(lambda x: x.decode('utf-8'), last_snapshots.keys()))
+    for k in last_snapshots:
+        if fnmatch.fnmatch(k,f'uniswap*{settings.NAMESPACE}*'):
+            r.hdel('auditprotocol:lastSeenSnapshots', k)
+
     # try:
     #     r.delete(*r.keys('payloadCommit:*'))
     # except:
@@ -104,12 +110,6 @@ def redis_cleanup_pooler_namespace():
         r.delete(*r.keys(f'*projectID*{settings.NAMESPACE}*'))
     except:
         pass
-
-    last_snapshots = r.hgetall('auditprotocol:lastSeenSnapshots')
-    last_snapshots = list(map(lambda x: x.decode('utf-8'), last_snapshots.keys()))
-    for k in last_snapshots:
-        if fnmatch.fnmatch(k,f'uniswap*{settings.NAMESPACE}*'):
-            r.hdel('auditprotocol:lastSeenSnapshots', k)
 
     try:
         r.delete(*r.keys(f'*uniswap:V2PairsSummarySnapshot*{settings.NAMESPACE}*snapshotsZset*'))
