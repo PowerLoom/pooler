@@ -431,6 +431,15 @@ def get_all_pairs_and_write_to_file():
         raise e
 
 
+async def get_maker_pair_data(prop):
+    prop = prop.lower()
+    if prop.lower() == "name":
+        return "Maker"
+    elif prop.lower() == "symbol":
+        return "MKR"
+    else:
+        return "Maker"
+
 async def get_pair_per_token_metadata(
         pair_contract_obj, pair_address,
         loop: asyncio.AbstractEventLoop,
@@ -480,12 +489,21 @@ async def get_pair_per_token_metadata(
             token1_name = pair_tokens_data[b"token1_name"].decode('utf-8')
         else:
             executor_gather = list()
-            executor_gather.append(loop.run_in_executor(func=token0.functions.name().call, executor=None))
-            executor_gather.append(loop.run_in_executor(func=token0.functions.symbol().call, executor=None))
+            if(Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.MAKER) == Web3.toChecksumAddress(token0Addr)):
+                executor_gather.append(get_maker_pair_data('name'))
+                executor_gather.append(get_maker_pair_data('symbol'))
+            else:
+                executor_gather.append(loop.run_in_executor(func=token0.functions.name().call, executor=None))
+                executor_gather.append(loop.run_in_executor(func=token0.functions.symbol().call, executor=None))
             executor_gather.append(loop.run_in_executor(func=token0.functions.decimals().call, executor=None))
 
-            executor_gather.append(loop.run_in_executor(func=token1.functions.name().call, executor=None))
-            executor_gather.append(loop.run_in_executor(func=token1.functions.symbol().call, executor=None))
+
+            if(Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.MAKER) == Web3.toChecksumAddress(token1Addr)):
+                executor_gather.append(get_maker_pair_data('name'))
+                executor_gather.append(get_maker_pair_data('symbol'))
+            else:
+                executor_gather.append(loop.run_in_executor(func=token1.functions.name().call, executor=None))
+                executor_gather.append(loop.run_in_executor(func=token1.functions.symbol().call, executor=None))
             executor_gather.append(loop.run_in_executor(func=token1.functions.decimals().call, executor=None))
 
             [
