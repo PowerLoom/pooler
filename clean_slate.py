@@ -4,9 +4,17 @@ from dynaconf import settings
 import json
 import fnmatch
 import ipfshttpclient
+import argparse
 
 
 client = ipfshttpclient.connect(addr=settings['ipfs_url'], session=True)
+# Define the parser
+parser = argparse.ArgumentParser(description='clean slate script')
+parser.add_argument(
+    '--ipfs', action=argparse.BooleanOptionalAction, type=bool, dest='ipfs', 
+    default=False, help='cleanup ipfs keys'
+)
+args = parser.parse_args()
 
 # with open('settings.json', 'r') as f:
 #     d = json.load(f)
@@ -40,8 +48,20 @@ def redis_cleanup_audit_protocol():
         pass
 
     try:
-        c = r.delete(*r.keys(f'*uniswap:pairContract*{settings.NAMESPACE}*'))
+        c = r.delete(*r.keys(f'*uniswap*pairContract*{settings.NAMESPACE}*'))
         print('Other Pair contract related keys deleted: ', c)
+    except:
+        pass
+
+    try:
+        c = r.delete(*r.keys(f'*{settings.NAMESPACE}*dagVerificationStatus*'))
+        print('Dag chain verification keys deleted: ', c)
+    except:
+        pass
+
+    try:
+        c = r.delete(*r.keys(f'*uniswap*PairsSummarySnapshot*{settings.NAMESPACE}*'))
+        print('Pair summary snapshots key deleted: ', c)
     except:
         pass
 
@@ -93,12 +113,6 @@ def redis_cleanup_pooler_namespace():
 
     try:
         r.delete(*r.keys(f'*uniswap:V2PairsSummarySnapshot*{settings.NAMESPACE}*snapshotsZset*'))
-    except:
-        pass
-
-    try:
-        c = r.delete(*r.keys(f'*{settings.NAMESPACE}*dagVerificationStatus*'))
-        print('Dag chain verification keys deleted: ', c)
     except:
         pass
 
@@ -205,8 +219,9 @@ def cleanup_ipfs():
 
 
 if __name__ == '__main__':
-    print("\n\n## Starting ipfs cleanup...")
-    cleanup_ipfs()
+    if args.ipfs:
+        print("\n\n## Starting ipfs cleanup...")
+        cleanup_ipfs()
     print(f"\n\n## Starting {settings.NAMESPACE} pooler cleanup...")
     redis_cleanup_pooler_namespace()
     print("\n\n## Starting audit-protocol specific cleanup...")
