@@ -340,6 +340,7 @@ async def eth_get_logs_async(
         return None, { 'error': str(err), 'contract': contract_address, "requestId": requestId}
 
 
+# TODO: remove dependency on singular redis conn supplier
 @provide_async_redis_conn_insta
 async def ethLogWorker(
     loop,

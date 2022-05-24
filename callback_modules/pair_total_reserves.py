@@ -215,7 +215,8 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 ev_loop=asyncio.get_running_loop(),
                 pair_address=msg_obj.contract,
                 from_block=from_block,
-                to_block=to_block
+                to_block=to_block,
+                redis_conn=self._redis_conn
             )
         except Exception as e:
             if enqueue_on_failure:

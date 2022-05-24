@@ -211,27 +211,6 @@ async def store_price_at_block_range(begin_block, end_block, token0, token1, pri
     )
     return len(block_prices)
 
-@provide_async_redis_conn_insta
-async def get_price_at_block_height_in_zset(token0, token1, block_number, redis_conn: aioredis.Redis=None):
-    
-    # get the price at the given block height
-    price = await redis_conn.zrangebyscore(
-        name=uniswap_pair_cached_block_height_token_price.format(f"{token0}-{token1}"),
-        min=block_number,
-        max=block_number
-    )
-
-    # if price is not found, then return lastest price available for token
-    if not price:
-        price = await redis_conn.zrevrange(
-            name=uniswap_pair_cached_block_height_token_price.format(f"{token0}-{token1}"),
-            start=0,
-            end=0
-        )
-
-    price = json.loads(price[0]) if price else None
-    return price
-
 
 async def extract_recent_transaction_logs(ev_loop, event_name, event_logs, pair_per_token_metadata, token0_price_map, token1_price_map):
     """
@@ -452,9 +431,11 @@ def get_all_pairs_and_write_to_file():
         raise e
 
 
-@provide_async_redis_conn_insta
-async def get_pair_per_token_metadata(pair_contract_obj, pair_address, loop: asyncio.AbstractEventLoop,
-                                      redis_conn: aioredis.Redis = None):
+async def get_pair_per_token_metadata(
+        pair_contract_obj, pair_address,
+        loop: asyncio.AbstractEventLoop,
+        redis_conn: aioredis.Redis
+):
     """
         returns information on the tokens contained within a pair contract - name, symbol, decimals of token0 and token1
         also returns pair symbol by concatenating {token0Symbol}-{token1Symbol}
@@ -811,7 +792,6 @@ async def get_trade_volume_epoch_price_map(loop, to_block, from_block, token_met
 
 
 # asynchronously get trades on a pair contract
-@provide_async_redis_conn_insta
 @retry(
     reraise=True, 
     retry=retry_if_exception_type(RPCException), 
@@ -823,8 +803,8 @@ async def get_pair_contract_trades_async(
     pair_address,
     from_block,
     to_block,
-    fetch_timestamp=True,
-    redis_conn: aioredis.Redis = None
+    redis_conn: aioredis.Redis,
+    fetch_timestamp=True
 ):
     try:
         pair_address = Web3.toChecksumAddress(pair_address)
@@ -882,7 +862,8 @@ async def get_pair_contract_trades_async(
             pair_per_token_metadata = await get_pair_per_token_metadata(
                 pair_contract_obj=pair,
                 pair_address=pair_address,
-                loop=ev_loop
+                loop=ev_loop,
+                redis_conn=redis_conn
             )
             token0_price_map, token1_price_map = await asyncio.gather(
                 get_trade_volume_epoch_price_map(loop=ev_loop, to_block=to_block, from_block=from_block, token_metadata=pair_per_token_metadata['token0'], redis_conn=redis_conn),

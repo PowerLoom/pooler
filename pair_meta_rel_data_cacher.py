@@ -10,7 +10,7 @@ from web3 import Web3
 from async_limits.strategies import AsyncFixedWindowRateLimiter
 from async_limits.storage import AsyncRedisStorage
 from async_limits import parse_many as limit_parse_many
-from redis_conn import provide_async_redis_conn_insta
+from redis_conn import RedisPoolCache
 from tenacity import Retrying, wait_random_exponential, stop_after_attempt
 import aioredis
 import time
@@ -54,8 +54,7 @@ router_contract_obj = w3.eth.contract(
 retrieval_logger.debug("Got uniswap v2 router object")
 
 
-@provide_async_redis_conn_insta
-async def cache_pair_meta_data(redis_conn: aioredis.Redis = None):
+async def cache_pair_meta_data(redis_conn: aioredis.Redis):
     try:
         # TODO: we can cache cached_pair_addresses content with expiry date
 
@@ -108,7 +107,8 @@ async def cache_pair_meta_data(redis_conn: aioredis.Redis = None):
                     x = await get_pair_per_token_metadata(
                         pair_contract_obj=pair,
                         pair_address=Web3.toChecksumAddress(pair_address),
-                        loop=asyncio.get_running_loop()
+                        loop=asyncio.get_running_loop(),
+                        redis_conn=redis_conn
                     )
                     # retrieval_logger.debug('Got pair contract per token metadata: %s', x)
                 except Exception as e:
@@ -220,15 +220,14 @@ async def get_token_price_against_stablecoins(pair_per_token_metadata, ev_loop, 
 
     return [token0_USD_price, token1_USD_price, WETH_USD_price]
 
-#settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS
+
 @tenacity.retry(
     wait=tenacity.wait_random_exponential(multiplier=1, min=10, max=60),
     stop=stop_after_attempt(1),
     reraise=True
 )
-@provide_async_redis_conn_insta
-async def cache_pair_stablecoin_exchange_rates(redis_conn: aioredis.Redis = None):
-    await cache_pair_meta_data()
+async def cache_pair_stablecoin_exchange_rates(redis_conn: aioredis.Redis):
+    await cache_pair_meta_data(redis_conn)
     all_pair_contracts = read_json_file('static/cached_pair_addresses.json')
     ev_loop = asyncio.get_running_loop()
     # # # prepare for rate limit check
@@ -300,11 +299,14 @@ async def get_aiohttp_cache() -> aiohttp.ClientSession:
     aiohttp_client_basic_rpc_session = aiohttp.ClientSession(connector=basic_rpc_connector)
     return aiohttp_client_basic_rpc_session
 
+
 async def periodic_retrieval():
     session = await get_aiohttp_cache()
+    aioredis_pool = RedisPoolCache(pool_size=20)
+    await aioredis_pool.populate()
     while True:
         await asyncio.gather(
-            cache_pair_stablecoin_exchange_rates(),
+            cache_pair_stablecoin_exchange_rates(redis_conn=aioredis_pool._aioredis_pool),
             asyncio.sleep(120)  # run atleast 'x' seconds not sleep for x seconds
         )
         retrieval_logger.debug('Completed one cycle of pair meta data cache.........')
