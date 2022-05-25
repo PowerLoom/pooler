@@ -1,5 +1,5 @@
 import threading
-
+import uuid
 from exceptions import SelfExitException, GenericExitOnSignal
 from redis_conn import provide_redis_conn
 from threading import Thread
@@ -81,46 +81,52 @@ class ProcessHubCore(Process):
                 callback_worker_module_file = None
                 callback_worker_class = None
                 callback_worker_name = None
-                for k, v in self._spawned_cb_processes_map.items():
-                    if v['process'].pid == pid:
-                        self._logger.debug(
-                            'Found crashed child process PID in spawned callback workers | Callback worker class: %s ',
-                            k
-                        )
-                        callback_worker_class = k
-                        for each_cb_worker_module_file, worker_type_list in CALLBACK_WORKERS_MAP.items():
+                callback_worker_unique_id = None
+                for k, worker_unique_id_entries in self._spawned_cb_processes_map.items():
+                    for unique_id, worker_process_details in worker_unique_id_entries.items():
+                        if worker_process_details['process'].pid == pid:
                             self._logger.debug(
-                                'Searching callback workers specified in module %s for worker class %s details',
-                                each_cb_worker_module_file, callback_worker_class
+                                'Found crashed child process PID in spawned callback workers | '
+                                'Callback worker class: %s | Unique worker identifier: %s',
+                                k, worker_process_details['id']
                             )
-                            if type(worker_type_list) is list:
-                                gen = (x for x in worker_type_list if x['class'] == callback_worker_class)
-                                worker_details = next(gen, None)
-                                if worker_details:
-                                    callback_worker_module_file = each_cb_worker_module_file
-                                    callback_worker_name = worker_details['name']
-                                    self._logger.debug(
-                                        'Found callback worker process initiation name %s for worker class %s',
-                                        callback_worker_name, callback_worker_class
-                                    )
-                                    break
+                            callback_worker_class = k
+                            callback_worker_name = worker_process_details['id']
+                            callback_worker_unique_id = unique_id
+                            for each_cb_worker_module_file, worker_type_list in CALLBACK_WORKERS_MAP.items():
+                                self._logger.debug(
+                                    'Searching callback workers specified in module %s for worker class %s details',
+                                    each_cb_worker_module_file, callback_worker_class
+                                )
+                                if type(worker_type_list) is list:
+                                    gen = (x for x in worker_type_list if x['class'] == callback_worker_class)
+                                    worker_details = next(gen, None)
+                                    if worker_details:
+                                        callback_worker_module_file = each_cb_worker_module_file
+                                        self._logger.debug(
+                                            'Found callback worker process initiation name %s for worker class %s',
+                                            callback_worker_name, callback_worker_class
+                                        )
+                                        break
 
-                if callback_worker_module_file and callback_worker_class and callback_worker_name:
+                if callback_worker_module_file and callback_worker_class and callback_worker_name \
+                        and callback_worker_unique_id:
                     worker_class = getattr(importlib.import_module(f'callback_modules.{callback_worker_module_file}'),
                                            callback_worker_class)
                     worker_obj: Process = worker_class(name=callback_worker_name)
                     worker_obj.start()
-                    self._spawned_cb_processes_map[callback_worker_class] = {
-                        'id': worker_obj.name, 'process': worker_obj
+                    self._spawned_cb_processes_map[callback_worker_class][callback_worker_unique_id] = {
+                        'id': callback_worker_name, 'process': worker_obj
                     }
                     self._logger.debug(
-                        'Respawned callback worker class %s with PID %s after receiving crash signal against PID %s',
-                        callback_worker_class, worker_obj.pid, pid
+                        'Respawned callback worker class %s unique ID %s '
+                        'with PID %s after receiving crash signal against PID %s',
+                        callback_worker_class, callback_worker_unique_id, worker_obj.pid, pid
                     )
                     return
                         
-                for k, v in self._spawned_processes_map.items():
-                    if v != -1 and v.pid == pid:
+                for k, worker_unique_id in self._spawned_processes_map.items():
+                    if worker_unique_id != -1 and worker_unique_id.pid == pid:
                         self._logger.debug('RESPAWNING: process for %s', k)
                         proc_details: dict = PROC_STR_ID_TO_CLASS_MAP.get(k)
                         init_kwargs = dict(name=proc_details['name'])
@@ -167,9 +173,10 @@ class ProcessHubCore(Process):
                 else:
                     proc_id_map[k] = -1
             proc_id_map['callback_workers'] = dict()
-            for k, v in self._spawned_cb_processes_map.items():
-                if v:
-                    proc_id_map['callback_workers'][k] = {'pid': v['process'].pid, 'id': v['id']}
+            for k, unique_worker_entries in self._spawned_cb_processes_map.items():
+                proc_id_map['callback_workers'][k] = dict()
+                for worker_unique_id, worker_process_details in unique_worker_entries.items():
+                    proc_id_map['callback_workers'][k][worker_unique_id] = {'pid': worker_process_details['process'].pid, 'id': worker_process_details['id']}
             proc_id_map['callback_workers'] = json.dumps(proc_id_map['callback_workers'])
             redis_conn.hset(name=f'powerloom:uniswap:{settings.NAMESPACE}:Processes', mapping=proc_id_map)
         self._logger.error('Caught thread shutdown notification event. Deleting process worker map in redis...')
@@ -198,11 +205,16 @@ class ProcessHubCore(Process):
             self._logger.debug('='*80)
             self._logger.debug('Launching workers for functionality %s', callback_worker_file)
             for each_worker in worker_list:
-                print(each_worker)
+                # print(each_worker)
                 worker_class = getattr(importlib.import_module(f'callback_modules.{callback_worker_file}'), each_worker['class'])
-                worker_obj: Process = worker_class(name=each_worker['name'])
-                worker_obj.start()
-                self._spawned_cb_processes_map[each_worker['class']] = {'id': worker_obj.name, 'process': worker_obj}
+                worker_count = each_worker.get('num_instances', 1)
+                self._spawned_cb_processes_map[each_worker['class']] = dict()
+                for _ in range(worker_count):
+                    unique_id = str(uuid.uuid4())[:5]
+                    unique_name = each_worker['name']+'-'+unique_id
+                    worker_obj: Process = worker_class(name=unique_name)
+                    worker_obj.start()
+                    self._spawned_cb_processes_map[each_worker['class']].update({unique_id: {'id': unique_name, 'process': worker_obj}})
                 # self._spawned_processes_map[each_worker['name']] = worker_obj
                 self._logger.debug('Process Hub Core launched process for callback worker %s with PID: %s', each_worker['class'], worker_obj.pid)
             self._logger.debug('='*80)

@@ -12,7 +12,8 @@
       },
       {
         "class": "PairTotalReservesProcessor",
-        "name": "PowerLoom|UniswapPooler|Callbacks|PairTotalReservesProcessor"
+        "name": "PowerLoom|UniswapPooler|Callbacks|PairTotalReservesProcessor",
+        "num_instances": 8
       }
     ]
   }

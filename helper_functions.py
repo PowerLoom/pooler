@@ -165,18 +165,20 @@ def cleanup_children_procs(fn):
             #     logging.error(f'killing process: {p.name()}')
             #     p.kill()
             logging.error('Waiting on spawned callback workers to join...')
-            for k, v in self._spawned_cb_processes_map.items():
-                if v['process'].pid:
-                    logging.error('Waiting on spawned callback worker %s | PID %s  to join...', k, v['process'].pid)
-                    v['process'].join()
+            for worker_class_name, unique_worker_entries in self._spawned_cb_processes_map.items():
+                for worker_unique_id, worker_unique_process_details in unique_worker_entries.items():
+                    if worker_unique_process_details['process'].pid:
+                        logging.error('Waiting on spawned callback worker %s | Unique ID %s | PID %s  to join...',
+                                      worker_class_name, worker_unique_id, worker_unique_process_details['process'].pid)
+                        worker_unique_process_details['process'].join()
 
             logging.error('Waiting on spawned core workers to join... %s',self._spawned_processes_map)
-            for k, v in self._spawned_processes_map.items():
-                logging.error('spawned Process Pid to wait on %s',v.pid)
+            for worker_class_name, unique_worker_entries in self._spawned_processes_map.items():
+                logging.error('spawned Process Pid to wait on %s',unique_worker_entries.pid)
                 # internal state reporter might set proc_id_map[k] = -1
-                if v != -1:
-                    logging.error('Waiting on spawned core worker %s | PID %s  to join...', k, v.pid)
-                    v.join()
+                if unique_worker_entries != -1:
+                    logging.error('Waiting on spawned core worker %s | PID %s  to join...', worker_class_name, unique_worker_entries.pid)
+                    unique_worker_entries.join()
             logging.error('Finished waiting for all children...now can exit.')
         finally:
             logging.error('Finished waiting for all children...now can exit.')
