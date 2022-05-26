@@ -547,14 +547,25 @@ async def get_pair_per_token_metadata(
         logger.error(f"RPC error while fetcing metadata for pair {pair_address}, error_msg:{e}", exc_info=True)
         return {}
 
-
-async def get_token_price_at_block_height(token_contract_obj, token_metadata, block_height, loop: asyncio.AbstractEventLoop, debug_log=True):
+async def get_token_price_at_block_height(token_contract_obj, token_metadata, block_height, loop: asyncio.AbstractEventLoop, redis_conn, debug_log=True):
     """
         returns the price of a token at a given block height
     """
     try:
         token_price = 0
-
+        
+        if block_height != 'latest':
+            cached_price = await redis_conn.zrangebyscore(
+                name=uniswap_pair_cached_block_height_token_price.format(Web3.toChecksumAddress(token_metadata['address'])),
+                min=int(block_height),
+                max=int(block_height)
+            )
+            cached_price = cached_price[0].decode('utf-8') if len(cached_price) > 0 else False
+            if cached_price:
+                token_price = json.loads(cached_price) 
+                return token_price
+        
+        # else fetch from rpc
         stable_coins_addresses = {
             "USDC": Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDC),
             "DAI": Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.DAI),
@@ -703,10 +714,16 @@ async def get_token_price_at_block_height(token_contract_obj, token_metadata, bl
             if debug_log:
                 logger.debug(f"Calculated prices for token0: {token_metadata['symbol']} - USDT conversion: {token_price}")
 
+        # cache price at height
+        if block_height != 'latest':
+            await redis_conn.zadd(
+                name=uniswap_pair_cached_block_height_token_price.format(Web3.toChecksumAddress(token_metadata['address'])),
+                mapping={token_price: int(block_height)} # timestamp so zset do not ignore same height on multiple heights
+            )
     except Exception as err:
         logger.error(f"Error: failed to fetch token price | error_msg: {str(err)} | contract: {token_metadata['address']}")
     finally:
-        return float(token_price) 
+        return float(token_price)
 
 
 # asynchronously get liquidity of each token reserve
@@ -797,8 +814,8 @@ async def get_liquidity_of_each_token_reserve_async(
                 with attempt:
                     executor_gather = list()
                     executor_gather.append(loop.run_in_executor(func=pfunc_get_reserves, executor=None))
-                    executor_gather.append(get_token_price_at_block_height(router_contract_obj, pair_per_token_metadata['token0'], block_identifier, loop))
-                    executor_gather.append(get_token_price_at_block_height(router_contract_obj, pair_per_token_metadata['token1'], block_identifier, loop))
+                    executor_gather.append(get_token_price_at_block_height(router_contract_obj, pair_per_token_metadata['token0'], block_identifier, loop, redis_conn))
+                    executor_gather.append(get_token_price_at_block_height(router_contract_obj, pair_per_token_metadata['token1'], block_identifier, loop, redis_conn))
                     [
                         reserves, token0Price, token1Price
                     ] = await asyncio.gather(*executor_gather)
@@ -901,7 +918,7 @@ async def get_trade_volume_epoch_price_map(
             try:
                 async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(3), wait=wait_random(1, 2)):
                     with attempt:
-                        price = await get_token_price_at_block_height(router_contract_obj, token_metadata, block, loop, debug_log)
+                        price = await get_token_price_at_block_height(router_contract_obj, token_metadata, block, loop, redis_conn, debug_log)
                         price_map[block] = price
                         if price:
                             break
@@ -1114,14 +1131,14 @@ if __name__ == '__main__':
     # rate_limit_lua_script_shas = dict()
     # loop = asyncio.get_event_loop()
     # data = loop.run_until_complete(
-    #     get_pair_contract_trades_async(loop,rate_limit_lua_script_shas, '0x9fae36a18ef8ac2b43186ade5e2b07403dc742b1', 14841463, 14841463)
+    #     get_pair_contract_trades_async(loop, rate_limit_lua_script_shas, '0x9fae36a18ef8ac2b43186ade5e2b07403dc742b1', 14841463, 14841463)
     # )
 
     # loop = asyncio.get_event_loop()
+    # rate_limit_lua_script_shas = dict()
     # data = loop.run_until_complete(
-    #     get_liquidity_of_each_token_reserve_async(loop, '0xbb2b8038a1640196fbe3e38816f3e67cba72d940')
+    #     get_liquidity_of_each_token_reserve_async(loop, rate_limit_lua_script_shas, '0xdf42388059692150d0a9de836e4171c7b9c09cbf')
     # )
 
-    # print(f"\n\n{data}\n")
-
+    #print(f"\n\n{data}\n")
     pass
