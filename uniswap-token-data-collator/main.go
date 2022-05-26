@@ -106,13 +106,21 @@ func Run(pairContractAddress string) {
 }
 
 func FetchAndFillTokenMetaData(tokenList map[string]TokenData,
-	pairContractAddr string) (TokenData, TokenData, error) {
+	pairContractAddr string, blockHeight int) (TokenData, TokenData, error) {
 	var token0Data, token1Data TokenData
 	redisKey := fmt.Sprintf(REDIS_KEY_TOKEN_PAIR_CONTRACT_TOKENS_DATA, pairContractAddr)
 	log.Debug("Fetching PariContractTokensData from redis with key:", redisKey)
 	tokenPairMeta, err := redisClient.HGetAll(redisKey).Result()
 	if err != nil {
 		log.Error("Failed to get tokenPair MetaData from redis for PairContract:", pairContractAddr)
+		return token0Data, token1Data, err
+	}
+
+	//Use tokenContractAddress to store tokenData as tokenSymbol is not gauranteed to be unique.
+	redisKey = fmt.Sprintf(REDIS_KEY_PAIR_TOKEN_ADDRESSES, settingsObj.Development.Namespace, pairContractAddr)
+	tokenContractAddresses, err := redisClient.HGetAll(redisKey).Result()
+	if err != nil {
+		log.Error("Failed to get token Contract Addresses from redis for PairContract:", pairContractAddr)
 		return token0Data, token1Data, err
 	}
 
@@ -129,13 +137,11 @@ func FetchAndFillTokenMetaData(tokenList map[string]TokenData,
 
 	//Fetching from redis for now where price is stored against USDT for each token.
 	if token0Data.Price == 0 || token1Data.Price == 0 {
-		//Fetch token price against USDT for calculations.
-		t0Price, t1Price := FetchTokenPairUSDTPriceFromRedis(token0Data.Symbol, token1Data.Symbol)
-		if token0Data.Price == 0 && t0Price != 0 {
-			token0Data.Price = t0Price
+		if token0Data.Price == 0 {
+			token0Data.Price = FetchTokenPriceAtBlockHeight(tokenContractAddresses["token0Addr"], blockHeight)
 		}
-		if token1Data.Price == 0 && t1Price != 0 {
-			token1Data.Price = t1Price
+		if token1Data.Price == 0 {
+			token1Data.Price = FetchTokenPriceAtBlockHeight(tokenContractAddresses["token1Addr"], blockHeight)
 		}
 
 	}
@@ -291,28 +297,19 @@ func FetchTokenV2Data(fromTime float64) map[string]TokenData {
 		//TODO: Optimize: This fetch can be done once during init and whenver dynamic reload to re-read contract address pairs is implemented.
 		var token0Data, token1Data TokenData
 		var err error
-		token0Data, token1Data, err = FetchAndFillTokenMetaData(tokenList, pairContractAddr)
-		if err != nil {
-			continue
-		}
-		//Calculate price change in last 24h
-		//Get last 288th index price and substract it.
-		//CalculateAndFillPriceChange(&token0Data, &token1Data)
-
-		//Fetch Last block height.
-		/*lastBlockHeight := FetchLastBlockHeight(strings.ToLower(pairContractAddress))
-		if lastBlockHeight == 0 {
-			log.Error("Skipping this pair as could not get blockheight")
-			continue
-		}*/
 
 		// this is only for pair_total_reserves, because we want to capture latest reserves.
 		//token0Liquidity, token1Liquidity, err := FetchLatestPairTotalReserves(strings.ToLower(pairContractAddress), int(lastBlockHeight), int(lastBlockHeight))
 		tokenPairProcessedData, err := FetchLatestPairCachedDataFromRedis(pairContractAddr)
 		if err != nil {
-			//TODO: If this happens only for 1 pair..total liquidity will be skewed.Need to handle.
-			log.Error("Not updating liquidity for this pairContract as..unable to fetch even after max retries.", pairContractAddress)
+			log.Errorf("Unable to fetch tokenData for this pairContract %s even after max retries. Skipping this cycle of tokenData collation.",
+				pairContractAddress)
+			return make(map[string]TokenData)
 		} else {
+			token0Data, token1Data, err = FetchAndFillTokenMetaData(tokenList, pairContractAddr, tokenPairProcessedData.Block_height)
+			if err != nil {
+				continue
+			}
 			token0Data.Liquidity += tokenPairProcessedData.Token0Liquidity
 			token0Data.LiquidityUSD += tokenPairProcessedData.Token0LiquidityUSD
 
@@ -358,6 +355,7 @@ func FetchTokenV2Data(fromTime float64) map[string]TokenData {
 			delete(tokenList, key)
 		}
 	}
+
 	return tokenList
 }
 
@@ -414,6 +412,40 @@ func PrunePriceHistoryInRedis(key string, fromTime float64) {
 		log.Error("Pruning entries at key:", key, "failed with error:", res.Err().Error())
 	}
 	log.Debug("Pruning: Removed ", res.Val(), " entries in redis Zset at key:", key)
+}
+
+func PruneTokenPriceZSet(tokenContractAddr string, blockHeight int) {
+	redisKey := fmt.Sprintf(REDIS_KEY_TOKEN_BLOCK_HEIGHT_PRICE, settingsObj.Development.Namespace, tokenContractAddr)
+	res := redisClient.ZRemRangeByScore(
+		redisKey,
+		"-inf",
+		fmt.Sprintf("%d", blockHeight))
+	if res.Err() != nil {
+		log.Error("Pruning entries at key:", redisKey, "failed with error:", res.Err().Error())
+	}
+	log.Debug("Pruning: Removed ", res.Val(), " entries in redis Zset at key:", redisKey)
+}
+
+func FetchTokenPriceAtBlockHeight(tokenContractAddr string, blockHeight int) float64 {
+
+	redisKey := fmt.Sprintf(REDIS_KEY_TOKEN_BLOCK_HEIGHT_PRICE, settingsObj.Development.Namespace, tokenContractAddr)
+	zRangeByScore := redisClient.ZRangeByScore(redisKey, redis.ZRangeBy{
+		Min: fmt.Sprintf("%d", blockHeight),
+		Max: fmt.Sprintf("%d", blockHeight),
+	})
+	if zRangeByScore.Err() != nil {
+		log.Error("Could not fetch tokenPrice for contract ", tokenContractAddr, " at BlockHeight error: ",
+			zRangeByScore.Err().Error(), "blockHeight:", blockHeight)
+		return 0
+	}
+	tokenPrice, err := strconv.ParseFloat(zRangeByScore.Val()[0], 64)
+	if err != nil {
+		log.Fatalf("Unable to parse tokenPrice retrieved from redis key %s error is %+v", redisKey, err)
+		return 0
+	}
+	log.Debugf("Fetched tokenPrice %f for tokenContract %s at blockHeight %d", tokenPrice, tokenContractAddr, blockHeight)
+	PruneTokenPriceZSet(tokenContractAddr, blockHeight)
+	return tokenPrice
 }
 
 func FetchLatestPairCachedDataFromRedis(pairContractAddress string) (TokenPairLiquidityProcessedData, error) {
