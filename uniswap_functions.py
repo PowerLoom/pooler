@@ -889,6 +889,18 @@ async def get_trade_volume_epoch_price_map(
     
     price_map = {}
     for block in range(from_block, to_block + 1):
+        if block != 'latest':
+            cached_price = await redis_conn.zrangebyscore(
+                name=uniswap_pair_cached_block_height_token_price.format(Web3.toChecksumAddress(token_metadata['address'])),
+                min=int(block),
+                max=int(block)
+            )
+            cached_price = cached_price[0].decode('utf-8') if len(cached_price) > 0 else False
+            if cached_price:
+                cached_price = json.loads(cached_price)
+                price_map[block] = cached_price['price']
+                continue
+
         # TODO: refactor rate limit check into something modular and easier to use
         # # # rate limit check - begin
         can_request = False
@@ -1144,5 +1156,5 @@ if __name__ == '__main__':
     #     get_liquidity_of_each_token_reserve_async(loop, rate_limit_lua_script_shas, '0xdf42388059692150d0a9de836e4171c7b9c09cbf')
     # )
 
-    print(f"\n\n{data}\n")
+    # print(f"\n\n{data}\n")
     pass
