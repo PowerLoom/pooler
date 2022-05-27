@@ -562,7 +562,8 @@ async def get_token_price_at_block_height(token_contract_obj, token_metadata, bl
             )
             cached_price = cached_price[0].decode('utf-8') if len(cached_price) > 0 else False
             if cached_price:
-                token_price = json.loads(cached_price) 
+                cached_price = json.loads(cached_price)
+                token_price = cached_price['price'] 
                 return token_price
         
         # else fetch from rpc
@@ -718,7 +719,10 @@ async def get_token_price_at_block_height(token_contract_obj, token_metadata, bl
         if block_height != 'latest':
             await redis_conn.zadd(
                 name=uniswap_pair_cached_block_height_token_price.format(Web3.toChecksumAddress(token_metadata['address'])),
-                mapping={token_price: int(block_height)} # timestamp so zset do not ignore same height on multiple heights
+                mapping={json.dumps({
+                    'blockHeight': block_height,
+                    'price': token_price
+                }): int(block_height)} # timestamp so zset do not ignore same height on multiple heights
             )
     except Exception as err:
         logger.error(f"Error: failed to fetch token price | error_msg: {str(err)} | contract: {token_metadata['address']}")
@@ -1131,7 +1135,7 @@ if __name__ == '__main__':
     # rate_limit_lua_script_shas = dict()
     # loop = asyncio.get_event_loop()
     # data = loop.run_until_complete(
-    #     get_pair_contract_trades_async(loop, rate_limit_lua_script_shas, '0x9fae36a18ef8ac2b43186ade5e2b07403dc742b1', 14841463, 14841463)
+    #     get_pair_contract_trades_async(loop, rate_limit_lua_script_shas, '0x9fae36a18ef8ac2b43186ade5e2b07403dc742b1', 14841443, 14841463)
     # )
 
     # loop = asyncio.get_event_loop()
@@ -1140,5 +1144,5 @@ if __name__ == '__main__':
     #     get_liquidity_of_each_token_reserve_async(loop, rate_limit_lua_script_shas, '0xdf42388059692150d0a9de836e4171c7b9c09cbf')
     # )
 
-    #print(f"\n\n{data}\n")
+    print(f"\n\n{data}\n")
     pass
