@@ -28,7 +28,7 @@ const settingsFile string = "../settings.json"
 const pairContractListFile string = "../static/cached_pair_addresses.json"
 
 //TODO: Move the below to config file.
-const periodicRetrievalInterval time.Duration = 300 * time.Second
+const periodicRetrievalInterval time.Duration = 120 * time.Second
 
 //const maxBlockCountToFetch int64 = 500 //Max number of blocks to fetch in 1 shot from Audit Protocol.
 
@@ -126,16 +126,17 @@ func FetchAndFillTokenMetaData(tokenList map[string]TokenData,
 
 	token0Sym := tokenPairMeta["token0_symbol"]
 	log.Debug("Fetched tokenPairMetadata from redis:", tokenPairMeta, "token0:", tokenPairMeta["token0_symbol"])
-	token0Data = tokenList[token0Sym]
+	token0Data = tokenList[tokenContractAddresses["token0Addr"]]
 	token0Data.Symbol = token0Sym
 	token0Data.Name = tokenPairMeta["token0_name"]
-
+	token0Data.ContractAddress = tokenContractAddresses["token0Addr"]
 	token1Sym := tokenPairMeta["token1_symbol"]
-	token1Data = tokenList[token1Sym]
+
+	token1Data = tokenList[tokenContractAddresses["token1Addr"]]
 	token1Data.Symbol = token1Sym
 	token1Data.Name = tokenPairMeta["token1_name"]
+	token1Data.ContractAddress = tokenContractAddresses["token1Addr"]
 
-	//Fetching from redis for now where price is stored against USDT for each token.
 	if token0Data.Price == 0 || token1Data.Price == 0 {
 		if token0Data.Price == 0 {
 			token0Data.Price = FetchTokenPriceAtBlockHeight(tokenContractAddresses["token0Addr"], blockHeight)
@@ -278,7 +279,6 @@ tokenPairCachedMetaData.TentativeNextStartAggregatedToken1Data.TradeVolume_24h =
 */
 
 //TODO: Can we parallelize this for batches of contract pairs to make it faster?
-//Need to evaluate load on Audit-protocol because of that.
 func FetchTokenV2Data(fromTime float64) map[string]TokenData {
 	tokenList = make(map[string]TokenData)
 	//tentativeNextBlockStartInterval := fromTime + periodicRetrievalInterval.Seconds()
@@ -337,8 +337,8 @@ func FetchTokenV2Data(fromTime float64) map[string]TokenData {
 		//AggregateTokenTradeVolumeFromPair(lastBlockHeight, fromTime, pairContractAddress, &token0Data, &token1Data)*/
 
 		//Update Map with latest  data.
-		tokenList[token0Data.Symbol] = token0Data
-		tokenList[token1Data.Symbol] = token1Data
+		tokenList[token0Data.ContractAddress] = token0Data
+		tokenList[token1Data.ContractAddress] = token1Data
 		//tokenPairCachedMetaDataList[pairContractAddress] = tokenPairCachedMetaData
 	}
 
@@ -351,7 +351,8 @@ func FetchTokenV2Data(fromTime float64) map[string]TokenData {
 			tokenList[key] = tokenData
 		} else {
 			//Not resetting values in redis, hence it will reflect values 5 mins older.
-			log.Error("Price couldn't be retrieved for token:" + key + " hence removing token from the list.")
+			log.Errorf("Price couldn't be retrieved for token %s with name %s hence removing token from the list.",
+				key, tokenData.Name)
 			delete(tokenList, key)
 		}
 	}
@@ -361,7 +362,7 @@ func FetchTokenV2Data(fromTime float64) map[string]TokenData {
 
 func CalculateAndFillPriceChange(fromTime float64, tokenData *TokenData) {
 	curTimeEpoch := float64(time.Now().Unix())
-	key := fmt.Sprintf(REDIS_KEY_TOKEN_PRICE_HISTORY, settingsObj.Development.Namespace, tokenData.Symbol)
+	key := fmt.Sprintf(REDIS_KEY_TOKEN_PRICE_HISTORY, settingsObj.Development.Namespace, tokenData.ContractAddress)
 
 	zRangeByScore := redisClient.ZRangeByScore(key, redis.ZRangeBy{
 		Min: fmt.Sprintf("%f", fromTime),
@@ -385,8 +386,8 @@ func CalculateAndFillPriceChange(fromTime float64, tokenData *TokenData) {
 
 func UpdateTokenPriceHistoryRedis(fromTime float64, tokenData TokenData) {
 	curTimeEpoch := float64(time.Now().Unix())
-	key := fmt.Sprintf(REDIS_KEY_TOKEN_PRICE_HISTORY, settingsObj.Development.Namespace, tokenData.Symbol)
-	var priceHistoryEntry TokenPriceHistoryEntry = TokenPriceHistoryEntry{curTimeEpoch, tokenData.Price}
+	key := fmt.Sprintf(REDIS_KEY_TOKEN_PRICE_HISTORY, settingsObj.Development.Namespace, tokenData.ContractAddress)
+	var priceHistoryEntry TokenPriceHistoryEntry = TokenPriceHistoryEntry{curTimeEpoch, tokenData.Price, tokenData.Block_height}
 	val, err := json.Marshal(priceHistoryEntry)
 	if err != nil {
 		log.Error("Couldn't marshal json..something is really wrong with data.curTime:", curTimeEpoch, " TokenData:", tokenData)
@@ -438,14 +439,23 @@ func FetchTokenPriceAtBlockHeight(tokenContractAddr string, blockHeight int) flo
 			zRangeByScore.Err().Error(), "blockHeight:", blockHeight)
 		return 0
 	}
-	tokenPrice, err := strconv.ParseFloat(zRangeByScore.Val()[0], 64)
+	if len(zRangeByScore.Val()) == 0 {
+		log.Error("Could not fetch tokenPrice for contract ", tokenContractAddr, " at BlockHeight:", blockHeight, " and hence will be set to 0")
+		return 0
+	}
+	type tokenPriceAtBlockHeight struct {
+		BlockHeight int     `json:"blockHeight"`
+		Price       float64 `json:"price"`
+	}
+	var tokenPriceAtHeight tokenPriceAtBlockHeight
+	err := json.Unmarshal([]byte(zRangeByScore.Val()[0]), &tokenPriceAtHeight)
 	if err != nil {
 		log.Fatalf("Unable to parse tokenPrice retrieved from redis key %s error is %+v", redisKey, err)
 		return 0
 	}
-	log.Debugf("Fetched tokenPrice %f for tokenContract %s at blockHeight %d", tokenPrice, tokenContractAddr, blockHeight)
+	log.Debugf("Fetched tokenPrice %f for tokenContract %s at blockHeight %d", tokenPriceAtHeight.Price, tokenContractAddr, blockHeight)
 	PruneTokenPriceZSet(tokenContractAddr, blockHeight)
-	return tokenPrice
+	return tokenPriceAtHeight.Price
 }
 
 func FetchLatestPairCachedDataFromRedis(pairContractAddress string) (TokenPairLiquidityProcessedData, error) {
@@ -568,7 +578,7 @@ func UpdateTokenDataToRedis(tokenList map[string]TokenData) {
 	log.Info("Updating TokenData to redis for tokens count:", len(tokenList))
 	for _, tokenData := range tokenList {
 		tokenData.LastUpdatedTimeStamp = time.Now().String()
-		redisKey := fmt.Sprintf(REDIS_KEY_TOKEN_CACHED_DATA, settingsObj.Development.Namespace, tokenData.Symbol)
+		redisKey := fmt.Sprintf(REDIS_KEY_TOKEN_CACHED_DATA, settingsObj.Development.Namespace, tokenData.ContractAddress)
 		log.Debug("Updating Token Data for token:", tokenData.Symbol, " at key:", redisKey, " data:", tokenData)
 		jsonData, err := json.Marshal(tokenData)
 		if err != nil {

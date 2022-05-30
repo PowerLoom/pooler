@@ -11,11 +11,13 @@ type AuditProtocolBlockHeightResp struct {
 }
 
 type TokenPriceHistoryEntry struct {
-	Timestamp float64 `json:"timeStamp"`
-	Price     float64 `json:"price"`
+	Timestamp   float64 `json:"timeStamp"`
+	Price       float64 `json:"price"`
+	BlockHeight int     `json:"blockHeight"`
 }
 
 type TokenData struct {
+	ContractAddress        string  `json:"contractAddress"`
 	LastUpdatedTimeStamp   string  `json:"lastUpdatedTime"`
 	Block_height           int     `json:"block_height"`
 	Name                   string  `json:"name"`
