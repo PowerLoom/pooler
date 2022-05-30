@@ -54,6 +54,18 @@ def redis_cleanup_audit_protocol():
         pass
 
     try:
+        c = r.delete(*r.keys('hitsDagBlock'))
+        print('hitsDagBlock keys deleted: ', c)
+    except:
+        pass
+
+    try:
+        c = r.delete(*r.keys('hitsPayloadData'))
+        print('hitsPayloadData keys deleted: ', c)
+    except:
+        pass
+
+    try:
         c = r.delete(*r.keys(f'*{settings.NAMESPACE}*dagVerificationStatus*'))
         print('Dag chain verification keys deleted: ', c)
     except:
