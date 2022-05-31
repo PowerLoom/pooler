@@ -7,7 +7,6 @@ import ipfshttpclient
 import argparse
 
 
-client = ipfshttpclient.connect(addr=settings['ipfs_url'], session=True)
 # Define the parser
 parser = argparse.ArgumentParser(description='clean slate script')
 parser.add_argument(
@@ -186,6 +185,7 @@ def redis_cleanup_pooler_namespace():
 
 
 def cleanup_ipfs():
+    client = ipfshttpclient.connect(addr=settings['ipfs_url'], session=True)
     REDIS_AUDIT_PROTOCOL_CONFIG = {
         "host": settings['redis']['host'],
         "port": settings['redis']['port'],
