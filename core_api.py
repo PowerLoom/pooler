@@ -14,13 +14,17 @@ import os
 import time
 from math import floor
 
+from pydantic import NoneStr
+
 import redis_keys
 from redis_conn import RedisPoolCache
 from functools import reduce
 from uniswap_functions import read_json_file
 from redis_keys import (
     uniswap_pair_contract_V2_pair_data, uniswap_pair_cached_recent_logs, uniswap_token_info_cached_data,
-    uniswap_pair_cache_daily_stats, uniswap_V2_summarized_snapshots_zset, uniswap_V2_snapshot_at_blockheight
+    uniswap_pair_cache_daily_stats, uniswap_V2_summarized_snapshots_zset, uniswap_V2_snapshot_at_blockheight,
+    uniswap_v2_daily_stats_snapshot_zset, uniswap_V2_daily_stats_at_blockheight, uniswap_v2_tokens_snapshot_zset,
+    uniswap_V2_tokens_at_blockheight
 )
 from utility_functions import (
     v2_pair_data_unpack, 
@@ -248,22 +252,29 @@ async def get_v2_pairs_data(
     request: Request,
     response: Response
 ):
-    all_pair_contracts = read_json_file('static/cached_pair_addresses.json')
-    
-    if all_pair_contracts and len(all_pair_contracts) <= 0:
-        return {"error": "No data found"}
-
     redis_conn = request.app.redis_pool
-    all_pair_contracts = [uniswap_pair_contract_V2_pair_data.format(f"{Web3.toChecksumAddress(addr)}") for addr in all_pair_contracts]
-    data = await redis_conn.mget(*all_pair_contracts)
+    latest_v2_summary_snapshot = await redis_conn.zrevrange(
+        name=uniswap_V2_summarized_snapshots_zset,
+        start=0,
+        end=0,
+        withscores=True
+    )
 
-    if data:
-        data = [json.loads(pair_data) for pair_data in data if pair_data is not None]
+    if len(latest_v2_summary_snapshot) < 1:
+        return {'data': None}
+
+    print(f"### LATEST: {latest_v2_summary_snapshot}")
+
+    _, latest_block_height = latest_v2_summary_snapshot[0]
+    snapshot_data = await redis_conn.get(
+        name=uniswap_V2_snapshot_at_blockheight.format(int(latest_block_height))
+    )
+    if snapshot_data:
+        data = json.loads(snapshot_data)["data"]
         data.sort(key=get_tokens_liquidity_for_sort, reverse=True)
+        return data
     else:
-        data = {"error": "No data found"}
-    
-    return data
+        return {"data": None}
 
 
 @app.get('/v2-pairs/snapshots')
@@ -300,9 +311,107 @@ async def get_v2_pairs_data(
     )
 
     if _:
-        return json.loads(await redis_conn.get(
+        snapshot_data = await redis_conn.get(
             name=redis_keys.uniswap_V2_snapshot_at_blockheight.format(block_height)
-        ))['data']
+        )
+        print(snapshot_data)
+        return json.loads(snapshot_data)['data']
+    return {
+        'data': None
+    }
+
+@app.get('/v2-daily-stats/snapshots')
+async def get_v2_daily_stats_snapshot(
+    request: Request,
+    response: Response
+):
+    redis_conn: aioredis.Redis = request.app.redis_pool
+    return {
+        'snapshots': list(map(
+            lambda x: int(x[1]),
+            await redis_conn.zrange(
+                name=uniswap_v2_daily_stats_snapshot_zset,
+                start=0,
+                end=-1,
+                withscores=True
+            )
+        ))
+    }
+
+
+@app.get('/v2-daily-stats/{block_height:int}')
+async def get_v2_daily_stats_by_block(
+    request: Request,
+    response: Response,
+    block_height: int
+):
+    redis_conn: aioredis.Redis = request.app.redis_pool
+    _ = await redis_conn.zrangebyscore(
+        name=uniswap_v2_daily_stats_snapshot_zset,
+        min=block_height,
+        max=block_height,
+        withscores=False
+    )
+
+    if _:
+        try:
+            snapshot_data = await redis_conn.get(
+                name=uniswap_V2_daily_stats_at_blockheight.format(block_height)
+            )
+            #return json.loads(snapshot_data)['data']
+            daily_stats = {
+                "volume24": { "currentValue": 0, "previousValue": 0, "change": 0},
+                "tvl": { "currentValue": 0, "previousValue": 0, "change": 0},
+                "fees24": { "currentValue": 0, "previousValue": 0, "change": 0}
+            }
+            snapshot_data = json.loads(snapshot_data)['data']
+            for contract_obj in snapshot_data:
+                if contract_obj:
+                    # aggregate trade volume and liquidity across all pairs
+                    daily_stats["volume24"]["currentValue"] += contract_obj["volume24"]["currentValue"]
+                    daily_stats["volume24"]["previousValue"] += contract_obj["volume24"]["previousValue"]
+                    
+                    daily_stats["tvl"]["currentValue"] += contract_obj["tvl"]["currentValue"]
+                    daily_stats["tvl"]["previousValue"] += contract_obj["tvl"]["previousValue"]
+                    
+                    daily_stats["fees24"]["currentValue"] += contract_obj["fees24"]["currentValue"]
+                    daily_stats["fees24"]["previousValue"] += contract_obj["fees24"]["previousValue"]
+            
+            # calculate percentage change
+            if daily_stats["volume24"]["previousValue"] != 0: 
+                daily_stats["volume24"]["change"] = daily_stats["volume24"]["currentValue"] - daily_stats["volume24"]["previousValue"]
+                daily_stats["volume24"]["change"] = daily_stats["volume24"]["change"] / daily_stats["volume24"]["previousValue"] * 100
+            
+            if daily_stats["tvl"]["previousValue"] != 0:
+                daily_stats["tvl"]["change"] = daily_stats["tvl"]["currentValue"] - daily_stats["tvl"]["previousValue"]
+                daily_stats["tvl"]["change"] = daily_stats["tvl"]["change"] / daily_stats["tvl"]["previousValue"] * 100
+
+            if daily_stats["fees24"]["previousValue"] != 0:
+                daily_stats["fees24"]["change"] = daily_stats["fees24"]["currentValue"] - daily_stats["fees24"]["previousValue"]
+                daily_stats["fees24"]["change"] = daily_stats["fees24"]["change"] / daily_stats["fees24"]["previousValue"] * 100
+
+
+            # format output
+            daily_stats["volume24"]["currentValue"] = f"US${number_to_abbreviated_string(round(daily_stats['volume24']['currentValue'], 2))}"
+            daily_stats["volume24"]["previousValue"] = f"US${number_to_abbreviated_string(round(daily_stats['volume24']['previousValue'], 2))}"
+            daily_stats["volume24"]["change"] = f"{round(daily_stats['volume24']['change'], 2)}%"
+
+            daily_stats["tvl"]["currentValue"] = f"US${number_to_abbreviated_string(round(daily_stats['tvl']['currentValue'], 2))}"
+            daily_stats["tvl"]["previousValue"] = f"US${number_to_abbreviated_string(round(daily_stats['tvl']['previousValue'], 2))}"
+            daily_stats["tvl"]["change"] = f"{round(daily_stats['tvl']['change'], 2)}%"
+
+            daily_stats["fees24"]["currentValue"] = f"US${number_to_abbreviated_string(round(daily_stats['fees24']['currentValue'], 2))}"
+            daily_stats["fees24"]["previousValue"] = f"US${number_to_abbreviated_string(round(daily_stats['fees24']['previousValue'], 2))}"
+            daily_stats["fees24"]["change"] = f"{round(daily_stats['fees24']['change'], 2)}%"
+
+            return daily_stats
+        
+        except Exception as err:
+            print(f"Error in daily stats by block height err: {str(err)} ")
+            return {
+                'data': None
+            }
+        
     return {
         'data': None
     }
@@ -334,18 +443,22 @@ async def get_v2_pairs_recent_logs(
 ):
     redis_conn = await request.app.redis_pool
 
-    # get all keys of uniswap v2 tokens
-    keys = await redis_conn.keys(uniswap_token_info_cached_data.format("*"))
-    if keys:
-        keys = [key.decode('utf-8') for key in keys]
-    else:
-        keys=[]
+    latest_daily_stats_snapshot = await redis_conn.zrevrange(
+        name=uniswap_v2_tokens_snapshot_zset,
+        start=0,
+        end=0,
+        withscores=True
+    )
 
-    # get data associated to those key
-    data = await redis_conn.mget(*keys)
+    if len(latest_daily_stats_snapshot) < 1:
+        return {'data': None}
 
-    if data:
-        data = [json.loads(obj) for obj in data]
+    _, latest_block_height = latest_daily_stats_snapshot[0]
+    snapshot_data = await redis_conn.get(
+        name=uniswap_V2_tokens_at_blockheight.format(int(latest_block_height))
+    )
+    if snapshot_data:
+        data = json.loads(snapshot_data)
         data.sort(key=get_pair_liquidity_for_sort, reverse=True)
         temp = []
         for i in range(len(data)):
@@ -365,6 +478,52 @@ async def get_v2_pairs_recent_logs(
     
     return data
 
+@app.get('/v2-tokens/snapshots')
+async def get_v2_tokens_snapshots(
+    request: Request,
+    response: Response
+):
+    redis_conn: aioredis.Redis = request.app.redis_pool
+    return {
+        'snapshots': list(map(
+            lambda x: int(x[1]),
+            await redis_conn.zrange(
+                name=uniswap_v2_tokens_snapshot_zset,
+                start=0,
+                end=-1,
+                withscores=True
+            )
+        ))
+    }
+
+
+@app.get('/v2-tokens/{block_height:int}')
+async def get_v2_tokens_data_by_block(
+    request: Request,
+    response: Response,
+    block_height: int
+):
+    redis_conn: aioredis.Redis = request.app.redis_pool
+    _ = await redis_conn.zrangebyscore(
+        name=uniswap_v2_tokens_snapshot_zset,
+        min=block_height,
+        max=block_height,
+        withscores=False
+    )
+
+    if _:
+        snapshot_data = await redis_conn.get(
+            name=uniswap_V2_tokens_at_blockheight.format(block_height)
+        )
+        if snapshot_data:
+            snapshot_data = snapshot_data.decode('utf-8')
+            snapshot_data = json.loads(snapshot_data)
+        else:
+            snapshot_data = {"data": None}
+        return snapshot_data
+    return {
+        'data': None
+    }
 
 
 @app.get('/v2_daily_stats')
@@ -375,37 +534,39 @@ async def get_v2_pairs_daily_stats(
     try:
 
         redis_conn = await request.app.redis_pool
+        latest_daily_stats_snapshot = await redis_conn.zrevrange(
+            name=uniswap_v2_daily_stats_snapshot_zset,
+            start=0,
+            end=0,
+            withscores=True
+        )
 
-        # get all keys of uniswap v2 tokens
-        keys = await redis_conn.keys(uniswap_pair_cache_daily_stats.format("*"))
-        if not keys:
-            rest_logger.error(f"Error in get_v2_pairs_daily_stats: no data found in redis: {redis_conn.keys(uniswap_pair_cache_daily_stats.format('*'))}")
-            return {"error": "No data found"}
+        if len(latest_daily_stats_snapshot) < 1:
+            return {'data': None}
 
-        keys = [key.decode('utf-8') for key in keys]
+        _, latest_block_height = latest_daily_stats_snapshot[0]
+        snapshot_data = await redis_conn.get(
+            name=uniswap_V2_daily_stats_at_blockheight.format(int(latest_block_height))
+        )
+        if snapshot_data:
+            snapshot_data = json.loads(snapshot_data)["data"]
+
         daily_stats = {
             "volume24": { "currentValue": 0, "previousValue": 0, "change": 0},
             "tvl": { "currentValue": 0, "previousValue": 0, "change": 0},
             "fees24": { "currentValue": 0, "previousValue": 0, "change": 0}
         }
-        for key in keys:
-            data = await redis_conn.zrangebyscore(
-                name=key,
-                min=float('-inf'),
-                max=float('inf')
-            )
-
-            if data:
+        for contract_obj in snapshot_data:
+            if contract_obj:
                 # aggregate trade volume and liquidity across all pairs
-                data = [json.loads(json.loads(obj)) for obj in data]
-                daily_stats["volume24"]["currentValue"] += v2_pair_data_unpack(data[len(data) - 1]["volume_24h"])
-                daily_stats["volume24"]["previousValue"] += v2_pair_data_unpack(data[0]["volume_24h"])
+                daily_stats["volume24"]["currentValue"] += contract_obj["volume24"]["currentValue"]
+                daily_stats["volume24"]["previousValue"] += contract_obj["volume24"]["previousValue"]
                 
-                daily_stats["tvl"]["currentValue"] += v2_pair_data_unpack(data[len(data) - 1]["liquidity"])
-                daily_stats["tvl"]["previousValue"] += v2_pair_data_unpack(data[0]["liquidity"])
+                daily_stats["tvl"]["currentValue"] += contract_obj["tvl"]["currentValue"]
+                daily_stats["tvl"]["previousValue"] += contract_obj["tvl"]["previousValue"]
                 
-                daily_stats["fees24"]["currentValue"] += v2_pair_data_unpack(data[len(data) - 1]["fees_24h"])
-                daily_stats["fees24"]["previousValue"] += v2_pair_data_unpack(data[0]["fees_24h"])
+                daily_stats["fees24"]["currentValue"] += contract_obj["fees24"]["currentValue"]
+                daily_stats["fees24"]["previousValue"] += contract_obj["fees24"]["previousValue"]
         
         # calculate percentage change
         if daily_stats["volume24"]["previousValue"] != 0: 
