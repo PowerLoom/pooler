@@ -1,0 +1,81 @@
+@startuml "Token Data preparation service and aggregated snapshots list flow"
+autonumber
+
+participant "Consumer(UI/3rd Party)" as client
+participant "core-api" as api
+participant "tokenCollator" as dp
+database redis 
+participant "audit-protocol" as ap
+
+group init 
+    dp -> dp : Read settings.json and connect to redis and audit-protocol using connection pool.
+
+    note over dp: Parse all contracts \n(static/cached_addresses.json) to load into project list (projects).
+    note over dp: Wait for blockHeight of v2PairSummarySnapshot project to be more than 1.
+    loop over tokenPairs
+        note over dp: Fetch tokenMetadata for tokens like symbol, name and contractAddress to populate tokenList.
+    end
+
+end
+
+group periodically(120 secs) do the following
+ 
+    dp <-> ap : Fetch currentBlockHeight of v2Summary project with projectId (uniswap_V2PairsSummarySnapshot_'+NAMESPACE)
+    note over dp: Compare curBlockHeight with prevBlockHeight.
+
+    alt if BlockHeight moved ahead 
+        dp <-> ap : Fetch data at curBlockHeight from path /uniswap_V2PairsSummarySnapshot_UNISWAPV2/payload/<curBlockHeight>/data
+            loop over tokenPairs
+                group TokenPrice calculation 
+                    note over dp: Fetch tokenPrice from redis for all tokens at currentBlockHeight. \n Update the data in priceHistory set. \n Arrive at 24h priceChange based on the same.
+                end
+                note over dp: Aggregate Token data for token0 and token1
+            end 
+            note over dp: Form a single snapshot of all tokenData. \nUpdate prevBlockHeight to curBlockHeight.
+        else
+            note over dp: sleep for 120 secs.
+    end 
+
+
+    note over dp : Aggregated snapshot data to be committed to Audit-protocol.
+    dp -> ap : commit-payload { payload:{}, projectId: \n"uniswap_V2TokensSummarySnapshot_<Namespace>" } to audit-protocol 
+    ap -> dp : {CommitId, tentativeBlockHeight}
+    dp -> ap : Get IPFS Payload CID (By querying Payload at tentativeBlockHeight for this new project until we get result.)
+    dp <-> redis : Store PayloadCID under key \n  (uniswap:V2TokensSummarySnapshot:<Namespace>:snapshotsZset Zset against BlockHeight \n (not of this new project, but as per original snapshot) as score)
+    dp <-> redis: Store payload against key \n uniswap:V2TokensSummarySnapshot:<Namespace>:<BlockHeight> with a TTL value(30 mins) \n https://redis.io/commands/expire/)
+    note over dp: Prune the Zset if more than n snapshots are crossed (n is configurable).
+    note over dp: sleep for 60 secs
+end
+
+
+group API(v2_tokens/snapshots)
+    client -> api : Request /v2_tokens/snapshots
+    api <-> redis : Fetch snapshots Zset for project (last n snapshots)
+    api -> client : List of blockHeights at which snapshots are available.\n  {"snapshots":[145567, 145577,..]}
+end
+
+group API(/v2_tokens/<blockheight>) as optional argument
+    client -> api : Request /v2_tokens/<blockHeight>
+    api <-> redis: Check reqBlockHeight is present in redis Zset (uniswap:V2TokensSummarySnapshot:<Namespace>:snapshotsZset)
+    api <-> redis : Check if reqBlockHeight payload is present.
+    alt if reqBlockHeight is in Zset but not in cache
+        api <-> ipfs : Fetch payload from IPFS using payloadCID against the blockHeight.
+    else
+        alt  #orange if reqBlockHeight is not present in Zset
+            note over api: Calculate diff between currentBlockHeight and reqBlockHeight from zSet.
+            api -> ap: Get latestDAGHeight of uniswap_V2TokensSummarySnapshot_<Namespace> project
+            note over api: Roughly estimate where the blockHeight is going to be based on epochsize, blockHeightDiff and DAGHeight.
+            api -> ap: Get Payloads between fromBlock and toBlock for uniswap_v2_tokens_aggregated_snapshots_<Namespace> project.
+            api <-> redis: Create payload Key in redis at blockHeight with expiry.
+        else 
+            api <-> redis : Fetch payload at uniswap::v2_tokens::<namespace>::snapshot::<blockHeight>
+            note over api: Sort tokenData as per liquidity. Format it as required for the UI (adding an index and renaming any fields required etc).
+            api <-> redis: Update expiry for payload Key.
+        end 
+    end
+    alt if no snapshot found at reqBlockHeight
+        api -> Client : 404. 
+    end 
+
+    api -> client : Return snapshot data at requestedBlockHeight.\n {{index:1,name:,symbol:WETH,...},...}
+end
