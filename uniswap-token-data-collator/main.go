@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -20,12 +22,21 @@ import (
 var settingsObj ProjectSettings
 var redisClient *redis.Client
 var pairContracts []string
-var tokenList map[string]TokenData
+var tokenList map[string]*TokenData
+var apHttpClient http.Client
+var lastSnapshotBlockHeight int64
+var tokenPairTokenMapping map[string]TokenDataRefs
 
-//var tokenPriceHistory map[int]float64
+type TokenDataRefs struct {
+	token0Ref *TokenData
+	token1Ref *TokenData
+}
 
 const settingsFile string = "../settings.json"
 const pairContractListFile string = "../static/cached_pair_addresses.json"
+const V2_PAIRSUMMARY_PROJECTID string = "uniswap_V2PairsSummarySnapshot_%s"
+const V2_TOKENSUMMARY_PROJECTID string = "uniswap_V2TokensSummarySnapshot_%s"
+const MAX_RETRIES_BEFORE_EXIT int = 10
 
 //TODO: Move the below to config file.
 const periodicRetrievalInterval time.Duration = 120 * time.Second
@@ -73,243 +84,129 @@ func main() {
 
 	ReadSettings()
 	SetupRedisClient()
+	InitAuditProtocolClient()
+	tokenList = make(map[string]*TokenData)
+	tokenPairTokenMapping = make(map[string]TokenDataRefs)
 	Run(pairContractAddressesFile)
 
 }
 
 func Run(pairContractAddress string) {
+	PopulatePairContractList(pairContractAddress)
+	var v2SummaryBlockHeight int64
 	for {
+		log.Info("Waiting for first V2 Summary snapshot to be formed...")
+		v2SummaryBlockHeight = FetchV2SummaryLatestBlockHeight()
+		if v2SummaryBlockHeight != 0 {
+			log.Infof("v2Summary snapshot has been created at height %d", v2SummaryBlockHeight)
+			break
+		}
+		time.Sleep(periodicRetrievalInterval)
+	}
 
-		PopulatePairContractList(pairContractAddress)
+	FetchTokensMetaData()
 
+	for {
 		t := time.Now()
 		t2 := t.AddDate(0, 0, -1)
 		time24h := float64(t2.Unix())
-		//time24h = 0
-
 		log.Debug("TimeStamp for 1 day before is:", time24h)
-		//tokenPriceData := FetchV2TokenPriceDataFromRedis()
-		//For now fetch all data within 24h for tradeVolume.
-		//Optimization: If more tokenPairs are there, run this in parallel for different pairs.
-		//In that case, need to colate data from the common data structures to where tokenData is updated, before writing to redis.
-		tokenList := FetchTokenV2Data(time24h)
-		if len(tokenList) == 0 {
-			log.Info("No new blocks to fetch and process..Have to check in next cycle")
-		} else {
-			UpdateTokenDataToRedis(tokenList)
-			//UpdateTokenCacheMetaDataToRedis(tokenCache)
-		}
+
+		PrepareAndSubmitV2TokenSummarySnapshot(time24h)
 
 		log.Info("Sleeping for " + periodicRetrievalInterval.String() + " secs")
 		time.Sleep(periodicRetrievalInterval)
 	}
 }
 
-func FetchAndFillTokenMetaData(tokenList map[string]TokenData,
-	pairContractAddr string, blockHeight int) (TokenData, TokenData, error) {
-	var token0Data, token1Data TokenData
+func FetchTokensMetaData() {
+	for i := range pairContracts {
+		pairContractAddress := pairContracts[i]
+		pairContractAddr := common.HexToAddress(pairContractAddress).Hex()
+		FetchAndFillTokenMetaData(pairContractAddr)
+	}
+}
+
+func FetchAndFillTokenMetaData(pairContractAddr string) {
 	redisKey := fmt.Sprintf(REDIS_KEY_TOKEN_PAIR_CONTRACT_TOKENS_DATA, pairContractAddr)
-	log.Debug("Fetching PariContractTokensData from redis with key:", redisKey)
-	tokenPairMeta, err := redisClient.HGetAll(redisKey).Result()
-	if err != nil {
-		log.Error("Failed to get tokenPair MetaData from redis for PairContract:", pairContractAddr)
-		return token0Data, token1Data, err
+	log.Debug("Fetching PairContractTokensData from redis with key:", redisKey)
+	var tokenPairMeta map[string]string
+	var err error
+	for retryCount := 0; ; {
+		tokenPairMeta, err = redisClient.HGetAll(redisKey).Result()
+		if err != nil {
+			retryCount++
+			if retryCount > MAX_RETRIES_BEFORE_EXIT {
+				log.Fatalf("Unable to fetch PairContractTokensData for %s key even after max retries %d . Hence exiting...",
+					MAX_RETRIES_BEFORE_EXIT, redisKey)
+				os.Exit(1)
+			}
+			log.Errorf("Failed to get tokenPair MetaData from redis for PairContract %s due to error %s, retrying %d",
+				pairContractAddr, err.Error(), retryCount)
+			time.Sleep(10 * time.Second)
+			continue
+		}
+		log.Debug("Fetched PairContractTokensData from redis:", tokenPairMeta)
+		break
 	}
 
 	//Use tokenContractAddress to store tokenData as tokenSymbol is not gauranteed to be unique.
+	var tokenContractAddresses map[string]string
 	redisKey = fmt.Sprintf(REDIS_KEY_PAIR_TOKEN_ADDRESSES, settingsObj.Development.Namespace, pairContractAddr)
-	tokenContractAddresses, err := redisClient.HGetAll(redisKey).Result()
-	if err != nil {
-		log.Error("Failed to get token Contract Addresses from redis for PairContract:", pairContractAddr)
-		return token0Data, token1Data, err
-	}
-
-	token0Sym := tokenPairMeta["token0_symbol"]
-	log.Debug("Fetched tokenPairMetadata from redis:", tokenPairMeta, "token0:", tokenPairMeta["token0_symbol"])
-	token0Data = tokenList[tokenContractAddresses["token0Addr"]]
-	token0Data.Symbol = token0Sym
-	token0Data.Name = tokenPairMeta["token0_name"]
-	token0Data.ContractAddress = tokenContractAddresses["token0Addr"]
-	token1Sym := tokenPairMeta["token1_symbol"]
-
-	token1Data = tokenList[tokenContractAddresses["token1Addr"]]
-	token1Data.Symbol = token1Sym
-	token1Data.Name = tokenPairMeta["token1_name"]
-	token1Data.ContractAddress = tokenContractAddresses["token1Addr"]
-
-	if token0Data.Price == 0 || token1Data.Price == 0 {
-		if token0Data.Price == 0 {
-			token0Data.Price = FetchTokenPriceAtBlockHeight(tokenContractAddresses["token0Addr"], blockHeight)
+	for retryCount := 0; ; {
+		tokenContractAddresses, err = redisClient.HGetAll(redisKey).Result()
+		if err != nil {
+			retryCount++
+			if retryCount > MAX_RETRIES_BEFORE_EXIT {
+				log.Fatalf("Unable to fetch PairContractTokensAddresses for %s key even after max retries %d. Hence exiting...",
+					MAX_RETRIES_BEFORE_EXIT, redisKey)
+				os.Exit(1)
+			}
+			log.Error("Failed to get PairContractTokensAddresses from redis for PairContract due to error %s, retrying %d",
+				pairContractAddr, err.Error(), retryCount)
+			time.Sleep(10 * time.Second)
+			continue
 		}
-		if token1Data.Price == 0 {
-			token1Data.Price = FetchTokenPriceAtBlockHeight(tokenContractAddresses["token1Addr"], blockHeight)
-		}
-
+		log.Debugf("Fetched PairContractTokensAddresses from redis %+v", tokenContractAddresses)
+		break
 	}
-	log.Debug("Token0:", token0Data)
-	log.Debug("Token1:", token1Data)
-	return token0Data, token1Data, nil
+	token0Addr := tokenContractAddresses["token0Addr"]
+	token1Addr := tokenContractAddresses["token1Addr"]
+	var tokenRefs TokenDataRefs
+	//FIX: TOKEN Symbol and name not getting stored in tokenData.
+	if _, ok := tokenList[token0Addr]; !ok {
+		var tokenData TokenData
+		tokenData.Symbol = tokenPairMeta["token0_symbol"]
+		tokenData.Name = tokenPairMeta["token0_name"]
+		tokenData.ContractAddress = token0Addr
+		tokenList[token0Addr] = &tokenData
+		tokenRefs.token0Ref = &tokenData
+		log.Debugf("Token0 Data : %+v", tokenData)
+	}
+	tokenRefs.token0Ref = tokenList[token0Addr]
+	if _, ok := tokenList[token1Addr]; !ok {
+		var tokenData TokenData
+		tokenData.Symbol = tokenPairMeta["token1_symbol"]
+		tokenData.Name = tokenPairMeta["token1_name"]
+		tokenData.ContractAddress = token1Addr
+		tokenList[token1Addr] = &tokenData
+		tokenRefs.token1Ref = &tokenData
+		log.Debugf("Token1 Data: %+v", tokenData)
+	}
+	tokenRefs.token1Ref = tokenList[token1Addr]
+	tokenPairTokenMapping[pairContractAddr] = tokenRefs
 }
 
-/*func CalculateAndFillPriceChange(token0Data *TokenData, token1Data *TokenData) {
+func PrepareAndSubmitV2TokenSummarySnapshot(fromTime float64) {
+	curBlockHeight := FetchV2SummaryLatestBlockHeight()
+	if curBlockHeight > lastSnapshotBlockHeight {
+		var sourceBlockHeight int64
+		tokensPairData := FetchV2PairSummarySnapshot(curBlockHeight)
+		for _, tokenPairProcessedData := range tokensPairData {
+			//TODO: Need to remove 0x from contractAddress saved as string.
+			token0Data := tokenPairTokenMapping[common.HexToAddress(tokenPairProcessedData.ContractAddress).Hex()].token0Ref
+			token1Data := tokenPairTokenMapping[common.HexToAddress(tokenPairProcessedData.ContractAddress).Hex()].token1Ref
 
-}*/
-/*
-func AggregateTokenTradeVolumeFromPair(lastBlockHeight int64, fromTime float64, pairContractAddress string,
-	token0Data *TokenData, token1Data *TokenData) {
-	toBlock := lastBlockHeight
-	fromBlock := int64(1)
-	/*lastAggregatedBlock := tokenPairCachedMetaData.LastAggregatedBlock.Height
-	if lastAggregatedBlock == lastBlockHeight {
-		//TODO: We cannot skip in this case, as we are aggregating fromTime data and data would become stale.
-		//We need to keep moving the window and keep recalculating aggregatedDat by reducing it for that interval.
-		log.Debug("As no additional blocks are created from last processing, refetching data to serve latest fromTime data.")
-
-		*tokenPairCachedMetaData = TokenPairCacheMetaData{}
-		//lastAggregatedBlock = 0
-	}*/
-/*tentativeNextBlockStartInterval := fromTime + periodicRetrievalInterval.Seconds()
-toBlock := lastBlockHeight
-fromBlock := lastBlockHeight
-//Fetch this from cached data, as current tokenDataMap is being modified as we move ahead through each tokenPair.
-
-tentativeStartAggregatedToken0Data := tokenPairCachedMetaData.TentativeNextStartAggregatedToken0Data
-tentativeStartAggregatedToken1Data := tokenPairCachedMetaData.TentativeNextStartAggregatedToken1Data
-lastAggregatedToken0Data := tokenPairCachedMetaData.LastAggregatedToken0Data
-lastAggregatedToken1Data := tokenPairCachedMetaData.LastAggregatedToken1Data
-
-tokenPairCachedMetaData.TentativeNextStartAggregatedToken0Data.TradeVolume_24h = 0
-tokenPairCachedMetaData.TentativeNextStartAggregatedToken1Data.TradeVolume_24h = 0*/
-/*There are below possible cases:
-1. Started for firstTime and hence lastAggregatedBlock is 0.
-   In this case, follow existing logic of fetching maxBlocks each time until we find blocks within specified fromTime.
-2. There was a last fetch till which data has been aggregated.
-   In this case, fetch only from lastAggregatedBlock to latestBlockHeight but maxBlocks in each fetch.
-3. There was a last fetch till which data has been aggregated, but that timeInterval is older than fromTime.
-	Fetch only till find blocks within specified fromTime, this will be greater than lastAggregatedBlock
-*/
-
-/*if lastAggregatedBlock != 0 {
-		fromBlock = lastAggregatedBlock
-	} else {
-		fromBlock = 1
-		lastAggregatedBlock = 1
-	}
-
-	blockRangeToFetch := toBlock - fromBlock
-	if blockRangeToFetch > maxBlockCountToFetch {
-		fromBlock = toBlock - maxBlockCountToFetch
-	}
-
-	curIntervalLatestProcessedBlockInfo := DagBlockInfo{0, 0}
-	//hitTentativeNextBlockStart := false
-	//TradeVolume and Liquidity for each pair: uniswap_pair_contract_V2_pair_data = 'uniswap:pairContract:'+settings.NAMESPACE+':{}:contractV2PairCachedData'
-	//For now putting logic of going back each block till we get trade-Volume data..this needs to be fixed in Audit protocol.
-	for {
-	restartLoop:
-		pairTradeVolume, err := FetchPairTradeVolume(strings.ToLower(pairContractAddress), int(fromBlock), int(toBlock))
-		if err != nil {
-			//Note: This is dependent on error string returned from Audit protocol and will break if that changes.
-			if err.Error() == "Invalid Height" {
-				toBlock--
-				goto restartLoop
-			} else if err.Error() == "Internal Server Error" {
-				//Delay and retry.
-				log.Error("Retrying due to Internal Server Error")
-				time.Sleep(100 * time.Millisecond) //TODO: Need to make this some exponential backoff.
-				goto restartLoop
-			}
-			log.Error("Skipping Trade-Volume for pair contract", pairContractAddress)
-			break
-		} else {
-			count := 0
-			//Update CurInterval Latest Block
-			if pairTradeVolume[0].Height > curIntervalLatestProcessedBlockInfo.Height {
-				curIntervalLatestProcessedBlockInfo = DagBlockInfo{pairTradeVolume[0].Timestamp, pairTradeVolume[0].Height}
-			}
-
-			for j := range pairTradeVolume {
-				if pairTradeVolume[j].Data.Payload.Timestamp > fromTime {
-					//Use second aggregator to store data to be substracted for next interval.
-					/*if pairTradeVolume[j].Data.Payload.Timestamp < tentativeNextBlockStartInterval {
-						//Couldn't think of a better way to do this..under time constraints.
-						if !hitTentativeNextBlockStart {
-							hitTentativeNextBlockStart = true
-							tokenPairCachedMetaData.TentativeNextIntervalBlockStart = DagBlockInfo{pairTradeVolume[j].Timestamp, pairTradeVolume[j].Height}
-							log.Debug("TentativeNextBlockStart:", tokenPairCachedMetaData.TentativeNextIntervalBlockStart)
-						}
-						tokenPairCachedMetaData.TentativeNextStartAggregatedToken0Data.TradeVolume_24h += pairTradeVolume[j].Data.Payload.Token0TradeVolume
-						tokenPairCachedMetaData.TentativeNextStartAggregatedToken1Data.TradeVolume_24h += pairTradeVolume[j].Data.Payload.Token1TradeVolume
-					}
-					count++
-					token0Data.TradeVolume_24h += pairTradeVolume[j].Data.Payload.Token0TradeVolume
-					token1Data.TradeVolume_24h += pairTradeVolume[j].Data.Payload.Token1TradeVolume
-				} else {
-					log.Debug("Hit older entries than", fromTime, ". Stop fetching further.")
-					fromBlock = 1 //TODO: This is a dirty hack, need to improve.
-					//tokenPairCachedMetaData.LastStartBlock = DagBlockInfo{pairTradeVolume[j].Timestamp, pairTradeVolume[j].Height}
-					break
-				}
-			}
-			log.Debug("Fetched ", len(pairTradeVolume), " entries. Found ", count, " entries in the tradeVolumePair from time:", fromTime)
-		}
-		if fromBlock == 1 {
-			break
-		}
-
-		toBlock = fromBlock - 1
-		blockRangeToFetch = toBlock - 1
-		if blockRangeToFetch > maxBlockCountToFetch {
-			fromBlock = toBlock - maxBlockCountToFetch
-		} else {
-			fromBlock = 1
-		}
-	}
-
-	//Add previously aggregated fromTime data and substract previously aggregated data till tentativeBlockStart.
-	/*token0Data.TradeVolume_24h += lastAggregatedToken0Data.TradeVolume_24h - tentativeStartAggregatedToken0Data.TradeVolume_24h
-	token1Data.TradeVolume_24h += lastAggregatedToken1Data.TradeVolume_24h - tentativeStartAggregatedToken1Data.TradeVolume_24h
-
-	//tokenPairCachedMetaData.LastAggregatedBlock = curIntervalLatestProcessedBlockInfo
-	//tokenPairCachedMetaData.LastAggregatedToken0Data.TradeVolume_24h = token0Data.TradeVolume_24h
-	//tokenPairCachedMetaData.LastAggregatedToken1Data.TradeVolume_24h = token1Data.TradeVolume_24h
-	//log.Debug("PairCachedMetaData for this interval for tokenPair :", token0Data.Symbol, token1Data.Symbol, " is :", tokenPairCachedMetaData)
-	log.Debug("TokenPair Data Aggregated for this interval:", pairContractAddress, " Token0Data:", token0Data, ", Token1Data:", token1Data)
-}
-*/
-
-//TODO: Can we parallelize this for batches of contract pairs to make it faster?
-func FetchTokenV2Data(fromTime float64) map[string]TokenData {
-	tokenList = make(map[string]TokenData)
-	//tentativeNextBlockStartInterval := fromTime + periodicRetrievalInterval.Seconds()
-	log.Info("Number of pair contracts to process:", len(pairContracts)) //", tentativeNextBlockStartInterval", tentativeNextBlockStartInterval)
-	//TODO: Add some retry logic and delay in between the loop and also for retries.
-	//Look for something similar to Python's tenacity for Golang as well.
-
-	for i := range pairContracts {
-		pairContractAddress := pairContracts[i]
-		//tokenPairCachedMetaData := tokenPairCachedMetaDataList[pairContractAddress]
-		//log.Debug("PairCachedMetaData from previous interval is", tokenPairCachedMetaData)
-		pairContractAddr := common.HexToAddress(pairContractAddress).Hex()
-
-		// Get name and symbol of both tokens from
-		//redis key uniswap:pairContract:UNISWAPV2:<pair-contract-address>:PairContractTokensData
-		//TODO: Optimize: This fetch can be done once during init and whenver dynamic reload to re-read contract address pairs is implemented.
-		var token0Data, token1Data TokenData
-		var err error
-
-		// this is only for pair_total_reserves, because we want to capture latest reserves.
-		//token0Liquidity, token1Liquidity, err := FetchLatestPairTotalReserves(strings.ToLower(pairContractAddress), int(lastBlockHeight), int(lastBlockHeight))
-		tokenPairProcessedData, err := FetchLatestPairCachedDataFromRedis(pairContractAddr)
-		if err != nil {
-			log.Errorf("Unable to fetch tokenData for this pairContract %s even after max retries. Skipping this cycle of tokenData collation.",
-				pairContractAddress)
-			return make(map[string]TokenData)
-		} else {
-			token0Data, token1Data, err = FetchAndFillTokenMetaData(tokenList, pairContractAddr, tokenPairProcessedData.Block_height)
-			if err != nil {
-				continue
-			}
 			token0Data.Liquidity += tokenPairProcessedData.Token0Liquidity
 			token0Data.LiquidityUSD += tokenPairProcessedData.Token0LiquidityUSD
 
@@ -328,36 +225,49 @@ func FetchTokenV2Data(fromTime float64) map[string]TokenData {
 			token1Data.TradeVolume_7d += tokenPairProcessedData.Token1TradeVolume_7d
 			token1Data.TradeVolumeUSD_7d += tokenPairProcessedData.Token1TradeVolumeUSD_7d
 
-			//Assuming that liquidity and tradeVolume for all tokenPairs is available at same height
-			//hence taking the same from any pair should be fine.
 			token0Data.Block_height = tokenPairProcessedData.Block_height
 			token1Data.Block_height = tokenPairProcessedData.Block_height
+			sourceBlockHeight = int64(tokenPairProcessedData.Block_height)
 		}
 
-		//AggregateTokenTradeVolumeFromPair(lastBlockHeight, fromTime, pairContractAddress, &token0Data, &token1Data)*/
-
-		//Update Map with latest  data.
-		tokenList[token0Data.ContractAddress] = token0Data
-		tokenList[token1Data.ContractAddress] = token1Data
-		//tokenPairCachedMetaDataList[pairContractAddress] = tokenPairCachedMetaData
-	}
-
-	//Update tokenPrice
-	for key, tokenData := range tokenList {
-		if tokenData.Price != 0 {
-			//Update TokenPrice in History Zset
-			UpdateTokenPriceHistoryRedis(fromTime, tokenData)
-			CalculateAndFillPriceChange(fromTime, &tokenData)
-			tokenList[key] = tokenData
-		} else {
-			//Not resetting values in redis, hence it will reflect values 5 mins older.
-			log.Errorf("Price couldn't be retrieved for token %s with name %s hence removing token from the list.",
-				key, tokenData.Name)
-			delete(tokenList, key)
+		//Update tokenPrice
+		for key, tokenData := range tokenList {
+			tokenData.Price = FetchTokenPriceAtBlockHeight(tokenData.ContractAddress, int64(tokenData.Block_height))
+			if tokenData.Price != 0 {
+				//Update TokenPrice in History Zset
+				UpdateTokenPriceHistoryRedis(fromTime, tokenData)
+				CalculateAndFillPriceChange(fromTime, tokenData)
+				//tokenList[key] = tokenData
+			} else {
+				//TODO: Should we create a snapshot if we don't have any tokenPrice at specified height?
+				log.Errorf("Price couldn't be retrieved for token %s with name %s at blockHeight %d hence removing token from the list.",
+					key, tokenData.Name, tokenData.Block_height)
+				//delete(tokenList, key)
+			}
 		}
-	}
+		tentativeBlockHeight, err := CommitV2TokenSummaryPayload()
+		if err != nil {
+			log.Errorf("Failed to commit payload at blockHeight %d due to error %s", curBlockHeight, err.Error())
+			return
+		}
+		payloadCID, err := WaitAndFetchLatestV2TokenSummaryCID(tentativeBlockHeight)
+		if err != nil {
+			log.Errorf("Failed to Fetch payloadCID at blockHeight %d due to error %s", curBlockHeight, err.Error())
+			return
+		}
+		StoreTokenSummaryCIDInSnapshotsZSet(sourceBlockHeight, payloadCID)
+		StoreV2TokensSummaryPayload(sourceBlockHeight)
 
-	return tokenList
+		lastSnapshotBlockHeight = curBlockHeight
+
+		//Prune TokenPrice ZSet as price already fetched for all tokens
+		for _, tokenData := range tokenList {
+			PruneTokenPriceZSet(tokenData.ContractAddress, int64(tokenData.Block_height))
+		}
+	} else {
+		log.Debugf("V2PairSummary blockHeight has not moved yet and is still at %d, lastSnapshotBlockHeight is %d. Hence not processing anything.",
+			curBlockHeight, lastSnapshotBlockHeight)
+	}
 }
 
 func CalculateAndFillPriceChange(fromTime float64, tokenData *TokenData) {
@@ -384,7 +294,7 @@ func CalculateAndFillPriceChange(fromTime float64, tokenData *TokenData) {
 	tokenData.PriceChangePercent_24h = (tokenData.Price - oldPrice) * 100 / tokenData.Price
 }
 
-func UpdateTokenPriceHistoryRedis(fromTime float64, tokenData TokenData) {
+func UpdateTokenPriceHistoryRedis(fromTime float64, tokenData *TokenData) {
 	curTimeEpoch := float64(time.Now().Unix())
 	key := fmt.Sprintf(REDIS_KEY_TOKEN_PRICE_HISTORY, settingsObj.Development.Namespace, tokenData.ContractAddress)
 	var priceHistoryEntry TokenPriceHistoryEntry = TokenPriceHistoryEntry{curTimeEpoch, tokenData.Price, tokenData.Block_height}
@@ -401,7 +311,7 @@ func UpdateTokenPriceHistoryRedis(fromTime float64, tokenData TokenData) {
 		log.Error("Failed to add to redis ZSet, err:", err, " key :", key, ", Value:", val)
 	}
 	log.Debug("Updated TokenPriceHistory at Zset:", key, " with score:", curTimeEpoch, ",val:", priceHistoryEntry)
-	//Need to prune history older than fromTime.
+
 	PrunePriceHistoryInRedis(key, fromTime)
 }
 
@@ -415,7 +325,7 @@ func PrunePriceHistoryInRedis(key string, fromTime float64) {
 	log.Debug("Pruning: Removed ", res.Val(), " entries in redis Zset at key:", key)
 }
 
-func PruneTokenPriceZSet(tokenContractAddr string, blockHeight int) {
+func PruneTokenPriceZSet(tokenContractAddr string, blockHeight int64) {
 	redisKey := fmt.Sprintf(REDIS_KEY_TOKEN_BLOCK_HEIGHT_PRICE, settingsObj.Development.Namespace, tokenContractAddr)
 	res := redisClient.ZRemRangeByScore(
 		redisKey,
@@ -427,216 +337,177 @@ func PruneTokenPriceZSet(tokenContractAddr string, blockHeight int) {
 	log.Debug("Pruning: Removed ", res.Val(), " entries in redis Zset at key:", redisKey)
 }
 
-func FetchTokenPriceAtBlockHeight(tokenContractAddr string, blockHeight int) float64 {
+func FetchTokenPriceAtBlockHeight(tokenContractAddr string, blockHeight int64) float64 {
 
 	redisKey := fmt.Sprintf(REDIS_KEY_TOKEN_BLOCK_HEIGHT_PRICE, settingsObj.Development.Namespace, tokenContractAddr)
-	zRangeByScore := redisClient.ZRangeByScore(redisKey, redis.ZRangeBy{
-		Min: fmt.Sprintf("%d", blockHeight),
-		Max: fmt.Sprintf("%d", blockHeight),
-	})
-	if zRangeByScore.Err() != nil {
-		log.Error("Could not fetch tokenPrice for contract ", tokenContractAddr, " at BlockHeight error: ",
-			zRangeByScore.Err().Error(), "blockHeight:", blockHeight)
-		return 0
-	}
-	if len(zRangeByScore.Val()) == 0 {
-		log.Error("Could not fetch tokenPrice for contract ", tokenContractAddr, " at BlockHeight:", blockHeight, " and hence will be set to 0")
-		return 0
-	}
 	type tokenPriceAtBlockHeight struct {
 		BlockHeight int     `json:"blockHeight"`
 		Price       float64 `json:"price"`
 	}
 	var tokenPriceAtHeight tokenPriceAtBlockHeight
-	err := json.Unmarshal([]byte(zRangeByScore.Val()[0]), &tokenPriceAtHeight)
-	if err != nil {
-		log.Fatalf("Unable to parse tokenPrice retrieved from redis key %s error is %+v", redisKey, err)
-		return 0
+	tokenPriceAtHeight.Price = 0
+	for retryCount := 0; retryCount < 3; retryCount++ {
+		zRangeByScore := redisClient.ZRangeByScore(redisKey, redis.ZRangeBy{
+			Min: fmt.Sprintf("%d", blockHeight),
+			Max: fmt.Sprintf("%d", blockHeight),
+		})
+		if zRangeByScore.Err() != nil {
+			log.Errorf("Failed to fetch tokenPrice for contract %s at blockHeight %d due to error %s, retrying %d",
+				tokenContractAddr, zRangeByScore.Err().Error(), blockHeight, retryCount)
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		if len(zRangeByScore.Val()) == 0 {
+			log.Error("Could not fetch tokenPrice for contract ", tokenContractAddr, " at BlockHeight:", blockHeight, " and hence will be set to 0")
+			return tokenPriceAtHeight.Price
+		}
+
+		err := json.Unmarshal([]byte(zRangeByScore.Val()[0]), &tokenPriceAtHeight)
+		if err != nil {
+			log.Fatalf("Unable to parse tokenPrice retrieved from redis key %s error is %+v", redisKey, err)
+			time.Sleep(5 * time.Second)
+			continue
+		}
 	}
 	log.Debugf("Fetched tokenPrice %f for tokenContract %s at blockHeight %d", tokenPriceAtHeight.Price, tokenContractAddr, blockHeight)
-	PruneTokenPriceZSet(tokenContractAddr, blockHeight)
 	return tokenPriceAtHeight.Price
 }
 
-func FetchLatestPairCachedDataFromRedis(pairContractAddress string) (TokenPairLiquidityProcessedData, error) {
-	var tokenPairCachedData TokenPairLiquidityProcessedData
-	uniswap_pair_contract_V2_pair_data := fmt.Sprintf(REDIS_KEY_TOKEN_PAIR_V2_CACHED_DATA, settingsObj.Development.Namespace, pairContractAddress)
-	log.Debug("Fetchin TokenPairContract Cached Data from Redis for:", uniswap_pair_contract_V2_pair_data)
-
-	res := redisClient.Get(uniswap_pair_contract_V2_pair_data)
-	if res.Err() != nil {
-		log.Error("Unable to get TokenPairCachedData from Redis.")
-		return tokenPairCachedData, res.Err()
-	}
-	bytes, _ := res.Bytes()
-	if err := json.Unmarshal(bytes, &tokenPairCachedData); err != nil {
-		log.Error("Can not unmarshal JSON. err", err, " payload:", bytes)
-	}
-	log.Debugf("Fetched TokenPairContract Cached Data from redis (%+v)", tokenPairCachedData)
-	return tokenPairCachedData, nil
-}
-
-func FetchTokenPairUSDTPriceFromRedis(token0Sym string, token1Sym string) (float64, float64) {
-	prices := FetchTokenPairCachedPriceFromRedis([]string{token0Sym + "-USDT", token1Sym + "-USDT"})
-
-	//If price with USDT is not available, then fetch pairPrice with WETH and then convert to USDT.
-	if prices[0] == 0 {
-		wethPrices := FetchTokenPairCachedPriceFromRedis([]string{token0Sym + "-WETH", "WETH-USDT"})
-		if wethPrices[0] == 0 {
-			log.Error("Unable to fetch price  for token:", token0Sym, " with WETH")
-		}
-		prices[0] = wethPrices[0] * wethPrices[1]
-	}
-
-	if prices[1] == 0 {
-		wethPrices := FetchTokenPairCachedPriceFromRedis([]string{token1Sym + "-WETH", "WETH-USDT"})
-		if wethPrices[0] == 0 {
-			log.Error("Unable to fetch price  for token:", token1Sym, " with WETH")
-		}
-		prices[1] = wethPrices[0] * wethPrices[1]
-	}
-	return prices[0], prices[1]
-}
-
-func FetchTokenPairCachedPriceFromRedis(tokenPairs []string) []float64 {
-	keys := make([]string, len(tokenPairs))
-	for i := range tokenPairs {
-		keys[i] = fmt.Sprintf(REDIS_KEY_TOKEN_PAIR_V2_CACHED_PAIR_PRICE, settingsObj.Development.Namespace, tokenPairs[i])
-	}
-
-	log.Debug("Fetching Token Price from redis for keys:", keys)
-	res := redisClient.MGet(keys...)
-	if res.Err() != nil {
-		log.Error("Unable to get price info from Redis.")
-		return make([]float64, len(tokenPairs))
-	}
-	values := res.Val()
-	prices := make([]float64, len(tokenPairs))
-
-	for i := range tokenPairs {
-		var err error
-		if values[i] != nil {
-			tmpPrice := values[i].(string)
-			if prices[i], err = strconv.ParseFloat(tmpPrice, 64); err == nil {
-				log.Debug("Token ", i, " Price:", prices[i])
-			}
-		}
-	}
-	return prices
-}
-
-/*func FetchV2CachedTokenDataFromRedis() map[string]TokenPairCacheMetaData {
-	keys := make([]string, len(pairContracts))
-	for i := range pairContracts {
-		keys[i] = "uniswap:tokenInfo:" + settingsObj.Development.Namespace + ":" + pairContracts[i] + ":cachedMetaData"
-	}
-	log.Info("Fetching TokenPairCacheMetaData from redis for all PairContracts Keys:", keys)
-
-	res := redisClient.MGet(keys...)
-	if res.Err() != nil {
-		log.Error("Unable to get Cached Pair MetaData info from Redis.")
-		//TODO: Fill map with empty objects and keys.
-		return make(map[string]TokenPairCacheMetaData)
-	}
-	values := res.Val()
-	tokenCacheMetaData := make(map[string]TokenPairCacheMetaData)
-	var metaData TokenPairCacheMetaData
-
-	for i := range values {
-		if values[i] != nil {
-			//log.Debug("Value interface from redis for TokenPairCacheMetaData", values[i])
-			//Not checking for type conversion, as in any case it fails..new value of proper type will get overridden in redis.
-			str := fmt.Sprintf("%v", values[i])
-			if err := json.Unmarshal([]byte(str), &metaData); err != nil {
-				log.Error("Can not unmarshal JSON. err", err, " payload:", str)
-			}
-			log.Debug("Value from redis for TokenPairCacheMetaData", metaData)
-		}
-		tokenCacheMetaData[pairContracts[i]] = metaData
-	}
-	log.Debug("Fetched TokenPairCacheMetaData from redis for all PairContracts.", tokenCacheMetaData)
-	return tokenCacheMetaData
-}
-
-func UpdateTokenCacheMetaDataToRedis(tokenCachePairMetaData map[string]TokenPairCacheMetaData) {
-	log.Info("Updating TokenCachePairMetaData to redis for tokenPairs count:", len(tokenCachePairMetaData))
-	for key, tokenCacheData := range tokenCachePairMetaData {
-		redisKey := "uniswap:tokenInfo:" + settingsObj.Development.Namespace + ":" + key + ":cachedMetaData"
-		log.Debug("Updating Token Pair Cache Data for tokenPair:", key, " at key:", redisKey)
-		jsonData, err := json.Marshal(tokenCacheData)
-		if err != nil {
-			log.Error("Json marshalling failed.")
-		}
-		err = redisClient.Set(redisKey, string(jsonData), 0).Err()
-		if err != nil {
-			log.Error("Storing TokenData: ", tokenCacheData, " to redis failed", err)
-		}
-	}
-}*/
-
-func UpdateTokenDataToRedis(tokenList map[string]TokenData) {
-	log.Info("Updating TokenData to redis for tokens count:", len(tokenList))
+func StoreV2TokensSummaryPayload(blockHeight int64) {
+	key := fmt.Sprintf(REDIS_KEY_V2_TOKENS_SUMMARY_SNAPSHOT_AT_BLOCKHEIGHT, settingsObj.Development.Namespace, blockHeight)
+	payload := make([]*TokenData, len(tokenList))
+	var i int
 	for _, tokenData := range tokenList {
-		tokenData.LastUpdatedTimeStamp = time.Now().String()
-		redisKey := fmt.Sprintf(REDIS_KEY_TOKEN_CACHED_DATA, settingsObj.Development.Namespace, tokenData.ContractAddress)
-		log.Debug("Updating Token Data for token:", tokenData.Symbol, " at key:", redisKey, " data:", tokenData)
-		jsonData, err := json.Marshal(tokenData)
-		if err != nil {
-			log.Error("Json marshalling failed.")
+		payload[i] = tokenData
+		i += 1
+	}
+	tokenSummaryJson, err := json.Marshal(payload)
+	if err != nil {
+		log.Fatalf("Json marshal error %+v", err)
+		return
+	}
+	for retryCount := 0; retryCount < 3; retryCount++ {
+		res := redisClient.Set(key, string(tokenSummaryJson), 60*time.Minute) //TODO: Move to settings
+		if res.Err() != nil {
+			log.Errorf("Failed to add payload at blockHeight %d due to error %s, retrying %d", blockHeight, res.Err().Error(), retryCount)
+			time.Sleep(5 * time.Second)
+			continue
 		}
-		err = redisClient.Set(redisKey, string(jsonData), 0).Err()
+		log.Debugf("Added payload at key %s", key)
+		break
+	}
+}
+
+func StoreTokenSummaryCIDInSnapshotsZSet(blockHeight int64, payloadCID string) {
+	key := fmt.Sprintf(REDIS_KEY_V2_TOKENS_SUMMARY_SNAPSHOTS_ZSET, settingsObj.Development.Namespace)
+	for retryCount := 0; retryCount < 3; retryCount++ {
+		err := redisClient.ZAdd(key, redis.Z{
+			Score:  float64(blockHeight),
+			Member: payloadCID,
+		}).Err()
 		if err != nil {
-			log.Error("Storing TokenData: ", tokenData, " to redis failed", err)
+			log.Errorf("Failed to add payloadCID %s at blockHeight %d due to error %+v, retrying %d", payloadCID, blockHeight, err, retryCount)
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		log.Debugf("Added payloadCID %s at blockHeight %d successfully at key %s", payloadCID, blockHeight, key)
+		break
+	}
+	PruneTokenSummarySnapshotsZSet()
+}
+
+func PruneTokenSummarySnapshotsZSet() {
+	redisKey := fmt.Sprintf(REDIS_KEY_V2_TOKENS_SUMMARY_SNAPSHOTS_ZSET, settingsObj.Development.Namespace)
+	res := redisClient.ZCard(redisKey)
+	zsetLen := res.Val()
+	log.Debugf("ZSet length is %d", zsetLen)
+	if zsetLen > 20 {
+		for retryCount := 0; retryCount < 3; retryCount++ {
+			endRank := -1*(zsetLen-20) + 1
+			log.Debugf("Removing entries in ZSet from rank %d to rank %d", 0, endRank)
+			res = redisClient.ZRemRangeByRank(redisKey, 0, endRank)
+			if res.Err() != nil {
+				log.Error("Pruning entries at key:", redisKey, "failed with error:", res.Err().Error(), " , retrying ", retryCount)
+				time.Sleep(5 * time.Second)
+				continue
+			}
+			log.Debug("Pruning: Removed ", res.Val(), " entries in redis Zset at key:", redisKey)
+			break
 		}
 	}
 }
 
-/*func FetchPairTradeVolume(pairContractAddr string, fromHeight int, toHeight int) ([]TokenPairTradeVolumeData, error) {
-	pair_trade_volume_audit_project_id := "uniswap_pairContract_trade_volume_" + pairContractAddr + "_" + settingsObj.Development.Namespace
-	pair_volume_range_fetch_url := settingsObj.Development.AuditProtocolEngine2.URL + "/" + pair_trade_volume_audit_project_id + "/payloads"
-	pair_volume_range_fetch_url += "?from_height=" + strconv.Itoa(fromHeight) + "&to_height=" + strconv.Itoa(toHeight) + "&data=true"
+func CommitV2TokenSummaryPayload() (int64, error) {
+	url := settingsObj.Development.AuditProtocolEngine.URL + "/commit_payload"
 
-	log.Debug("Fetching TotalPair Trade Volume at:", pair_volume_range_fetch_url)
-	resp, err := http.Get(pair_volume_range_fetch_url)
-	if err != nil {
-		log.Error("Error: Could not fetch Pairtotal Trade-Volume for pairContract:", pairContractAddr, " Error:", err)
-		return nil, err
+	var apCommitResp AuditProtocolCommitPayloadResp
+	var request AuditProtocolCommitPayloadReq
+	request.ProjectId = fmt.Sprintf(V2_TOKENSUMMARY_PROJECTID, settingsObj.Development.Namespace)
+	request.Payload.TokensData = make([]*TokenData, len(tokenList))
+	var i int
+	for _, tokenData := range tokenList {
+		request.Payload.TokensData[i] = tokenData
+		i += 1
 	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := json.Marshal(request)
 	if err != nil {
-		log.Println("Unable to read HTTP resp.", err)
-		return nil, err
+		log.Fatalf("Failed to marshal request %+v towards Audit-Protocol with error %+v", request, err)
+		return 0, err
 	}
-	log.Trace("Rsp Body", string(body))
-	var pairVolumes []TokenPairTradeVolumeData
-	if err = json.Unmarshal(body, &pairVolumes); err != nil { // Parse []byte to the go struct pointer
-		var errResp AuditProtocolErrorResp
-		if err = json.Unmarshal(body, &errResp); err != nil {
-			log.Error("Can not unmarshal JSON. Resp.Body", string(body))
-			return nil, err
+	log.Debug("URL %s . Committing Payload %s", url, string(body))
+	retryCount := 0
+	for ; retryCount < 3; retryCount++ {
+		resp, err := apHttpClient.Post(url, "application/json", bytes.NewBuffer(body))
+		if err != nil {
+			log.Errorf("Error: Could not send commit-payload request to audit-protocol %+v due to error:", request, err)
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		defer resp.Body.Close()
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Error("Unable to read HTTP resp from Audit-protocol for commit-Payload.", err)
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		log.Trace("Rsp Body", string(body))
+		if resp.StatusCode == http.StatusOK {
+			if err = json.Unmarshal(body, &apCommitResp); err != nil { // Parse []byte to the go struct pointer
+				log.Errorf("Can not unmarshal JSON response received from Audit-protocol due to error %s, retrying %d",
+					err, retryCount)
+				continue
+			}
+			log.Debugf("Sucessfully committed payload to Audit-protocol at tentativeHeight %d with commitId %s",
+				apCommitResp.TentativeHeight, apCommitResp.CommitID)
 		} else {
-			return nil, errors.New(errResp.Error)
+			var errorResp AuditProtocolErrorResp
+			if err = json.Unmarshal(body, &errorResp); err != nil {
+				log.Errorf("Can not unmarshal error JSON response received from Audit-protocol due to error %s, retrying %d",
+					err, retryCount)
+				continue
+			}
+			log.Errorf("Received %d error on commit-payload with error data %+v, retrying %d",
+				resp.StatusCode, errorResp, retryCount)
+			continue
 		}
-
+		break
 	}
-	return pairVolumes, err
+	if retryCount >= 3 {
+		return 0, errors.New("failed to commit payload after max retries")
+	}
+	return int64(apCommitResp.TentativeHeight), nil
 }
 
-func FetchLatestPairTotalReserves(pairContractAddr string, fromHeight int, toHeight int) (float64, float64, error) {
-	pair_reserves_audit_project_id := "uniswap_pairContract_pair_total_reserves_" + pairContractAddr + "_" + settingsObj.Development.Namespace
-	pair_reserves_range_fetch_url := settingsObj.Development.AuditProtocolEngine2.URL + "/" + pair_reserves_audit_project_id + "/payloads"
-	var err error
-	pairReserves := make([]TokenPairReserves, 0)
+func FetchV2PairSummarySnapshot(blockHeight int64) []TokenPairLiquidityProcessedData {
+	v2PairsProjectId := fmt.Sprintf(V2_PAIRSUMMARY_PROJECTID, settingsObj.Development.Namespace)
+	last_block_height_url := fmt.Sprintf("%s/%s/payload/%d/data", settingsObj.Development.AuditProtocolEngine.URL, v2PairsProjectId, blockHeight)
+	log.Debug("Fetching Blockheight URL:", last_block_height_url)
+	var v2SummaryResp V2PairSummaryDataResp
 
 	for retryCount := 0; retryCount < 3; retryCount++ {
-		pair_reserves_range_fetch_url += "?from_height=" + strconv.Itoa(fromHeight) + "&to_height=" + strconv.Itoa(toHeight) + "&data=true"
-		log.Debug("Fetching TotalPair reserves at:", pair_reserves_range_fetch_url)
-
-		resp, err := http.Get(pair_reserves_range_fetch_url)
+		resp, err := apHttpClient.Get(last_block_height_url)
 		if err != nil {
-			log.Error("Error: Could not fetch Pairtotal reserves for pairContract:", pairContractAddr, " Error:", err)
+			log.Error("Error: Could not fetch block height for pairContract:", v2PairsProjectId, " Error:", err)
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
@@ -644,53 +515,82 @@ func FetchLatestPairTotalReserves(pairContractAddr string, fromHeight int, toHei
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			log.Error("Unable to read HTTP resp.", err)
-			continue
+			return nil
 		}
 		log.Trace("Rsp Body", string(body))
 
-		if err = json.Unmarshal(body, &pairReserves); err != nil { // Parse []byte to the go struct pointer
-			log.Error("Can not unmarshal JSON. Resp.Body", string(body))
-			continue
-		}
-		if err != nil && err.Error() == "Invalid Height" {
-			toHeight--
-			retryCount = 0
+		if err = json.Unmarshal(body, &v2SummaryResp); err != nil { // Parse []byte to the go struct pointer
+			log.Error("Can not unmarshal JSON")
 			continue
 		}
 		break
 	}
-	var token0Liquidity, token1Liquidity float64
-	if err == nil {
-		chainCurrentHeight := pairReserves[0].Data.Payload.ChainHeightRange.End
-		// Fetch liquidity from the 0th index as we want the latest liquidity. data.payload.token0Reserves.block<height>
-		// Had to convert uint to int..ideally this shouldn't cause any issue.
-		liquidity, ok := pairReserves[0].Data.Payload.Token0Reserves["block"+strconv.Itoa(int(chainCurrentHeight))]
-		if !ok {
-			log.Error("Couldn't find latest block in pairTokenData for Token0,something wrong with snapshot.TODO")
+	log.Debugf("Last Block Height for projectID %s is : %+v", v2PairsProjectId, v2SummaryResp)
+	if len(v2SummaryResp) > 0 {
+		for _, val := range v2SummaryResp {
+			return val.Payload.Data
 		}
-		token0Liquidity = liquidity
+	}
+	return nil
+}
 
-		liquidity, ok = pairReserves[0].Data.Payload.Token1Reserves["block"+strconv.Itoa(int(chainCurrentHeight))]
-		if !ok {
-			log.Error("Couldn't find latest block in pairTokenData for Token1,something wrong with snapshot.TODO")
+func WaitAndFetchLatestV2TokenSummaryCID(blockHeight int64) (string, error) {
+	projectID := fmt.Sprintf(V2_TOKENSUMMARY_PROJECTID, settingsObj.Development.Namespace)
+	url := fmt.Sprintf("%s/%s/payload/%d", settingsObj.Development.AuditProtocolEngine.URL, projectID, blockHeight)
+	log.Debug("Fetching CID at Blockheight URL:", url)
+
+	var apResp map[string]AuditProtocolBlockResp
+	var retryCount int
+	for retryCount = 0; retryCount < 12; retryCount++ {
+		resp, err := apHttpClient.Get(url)
+		if err != nil {
+			log.Error("Error: Could not fetch block height for pairContract:", projectID, " Error:", err)
+			time.Sleep(10 * time.Second)
+			continue
 		}
-		log.Trace("Reserves[0]", pairReserves[0])
-		token1Liquidity = liquidity
+		defer resp.Body.Close()
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Errorf("Unable to read HTTP resp due to error %+v , retrying %d", err, retryCount)
+			time.Sleep(10 * time.Second)
+			continue
+		}
+		log.Trace("Rsp Body", string(body))
+		if resp.StatusCode == http.StatusBadRequest {
+			log.Debugf("Snapshot for Block at height %d not yet ready, retrying %d", blockHeight, retryCount)
+			time.Sleep(10 * time.Second)
+			continue
+		}
+		if err = json.Unmarshal(body, &apResp); err != nil { // Parse []byte to the go struct pointer
+			log.Error("Can not unmarshal JSON due to error %+v, retrying %d", err, retryCount)
+			time.Sleep(10 * time.Second)
+			continue
+		}
+
+		log.Debugf("Successfully got response  %+v for CID fetch for URL %s is", apResp, url)
+		if len(apResp) > 0 {
+			for _, val := range apResp {
+				log.Debugf("Got CID %s at Block Height %d for projectID %s", val.Data.Cid, blockHeight, projectID)
+				return val.Data.Cid, nil
+			}
+		}
 	}
 
-	return token0Liquidity, token1Liquidity, err
-}*/
+	log.Errorf("Max retries reached while trying to fetch payloadCID at height %d. Not retrying anymore.", blockHeight)
+	return "", fmt.Errorf("max retries reached to fetch payloadCID at height %d", blockHeight)
 
-func FetchLastBlockHeight(pairContractAddr string) int64 {
-	pair_reserves_audit_project_id := "uniswap_pairContract_pair_total_reserves_" + pairContractAddr + "_" + settingsObj.Development.Namespace
-	last_block_height_url := settingsObj.Development.AuditProtocolEngine2.URL + "/" + pair_reserves_audit_project_id + "/payloads/height"
+}
+
+func FetchV2SummaryLatestBlockHeight() int64 {
+	v2PairsProjectId := fmt.Sprintf(V2_PAIRSUMMARY_PROJECTID, settingsObj.Development.Namespace)
+	last_block_height_url := settingsObj.Development.AuditProtocolEngine.URL + "/" + v2PairsProjectId + "/payloads/height"
 	log.Debug("Fetching Blockheight URL:", last_block_height_url)
 	var heightResp AuditProtocolBlockHeightResp
 
 	for retryCount := 0; retryCount < 3; retryCount++ {
-		resp, err := http.Get(last_block_height_url)
+		resp, err := apHttpClient.Get(last_block_height_url)
 		if err != nil {
-			log.Error("Error: Could not fetch block height for pairContract:", pairContractAddr, " Error:", err)
+			log.Error("Error: Could not fetch block height for pairContract:", v2PairsProjectId, " Error:", err)
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
@@ -708,7 +608,7 @@ func FetchLastBlockHeight(pairContractAddr string) int64 {
 		}
 		break
 	}
-	log.Debug("Last Block Height is:", heightResp)
+	log.Debugf("Last Block Height for projectID %s is : %s", v2PairsProjectId, heightResp.Height)
 	return heightResp.Height
 }
 
@@ -767,4 +667,23 @@ func SetupRedisClient() {
 		log.Error("Unable to connect to redis at:")
 	}
 	log.Info("Connected successfully to Redis and received ", pong, " back")
+}
+
+func InitAuditProtocolClient() {
+	//TODO: Move these to settings
+
+	t := http.Transport{
+		//TLSClientConfig:    &tls.Config{KeyLogWriter: kl, InsecureSkipVerify: true},
+		MaxIdleConns:        2,
+		MaxConnsPerHost:     2,
+		MaxIdleConnsPerHost: 2,
+		IdleConnTimeout:     0,
+		DisableCompression:  true,
+	}
+
+	apHttpClient = http.Client{
+		Timeout:   10 * time.Second,
+		Transport: &t,
+	}
+
 }

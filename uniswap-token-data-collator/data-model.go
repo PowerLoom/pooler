@@ -10,6 +10,31 @@ type AuditProtocolBlockHeightResp struct {
 	Height int64 `json:"height"`
 }
 
+type AuditProtocolCommitPayloadReq struct {
+	ProjectId string      `json:"projectId"`
+	Payload   _TokensData `json:"payload"`
+}
+
+type _TokensData struct {
+	TokensData []*TokenData `json:"data"`
+}
+
+type AuditProtocolCommitPayloadResp struct {
+	TentativeHeight int    `json:"tentativeHeight"`
+	CommitID        string `json:"commitId"`
+}
+
+type AuditProtocolBlockResp struct {
+	Data struct {
+		Cid  string `json:"cid"`
+		Type string `json:"type"`
+	} `json:"data"`
+	Height    int    `json:"height"`
+	PrevCid   string `json:"prevCid"`
+	Timestamp int    `json:"timestamp"`
+	TxHash    string `json:"txHash"`
+}
+
 type TokenPriceHistoryEntry struct {
 	Timestamp   float64 `json:"timeStamp"`
 	Price       float64 `json:"price"`
@@ -18,7 +43,6 @@ type TokenPriceHistoryEntry struct {
 
 type TokenData struct {
 	ContractAddress        string  `json:"contractAddress"`
-	LastUpdatedTimeStamp   string  `json:"lastUpdatedTime"`
 	Block_height           int     `json:"block_height"`
 	Name                   string  `json:"name"`
 	Symbol                 string  `json:"symbol"`
@@ -32,8 +56,16 @@ type TokenData struct {
 	PriceChangePercent_24h float64 `json:"priceChangePercent_24h"`
 }
 
-//This is the data stored in redis.
-//TODO: Do we need to decode data that are not needed?
+type V2PairSummaryDataResp map[string]V2PairSummarySnapshot
+
+type V2PairSummarySnapshot struct {
+	Cid     string `json:"cid"`
+	Type    string `json:"type"`
+	Payload struct {
+		Data []TokenPairLiquidityProcessedData `json:"data"`
+	} `json:"payload"`
+}
+
 type TokenPairLiquidityProcessedData struct {
 	ContractAddress          string  `json:"contractAddress"`
 	Name                     string  `json:"name"`
