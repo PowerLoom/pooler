@@ -263,8 +263,6 @@ async def get_v2_pairs_data(
     if len(latest_v2_summary_snapshot) < 1:
         return {'data': None}
 
-    print(f"### LATEST: {latest_v2_summary_snapshot}")
-
     _, latest_block_height = latest_v2_summary_snapshot[0]
     snapshot_data = await redis_conn.get(
         name=uniswap_V2_snapshot_at_blockheight.format(int(latest_block_height))
@@ -314,8 +312,9 @@ async def get_v2_pairs_data(
         snapshot_data = await redis_conn.get(
             name=redis_keys.uniswap_V2_snapshot_at_blockheight.format(block_height)
         )
-        print(snapshot_data)
-        return json.loads(snapshot_data)['data']
+        data = json.loads(snapshot_data)['data']
+        data.sort(key=get_tokens_liquidity_for_sort, reverse=True)
+        return data
     return {
         'data': None
     }
