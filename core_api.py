@@ -263,7 +263,7 @@ async def get_v2_pairs_data(
     if len(latest_v2_summary_snapshot) < 1:
         return {'data': None}
 
-    _, latest_block_height = latest_v2_summary_snapshot[0]
+    latest_payload_cid, latest_block_height = latest_v2_summary_snapshot[0]
     snapshot_data = await redis_conn.get(
         name=uniswap_V2_snapshot_at_blockheight.format(int(latest_block_height))
     )
@@ -416,7 +416,7 @@ async def get_v2_daily_stats_by_block(
     }
 
 
-@app.get('/v2_pairs_recent_logs')
+@app.get('/v2-pairs-recent-logs')
 async def get_v2_pairs_recent_logs(
     request: Request,
     response: Response,
@@ -435,7 +435,7 @@ async def get_v2_pairs_recent_logs(
 def get_pair_liquidity_for_sort(tokenData):
     return tokenData["liquidityUSD"]
 
-@app.get('/v2_tokens')
+@app.get('/v2-tokens')
 async def get_v2_pairs_recent_logs(
     request: Request,
     response: Response
@@ -525,7 +525,7 @@ async def get_v2_tokens_data_by_block(
     }
 
 
-@app.get('/v2_daily_stats')
+@app.get('/v2-daily-stats')
 async def get_v2_pairs_daily_stats(
     request: Request,
     response: Response

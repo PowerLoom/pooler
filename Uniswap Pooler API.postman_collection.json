@@ -2,9 +2,144 @@
 	"info": {
 		"_postman_id": "0b520ff9-e74e-4eae-ba3e-e7864b7d977b",
 		"name": "Uniswap Pooler API",
-		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "18783219"
 	},
 	"item": [
+		{
+			"name": "Uniswap V3",
+			"item": [
+				{
+					"name": "get latest uniswap v3 pairs aggregated data ",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\"query\":\"{\\n  mints(orderBy: timestamp, orderDirection: desc, where:{\\n    pair: \\\"0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852\\\",\\n    timestamp_lt: 1649248173\\n  }) {\\n    id,\\n    timestamp,\\n    amountUSD,\\n    logIndex,\\n    feeTo,\\n    feeLiquidity,\\n    amount0,\\n    amount1\\n  },\\n  swaps(orderBy: timestamp, orderDirection: desc, where:{\\n    pair: \\\"0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852\\\",\\n    timestamp_lt: 1649248173\\n  }) {\\n    id,\\n    timestamp,\\n    amountUSD,\\n    logIndex,\\n    amount0In,\\n    amount0Out,\\n    amount1Out,\\n    amount1In\\n  },\\n  burns(orderBy: timestamp, orderDirection: desc, where:{\\n    pair: \\\"0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852\\\",\\n    timestamp_lt: 1649248173\\n  }) {\\n    id,\\n    timestamp,\\n    amountUSD,\\n    logIndex,\\n    amount0,\\n    amount1\\n  }\\n}\\n\",\"variables\":null}"
+						},
+						"url": {
+							"raw": "http://localhost:9004/v3-pairs",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9004",
+							"path": [
+								"v3-pairs"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get list of cached latest snapshot block heights",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:9004/v3-pairs/snapshots",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9004",
+							"path": [
+								"v3-pairs",
+								"snapshots"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get uniswap v3 block height based pair aggregated data",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:9004/v3-pairs/14829565",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9004",
+							"path": [
+								"v3-pairs",
+								"14829565"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get recent logs of any uniswap v3 pair",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:9004/v3_pairs_recent_logs?pair_contract=0x5777d92f208679db4b9778590fa3cab3ac9e2168",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9004",
+							"path": [
+								"v3_pairs_recent_logs"
+							],
+							"query": [
+								{
+									"key": "pair_contract",
+									"value": "0x5777d92f208679db4b9778590fa3cab3ac9e2168"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get uniswap v3 token aggregated data",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:9004/v2_tokens",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9004",
+							"path": [
+								"v2_tokens"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get uniswap v3 daily stats",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:9004/v2_daily_stats",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9004",
+							"path": [
+								"v2_daily_stats"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
 		{
 			"name": "Get past snapshots for a pair contract address",
 			"request": {
@@ -141,14 +276,14 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:9002/v2_daily_stats",
+					"raw": "http://localhost:9002/v2-daily-stats",
 					"protocol": "http",
 					"host": [
 						"localhost"
 					],
 					"port": "9002",
 					"path": [
-						"v2_daily_stats"
+						"v2-daily-stats"
 					]
 				}
 			},
@@ -160,14 +295,14 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:9002/v2_pairs_recent_logs?pair_contract=0x3041cbd36888becc7bbcbc0045e3b1f144466f5f",
+					"raw": "http://localhost:9002/v2-pairs-recent-logs?pair_contract=0x3041cbd36888becc7bbcbc0045e3b1f144466f5f",
 					"protocol": "http",
 					"host": [
 						"localhost"
 					],
 					"port": "9002",
 					"path": [
-						"v2_pairs_recent_logs"
+						"v2-pairs-recent-logs"
 					],
 					"query": [
 						{
@@ -185,14 +320,94 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:9002/v2_tokens",
+					"raw": "http://localhost:9002/v2-tokens",
 					"protocol": "http",
 					"host": [
 						"localhost"
 					],
 					"port": "9002",
 					"path": [
-						"v2_tokens"
+						"v2-tokens"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "get v2 daily stats snapshot list",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:9002/v2-daily-stats/snapshots",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "9002",
+					"path": [
+						"v2-daily-stats",
+						"snapshots"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "get v2 pair daily stats by block height",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:9002/v2-daily-stats/14883690",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "9002",
+					"path": [
+						"v2-daily-stats",
+						"14883690"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get v2 token data snapshots",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:9002/v2-tokens/snapshots",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "9002",
+					"path": [
+						"v2-tokens",
+						"snapshots"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get v2 token data by block height",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:9002/v2-tokens/14883750",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "9002",
+					"path": [
+						"v2-tokens",
+						"14883750"
 					]
 				}
 			},
