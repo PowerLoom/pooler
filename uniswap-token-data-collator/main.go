@@ -608,13 +608,13 @@ func FetchV2SummaryLatestBlockHeight() int64 {
 		}
 		break
 	}
-	log.Debugf("Last Block Height for projectID %s is : %s", v2PairsProjectId, heightResp.Height)
+	log.Debugf("Last Block Height for projectID %s is : %d", v2PairsProjectId, heightResp.Height)
 	return heightResp.Height
 }
 
 func PopulatePairContractList(pairContractAddr string) {
 	if pairContractAddr != "" {
-		log.Info("Skipping reading contract addresses from json.\nConsidering only passed pairContractaddress:", pairContractAddr)
+		log.Info("Skipping reading contract addresses from json.Considering only passed pairContractaddress:", pairContractAddr)
 		pairContracts = make([]string, 1)
 		pairContracts[0] = pairContractAddr
 		return
