@@ -3,7 +3,7 @@ from redis_conn import REDIS_CONN_CONF
 from dynaconf import settings
 import json
 import fnmatch
-import ipfshttpclient
+from IPFS_API import ipfshttpclient
 import argparse
 
 

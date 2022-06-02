@@ -29,7 +29,8 @@ hiredis
 httptools==0.1.1
 humanfriendly==9.0
 idna==2.8
-ipfshttpclient @ git+https://github.com/ipfs/py-ipfs-http-client.git@bcec97aa83cf0b0348d8e160c3f68dc8495dbc1b
+# ipfshttpclient @ git+https://github.com/ipfs/py-ipfs-http-client.git@bcec97aa83cf0b0348d8e160c3f68dc8495dbc1b
+git+https://github.com/anomit/IPFS-Toolkit-Python.git@5c4ebe4c385c96a8f122d7e380710d4e7baa711d
 loguru==0.5.3
 maticvigil-sdk @ git+https://github.com/blockvigil/maticvigil-python-sdk.git@95e94e23c574fff9a5d759c65a6a317b19f2ef94
 multiaddr==0.0.9

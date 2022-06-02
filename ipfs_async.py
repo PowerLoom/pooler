@@ -1,4 +1,4 @@
-import ipfshttpclient
+from IPFS_API import ipfshttpclient
 import asyncio
 from greenletio import async_
 from dynaconf import settings
@@ -49,12 +49,6 @@ client.add_str = async_ipfs_client.async_add_str
 
 
 async def test_async_funcs():
-    
-    # cid = await client.add_json(json.dumps({'a':'b'}))
-    # print("CID: %s", cid)
-    # out = await client.cat(cid)
-    # print("GET CID:", json.loads(out.decode('utf-8')))
-    
     out = await client.dag.put(io.BytesIO(json.dumps({'a':'b'}).encode()))
     print(out)
     out = await client.dag.get(out.as_json()['Cid']['/'])
