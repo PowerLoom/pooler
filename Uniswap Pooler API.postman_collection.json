@@ -412,6 +412,71 @@
 				}
 			},
 			"response": []
+		},
+		{
+			"name": "Get v2 pairs summary data's snapshot list",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:9002/v2-pairs/snapshots",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "9002",
+					"path": [
+						"v2-pairs",
+						"snapshots"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get v2 pairs summary data at a block height",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:9002/v2-pairs/14895183",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "9002",
+					"path": [
+						"v2-pairs",
+						"14895183"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get uniswap v2 token recent logs",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:9002/v2-tokens-recent-logs?token_contract=0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "9002",
+					"path": [
+						"v2-tokens-recent-logs"
+					],
+					"query": [
+						{
+							"key": "token_contract",
+							"value": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+						}
+					]
+				}
+			},
+			"response": []
 		}
 	]
 }
