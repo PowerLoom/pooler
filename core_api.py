@@ -22,7 +22,7 @@ from redis_keys import (
     uniswap_pair_contract_V2_pair_data, uniswap_pair_cached_recent_logs, uniswap_token_info_cached_data,
     uniswap_pair_cache_daily_stats, uniswap_V2_summarized_snapshots_zset, uniswap_V2_snapshot_at_blockheight,
     uniswap_v2_daily_stats_snapshot_zset, uniswap_V2_daily_stats_at_blockheight, uniswap_v2_tokens_snapshot_zset,
-    uniswap_V2_tokens_at_blockheight
+    uniswap_V2_tokens_at_blockheight, uniswap_pair_contract_tokens_addresses
 )
 from utility_functions import (
     v2_pair_data_unpack, 
@@ -460,6 +460,52 @@ async def get_v2_pairs_recent_logs(
         data = {"error": "No data found"}
     
     return data
+
+@app.get('/v2-tokens-recent-logs')
+async def get_v2_tokens_recent_logs(
+    request: Request,
+    response: Response,
+    token_contract: str
+):
+    pair_tokens_addresses = {}
+    all_pair_contracts = read_json_file('static/cached_pair_addresses.json')
+    redis_conn = await request.app.redis_pool
+
+    # get pair's token addresses ( pair -> token0, token1)
+    redis_pipe = redis_conn.pipeline()
+    pair_logs_keys = []
+    for pair in all_pair_contracts:
+        redis_pipe.hgetall(uniswap_pair_contract_tokens_addresses.format(Web3.toChecksumAddress(pair)))
+        pair_logs_keys.append(uniswap_pair_cached_recent_logs.format(Web3.toChecksumAddress(pair)))
+    tokens_address = await redis_pipe.execute()
+    
+    # map pair to token adresses
+    for i in range(len(tokens_address)):
+        pair_tokens_addresses[pair_logs_keys[i]] = tokens_address[i]
+
+    # filter pairs whos have given token contract
+    def filter_token(map):
+        nonlocal token_contract
+        token0 = map[b'token0Addr'].decode('utf-8')
+        token1 = map[b'token1Addr'].decode('utf-8')
+        token_contract = Web3.toChecksumAddress(token_contract)
+        return token0 == token_contract or token1 == token_contract
+
+    # filter by token address
+    pair_tokens_addresses = {k:v for (k,v) in pair_tokens_addresses.items() if filter_token(v)}
+    
+    # get recent logs of filtered pairs
+    pairs_log = await redis_conn.mget(*pair_tokens_addresses.keys())
+
+    temp = []
+    for pair_log in pairs_log:
+        pairs_log = json.loads(pair_log)
+        temp += pairs_log
+    pairs_log = sorted(temp, key=lambda d: d['timestamp'], reverse=True)
+    if len(pairs_log) > 75:
+        pairs_log = pairs_log[:75]
+
+    return pairs_log
 
 def get_pair_liquidity_for_sort(tokenData):
     return tokenData["liquidityUSD"]
