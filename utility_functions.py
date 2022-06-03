@@ -1,4 +1,7 @@
 from math import floor
+import json
+from ipfs_async import client as ipfs_client
+from redis_keys import uniswap_pair_hits_payload_data_key
 
 def v2_pair_data_unpack(prop):
     prop = prop.replace("US$", "")
@@ -13,4 +16,18 @@ def number_to_abbreviated_string(num):
         magnitude+=1
         num=num/1000.0
     return(f'{floor(num*100.0)/100.0}{magnitudeDict[magnitude]}')
-        
+
+async def retrieve_payload_data(payload_cid,  writer_redis_conn=None, logger=None):
+    """
+        - Given a payload_cid, get its data from ipfs, at the same time increase its hit
+    """
+    if writer_redis_conn:
+        r = await writer_redis_conn.zincrby(uniswap_pair_hits_payload_data_key, 1.0, payload_cid)
+        if logger:
+            logger.debug("Payload Data hit for: ")
+            logger.debug(payload_cid)
+
+    """ Get the payload Data from ipfs """
+    _payload_data = await ipfs_client.cat(payload_cid)
+    payload_data = _payload_data.decode('utf-8')
+    return payload_data

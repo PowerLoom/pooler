@@ -13,9 +13,7 @@ import json
 import os
 import time
 from math import floor
-
 from pydantic import NoneStr
-
 import redis_keys
 from redis_conn import RedisPoolCache
 from functools import reduce
@@ -28,7 +26,8 @@ from redis_keys import (
 )
 from utility_functions import (
     v2_pair_data_unpack, 
-    number_to_abbreviated_string
+    number_to_abbreviated_string,
+    retrieve_payload_data
 )
 from web3 import Web3
 
@@ -243,6 +242,7 @@ async def get_past_snapshots(
             return resp_json
 
 
+
 def get_tokens_liquidity_for_sort(pairData):
     return pairData["token0LiquidityUSD"] + pairData["token1LiquidityUSD"]
 
@@ -267,12 +267,18 @@ async def get_v2_pairs_data(
     snapshot_data = await redis_conn.get(
         name=uniswap_V2_snapshot_at_blockheight.format(int(latest_block_height))
     )
-    if snapshot_data:
-        data = json.loads(snapshot_data)["data"]
-        data.sort(key=get_tokens_liquidity_for_sort, reverse=True)
-        return data
-    else:
-        return {"data": None}
+    if not snapshot_data:
+        # fetch from ipfs
+        latest_payload_cid = latest_payload_cid.decode('utf-8')
+        snapshot_data = await retrieve_payload_data(latest_payload_cid, redis_conn)
+
+    #even ipfs doesn't have the data, return empty
+    if not snapshot_data:
+        return {'data': None}
+    
+    data = json.loads(snapshot_data)["data"]
+    data.sort(key=get_tokens_liquidity_for_sort, reverse=True)
+    return data
 
 
 @app.get('/v2-pairs/snapshots')
@@ -301,23 +307,38 @@ async def get_v2_pairs_data(
     block_height: int
 ):
     redis_conn: aioredis.Redis = request.app.redis_pool
-    _ = await redis_conn.zrangebyscore(
+    payload_cid = await redis_conn.zrangebyscore(
         name=redis_keys.uniswap_V2_summarized_snapshots_zset,
         min=block_height,
         max=block_height,
         withscores=False
     )
 
-    if _:
-        snapshot_data = await redis_conn.get(
-            name=redis_keys.uniswap_V2_snapshot_at_blockheight.format(block_height)
-        )
+    if len(payload_cid) < 1:
+        return {'data': None}
+    
+    snapshot_data = await redis_conn.get(
+        name=redis_keys.uniswap_V2_snapshot_at_blockheight.format(block_height)
+    )
+    
+    # serve redis cache
+    if snapshot_data:
         data = json.loads(snapshot_data)['data']
         data.sort(key=get_tokens_liquidity_for_sort, reverse=True)
         return data
-    return {
-        'data': None
-    }
+    
+    # fetch from ipfs
+    payload_cid = payload_cid[0].decode('utf-8')
+    payload_data = await retrieve_payload_data(payload_cid, redis_conn)
+    
+    if not payload_data:
+        payload_data = {"data": None}
+    
+    payload_data = json.loads(payload_data)['data']
+    payload_data.sort(key=get_tokens_liquidity_for_sort, reverse=True)
+
+    return payload_data
+        
 
 @app.get('/v2-daily-stats/snapshots')
 async def get_v2_daily_stats_snapshot(
@@ -345,75 +366,83 @@ async def get_v2_daily_stats_by_block(
     block_height: int
 ):
     redis_conn: aioredis.Redis = request.app.redis_pool
-    _ = await redis_conn.zrangebyscore(
+    payload_cid = await redis_conn.zrangebyscore(
         name=uniswap_v2_daily_stats_snapshot_zset,
         min=block_height,
         max=block_height,
         withscores=False
     )
 
-    if _:
-        try:
-            snapshot_data = await redis_conn.get(
-                name=uniswap_V2_daily_stats_at_blockheight.format(block_height)
-            )
-            #return json.loads(snapshot_data)['data']
-            daily_stats = {
-                "volume24": { "currentValue": 0, "previousValue": 0, "change": 0},
-                "tvl": { "currentValue": 0, "previousValue": 0, "change": 0},
-                "fees24": { "currentValue": 0, "previousValue": 0, "change": 0}
-            }
-            snapshot_data = json.loads(snapshot_data)['data']
-            for contract_obj in snapshot_data:
-                if contract_obj:
-                    # aggregate trade volume and liquidity across all pairs
-                    daily_stats["volume24"]["currentValue"] += contract_obj["volume24"]["currentValue"]
-                    daily_stats["volume24"]["previousValue"] += contract_obj["volume24"]["previousValue"]
-                    
-                    daily_stats["tvl"]["currentValue"] += contract_obj["tvl"]["currentValue"]
-                    daily_stats["tvl"]["previousValue"] += contract_obj["tvl"]["previousValue"]
-                    
-                    daily_stats["fees24"]["currentValue"] += contract_obj["fees24"]["currentValue"]
-                    daily_stats["fees24"]["previousValue"] += contract_obj["fees24"]["previousValue"]
-            
-            # calculate percentage change
-            if daily_stats["volume24"]["previousValue"] != 0: 
-                daily_stats["volume24"]["change"] = daily_stats["volume24"]["currentValue"] - daily_stats["volume24"]["previousValue"]
-                daily_stats["volume24"]["change"] = daily_stats["volume24"]["change"] / daily_stats["volume24"]["previousValue"] * 100
-            
-            if daily_stats["tvl"]["previousValue"] != 0:
-                daily_stats["tvl"]["change"] = daily_stats["tvl"]["currentValue"] - daily_stats["tvl"]["previousValue"]
-                daily_stats["tvl"]["change"] = daily_stats["tvl"]["change"] / daily_stats["tvl"]["previousValue"] * 100
-
-            if daily_stats["fees24"]["previousValue"] != 0:
-                daily_stats["fees24"]["change"] = daily_stats["fees24"]["currentValue"] - daily_stats["fees24"]["previousValue"]
-                daily_stats["fees24"]["change"] = daily_stats["fees24"]["change"] / daily_stats["fees24"]["previousValue"] * 100
+    if len(payload_cid) < 1:
+        return {'data': None}
 
 
-            # format output
-            daily_stats["volume24"]["currentValue"] = f"US${number_to_abbreviated_string(round(daily_stats['volume24']['currentValue'], 2))}"
-            daily_stats["volume24"]["previousValue"] = f"US${number_to_abbreviated_string(round(daily_stats['volume24']['previousValue'], 2))}"
-            daily_stats["volume24"]["change"] = f"{round(daily_stats['volume24']['change'], 2)}%"
+    try:
+        snapshot_data = await redis_conn.get(
+            name=uniswap_V2_daily_stats_at_blockheight.format(block_height)
+        )
+        if not snapshot_data:
+            # fetch from ipfs
+            payload_cid = payload_cid[0].decode('utf-8')
+            snapshot_data = await retrieve_payload_data(payload_cid, redis_conn)
 
-            daily_stats["tvl"]["currentValue"] = f"US${number_to_abbreviated_string(round(daily_stats['tvl']['currentValue'], 2))}"
-            daily_stats["tvl"]["previousValue"] = f"US${number_to_abbreviated_string(round(daily_stats['tvl']['previousValue'], 2))}"
-            daily_stats["tvl"]["change"] = f"{round(daily_stats['tvl']['change'], 2)}%"
+        # even ipfs doesn't have payload then exit
+        if not snapshot_data:
+            return {'data': None}
 
-            daily_stats["fees24"]["currentValue"] = f"US${number_to_abbreviated_string(round(daily_stats['fees24']['currentValue'], 2))}"
-            daily_stats["fees24"]["previousValue"] = f"US${number_to_abbreviated_string(round(daily_stats['fees24']['previousValue'], 2))}"
-            daily_stats["fees24"]["change"] = f"{round(daily_stats['fees24']['change'], 2)}%"
+        snapshot_data = json.loads(snapshot_data)['data']
 
-            return daily_stats
+        daily_stats = {
+            "volume24": { "currentValue": 0, "previousValue": 0, "change": 0},
+            "tvl": { "currentValue": 0, "previousValue": 0, "change": 0},
+            "fees24": { "currentValue": 0, "previousValue": 0, "change": 0}
+        }
+        for contract_obj in snapshot_data:
+            if contract_obj:
+                # aggregate trade volume and liquidity across all pairs
+                daily_stats["volume24"]["currentValue"] += contract_obj["volume24"]["currentValue"]
+                daily_stats["volume24"]["previousValue"] += contract_obj["volume24"]["previousValue"]
+                
+                daily_stats["tvl"]["currentValue"] += contract_obj["tvl"]["currentValue"]
+                daily_stats["tvl"]["previousValue"] += contract_obj["tvl"]["previousValue"]
+                
+                daily_stats["fees24"]["currentValue"] += contract_obj["fees24"]["currentValue"]
+                daily_stats["fees24"]["previousValue"] += contract_obj["fees24"]["previousValue"]
         
-        except Exception as err:
-            print(f"Error in daily stats by block height err: {str(err)} ")
-            return {
-                'data': None
-            }
+        # calculate percentage change
+        if daily_stats["volume24"]["previousValue"] != 0: 
+            daily_stats["volume24"]["change"] = daily_stats["volume24"]["currentValue"] - daily_stats["volume24"]["previousValue"]
+            daily_stats["volume24"]["change"] = daily_stats["volume24"]["change"] / daily_stats["volume24"]["previousValue"] * 100
         
-    return {
-        'data': None
-    }
+        if daily_stats["tvl"]["previousValue"] != 0:
+            daily_stats["tvl"]["change"] = daily_stats["tvl"]["currentValue"] - daily_stats["tvl"]["previousValue"]
+            daily_stats["tvl"]["change"] = daily_stats["tvl"]["change"] / daily_stats["tvl"]["previousValue"] * 100
+
+        if daily_stats["fees24"]["previousValue"] != 0:
+            daily_stats["fees24"]["change"] = daily_stats["fees24"]["currentValue"] - daily_stats["fees24"]["previousValue"]
+            daily_stats["fees24"]["change"] = daily_stats["fees24"]["change"] / daily_stats["fees24"]["previousValue"] * 100
+
+
+        # format output
+        daily_stats["volume24"]["currentValue"] = f"US${number_to_abbreviated_string(round(daily_stats['volume24']['currentValue'], 2))}"
+        daily_stats["volume24"]["previousValue"] = f"US${number_to_abbreviated_string(round(daily_stats['volume24']['previousValue'], 2))}"
+        daily_stats["volume24"]["change"] = f"{round(daily_stats['volume24']['change'], 2)}%"
+
+        daily_stats["tvl"]["currentValue"] = f"US${number_to_abbreviated_string(round(daily_stats['tvl']['currentValue'], 2))}"
+        daily_stats["tvl"]["previousValue"] = f"US${number_to_abbreviated_string(round(daily_stats['tvl']['previousValue'], 2))}"
+        daily_stats["tvl"]["change"] = f"{round(daily_stats['tvl']['change'], 2)}%"
+
+        daily_stats["fees24"]["currentValue"] = f"US${number_to_abbreviated_string(round(daily_stats['fees24']['currentValue'], 2))}"
+        daily_stats["fees24"]["previousValue"] = f"US${number_to_abbreviated_string(round(daily_stats['fees24']['previousValue'], 2))}"
+        daily_stats["fees24"]["change"] = f"{round(daily_stats['fees24']['change'], 2)}%"
+
+        return daily_stats
+    
+    except Exception as err:
+        print(f"Error in daily stats by block height err: {str(err)} ")
+        return {
+            'data': None
+        }
 
 
 @app.get('/v2-pairs-recent-logs')
@@ -452,28 +481,37 @@ async def get_v2_pairs_recent_logs(
     if len(latest_daily_stats_snapshot) < 1:
         return {'data': None}
 
-    _, latest_block_height = latest_daily_stats_snapshot[0]
+    latest_payload_cid, latest_block_height = latest_daily_stats_snapshot[0]
     snapshot_data = await redis_conn.get(
         name=uniswap_V2_tokens_at_blockheight.format(int(latest_block_height))
     )
-    if snapshot_data:
-        data = json.loads(snapshot_data)
-        data.sort(key=get_pair_liquidity_for_sort, reverse=True)
-        temp = []
-        for i in range(len(data)):
-            temp.append({
-                "index": i+1,
-                "name": data[i]["name"],
-                "symbol": data[i]["symbol"],
-                "liquidity": f"US${round(abs(data[i]['liquidityUSD'])):,}",
-                "volume_24h": f"US${round(abs(data[i]['tradeVolumeUSD_24h'])):,}",
-                "price": f"US${round(abs(data[i]['price']), 5):,}",
-                "price_change_24h": f"{round(data[i]['priceChangePercent_24h'], 2)}%",
-                "block_height": int(data[i]["block_height"])
-            })
-        data = temp
+    if not snapshot_data:
+        # fetch from ipfs
+        latest_payload_cid = latest_payload_cid.decode('utf-8')
+        snapshot_data = await retrieve_payload_data(latest_payload_cid, redis_conn)
+        
+        # even ipfs doesn't have data, return empty
+        if not snapshot_data:
+            return {'data': None}
+
+        data = json.loads(snapshot_data)['data']
     else:
-        data = {"error": "No data found"}
+        data = json.loads(snapshot_data)
+
+    data.sort(key=get_pair_liquidity_for_sort, reverse=True)
+    temp = []
+    for i in range(len(data)):
+        temp.append({
+            "index": i+1,
+            "name": data[i]["name"],
+            "symbol": data[i]["symbol"],
+            "liquidity": f"US${round(abs(data[i]['liquidityUSD'])):,}",
+            "volume_24h": f"US${round(abs(data[i]['tradeVolumeUSD_24h'])):,}",
+            "price": f"US${round(abs(data[i]['price']), 5):,}",
+            "price_change_24h": f"{round(data[i]['priceChangePercent_24h'], 2)}%",
+            "block_height": int(data[i]["block_height"])
+        })
+    data = temp
     
     return data
 
@@ -503,26 +541,49 @@ async def get_v2_tokens_data_by_block(
     block_height: int
 ):
     redis_conn: aioredis.Redis = request.app.redis_pool
-    _ = await redis_conn.zrangebyscore(
+    payload_cid = await redis_conn.zrangebyscore(
         name=uniswap_v2_tokens_snapshot_zset,
         min=block_height,
         max=block_height,
         withscores=False
     )
 
-    if _:
-        snapshot_data = await redis_conn.get(
-            name=uniswap_V2_tokens_at_blockheight.format(block_height)
-        )
-        if snapshot_data:
-            snapshot_data = snapshot_data.decode('utf-8')
-            snapshot_data = json.loads(snapshot_data)
-        else:
-            snapshot_data = {"data": None}
-        return snapshot_data
-    return {
-        'data': None
-    }
+    if len(payload_cid) < 1:
+        return {'data': None}
+    
+    snapshot_data = await redis_conn.get(
+        name=uniswap_V2_tokens_at_blockheight.format(block_height)
+    )
+    if not snapshot_data:
+        # fetch from ipfs
+        payload_cid = payload_cid[0].decode('utf-8')
+        snapshot_data = await retrieve_payload_data(payload_cid, redis_conn)
+        
+        # even ipfs doesn't have data, return empty
+        if not snapshot_data:
+            return {'data': None}
+
+        snapshot_data = json.loads(snapshot_data)['data']
+    else:
+        snapshot_data = snapshot_data.decode('utf-8')
+        snapshot_data = json.loads(snapshot_data)
+    
+    snapshot_data.sort(key=get_pair_liquidity_for_sort, reverse=True)
+    temp = []
+    for i in range(len(snapshot_data)):
+        temp.append({
+            "index": i+1,
+            "name": snapshot_data[i]["name"],
+            "symbol": snapshot_data[i]["symbol"],
+            "liquidity": f"US${round(abs(snapshot_data[i]['liquidityUSD'])):,}",
+            "volume_24h": f"US${round(abs(snapshot_data[i]['tradeVolumeUSD_24h'])):,}",
+            "price": f"US${round(abs(snapshot_data[i]['price']), 5):,}",
+            "price_change_24h": f"{round(snapshot_data[i]['priceChangePercent_24h'], 2)}%",
+            "block_height": int(snapshot_data[i]["block_height"])
+        })
+    snapshot_data = temp
+    
+    return snapshot_data
 
 
 @app.get('/v2-daily-stats')
@@ -543,12 +604,20 @@ async def get_v2_pairs_daily_stats(
         if len(latest_daily_stats_snapshot) < 1:
             return {'data': None}
 
-        _, latest_block_height = latest_daily_stats_snapshot[0]
+        payload_cid, latest_block_height = latest_daily_stats_snapshot[0]
         snapshot_data = await redis_conn.get(
             name=uniswap_V2_daily_stats_at_blockheight.format(int(latest_block_height))
         )
-        if snapshot_data:
-            snapshot_data = json.loads(snapshot_data)["data"]
+        if not snapshot_data:
+            # fetch from ipfs
+            payload_cid = payload_cid.decode('utf-8')
+            snapshot_data = await retrieve_payload_data(payload_cid, redis_conn)
+
+        # even ipfs doesn't have payload then exit
+        if not snapshot_data:
+            return {'data': None}
+        
+        snapshot_data = json.loads(snapshot_data)["data"]
 
         daily_stats = {
             "volume24": { "currentValue": 0, "previousValue": 0, "change": 0},
