@@ -2,7 +2,7 @@ import asyncio
 import json
 import requests
 import time
-from uniswap_functions import get_pair_contract_trades_async
+from uniswap_functions import get_pair_contract_trades_async, provide_async_redis_conn_insta, load_rate_limiter_scripts
 import os
 
 
@@ -106,12 +106,13 @@ def calculate_extra_log_stats(directory_path, file_path, uniswap_url, uniswap_pa
         print(f"\n\t uniswap_url: {uniswap_url}")
         print(f"\n\t uniswap_payload: {uniswap_payload}")
 
-async def verify_trade_volume_calculations(loop, pair_contract, start_block, end_block, debug_logs):
+@provide_async_redis_conn_insta
+async def verify_trade_volume_calculations(loop, pair_contract, start_block, end_block, debug_logs, redis_conn=None):
     current_time = int(time.time())
     
     # process logs to gather usd calculated value on events/transaction
     processed_logs_batches = []
-    batch_size = 1000
+    batch_size = 500
     debug_trade_logs = {
         "powerloom": {"Mint": [], "Swap":[], "Burn":[]},
         "uniswap": {"mints": [], "swaps":[], "burns":[]}
@@ -127,8 +128,18 @@ async def verify_trade_volume_calculations(loop, pair_contract, start_block, end
             end = i+batch_size-1
         
         print(f"Batch: {start} - {end}")
+
+        rate_limiting_lua_scripts = await load_rate_limiter_scripts(redis_conn)
+
         # TODO: supply aioredis connection and rate limiter lua scripts
-        data = await get_pair_contract_trades_async(loop, pair_contract, start, end)
+        data = await get_pair_contract_trades_async(
+            loop, 
+            rate_limiting_lua_scripts,
+            pair_contract, 
+            start, 
+            end,
+            redis_conn
+        )
         processed_logs_batches.append(data)
 
     # aggregate processed logs values (this same as what we do in _construct_trade_volume_epoch_snapshot_data function)
@@ -165,7 +176,8 @@ async def verify_trade_volume_calculations(loop, pair_contract, start_block, end
     else:
         print(f"Error fetching data from uniswap THE GRAPH")
         trade_volume_data["uniswap_24h_trade_volume"] = None
-    
+
+    print(f"pair_contract: {pair_contract}")
 
     # PRINT RESULTS
     print("\n Results:")
@@ -199,9 +211,9 @@ if __name__ == '__main__':
     debug_logs = True
 
     # ************* CHANGE THESE VALUES FOR CURRENT TIME ****************** 
-    pair_contract = '0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5'
-    start_block = 14525918 # 24h old block on etherscan 
-    end_block = 14532376 # latest block on etherscan
+    pair_contract = '0x63b61e73d3fa1fb96d51ce457cabe89fffa7a1f1'
+    start_block = 14892336 # 24h old block on etherscan 
+    end_block = 14898493 # latest block on etherscan
     # ********************************************************************
 
     loop.run_until_complete(
