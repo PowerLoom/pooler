@@ -225,21 +225,21 @@ async def extract_recent_transaction_logs(ev_loop, event_name, event_logs, pair_
         token0_swapped_usd = 0
         trade_amount_usd = 0
         if event_name == 'Swap':
-            if log.args.get('amount1In') == 0:
+            if log.args.get('amount1Out') == 0:
 
-                current0_swapped = log.args.get('amount0In') / 10 ** int(pair_per_token_metadata['token0']['decimals'])
+                current0_swapped = log.args.get('amount0Out') / 10 ** int(pair_per_token_metadata['token0']['decimals'])
                 token0_amount = current0_swapped
                 token0_swapped_usd = current0_swapped * token0_price_map.get(log["blockNumber"], list(token0_price_map.values())[0])
                 
-                current1_swapped = log.args.get('amount1Out') / 10 ** int(pair_per_token_metadata['token1']['decimals'])
+                current1_swapped = log.args.get('amount1In') / 10 ** int(pair_per_token_metadata['token1']['decimals'])
                 token1_amount = current1_swapped
                 token1_swapped_usd = current1_swapped * token1_price_map.get(log["blockNumber"], list(token1_price_map.values())[0])
-            elif log.args.get('amount0In') == 0:
-                current0_swapped = log.args.get('amount0Out') / 10 ** int(pair_per_token_metadata['token0']['decimals']) 
+            elif log.args.get('amount0Out') == 0:
+                current0_swapped = log.args.get('amount0In') / 10 ** int(pair_per_token_metadata['token0']['decimals']) 
                 token0_amount = current0_swapped
                 token0_swapped_usd = current0_swapped * token0_price_map.get(log["blockNumber"], list(token0_price_map.values())[0])
 
-                current1_swapped = log.args.get('amount1In') / 10 ** int(pair_per_token_metadata['token1']['decimals'])
+                current1_swapped = log.args.get('amount1Out') / 10 ** int(pair_per_token_metadata['token1']['decimals'])
                 token1_amount = current1_swapped
                 token1_swapped_usd = current1_swapped * token1_price_map.get(log["blockNumber"], list(token1_price_map.values())[0])
 
@@ -294,23 +294,23 @@ async def extract_trade_volume_data(ev_loop, event_name, event_logs: List[Attrib
 
     for parsed_log_obj_values in log_topic_values:
         if event_name == 'Swap':
-            if parsed_log_obj_values.get('amount1In') == 0:
+            if parsed_log_obj_values.get('amount1Out') == 0:
             
-                current0_swapped = parsed_log_obj_values.get('amount0In') / 10 ** int(pair_per_token_metadata['token0']['decimals'])
+                current0_swapped = parsed_log_obj_values.get('amount0Out') / 10 ** int(pair_per_token_metadata['token0']['decimals'])
                 token0_swapped += current0_swapped
                 token0_swapped_usd += current0_swapped * token0_price_map.get(parsed_log_obj_values.get('blockNumber'), list(token0_price_map.values())[0])
                 
-                current1_swapped = parsed_log_obj_values.get('amount1Out') / 10 ** int(pair_per_token_metadata['token1']['decimals'])
+                current1_swapped = parsed_log_obj_values.get('amount1In') / 10 ** int(pair_per_token_metadata['token1']['decimals'])
                 token1_swapped += current1_swapped
                 token1_swapped_usd += current1_swapped * token1_price_map.get(parsed_log_obj_values.get('blockNumber'), list(token1_price_map.values())[0])
 
-            elif parsed_log_obj_values.get('amount0In') == 0:
+            elif parsed_log_obj_values.get('amount0Out') == 0:
 
-                current0_swapped = parsed_log_obj_values.get('amount0Out') / 10 ** int(pair_per_token_metadata['token0']['decimals']) 
+                current0_swapped = parsed_log_obj_values.get('amount0In') / 10 ** int(pair_per_token_metadata['token0']['decimals']) 
                 token0_swapped += current0_swapped
                 token0_swapped_usd += current0_swapped * token0_price_map.get(parsed_log_obj_values.get('blockNumber'), list(token0_price_map.values())[0])
 
-                current1_swapped = parsed_log_obj_values.get('amount1In') / 10 ** int(pair_per_token_metadata['token1']['decimals'])
+                current1_swapped = parsed_log_obj_values.get('amount1Out') / 10 ** int(pair_per_token_metadata['token1']['decimals'])
                 token1_swapped += current1_swapped
                 token1_swapped_usd += current1_swapped * token1_price_map.get(parsed_log_obj_values.get('blockNumber'), list(token1_price_map.values())[0])
 
