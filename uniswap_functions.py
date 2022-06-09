@@ -693,6 +693,7 @@ async def get_token_price_at_block_height(token_metadata, block_height, loop: as
         if Web3.toChecksumAddress(token_metadata['address']) == Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH):
             token_price = await get_eth_price_usd(block_height, loop)
         else:
+            token_eth_price = 0
 
             for white_token in settings.UNISWAP_V2_WHITELIST:
                 white_token = Web3.toChecksumAddress(white_token)
