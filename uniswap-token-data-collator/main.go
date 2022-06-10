@@ -46,7 +46,7 @@ const periodicRetrievalInterval time.Duration = 120 * time.Second
 func main() {
 	var pairContractAddressesFile string
 	log.SetOutput(ioutil.Discard) // Send all logs to nowhere by default
-
+	log.SetReportCaller(true)
 	log.AddHook(&writer.Hook{ // Send logs with level higher than warning to stderr
 		Writer: os.Stderr,
 		LogLevels: []log.Level{
@@ -162,7 +162,7 @@ func FetchAndFillTokenMetaData(pairContractAddr string) {
 					MAX_RETRIES_BEFORE_EXIT, redisKey)
 				os.Exit(1)
 			}
-			log.Error("Failed to get PairContractTokensAddresses from redis for PairContract due to error %s, retrying %d",
+			log.Errorf("Failed to get PairContractTokensAddresses from redis for PairContract due to error %s, retrying %d",
 				pairContractAddr, err.Error(), retryCount)
 			time.Sleep(10 * time.Second)
 			continue
@@ -454,7 +454,7 @@ func CommitV2TokenSummaryPayload() (int64, error) {
 		log.Fatalf("Failed to marshal request %+v towards Audit-Protocol with error %+v", request, err)
 		return 0, err
 	}
-	log.Debug("URL %s . Committing Payload %s", url, string(body))
+	log.Debugf("URL %s . Committing Payload %s", url, string(body))
 	retryCount := 0
 	for ; retryCount < 3; retryCount++ {
 		resp, err := apHttpClient.Post(url, "application/json", bytes.NewBuffer(body))
@@ -520,7 +520,7 @@ func FetchV2PairSummarySnapshot(blockHeight int64) []TokenPairLiquidityProcessed
 		log.Trace("Rsp Body", string(body))
 
 		if err = json.Unmarshal(body, &v2SummaryResp); err != nil { // Parse []byte to the go struct pointer
-			log.Error("Can not unmarshal JSON")
+			log.Errorf("Can not unmarshal JSON due to error %+v", err)
 			continue
 		}
 		break
@@ -562,7 +562,7 @@ func WaitAndFetchLatestV2TokenSummaryCID(blockHeight int64) (string, error) {
 			continue
 		}
 		if err = json.Unmarshal(body, &apResp); err != nil { // Parse []byte to the go struct pointer
-			log.Error("Can not unmarshal JSON due to error %+v, retrying %d", err, retryCount)
+			log.Errorf("Can not unmarshal JSON due to error %+v, retrying %d", err, retryCount)
 			time.Sleep(10 * time.Second)
 			continue
 		}
@@ -570,8 +570,8 @@ func WaitAndFetchLatestV2TokenSummaryCID(blockHeight int64) (string, error) {
 		log.Debugf("Successfully got response  %+v for CID fetch for URL %s is", apResp, url)
 		if len(apResp) > 0 {
 			for _, val := range apResp {
-				log.Debugf("Got CID %s at Block Height %d for projectID %s", val.Data.Cid, blockHeight, projectID)
-				return val.Data.Cid, nil
+				log.Debugf("Got CID %s at Block Height %d for projectID %s", val.Data.Cid.LinkData, blockHeight, projectID)
+				return val.Data.Cid.LinkData, nil
 			}
 		}
 	}
@@ -603,7 +603,7 @@ func FetchV2SummaryLatestBlockHeight() int64 {
 		log.Trace("Rsp Body", string(body))
 
 		if err = json.Unmarshal(body, &heightResp); err != nil { // Parse []byte to the go struct pointer
-			log.Error("Can not unmarshal JSON")
+			log.Errorf("Can not unmarshal JSON resp for due to error %+v", err)
 			continue
 		}
 		break

@@ -24,15 +24,19 @@ type AuditProtocolCommitPayloadResp struct {
 	CommitID        string `json:"commitId"`
 }
 
+type IPLDLink struct {
+	LinkData string `json:"/"`
+}
+
 type AuditProtocolBlockResp struct {
 	Data struct {
-		Cid  string `json:"cid"`
-		Type string `json:"type"`
+		Cid  IPLDLink `json:"cid"`
+		Type string   `json:"type"`
 	} `json:"data"`
-	Height    int    `json:"height"`
-	PrevCid   string `json:"prevCid"`
-	Timestamp int    `json:"timestamp"`
-	TxHash    string `json:"txHash"`
+	Height    int      `json:"height"`
+	PrevCid   IPLDLink `json:"prevCid"`
+	Timestamp int      `json:"timestamp"`
+	TxHash    string   `json:"txHash"`
 }
 
 type TokenPriceHistoryEntry struct {
