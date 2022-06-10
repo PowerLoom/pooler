@@ -723,18 +723,18 @@ async def get_token_price_at_block_height(token_metadata, block_height, loop: as
                 eth_usd_price = await get_eth_price_usd(block_height, loop)
                 token_price = token_eth_price * eth_usd_price 
             
-            # cache price at height
-            if block_height != 'latest':
-                await redis_conn.zadd(
-                    name=uniswap_pair_cached_block_height_token_price.format(Web3.toChecksumAddress(token_metadata['address'])),
-                    mapping={json.dumps({
-                        'blockHeight': block_height,
-                        'price': token_price
-                    }): int(block_height)} # timestamp so zset do not ignore same height on multiple heights
-                )
-
             if debug_log:
                 logger.debug(f"{token_metadata['symbol']}: price is {token_price} | its eth price is {token_eth_price}")
+            
+        # cache price at height
+        if block_height != 'latest':
+            await redis_conn.zadd(
+                name=uniswap_pair_cached_block_height_token_price.format(Web3.toChecksumAddress(token_metadata['address'])),
+                mapping={json.dumps({
+                    'blockHeight': block_height,
+                    'price': token_price
+                }): int(block_height)} # timestamp so zset do not ignore same height on multiple heights
+            )
 
     except Exception as err:
         logger.error(f"Error: failed to fetch token price | error_msg: {str(err)} | contract: {token_metadata['address']}")
@@ -1159,7 +1159,7 @@ if __name__ == '__main__':
     # loop = asyncio.get_event_loop()
     # rate_limit_lua_script_shas = dict()
     # data = loop.run_until_complete(
-    #     get_liquidity_of_each_token_reserve_async(loop, rate_limit_lua_script_shas, '0x7a809081f991ecfe0ab2727c7e90d2ad7c2e411e')
+    #     get_liquidity_of_each_token_reserve_async(loop, rate_limit_lua_script_shas, '0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc', block_identifier=14936922)
     # )
 
     # print(f"\n\n{data}\n")
