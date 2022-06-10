@@ -37,6 +37,10 @@ def rabbitmq_cleanup(fn):
             try:
                 self._logger.debug('Waiting for RabbitMQ interactor thread to join...')
                 self._rabbitmq_thread.join()
+                self._logger.debug('Shutting down after sending out last epoch with end block height as %s,'
+                                    ' starting blockHeight to be used during next restart is %s'
+                                    ,self.last_sent_block
+                                    , self.last_sent_block+1)
             except:
                 pass
         finally:
@@ -52,6 +56,7 @@ class LinearTickerProcess(Process):
         self._begin = kwargs.get('begin')
         self._end = kwargs.get('end')
         self._shutdown_initiated = False
+        self.last_sent_block = 0
 
     def _interactor_wrapper(self, q: queue.Queue):
         self._rabbitmq_interactor = RabbitmqThreadedSelectLoopInteractor(
@@ -136,6 +141,7 @@ class LinearTickerProcess(Process):
                         self._rabbitmq_queue.put(cmd_obj)
                         # send epoch report
                         self._logger.debug(cmd)
+                        self.last_sent_block = epoch[1]
                         self._logger.debug('Waiting to push next epoch in %d seconds...', sleep_secs_between_chunks)
                         # fixed wait
                         sleep(sleep_secs_between_chunks)
