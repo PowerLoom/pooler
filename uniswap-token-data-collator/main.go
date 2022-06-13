@@ -250,6 +250,7 @@ func PrepareAndSubmitV2TokenSummarySnapshot(fromTime float64) {
 			log.Errorf("Failed to commit payload at blockHeight %d due to error %s", curBlockHeight, err.Error())
 			return
 		}
+		ResetTokenData()
 		payloadCID, err := WaitAndFetchLatestV2TokenSummaryCID(tentativeBlockHeight)
 		if err != nil {
 			log.Errorf("Failed to Fetch payloadCID at blockHeight %d due to error %s", curBlockHeight, err.Error())
@@ -265,8 +266,19 @@ func PrepareAndSubmitV2TokenSummarySnapshot(fromTime float64) {
 			PruneTokenPriceZSet(tokenData.ContractAddress, int64(tokenData.Block_height))
 		}
 	} else {
-		log.Debugf("V2PairSummary blockHeight has not moved yet and is still at %d, lastSnapshotBlockHeight is %d. Hence not processing anything.",
+		log.Debugf("PairSummary blockHeight has not moved yet and is still at %d, lastSnapshotBlockHeight is %d. Hence not processing anything.",
 			curBlockHeight, lastSnapshotBlockHeight)
+	}
+}
+
+func ResetTokenData() {
+	for _, tokenData := range tokenList {
+		tokenData.Liquidity = 0
+		tokenData.LiquidityUSD = 0
+		tokenData.TradeVolume_24h = 0
+		tokenData.TradeVolumeUSD_24h = 0
+		tokenData.TradeVolume_7d = 0
+		tokenData.TradeVolumeUSD_7d = 0
 	}
 }
 
@@ -454,7 +466,7 @@ func CommitV2TokenSummaryPayload() (int64, error) {
 		log.Fatalf("Failed to marshal request %+v towards Audit-Protocol with error %+v", request, err)
 		return 0, err
 	}
-	log.Debugf("URL %s . Committing Payload %s", url, string(body))
+	log.Debugf("URL %s. Committing Payload %s", url, string(body))
 	retryCount := 0
 	for ; retryCount < 3; retryCount++ {
 		resp, err := apHttpClient.Post(url, "application/json", bytes.NewBuffer(body))
@@ -525,7 +537,7 @@ func FetchV2PairSummarySnapshot(blockHeight int64) []TokenPairLiquidityProcessed
 		}
 		break
 	}
-	log.Debugf("Last Block Height for projectID %s is : %+v", v2PairsProjectId, v2SummaryResp)
+	log.Debugf("v2Pairs Summary data for projectID %s is : %+v", v2PairsProjectId, v2SummaryResp)
 	if len(v2SummaryResp) > 0 {
 		for _, val := range v2SummaryResp {
 			return val.Payload.Data
