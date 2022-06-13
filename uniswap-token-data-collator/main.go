@@ -202,6 +202,7 @@ func PrepareAndSubmitV2TokenSummarySnapshot(fromTime float64) {
 	if curBlockHeight > lastSnapshotBlockHeight {
 		var sourceBlockHeight int64
 		tokensPairData := FetchV2PairSummarySnapshot(curBlockHeight)
+		log.Debugf("Collating tokenData at blockHeight %d", curBlockHeight)
 		for _, tokenPairProcessedData := range tokensPairData {
 			//TODO: Need to remove 0x from contractAddress saved as string.
 			token0Data := tokenPairTokenMapping[common.HexToAddress(tokenPairProcessedData.ContractAddress).Hex()].token0Ref
@@ -250,7 +251,7 @@ func PrepareAndSubmitV2TokenSummarySnapshot(fromTime float64) {
 			log.Errorf("Failed to commit payload at blockHeight %d due to error %s", curBlockHeight, err.Error())
 			return
 		}
-		ResetTokenData()
+
 		payloadCID, err := WaitAndFetchLatestV2TokenSummaryCID(tentativeBlockHeight)
 		if err != nil {
 			log.Errorf("Failed to Fetch payloadCID at blockHeight %d due to error %s", curBlockHeight, err.Error())
@@ -258,7 +259,7 @@ func PrepareAndSubmitV2TokenSummarySnapshot(fromTime float64) {
 		}
 		StoreTokenSummaryCIDInSnapshotsZSet(sourceBlockHeight, payloadCID)
 		StoreV2TokensSummaryPayload(sourceBlockHeight)
-
+		ResetTokenData()
 		lastSnapshotBlockHeight = curBlockHeight
 
 		//Prune TokenPrice ZSet as price already fetched for all tokens
