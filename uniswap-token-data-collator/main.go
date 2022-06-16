@@ -128,7 +128,7 @@ func FetchTokensMetaData() {
 }
 
 func FetchAndFillTokenMetaData(pairContractAddr string) {
-	redisKey := fmt.Sprintf(REDIS_KEY_TOKEN_PAIR_CONTRACT_TOKENS_DATA, pairContractAddr)
+	redisKey := fmt.Sprintf(REDIS_KEY_TOKEN_PAIR_CONTRACT_TOKENS_DATA, settingsObj.Development.Namespace, pairContractAddr)
 	log.Debug("Fetching PairContractTokensData from redis with key:", redisKey)
 	var tokenPairMeta map[string]string
 	var err error

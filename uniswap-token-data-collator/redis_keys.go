@@ -1,6 +1,6 @@
 package main
 
-const REDIS_KEY_TOKEN_PAIR_CONTRACT_TOKENS_DATA = "uniswap:pairContract:UNISWAPV2:%s:PairContractTokensData"
+const REDIS_KEY_TOKEN_PAIR_CONTRACT_TOKENS_DATA = "uniswap:pairContract:%s:%s:PairContractTokensData"
 const REDIS_KEY_TOKEN_PRICE_HISTORY = "uniswap:tokenInfo:%s:%s:priceHistory"
 const REDIS_KEY_PAIR_TOKEN_ADDRESSES = "uniswap:pairContract:%s:%s:PairContractTokensAddresses"
 const REDIS_KEY_TOKEN_BLOCK_HEIGHT_PRICE = "uniswap:pairContract:%s:%s:cachedPairBlockHeightTokenPrice"
