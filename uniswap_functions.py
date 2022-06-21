@@ -671,6 +671,24 @@ async def get_derived_eth_per_token(contract_obj, token_metadata, block_height, 
     finally:
         return float(token_eth_price)
 
+def return_last_price_value(retry_state):
+        """After max retry attempt, return the last price value for token"""
+
+        try:
+            retry_state.outcome.result()
+        except Exception as err:
+            logger.error(f"Error: token price exception after max retries: {str(err)}, setting price to 0")
+        else:
+            logger.debug(f"Error: there is some unknown issue in token price rpc call, setting price to 0")
+
+        return 0
+
+@retry(
+    retry=retry_if_exception_type(RPCException), 
+    wait=wait_random_exponential(multiplier=1, max=10), 
+    stop=stop_after_attempt(settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS),
+    retry_error_callback=return_last_price_value
+)
 async def get_token_price_at_block_height(token_metadata, block_height, loop: asyncio.AbstractEventLoop, redis_conn, debug_log=True):
     """
         returns the price of a token at a given block height
@@ -735,11 +753,13 @@ async def get_token_price_at_block_height(token_metadata, block_height, loop: as
                     'price': token_price
                 }): int(block_height)} # timestamp so zset do not ignore same height on multiple heights
             )
+        
+        return token_price
 
     except Exception as err:
-        logger.error(f"Error: failed to fetch token price | error_msg: {str(err)} | contract: {token_metadata['address']}")
-    finally:
-        return token_price
+        raise RPCException(request={"contract": token_metadata['address'], "block_identifier": block_height}, 
+            response={}, underlying_exception=None, 
+            extra_info={'msg': f"rpc error: {str(err)}"}) from err
 
 
 # asynchronously get liquidity of each token reserve
