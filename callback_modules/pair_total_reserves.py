@@ -114,12 +114,12 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 epoch_usd_reserves_snapshot_map_token0[f'block{block_num}'] = pair_reserve_total['token0USD']
                 epoch_usd_reserves_snapshot_map_token1[f'block{block_num}'] = pair_reserve_total['token1USD']
                 if fetch_ts:
-                    if not pair_reserve_total['timestamp']:
+                    if not pair_reserve_total.get('timestamp', None):
                         self._logger.error(
                             f'Could not fetch timestamp for max block height in broadcast {msg_obj} '
                             f'against pair reserves calculation')
                     else:
-                        max_block_timestamp = pair_reserve_total['timestamp']
+                        max_block_timestamp = pair_reserve_total.get('timestamp')
         if enqueue_epoch:
             if enqueue_on_failure:
                 # if coalescing was achieved, ensure that is recorded and enqueued as well
@@ -221,6 +221,51 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 to_block=to_block,
                 redis_conn=self._redis_conn
             )
+        
+            total_trades_in_usd = 0
+            total_fee_in_usd = 0
+            total_token0_vol = 0
+            total_token1_vol = 0
+            total_token0_vol_usd = 0
+            total_token1_vol_usd = 0
+            recent_events_logs = list()
+            self._logger.debug('Trade volume processed snapshot: %s', trade_vol_processed_snapshot)
+            for each_event in trade_vol_processed_snapshot:
+                if each_event == 'timestamp':
+                    continue
+                # self._logger.debug('Event under process: %s | event subdict: %s', each_event, trade_vol_processed_snapshot[each_event])
+                # self._logger.debug('event trades: %s', trade_vol_processed_snapshot[each_event]['trades'])
+                total_trades_in_usd += trade_vol_processed_snapshot[each_event]['trades']['totalTradesUSD']
+                total_fee_in_usd += trade_vol_processed_snapshot[each_event]['trades'].get('totalFeeUSD', 0)
+                total_token0_vol += trade_vol_processed_snapshot[each_event]['trades']['token0TradeVolume']
+                total_token1_vol += trade_vol_processed_snapshot[each_event]['trades']['token1TradeVolume']
+                total_token0_vol_usd += trade_vol_processed_snapshot[each_event]['trades']['token0TradeVolumeUSD']
+                total_token1_vol_usd += trade_vol_processed_snapshot[each_event]['trades']['token1TradeVolumeUSD']
+                recent_events_logs.extend(trade_vol_processed_snapshot[each_event]['trades'].get("recent_transaction_logs", []))
+                trade_vol_processed_snapshot[each_event]['trades'].pop('recent_transaction_logs', None)
+            if not trade_vol_processed_snapshot.get('timestamp', None):
+                self._logger.error(
+                    f'Could not fetch timestamp for max block height in broadcast {msg_obj} '
+                    f'against trade volume calculation')
+            else:
+                max_block_timestamp = trade_vol_processed_snapshot.get('timestamp')
+                trade_vol_processed_snapshot.pop('timestamp', None)
+            trade_volume_snapshot = UniswapTradesSnapshot(**dict(
+                contract=msg_obj.contract,
+                broadcast_id=msg_obj.broadcast_id,
+                chainHeightRange=EpochBase(begin=msg_obj.begin, end=msg_obj.end),
+                timestamp=max_block_timestamp,
+                totalTrade=float(f'{total_trades_in_usd: .6f}'),
+                totalFee=float(f'{total_fee_in_usd: .6f}'),
+                token0TradeVolume=float(f'{total_token0_vol: .6f}'),
+                token1TradeVolume=float(f'{total_token1_vol: .6f}'),
+                token0TradeVolumeUSD=float(f'{total_token0_vol_usd: .6f}'),
+                token1TradeVolumeUSD=float(f'{total_token1_vol_usd: .6f}'),
+                events=trade_vol_processed_snapshot,
+                recent_logs=recent_events_logs
+            ))
+            return trade_volume_snapshot
+
         except Exception as e:
             if enqueue_on_failure:
                 # if coalescing was achieved, ensure that is recorded and enqueued as well
@@ -244,50 +289,6 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 self._logger.error(f'Enqueued epoch broadcast ID {msg_obj.broadcast_id} because '
                                    f'trade volume query failed: {msg_obj}: {e}', exc_info=True)
             return None
-        else:
-            total_trades_in_usd = 0
-            total_fee_in_usd = 0
-            total_token0_vol = 0
-            total_token1_vol = 0
-            total_token0_vol_usd = 0
-            total_token1_vol_usd = 0
-            recent_events_logs = list()
-            self._logger.debug('Trade volume processed snapshot: %s', trade_vol_processed_snapshot)
-            for each_event in trade_vol_processed_snapshot:
-                if each_event == 'timestamp':
-                    continue
-                # self._logger.debug('Event under process: %s | event subdict: %s', each_event, trade_vol_processed_snapshot[each_event])
-                # self._logger.debug('event trades: %s', trade_vol_processed_snapshot[each_event]['trades'])
-                total_trades_in_usd += trade_vol_processed_snapshot[each_event]['trades']['totalTradesUSD']
-                total_fee_in_usd += trade_vol_processed_snapshot[each_event]['trades'].get('totalFeeUSD', 0)
-                total_token0_vol += trade_vol_processed_snapshot[each_event]['trades']['token0TradeVolume']
-                total_token1_vol += trade_vol_processed_snapshot[each_event]['trades']['token1TradeVolume']
-                total_token0_vol_usd += trade_vol_processed_snapshot[each_event]['trades']['token0TradeVolumeUSD']
-                total_token1_vol_usd += trade_vol_processed_snapshot[each_event]['trades']['token1TradeVolumeUSD']
-                recent_events_logs.extend(trade_vol_processed_snapshot[each_event]['trades'].get("recent_transaction_logs", []))
-                trade_vol_processed_snapshot[each_event]['trades'].pop('recent_transaction_logs', None)
-            if not trade_vol_processed_snapshot['timestamp']:
-                self._logger.error(
-                    f'Could not fetch timestamp for max block height in broadcast {msg_obj} '
-                    f'against trade volume calculation')
-            else:
-                max_block_timestamp = trade_vol_processed_snapshot['timestamp']
-                trade_vol_processed_snapshot.pop('timestamp', None)
-            trade_volume_snapshot = UniswapTradesSnapshot(**dict(
-                contract=msg_obj.contract,
-                broadcast_id=msg_obj.broadcast_id,
-                chainHeightRange=EpochBase(begin=msg_obj.begin, end=msg_obj.end),
-                timestamp=max_block_timestamp,
-                totalTrade=float(f'{total_trades_in_usd: .6f}'),
-                totalFee=float(f'{total_fee_in_usd: .6f}'),
-                token0TradeVolume=float(f'{total_token0_vol: .6f}'),
-                token1TradeVolume=float(f'{total_token1_vol: .6f}'),
-                token0TradeVolumeUSD=float(f'{total_token0_vol_usd: .6f}'),
-                token1TradeVolumeUSD=float(f'{total_token1_vol_usd: .6f}'),
-                events=trade_vol_processed_snapshot,
-                recent_logs=recent_events_logs
-            ))
-            return trade_volume_snapshot
 
     async def _update_broadcast_processing_status(self, broadcast_id, update_state):
         await self._redis_conn.hset(

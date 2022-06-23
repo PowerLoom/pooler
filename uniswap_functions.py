@@ -217,8 +217,9 @@ async def get_block_details(ev_loop, block_number):
         block_details = dict() if not block_details else block_details
     except Exception as e:
         logger.error('Error attempting to get block details of recent transaction timestamp %s: %s', block_number, e, exc_info=True)
-        block_details = dict()
-    finally:
+        block_details = dict()      
+        raise e
+    else:
         return block_details
 
 async def store_price_at_block_range(begin_block, end_block, token0, token1, price, redis_conn: aioredis.Redis):
@@ -576,10 +577,10 @@ async def get_pair_per_token_metadata(
                 'symbol': f'{token0_symbol}-{token1_symbol}'
             }
         }
-    except Exception as e:
+    except Exception as err:
         # this will be retried in next cycle
-        logger.error(f"RPC error while fetcing metadata for pair {pair_address}, error_msg:{e}", exc_info=True)
-        return {}
+        logger.error(f"RPC error while fetcing metadata for pair {pair_address}, error_msg:{err}", exc_info=True)
+        raise err
 
 async def get_eth_price_usd(block_height, loop: asyncio.AbstractEventLoop):
     """
@@ -620,7 +621,8 @@ async def get_eth_price_usd(block_height, loop: asyncio.AbstractEventLoop):
 
     except Exception as err:
         logger.error(f"RPC ERROR failed to fetch ETH price, error_msg:{err}")
-    finally:
+        raise err
+    else:
         return float(eth_price_usd)
 
 async def pair_based_token_price(pair_contract_obj, pair_metadata, white_token, target_token, block_height, loop: asyncio.AbstractEventLoop, redis_conn):
@@ -666,9 +668,10 @@ async def get_derived_eth_per_token(contract_obj, token_metadata, block_height, 
             else:
                 token_eth_price = 0
     except Exception as error:
-        logger.error(f"ERROR: failed to derived eth per token, error_msg:{str(error)}")
+        logger.error(f"Error: failed to derived eth per token, error_msg:{str(error)}")
         token_eth_price = 0
-    finally:
+        raise error
+    else:
         return float(token_eth_price)
 
 def return_last_price_value(retry_state):
@@ -968,6 +971,7 @@ async def get_trade_volume_epoch_price_map(
             except Exception as err:
                 # pair_contract price can't retrieved, this is mostly with sepcific coins log it and fetch price for newer ones
                 logger.error(f"Failed to fetch token price | error_msg: {str(err)} | epoch: {to_block}-{from_block}", exc_info=True)
+                raise err
         else:
             logger.error('Trade Volume block map: I cant request, retry after sometime')
     
@@ -1027,8 +1031,7 @@ async def get_pair_contract_trades_async(
                 aioredis.exceptions.RedisError, Exception
             ) as e:
                 # shit can happen while each limit check call hits Redis, handle appropriately
-                logger.debug('Bypassing rate limit check for appID because of Redis exception: ' + str(
-                    {'appID': app_id, 'exception': e}))
+                logger.debug('Bypassing rate limit check for appID because of Redis exception: ' + str({'appID': app_id, 'exception': e}))
             else:
                 can_request = True
         if can_request:
