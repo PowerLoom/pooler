@@ -247,6 +247,7 @@ def get_tokens_liquidity_for_sort(pairData):
     return pairData["token0LiquidityUSD"] + pairData["token1LiquidityUSD"]
 
 
+@app.get('/v1/api/v2-pairs')
 @app.get('/v2-pairs')
 async def get_v2_pairs_data(
     request: Request,
@@ -281,9 +282,13 @@ async def get_v2_pairs_data(
     
     data = json.loads(snapshot_data)["data"]
     data.sort(key=get_tokens_liquidity_for_sort, reverse=True)
-    return data
 
+    if "/v1/api" in request.url._url:
+        return {"data": data, "txHash": txHash, "cid": latest_payload_cid}
+    else:
+        return data
 
+@app.get('/v1/api/v2-pairs/snapshots')
 @app.get('/v2-pairs/snapshots')
 async def get_v2_pairs_data(
     request: Request,
@@ -303,6 +308,7 @@ async def get_v2_pairs_data(
     }
 
 
+@app.get('/v1/api/v2-pairs/{block_height:int}')
 @app.get('/v2-pairs/{block_height:int}')
 async def get_v2_pairs_data(
     request: Request,
@@ -314,12 +320,6 @@ async def get_v2_pairs_data(
     snapshot_data = await redis_conn.get(
         name=redis_keys.uniswap_V2_snapshot_at_blockheight.format(block_height)
     )
-
-    # serve redis cache
-    if snapshot_data:
-        data = json.loads(snapshot_data)['data']
-        data.sort(key=get_tokens_liquidity_for_sort, reverse=True)
-        return data
 
     latest_payload = await redis_conn.zrangebyscore(
         name=redis_keys.uniswap_V2_summarized_snapshots_zset,
@@ -334,6 +334,15 @@ async def get_v2_pairs_data(
     latest_payload = json.loads(latest_payload[0].decode('utf-8'))
     payload_cid = latest_payload.get("cid")
     txHash = latest_payload.get("txHash")
+
+    # serve redis cache
+    if snapshot_data:
+        data = json.loads(snapshot_data)['data']
+        data.sort(key=get_tokens_liquidity_for_sort, reverse=True)
+        if "/v1/api" in request.url._url:
+            return {"data": data, "txHash": txHash, "cid": payload_cid}
+        else:
+            return data
     
     # fetch from ipfs
     payload_data = await retrieve_payload_data(payload_cid, redis_conn)
@@ -344,7 +353,10 @@ async def get_v2_pairs_data(
     payload_data = json.loads(payload_data)['data']
     payload_data.sort(key=get_tokens_liquidity_for_sort, reverse=True)
 
-    return payload_data
+    if "/v1/api" in request.url._url:
+        return {"data": payload_data, "txHash": txHash, "cid": payload_cid}
+    else:
+        return payload_data
         
 
 @app.get('/v2-daily-stats/snapshots')
