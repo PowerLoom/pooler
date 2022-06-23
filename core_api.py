@@ -263,13 +263,16 @@ async def get_v2_pairs_data(
     if len(latest_v2_summary_snapshot) < 1:
         return {'data': None}
 
-    latest_payload_cid, latest_block_height = latest_v2_summary_snapshot[0]
+    latest_payload, latest_block_height = latest_v2_summary_snapshot[0]
+    latest_payload = json.loads(latest_payload.decode('utf-8'))
+    latest_payload_cid = latest_payload.get("cid")
+    txHash = latest_payload.get("txHash")
+
     snapshot_data = await redis_conn.get(
         name=uniswap_V2_snapshot_at_blockheight.format(int(latest_block_height))
     )
     if not snapshot_data:
         # fetch from ipfs
-        latest_payload_cid = latest_payload_cid.decode('utf-8')
         snapshot_data = await retrieve_payload_data(latest_payload_cid, redis_conn)
 
     #even ipfs doesn't have the data, return empty
@@ -307,28 +310,32 @@ async def get_v2_pairs_data(
     block_height: int
 ):
     redis_conn: aioredis.Redis = request.app.redis_pool
-    payload_cid = await redis_conn.zrangebyscore(
+
+    snapshot_data = await redis_conn.get(
+        name=redis_keys.uniswap_V2_snapshot_at_blockheight.format(block_height)
+    )
+
+    # serve redis cache
+    if snapshot_data:
+        data = json.loads(snapshot_data)['data']
+        data.sort(key=get_tokens_liquidity_for_sort, reverse=True)
+        return data
+
+    latest_payload = await redis_conn.zrangebyscore(
         name=redis_keys.uniswap_V2_summarized_snapshots_zset,
         min=block_height,
         max=block_height,
         withscores=False
     )
 
-    if len(payload_cid) < 1:
+    if len(latest_payload) < 1:
         return {'data': None}
-    
-    snapshot_data = await redis_conn.get(
-        name=redis_keys.uniswap_V2_snapshot_at_blockheight.format(block_height)
-    )
-    
-    # serve redis cache
-    if snapshot_data:
-        data = json.loads(snapshot_data)['data']
-        data.sort(key=get_tokens_liquidity_for_sort, reverse=True)
-        return data
+
+    latest_payload = json.loads(latest_payload[0].decode('utf-8'))
+    payload_cid = latest_payload.get("cid")
+    txHash = latest_payload.get("txHash")
     
     # fetch from ipfs
-    payload_cid = payload_cid[0].decode('utf-8')
     payload_data = await retrieve_payload_data(payload_cid, redis_conn)
     
     if not payload_data:
