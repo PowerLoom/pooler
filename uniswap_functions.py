@@ -684,6 +684,7 @@ def return_last_price_value(retry_state):
         return 0
 
 @retry(
+    reraise=True,
     retry=retry_if_exception_type(RPCException), 
     wait=wait_random_exponential(multiplier=1, max=10), 
     stop=stop_after_attempt(settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS),
@@ -829,8 +830,9 @@ async def get_liquidity_of_each_token_reserve_async(
                 block_det_func = partial(w3.eth.get_block, block_identifier)
                 try:
                     block_details = await loop.run_in_executor(func=block_det_func, executor=None)
-                except:
-                    block_details = None
+                except Exception as err:
+                    logger.error('Error attempting to get block details of block_identifier %s: %s, retrying again', block_identifier, err, exc_info=True)
+                    raise err
             else:
                 block_details = None
             pair_per_token_metadata = await get_pair_per_token_metadata(
@@ -889,9 +891,10 @@ async def get_liquidity_of_each_token_reserve_async(
             response={}, underlying_exception=None, 
             extra_info={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get async liquidity reserves"})
     except Exception as exc:
-        logger.error("error at async_get_liquidity_of_each_token_reserve fn: %s", exc, exc_info=True)
-        # snapshot constructor expect exception and handle it with queue
-        raise exc
+        logger.error("error at async_get_liquidity_of_each_token_reserve fn, retrying..., error_msg: %s", exc, exc_info=True)
+        raise RPCException(request={"contract": pair_address, "block_height": block_identifier}, 
+            response={}, underlying_exception=None, 
+            extra_info={'msg': f"Error: async_get_liquidity_of_each_token_reserve error_msg: {str(exc)}"}) from exc
 
 
 async def get_trade_volume_epoch_price_map(
@@ -1034,9 +1037,9 @@ async def get_pair_contract_trades_async(
                 block_det_func = partial(w3.eth.get_block, to_block)
                 try:
                     block_details = await ev_loop.run_in_executor(func=block_det_func, executor=None)
-                except Exception as e:
-                    logger.error('Error attempting to get block details of to_block %s: %s', to_block, e, exc_info=True)
-                    block_details = None
+                except Exception as err:
+                    logger.error('Error attempting to get block details of to_block %s: %s, retrying again', to_block, err, exc_info=True)
+                    raise err
             else:
                 # logger.debug('Not attempting to get block details of to_block %s', to_block)
                 block_details = None
@@ -1105,8 +1108,9 @@ async def get_pair_contract_trades_async(
             extra_info={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get async trade volume"})
     except Exception as exc:
         logger.error("error at get_pair_contract_trades_async fn: %s", exc, exc_info=True)
-        # snapshot constructor expect exception and handle it with queue
-        raise exc
+        raise RPCException(request={"contract": pair_address, "fromBlock": from_block, "toBlock": to_block}, 
+            response={}, underlying_exception=None, 
+            extra_info={'msg': f"error: get_pair_contract_trades_async, error_msg: {str(exc)}"}) from exc
 
 
 # get liquidity of each token reserve
@@ -1173,7 +1177,7 @@ if __name__ == '__main__':
     # rate_limit_lua_script_shas = dict()
     # loop = asyncio.get_event_loop()
     # data = loop.run_until_complete(
-    #     get_pair_contract_trades_async(loop, rate_limit_lua_script_shas, '0x9fae36a18ef8ac2b43186ade5e2b07403dc742b1', 14841443, 14841463)
+    #     get_pair_contract_trades_async(loop, rate_limit_lua_script_shas, '0x9fae36a18ef8ac2b43186ade5e2b07403dc742b1', 15007407, 15007416)
     # )
 
     # loop = asyncio.get_event_loop()
