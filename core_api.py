@@ -284,7 +284,10 @@ async def get_v2_pairs_data(
     data.sort(key=get_tokens_liquidity_for_sort, reverse=True)
 
     if "/v1/api" in request.url._url:
-        return {"data": data, "txHash": txHash, "cid": latest_payload_cid}
+        return {
+            "data": data, "txHash": txHash, "cid": latest_payload_cid,
+            "block_height": data[0].get("block_height", None), "block_timestamp": data[0].get("block_timestamp", None)
+        }
     else:
         return data
 
@@ -340,7 +343,10 @@ async def get_v2_pairs_data(
         data = json.loads(snapshot_data)['data']
         data.sort(key=get_tokens_liquidity_for_sort, reverse=True)
         if "/v1/api" in request.url._url:
-            return {"data": data, "txHash": txHash, "cid": payload_cid}
+            return {
+                "data": data, "txHash": txHash, "cid": payload_cid, 
+                "block_height": block_height, "block_timestamp": data[0].get("block_timestamp", None)
+            }
         else:
             return data
     
@@ -354,7 +360,10 @@ async def get_v2_pairs_data(
     payload_data.sort(key=get_tokens_liquidity_for_sort, reverse=True)
 
     if "/v1/api" in request.url._url:
-        return {"data": payload_data, "txHash": txHash, "cid": payload_cid}
+        return {
+            "data": payload_data, "txHash": txHash, "cid": payload_cid,
+            "block_height": block_height, "block_timestamp": payload_data[0].get("block_timestamp", None)
+        }
     else:
         return payload_data
         
