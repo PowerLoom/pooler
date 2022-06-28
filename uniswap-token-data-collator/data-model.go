@@ -2,6 +2,11 @@ package main
 
 const MAX_TOKEN_PRICE_HISTORY_INDEX int = 300
 
+type TokenSummarySnapshot struct {
+	Cid    string `json:"cid"`
+	TxHash string `json:"txHash"`
+}
+
 type AuditProtocolErrorResp struct {
 	Error string `json:"error"`
 }
@@ -48,6 +53,7 @@ type TokenPriceHistoryEntry struct {
 type TokenData struct {
 	ContractAddress        string  `json:"contractAddress"`
 	Block_height           int     `json:"block_height"`
+	Block_timestamp        int     `json:"block_timestamp"`
 	Name                   string  `json:"name"`
 	Symbol                 string  `json:"symbol"`
 	Price                  float64 `json:"price"`
@@ -80,6 +86,7 @@ type TokenPairLiquidityProcessedData struct {
 	Cid_volume_7d            string  `json:"cid_volume_7d"`
 	Fees_24h                 string  `json:"fees_24h"`
 	Block_height             int     `json:"block_height"`
+	Block_timestamp          int     `json:"block_timestamp"`
 	DeltaToken0Reserves      float64 `json:"deltaToken0Reserves"`
 	DeltaToken1Reserves      float64 `json:"deltaToken1Reserves"`
 	DeltaTime                float64 `json:"deltaTime"`

@@ -228,6 +228,9 @@ func PrepareAndSubmitV2TokenSummarySnapshot(fromTime float64) {
 
 			token0Data.Block_height = tokenPairProcessedData.Block_height
 			token1Data.Block_height = tokenPairProcessedData.Block_height
+
+			token0Data.Block_timestamp = tokenPairProcessedData.Block_timestamp
+			token1Data.Block_timestamp = tokenPairProcessedData.Block_timestamp
 			sourceBlockHeight = int64(tokenPairProcessedData.Block_height)
 		}
 
@@ -252,12 +255,12 @@ func PrepareAndSubmitV2TokenSummarySnapshot(fromTime float64) {
 			return
 		}
 
-		payloadCID, err := WaitAndFetchLatestV2TokenSummaryCID(tentativeBlockHeight)
+		payloadCID, txHash, err := WaitAndFetchLatestV2TokenSummaryCID(tentativeBlockHeight)
 		if err != nil {
 			log.Errorf("Failed to Fetch payloadCID at blockHeight %d due to error %s", curBlockHeight, err.Error())
 			return
 		}
-		StoreTokenSummaryCIDInSnapshotsZSet(sourceBlockHeight, payloadCID)
+		StoreTokenSummaryCIDInSnapshotsZSet(sourceBlockHeight, payloadCID, txHash)
 		StoreV2TokensSummaryPayload(sourceBlockHeight)
 		ResetTokenData()
 		lastSnapshotBlockHeight = curBlockHeight
@@ -411,12 +414,20 @@ func StoreV2TokensSummaryPayload(blockHeight int64) {
 	}
 }
 
-func StoreTokenSummaryCIDInSnapshotsZSet(blockHeight int64, payloadCID string) {
+func StoreTokenSummaryCIDInSnapshotsZSet(blockHeight int64, payloadCID string, txHash string) {
 	key := fmt.Sprintf(REDIS_KEY_V2_TOKENS_SUMMARY_SNAPSHOTS_ZSET, settingsObj.Development.Namespace)
+	var ZsetMember TokenSummarySnapshot
+	ZsetMember.Cid = payloadCID
+	ZsetMember.TxHash = txHash
+	ZsetMemberJson, err := json.Marshal(ZsetMember)
+	if err != nil {
+		log.Fatalf("Json marshal error %+v", err)
+		return
+	}
 	for retryCount := 0; retryCount < 3; retryCount++ {
 		err := redisClient.ZAdd(key, redis.Z{
 			Score:  float64(blockHeight),
-			Member: payloadCID,
+			Member: ZsetMemberJson,
 		}).Err()
 		if err != nil {
 			log.Errorf("Failed to add payloadCID %s at blockHeight %d due to error %+v, retrying %d", payloadCID, blockHeight, err, retryCount)
@@ -547,7 +558,7 @@ func FetchV2PairSummarySnapshot(blockHeight int64) []TokenPairLiquidityProcessed
 	return nil
 }
 
-func WaitAndFetchLatestV2TokenSummaryCID(blockHeight int64) (string, error) {
+func WaitAndFetchLatestV2TokenSummaryCID(blockHeight int64) (string, string, error) {
 	projectID := fmt.Sprintf(V2_TOKENSUMMARY_PROJECTID, settingsObj.Development.Namespace)
 	url := fmt.Sprintf("%s/%s/payload/%d", settingsObj.Development.AuditProtocolEngine.URL, projectID, blockHeight)
 	log.Debug("Fetching CID at Blockheight URL:", url)
@@ -584,13 +595,13 @@ func WaitAndFetchLatestV2TokenSummaryCID(blockHeight int64) (string, error) {
 		if len(apResp) > 0 {
 			for _, val := range apResp {
 				log.Debugf("Got CID %s at Block Height %d for projectID %s", val.Data.Cid.LinkData, blockHeight, projectID)
-				return val.Data.Cid.LinkData, nil
+				return val.Data.Cid.LinkData, val.TxHash, nil
 			}
 		}
 	}
 
 	log.Errorf("Max retries reached while trying to fetch payloadCID at height %d. Not retrying anymore.", blockHeight)
-	return "", fmt.Errorf("max retries reached to fetch payloadCID at height %d", blockHeight)
+	return "", "", fmt.Errorf("max retries reached to fetch payloadCID at height %d", blockHeight)
 
 }
 

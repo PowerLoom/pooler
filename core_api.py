@@ -538,6 +538,7 @@ async def get_v2_tokens_recent_logs(
 def get_pair_liquidity_for_sort(tokenData):
     return tokenData["liquidityUSD"]
 
+@app.get('/v1/api/v2-tokens')
 @app.get('/v2-tokens')
 async def get_v2_pairs_recent_logs(
     request: Request,
@@ -555,7 +556,11 @@ async def get_v2_pairs_recent_logs(
     if len(latest_daily_stats_snapshot) < 1:
         return {'data': None}
 
-    latest_payload_cid, latest_block_height = latest_daily_stats_snapshot[0]
+    latest_payload, latest_block_height = latest_daily_stats_snapshot[0]
+    latest_payload = json.loads(latest_payload.decode('utf-8'))
+    latest_payload_cid = latest_payload.get("cid")
+    txHash = latest_payload.get("txHash")
+
     snapshot_data = await redis_conn.get(
         name=uniswap_V2_tokens_at_blockheight.format(int(latest_block_height))
     )
@@ -583,12 +588,21 @@ async def get_v2_pairs_recent_logs(
             "volume_24h": f"US${round(abs(data[i]['tradeVolumeUSD_24h'])):,}",
             "price": f"US${round(abs(data[i]['price']), 5):,}",
             "price_change_24h": f"{round(data[i]['priceChangePercent_24h'], 2)}%",
-            "block_height": int(data[i]["block_height"])
+            "block_height": int(data[i]["block_height"]),
+            "block_timestamp": int(data[i]["block_timestamp"])
         })
     data = temp
     
-    return data
+    if "/v1/api" in request.url._url:
+        return {
+            "data": data, "txHash": txHash, "cid": latest_payload_cid,
+            "block_height": data[0].get("block_height", None), "block_timestamp": data[0].get("block_timestamp", None)
+        }
+    else:
+        return data
 
+
+@app.get('/v1/api/v2-tokens/snapshots')
 @app.get('/v2-tokens/snapshots')
 async def get_v2_tokens_snapshots(
     request: Request,
@@ -608,6 +622,7 @@ async def get_v2_tokens_snapshots(
     }
 
 
+@app.get('/v1/api/v2-tokens/{block_height:int}')
 @app.get('/v2-tokens/{block_height:int}')
 async def get_v2_tokens_data_by_block(
     request: Request,
@@ -615,22 +630,25 @@ async def get_v2_tokens_data_by_block(
     block_height: int
 ):
     redis_conn: aioredis.Redis = request.app.redis_pool
-    payload_cid = await redis_conn.zrangebyscore(
+    latest_payload = await redis_conn.zrangebyscore(
         name=uniswap_v2_tokens_snapshot_zset,
         min=block_height,
         max=block_height,
         withscores=False
     )
 
-    if len(payload_cid) < 1:
+    if len(latest_payload) < 1:
         return {'data': None}
     
+    latest_payload = json.loads(latest_payload[0].decode('utf-8'))
+    payload_cid = latest_payload.get("cid")
+    txHash = latest_payload.get("txHash")
+
     snapshot_data = await redis_conn.get(
         name=uniswap_V2_tokens_at_blockheight.format(block_height)
     )
     if not snapshot_data:
         # fetch from ipfs
-        payload_cid = payload_cid[0].decode('utf-8')
         snapshot_data = await retrieve_payload_data(payload_cid, redis_conn)
         
         # even ipfs doesn't have data, return empty
@@ -653,11 +671,18 @@ async def get_v2_tokens_data_by_block(
             "volume_24h": f"US${round(abs(snapshot_data[i]['tradeVolumeUSD_24h'])):,}",
             "price": f"US${round(abs(snapshot_data[i]['price']), 5):,}",
             "price_change_24h": f"{round(snapshot_data[i]['priceChangePercent_24h'], 2)}%",
-            "block_height": int(snapshot_data[i]["block_height"])
+            "block_height": int(snapshot_data[i]["block_height"]),
+            "block_timestamp": int(snapshot_data[i]["block_timestamp"])
         })
     snapshot_data = temp
     
-    return snapshot_data
+    if "/v1/api" in request.url._url:
+        return {
+            "data": snapshot_data, "txHash": txHash, "cid": payload_cid,
+            "block_height": snapshot_data[0].get("block_height", None), "block_timestamp": snapshot_data[0].get("block_timestamp", None)
+        }
+    else:
+        return snapshot_data
 
 
 @app.get('/v2-daily-stats')
