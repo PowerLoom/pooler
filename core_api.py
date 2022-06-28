@@ -368,6 +368,7 @@ async def get_v2_pairs_data(
         return payload_data
         
 
+@app.get('/v1/api/v2-daily-stats/snapshots')
 @app.get('/v2-daily-stats/snapshots')
 async def get_v2_daily_stats_snapshot(
     request: Request,
@@ -386,7 +387,7 @@ async def get_v2_daily_stats_snapshot(
         ))
     }
 
-
+@app.get('/v1/api/v2-daily-stats/{block_height:int}')
 @app.get('/v2-daily-stats/{block_height:int}')
 async def get_v2_daily_stats_by_block(
     request: Request,
@@ -394,15 +395,19 @@ async def get_v2_daily_stats_by_block(
     block_height: int
 ):
     redis_conn: aioredis.Redis = request.app.redis_pool
-    payload_cid = await redis_conn.zrangebyscore(
+    latest_payload = await redis_conn.zrangebyscore(
         name=uniswap_v2_daily_stats_snapshot_zset,
         min=block_height,
         max=block_height,
         withscores=False
     )
 
-    if len(payload_cid) < 1:
+    if len(latest_payload) < 1:
         return {'data': None}
+
+    latest_payload = json.loads(latest_payload[0].decode('utf-8'))
+    payload_cid = latest_payload.get("cid")
+    txHash = latest_payload.get("txHash")
 
 
     try:
@@ -411,7 +416,6 @@ async def get_v2_daily_stats_by_block(
         )
         if not snapshot_data:
             # fetch from ipfs
-            payload_cid = payload_cid[0].decode('utf-8')
             snapshot_data = await retrieve_payload_data(payload_cid, redis_conn)
 
         # even ipfs doesn't have payload then exit
@@ -464,7 +468,13 @@ async def get_v2_daily_stats_by_block(
         daily_stats["fees24"]["previousValue"] = f"US${number_to_abbreviated_string(round(daily_stats['fees24']['previousValue'], 2))}"
         daily_stats["fees24"]["change"] = f"{round(daily_stats['fees24']['change'], 2)}%"
 
-        return daily_stats
+        if "/v1/api" in request.url._url:
+            return {
+                "data": daily_stats, "txHash": txHash, "cid": payload_cid,
+                "block_height": snapshot_data[0].get("block_height", None), "block_timestamp": snapshot_data[0].get("block_timestamp", None)
+            }
+        else:
+            return daily_stats
     
     except Exception as err:
         print(f"Error in daily stats by block height err: {str(err)} ")
@@ -685,6 +695,7 @@ async def get_v2_tokens_data_by_block(
         return snapshot_data
 
 
+@app.get('/v1/api/v2-daily-stats')
 @app.get('/v2-daily-stats')
 async def get_v2_pairs_daily_stats(
     request: Request,
@@ -703,7 +714,12 @@ async def get_v2_pairs_daily_stats(
         if len(latest_daily_stats_snapshot) < 1:
             return {'data': None}
 
-        payload_cid, latest_block_height = latest_daily_stats_snapshot[0]
+        latest_payload, latest_block_height = latest_daily_stats_snapshot[0]
+        latest_payload = json.loads(latest_payload.decode('utf-8'))
+        payload_cid = latest_payload.get("cid")
+        txHash = latest_payload.get("txHash")
+
+
         snapshot_data = await redis_conn.get(
             name=uniswap_V2_daily_stats_at_blockheight.format(int(latest_block_height))
         )
@@ -762,7 +778,13 @@ async def get_v2_pairs_daily_stats(
         daily_stats["fees24"]["previousValue"] = f"US${number_to_abbreviated_string(round(daily_stats['fees24']['previousValue'], 2))}"
         daily_stats["fees24"]["change"] = f"{round(daily_stats['fees24']['change'], 2)}%"
 
-        return daily_stats
+        if "/v1/api" in request.url._url:
+            return {
+                "data": daily_stats, "txHash": txHash, "cid": payload_cid,
+                "block_height": snapshot_data[0].get("block_height", None), "block_timestamp": snapshot_data[0].get("block_timestamp", None)
+            }
+        else:
+            return daily_stats
     except Exception as e:
         rest_logger.error(f"Error in get_v2_pairs_daily_stats: {str(e)}", exc_info=True)
         return {"error": "No data found"}
