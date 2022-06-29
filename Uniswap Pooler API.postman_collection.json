@@ -439,7 +439,7 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:9002/v2-pairs/14895183",
+					"raw": "http://localhost:9002/v2-pairs/15013345",
 					"protocol": "http",
 					"host": [
 						"localhost"
@@ -447,7 +447,7 @@
 					"port": "9002",
 					"path": [
 						"v2-pairs",
-						"14895183"
+						"15013345"
 					]
 				}
 			},
@@ -473,6 +473,201 @@
 							"key": "token_contract",
 							"value": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
 						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "v1/api - get daily stats latest snapshot data",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:9002/v1/api/v2-daily-stats",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "9002",
+					"path": [
+						"v1",
+						"api",
+						"v2-daily-stats"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "v1/api - get daily stats snapshots list",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:9002/v1/api/v2-daily-stats/snapshots",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "9002",
+					"path": [
+						"v1",
+						"api",
+						"v2-daily-stats",
+						"snapshots"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "v1/api - get daily stats snapshot data at given block_height",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:9002/v1/api/v2-daily-stats/15039432",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "9002",
+					"path": [
+						"v1",
+						"api",
+						"v2-daily-stats",
+						"15039432"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "v1/api - get v2 pair summary snapshot data at given block_height",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:9002/v1/api/v2-pairs/15039492",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "9002",
+					"path": [
+						"v1",
+						"api",
+						"v2-pairs",
+						"15039492"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "v1/api - get v2 pair summary latest snapshot data ",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:9002/v1/api/v2-pairs",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "9002",
+					"path": [
+						"v1",
+						"api",
+						"v2-pairs"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "v1/api - get v2 pair summary snapshots list",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:9002/v1/api/v2-pairs/snapshots",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "9002",
+					"path": [
+						"v1",
+						"api",
+						"v2-pairs",
+						"snapshots"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "v1/api - get tokens latest snapshot data",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:9002/v1/api/v2-tokens",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "9002",
+					"path": [
+						"v1",
+						"api",
+						"v2-tokens"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "v1/api - get tokens latest snapshots list",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:9002/v1/api/v2-tokens/snapshots",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "9002",
+					"path": [
+						"v1",
+						"api",
+						"v2-tokens",
+						"snapshots"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "v1/api - get tokens latest snapshot data at given block_height",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:9002/v1/api/v2-tokens/15039492",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "9002",
+					"path": [
+						"v1",
+						"api",
+						"v2-tokens",
+						"15039492"
 					]
 				}
 			},

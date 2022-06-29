@@ -71,8 +71,8 @@ def redis_cleanup_audit_protocol():
         pass
 
     try:
-        c = r.delete(*r.keys(f'*uniswap*PairsSummarySnapshot*{settings.NAMESPACE}*'))
-        print('Pair summary snapshots key deleted: ', c)
+        c = r.delete(*r.keys(f'*uniswap*{settings.NAMESPACE}:snapshotsZset'))
+        print('Pair, dialy stats and token snapshots keys deleted: ', c)
     except:
         pass
 
