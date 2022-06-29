@@ -76,6 +76,12 @@ def redis_cleanup_audit_protocol():
     except:
         pass
 
+    try:
+        c = r.delete(*r.keys(f'*uniswap*{settings.NAMESPACE}:snapshotTimestampZset'))
+        print('daily stats snapshot timestamp: ', c)
+    except:
+        pass
+
     last_snapshots = r.hgetall('auditprotocol:lastSeenSnapshots')
     last_snapshots = list(map(lambda x: x.decode('utf-8'), last_snapshots.keys()))
     for k in last_snapshots:
