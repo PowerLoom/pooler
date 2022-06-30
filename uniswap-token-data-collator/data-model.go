@@ -16,8 +16,9 @@ type AuditProtocolBlockHeightResp struct {
 }
 
 type AuditProtocolCommitPayloadReq struct {
-	ProjectId string      `json:"projectId"`
-	Payload   _TokensData `json:"payload"`
+	ProjectId   string      `json:"projectId"`
+	Payload     _TokensData `json:"payload"`
+	Web3Storage bool        `json:"web3Storage"`
 }
 
 type _TokensData struct {

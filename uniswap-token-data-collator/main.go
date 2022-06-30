@@ -468,6 +468,7 @@ func CommitV2TokenSummaryPayload() (int64, error) {
 	var request AuditProtocolCommitPayloadReq
 	request.ProjectId = fmt.Sprintf(V2_TOKENSUMMARY_PROJECTID, settingsObj.Development.Namespace)
 	request.Payload.TokensData = make([]*TokenData, len(tokenList))
+	request.Web3Storage = true //Always store TokenData snapshot in web3.storage.
 	var i int
 	for _, tokenData := range tokenList {
 		request.Payload.TokensData[i] = tokenData
