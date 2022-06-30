@@ -973,7 +973,9 @@ async def get_trade_volume_epoch_price_map(
                 logger.error(f"Failed to fetch token price | error_msg: {str(err)} | epoch: {to_block}-{from_block}", exc_info=True)
                 raise err
         else:
-            logger.error('Trade Volume block map: I cant request, retry after sometime')
+            raise RPCException(request={"contract": token_metadata["address"], "to_block": to_block, "from_block": from_block}, 
+            response={}, underlying_exception=None, 
+            extra_info={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get_trade_volume_epoch_price_map"})
     
     return price_map
 

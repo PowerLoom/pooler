@@ -29,7 +29,7 @@ hiredis
 httptools==0.1.1
 humanfriendly==9.0
 idna==2.8
-git+https://github.com/anomit/IPFS-Toolkit-Python.git@5c4ebe4c385c96a8f122d7e380710d4e7baa711d
+git+https://github.com/anomit/IPFS-Toolkit-Python.git@76dc979dd8ca6c31b0fe07d41cf13d3c467072c8
 loguru==0.5.3
 multiaddr==0.0.9
 multidict==5.0.2

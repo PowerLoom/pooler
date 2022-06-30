@@ -89,10 +89,8 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             queued_epochs = queued_epochs[:-1]
             self._logger.info('Recording epochs as discarded during snapshot construction stage for pair total '
                               'reserves processing: %s', queued_epochs)
-            [
-                self._redis_conn.rpush(uniswap_discarded_query_pair_total_reserves_epochs_redis_q_f.format(msg_obj.contract), x.json())
-                for x in queued_epochs
-            ]
+            for x in queued_epochs:
+                await self._redis_conn.rpush(uniswap_discarded_query_pair_total_reserves_epochs_redis_q_f.format(msg_obj.contract), x.json())
         for block_num in range(min_chain_height, max_chain_height+1):
             fetch_ts = True if block_num == max_chain_height else False
             try:
@@ -198,15 +196,12 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 queued_epochs = queued_epochs[:-1]
                 self._logger.info('Recording epochs as discarded during snapshot construction stage for trade volume '
                                 'processing: %s', queued_epochs)
-                [
-                    self._redis_conn.rpush(
-                        uniswap_discarded_query_pair_trade_volume_epochs_redis_q_f.format(msg_obj.contract), x.json())
-                    for x in queued_epochs
-                ]
+                for x in queued_epochs:
+                    await self._redis_conn.rpush(uniswap_discarded_query_pair_trade_volume_epochs_redis_q_f.format(msg_obj.contract), x.json())
         except Exception as e:
             # Stroing epoch for next time to be processed or discarded
             await self._redis_conn.rpush(
-                uniswap_failed_query_pair_total_reserves_epochs_redis_q_f.format(msg_obj.contract),
+                uniswap_failed_query_pair_trade_volume_epochs_redis_q_f.format(msg_obj.contract),
                 msg_obj.json()
             )
             self._logger.error(f'Error while retrying old failed epoch: {str(e)}')
@@ -283,7 +278,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                         coalesced_epochs=coalesced_epochs
                     )
                 await self._redis_conn.rpush(
-                    uniswap_failed_query_pair_total_reserves_epochs_redis_q_f.format(msg_obj.contract),
+                    uniswap_failed_query_pair_trade_volume_epochs_redis_q_f.format(msg_obj.contract),
                     msg_obj.json()
                 )
                 self._logger.error(f'Enqueued epoch broadcast ID {msg_obj.broadcast_id} because '
