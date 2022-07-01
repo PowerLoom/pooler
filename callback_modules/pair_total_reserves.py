@@ -69,7 +69,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         # check for continuity in epochs before coalescing them
         # assuming the best
         self._logger.info(
-            'Attempting to construct a continous epoch for pair total reserves from query failure epochs and current '
+            'Attempting to construct a continuous epoch for pair total reserves from query failure epochs and current '
             'epoch: %s', queued_epochs
         )
         continuity = True

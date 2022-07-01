@@ -23,7 +23,7 @@ import asyncio
 import signal
 import aio_pika
 import aiohttp
-from tenacity import AsyncRetrying, stop_after_attempt
+from tenacity import AsyncRetrying, stop_after_attempt, wait_random_exponential
 
 
 # TODO: remove polymarket specific helpers
@@ -187,7 +187,11 @@ class AuditProtocolCommandsHelper:
     @classmethod
     async def commit_payload(cls, pair_contract_address, stream, report_payload, session: AsyncClient):
         # retry below call given at settings.AUDIT_PROTOCOL_ENGINE.RETRY
-        async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY)):
+        async for attempt in AsyncRetrying(
+                reraise=True,
+                stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY),
+                wait=wait_random_exponential(multiplier=2, max=10)
+        ):
             with attempt:
                 project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
                 response_obj = await session.post(
