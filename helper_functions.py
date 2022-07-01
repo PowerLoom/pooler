@@ -61,7 +61,11 @@ class AsyncHTTPSessionCache:
         async_httpx_client = AsyncClient(
             timeout=Timeout(timeout=5.0),
             follow_redirects=False,
-            limits=Limits(max_connections=settings['rlimit']['file_descriptors'], max_keepalive_connections=250, keepalive_expiry=5.0)
+            limits=Limits(
+                max_connections=settings['rlimit']['file_descriptors'], 
+                max_keepalive_connections=50, 
+                keepalive_expiry=600
+            )
         )
         return async_httpx_client
 
