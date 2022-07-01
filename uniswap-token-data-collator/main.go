@@ -25,6 +25,7 @@ var pairContracts []string
 var tokenList map[string]*TokenData
 var apHttpClient http.Client
 var lastSnapshotBlockHeight int64
+
 var tokenPairTokenMapping map[string]TokenDataRefs
 
 type TokenDataRefs struct {
@@ -37,6 +38,7 @@ const pairContractListFile string = "../static/cached_pair_addresses.json"
 const V2_PAIRSUMMARY_PROJECTID string = "uniswap_V2PairsSummarySnapshot_%s"
 const V2_TOKENSUMMARY_PROJECTID string = "uniswap_V2TokensSummarySnapshot_%s"
 const MAX_RETRIES_BEFORE_EXIT int = 10
+const MAX_RETRIES_FOR_SNAPSHOT_CONFIRM = 18
 
 //TODO: Move the below to config file.
 const periodicRetrievalInterval time.Duration = 120 * time.Second
@@ -198,6 +200,7 @@ func FetchAndFillTokenMetaData(pairContractAddr string) {
 }
 
 func PrepareAndSubmitV2TokenSummarySnapshot(fromTime float64) {
+
 	curBlockHeight := FetchV2SummaryLatestBlockHeight()
 	if curBlockHeight > lastSnapshotBlockHeight {
 		var sourceBlockHeight int64
@@ -252,12 +255,14 @@ func PrepareAndSubmitV2TokenSummarySnapshot(fromTime float64) {
 		tentativeBlockHeight, err := CommitV2TokenSummaryPayload()
 		if err != nil {
 			log.Errorf("Failed to commit payload at blockHeight %d due to error %s", curBlockHeight, err.Error())
+			ResetTokenData()
 			return
 		}
 
-		payloadCID, txHash, err := WaitAndFetchLatestV2TokenSummaryCID(tentativeBlockHeight)
+		payloadCID, txHash, err := WaitAndFetchLatestV2TokenSummaryCID(tentativeBlockHeight, MAX_RETRIES_FOR_SNAPSHOT_CONFIRM)
 		if err != nil {
-			log.Errorf("Failed to Fetch payloadCID at blockHeight %d due to error %s", curBlockHeight, err.Error())
+			log.Errorf("Failed to Fetch payloadCID at blockHeight %d due to error %s", tentativeBlockHeight, err.Error())
+			ResetTokenData()
 			return
 		}
 		StoreTokenSummaryCIDInSnapshotsZSet(sourceBlockHeight, payloadCID, txHash)
@@ -559,14 +564,14 @@ func FetchV2PairSummarySnapshot(blockHeight int64) []TokenPairLiquidityProcessed
 	return nil
 }
 
-func WaitAndFetchLatestV2TokenSummaryCID(blockHeight int64) (string, string, error) {
+func WaitAndFetchLatestV2TokenSummaryCID(blockHeight int64, retries int) (string, string, error) {
 	projectID := fmt.Sprintf(V2_TOKENSUMMARY_PROJECTID, settingsObj.Development.Namespace)
 	url := fmt.Sprintf("%s/%s/payload/%d", settingsObj.Development.AuditProtocolEngine.URL, projectID, blockHeight)
 	log.Debug("Fetching CID at Blockheight URL:", url)
 
 	var apResp map[string]AuditProtocolBlockResp
 	var retryCount int
-	for retryCount = 0; retryCount < 12; retryCount++ {
+	for retryCount = 0; retryCount <= retries; retryCount++ {
 		resp, err := apHttpClient.Get(url)
 		if err != nil {
 			log.Error("Error: Could not fetch block height for pairContract:", projectID, " Error:", err)
