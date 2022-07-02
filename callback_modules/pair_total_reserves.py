@@ -123,9 +123,9 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 # if coalescing was achieved, ensure that is recorded and enqueued as well
                 if continuity and queued_epochs:
                     coalesced_broadcast_ids = [x.broadcast_id for x in queued_epochs]
-                    coalesced_broadcast_ids.append(msg_obj.broadcast_id)
+                    #coalesced_broadcast_ids.append(msg_obj.broadcast_id)
                     coalesced_epochs = [EpochBase(**{'begin': x.begin, 'end': x.end}) for x in queued_epochs]
-                    coalesced_epochs.append(EpochBase(**{'begin': msg_obj.begin, 'end': msg_obj.end}))
+                    #coalesced_epochs.append(EpochBase(**{'begin': msg_obj.begin, 'end': msg_obj.end}))
                     msg_obj = PowerloomCallbackProcessMessage(
                         begin=queued_epochs[0].begin,
                         end=queued_epochs[-1].end,
@@ -266,9 +266,9 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 # if coalescing was achieved, ensure that is recorded and enqueued as well
                 if continuity and queued_epochs:
                     coalesced_broadcast_ids = [x.broadcast_id for x in queued_epochs]
-                    coalesced_broadcast_ids.append(msg_obj.broadcast_id)
+                    #coalesced_broadcast_ids.append(msg_obj.broadcast_id)
                     coalesced_epochs = [EpochBase(**{'begin': x.begin, 'end': x.end}) for x in queued_epochs]
-                    coalesced_epochs.append(EpochBase(**{'begin': msg_obj.begin, 'end': msg_obj.end}))
+                    #coalesced_epochs.append(EpochBase(**{'begin': msg_obj.begin, 'end': msg_obj.end}))
                     msg_obj = PowerloomCallbackProcessMessage(
                         begin=queued_epochs[0].begin,
                         end=queued_epochs[-1].end,
