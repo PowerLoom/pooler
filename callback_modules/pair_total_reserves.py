@@ -248,7 +248,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             trade_volume_snapshot = UniswapTradesSnapshot(**dict(
                 contract=msg_obj.contract,
                 broadcast_id=msg_obj.broadcast_id,
-                chainHeightRange=EpochBase(begin=msg_obj.begin, end=msg_obj.end),
+                chainHeightRange=EpochBase(begin=from_block, end=to_block),
                 timestamp=max_block_timestamp,
                 totalTrade=float(f'{total_trades_in_usd: .6f}'),
                 totalFee=float(f'{total_fee_in_usd: .6f}'),
