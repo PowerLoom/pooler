@@ -51,7 +51,6 @@ class UniswapPairTotalReservesSnapshot(BaseModel):
     token0ReservesUSD: Dict[str, float]
     token1ReservesUSD: Dict[str, float]
     chainHeightRange: EpochBase
-    broadcast_id: str
     timestamp: float
 
 
@@ -71,7 +70,6 @@ class UniswapTradesSnapshot(BaseModel):
     events: Dict[str, logsTradeModel]
     recent_logs: list
     chainHeightRange: EpochBase
-    broadcast_id: str
     timestamp: float
 
 

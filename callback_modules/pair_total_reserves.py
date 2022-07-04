@@ -148,8 +148,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             'token1ReservesUSD': epoch_usd_reserves_snapshot_map_token1,
             'chainHeightRange': EpochBase(begin=min_chain_height, end=max_chain_height),
             'timestamp': max_block_timestamp,
-            'contract': msg_obj.contract,
-            'broadcast_id': msg_obj.broadcast_id
+            'contract': msg_obj.contract
         })
         return pair_total_reserves_snapshot
 
@@ -247,7 +246,6 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 trade_vol_processed_snapshot.pop('timestamp', None)
             trade_volume_snapshot = UniswapTradesSnapshot(**dict(
                 contract=msg_obj.contract,
-                broadcast_id=msg_obj.broadcast_id,
                 chainHeightRange=EpochBase(begin=from_block, end=to_block),
                 timestamp=max_block_timestamp,
                 totalTrade=float(f'{total_trades_in_usd: .6f}'),
