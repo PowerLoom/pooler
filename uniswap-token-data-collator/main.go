@@ -109,12 +109,7 @@ func Run(pairContractAddress string) {
 	FetchTokensMetaData()
 
 	for {
-		t := time.Now()
-		t2 := t.AddDate(0, 0, -1)
-		time24h := float64(t2.Unix())
-		log.Debug("TimeStamp for 1 day before is:", time24h)
-
-		PrepareAndSubmitV2TokenSummarySnapshot(time24h)
+		PrepareAndSubmitV2TokenSummarySnapshot()
 
 		log.Info("Sleeping for " + periodicRetrievalInterval.String() + " secs")
 		time.Sleep(periodicRetrievalInterval)
@@ -199,7 +194,7 @@ func FetchAndFillTokenMetaData(pairContractAddr string) {
 	tokenPairTokenMapping[pairContractAddr] = tokenRefs
 }
 
-func PrepareAndSubmitV2TokenSummarySnapshot(fromTime float64) {
+func PrepareAndSubmitV2TokenSummarySnapshot() {
 
 	curBlockHeight := FetchV2SummaryLatestBlockHeight()
 	if curBlockHeight > lastSnapshotBlockHeight {
@@ -237,12 +232,24 @@ func PrepareAndSubmitV2TokenSummarySnapshot(fromTime float64) {
 			sourceBlockHeight = int64(tokenPairProcessedData.Block_height)
 		}
 
+		tm, err := strconv.ParseInt(fmt.Sprint(tokensPairData[0].Block_timestamp), 10, 64)
+		if err != nil {
+			log.Errorf("Failed to parse current timestamp int %s due to error %s", tokensPairData[0].Block_timestamp, err.Error())
+			return
+		}
+		currentTimestamp := time.Unix(tm, 0)
+		toTime := float64(currentTimestamp.Unix())
+
+		time24h := currentTimestamp.AddDate(0, 0, -1)
+		fromTime := float64(time24h.Unix())
+		log.Debug("TimeStamp for 1 day before is:", fromTime)
+
 		//Update tokenPrice
 		for key, tokenData := range tokenList {
 			tokenData.Price = FetchTokenPriceAtBlockHeight(tokenData.ContractAddress, int64(tokenData.Block_height))
 			if tokenData.Price != 0 {
 				//Update TokenPrice in History Zset
-				UpdateTokenPriceHistoryRedis(fromTime, tokenData)
+				UpdateTokenPriceHistoryRedis(toTime, fromTime, tokenData)
 				CalculateAndFillPriceChange(fromTime, tokenData)
 				//tokenList[key] = tokenData
 			} else {
@@ -315,23 +322,22 @@ func CalculateAndFillPriceChange(fromTime float64, tokenData *TokenData) {
 	tokenData.PriceChangePercent_24h = (tokenData.Price - oldPrice) * 100 / tokenData.Price
 }
 
-func UpdateTokenPriceHistoryRedis(fromTime float64, tokenData *TokenData) {
-	curTimeEpoch := float64(time.Now().Unix())
+func UpdateTokenPriceHistoryRedis(toTime float64, fromTime float64, tokenData *TokenData) {
 	key := fmt.Sprintf(REDIS_KEY_TOKEN_PRICE_HISTORY, settingsObj.Development.Namespace, tokenData.ContractAddress)
-	var priceHistoryEntry TokenPriceHistoryEntry = TokenPriceHistoryEntry{curTimeEpoch, tokenData.Price, tokenData.Block_height}
+	var priceHistoryEntry TokenPriceHistoryEntry = TokenPriceHistoryEntry{toTime, tokenData.Price, tokenData.Block_height}
 	val, err := json.Marshal(priceHistoryEntry)
 	if err != nil {
-		log.Error("Couldn't marshal json..something is really wrong with data.curTime:", curTimeEpoch, " TokenData:", tokenData)
+		log.Error("Couldn't marshal json..something is really wrong with data.curTime:", toTime, " TokenData:", tokenData)
 		return
 	}
 	err = redisClient.ZAdd(key, redis.Z{
-		Score:  float64(curTimeEpoch),
+		Score:  float64(toTime),
 		Member: string(val),
 	}).Err()
 	if err != nil {
 		log.Error("Failed to add to redis ZSet, err:", err, " key :", key, ", Value:", val)
 	}
-	log.Debug("Updated TokenPriceHistory at Zset:", key, " with score:", curTimeEpoch, ",val:", priceHistoryEntry)
+	log.Debug("Updated TokenPriceHistory at Zset:", key, " with score:", toTime, ",val:", priceHistoryEntry)
 
 	PrunePriceHistoryInRedis(key, fromTime)
 }
