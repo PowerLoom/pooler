@@ -690,8 +690,7 @@ def return_last_price_value(retry_state):
     reraise=True,
     retry=retry_if_exception_type(RPCException), 
     wait=wait_random_exponential(multiplier=1, max=10), 
-    stop=stop_after_attempt(settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS),
-    retry_error_callback=return_last_price_value
+    stop=stop_after_attempt(settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS)
 )
 async def get_token_price_at_block_height(token_metadata, block_height, loop: asyncio.AbstractEventLoop, redis_conn, debug_log=True):
     """
