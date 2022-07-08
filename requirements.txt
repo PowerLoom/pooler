@@ -68,3 +68,5 @@ greenletio
 aioredis>=2.0,<2.1
 redis>=4.2,<4.3
 httpx==0.22.0
+rich
+safe-eth-py

@@ -223,9 +223,9 @@ if __name__ == '__main__':
     debug_logs = True
 
     # ************* CHANGE THESE VALUES FOR CURRENT TIME ****************** 
-    pair_contract = '0x9928e4046d7c6513326ccea028cd3e7a91c7590a'
-    start_block = 15088382 # 24h old block on etherscan 
-    end_block = 15094937 # latest block on etherscan
+    pair_contract = '0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc'
+    start_block = 15093496 # 24h old block on etherscan 
+    end_block = 15100017 # latest block on etherscan
     # ********************************************************************
 
     loop.run_until_complete(

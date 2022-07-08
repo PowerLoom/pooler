@@ -182,6 +182,8 @@
             "connect": 200,
             "sock_connect": 200
         },
-        "pending_commit_timeout": 300
+        "pending_commit_timeout": 300,
+        "number_of_blocks_in_epoch": 10,
+        "prune_price_zset_epoch_multiplier": 5
     }
 }

@@ -3,6 +3,7 @@ from tenacity import retry, AsyncRetrying, stop_after_attempt, wait_random, wait
 from typing import List
 from web3 import Web3
 from web3.datastructures import AttributeDict
+from gnosis.eth import EthereumClient
 from eth_utils import keccak
 from web3._utils.events import get_event_data
 from eth_abi.codec import ABICodec
@@ -25,12 +26,13 @@ import time
 from datetime import datetime, timedelta
 from redis_keys import (
     uniswap_pair_contract_tokens_addresses, uniswap_pair_contract_tokens_data, uniswap_pair_cached_token_price,
-    uniswap_pair_contract_V2_pair_data, uniswap_pair_cached_block_height_token_price
+    uniswap_pair_contract_V2_pair_data, uniswap_pair_cached_block_height_token_price,uniswap_eth_usd_price_zset
 )
 from helper_functions import (
     acquire_threading_semaphore
 )
 
+ethereum_client = EthereumClient(settings.RPC.MATIC[0])
 w3 = Web3(Web3.HTTPProvider(settings.RPC.MATIC[0]))
 # TODO: Use async http provider once it is considered stable by the web3.py project maintainers
 # web3_async = Web3(Web3.AsyncHTTPProvider(settings.RPC.MATIC[0]))
@@ -107,15 +109,15 @@ dai = settings.CONTRACT_ADDRESSES.DAI
 usdt = settings.CONTRACT_ADDRESSES.USDT
 weth = settings.CONTRACT_ADDRESSES.WETH
 
-dai_eth_contract_obj = w3.eth.contract(
+dai_eth_contract_obj = ethereum_client.w3.eth.contract(
     address=Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.DAI_WETH_PAIR),
     abi=pair_contract_abi
 )
-usdc_eth_contract_obj = w3.eth.contract(
+usdc_eth_contract_obj = ethereum_client.w3.eth.contract(
     address=Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDC_WETH_PAIR),
     abi=pair_contract_abi
 )
-eth_usdt_contract_obj = w3.eth.contract(
+eth_usdt_contract_obj = ethereum_client.w3.eth.contract(
     address=Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDT_WETH_PAIR),
     abi=pair_contract_abi
 )
@@ -582,22 +584,32 @@ async def get_pair_per_token_metadata(
         logger.error(f"RPC error while fetcing metadata for pair {pair_address}, error_msg:{err}", exc_info=True)
         raise err
 
-async def get_eth_price_usd(block_height, loop: asyncio.AbstractEventLoop):
+async def get_eth_price_usd(block_height, loop: asyncio.AbstractEventLoop, redis_conn: aioredis.Redis):
     """
         returns the price of eth in usd at a given block height
     """
 
     try:
         eth_price_usd = 0
-        dai_eth_func = partial(dai_eth_contract_obj.functions.getReserves().call, block_identifier=block_height)
-        usdc_eth_func = partial(usdc_eth_contract_obj.functions.getReserves().call, block_identifier=block_height)
-        eth_usdt_func = partial(eth_usdt_contract_obj.functions.getReserves().call, block_identifier=block_height)
+        
+        if block_height != 'latest':
+            cached_price = await redis_conn.zrangebyscore(
+                name=uniswap_eth_usd_price_zset,
+                min=int(block_height),
+                max=int(block_height)
+            )
+            cached_price = cached_price[0].decode('utf-8') if len(cached_price) > 0 else False
+            if cached_price:
+                cached_price = json.loads(cached_price)
+                eth_price_usd = cached_price['price']
+                return eth_price_usd
 
-        [dai_eth_pair_reserves, usdc_eth_pair_reserves, eth_usdt_pair_reserves] = await asyncio.gather(
-            loop.run_in_executor(func=dai_eth_func, executor=None),
-            loop.run_in_executor(func=usdc_eth_func, executor=None),
-            loop.run_in_executor(func=eth_usdt_func, executor=None)
-        )
+        
+        [dai_eth_pair_reserves, usdc_eth_pair_reserves, eth_usdt_pair_reserves] = ethereum_client.batch_call([
+            dai_eth_contract_obj.functions.getReserves(),
+            usdc_eth_contract_obj.functions.getReserves(),
+            eth_usdt_contract_obj.functions.getReserves()
+        ],block_identifier=block_height)
 
         dai_eth_pair_eth_reserve = dai_eth_pair_reserves[1]/10**tokens_decimals["WETH"]
         dai_eth_pair_dai_reserve = dai_eth_pair_reserves[0]/10**tokens_decimals["DAI"]
@@ -618,6 +630,23 @@ async def get_eth_price_usd(block_height, loop: asyncio.AbstractEventLoop):
         usdtWeight = usdt_eth_pair_eth_reserve / total_eth_liquidity
 
         eth_price_usd = daiWeight * dai_price + usdcWeight * usdc_price + usdtWeight * usdt_price
+
+        # cache price at height
+        if block_height != 'latest':
+            await asyncio.gather(
+                redis_conn.zadd(
+                    name=uniswap_eth_usd_price_zset,
+                    mapping={json.dumps({
+                        'blockHeight': block_height,
+                        'price': eth_price_usd
+                    }): int(block_height)}
+                ),
+                redis_conn.zremrangebyscore(
+                    name=uniswap_eth_usd_price_zset,
+                    min=0,
+                    max= block_height - int(settings.NUMBER_OF_BLOCKS_IN_EPOCH) * int(settings.PRUNE_PRICE_ZSET_EPOCH_MULTIPLIER)
+                )
+            )
 
     except Exception as err:
         logger.error(f"RPC ERROR failed to fetch ETH price, error_msg:{err}")
@@ -712,7 +741,7 @@ async def get_token_price_at_block_height(token_metadata, block_height, loop: as
                 return token_price
 
         if Web3.toChecksumAddress(token_metadata['address']) == Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH):
-            token_price = await get_eth_price_usd(block_height, loop)
+            token_price = await get_eth_price_usd(block_height, loop, redis_conn)
         else:
             token_eth_price = 0
 
@@ -741,7 +770,7 @@ async def get_token_price_at_block_height(token_metadata, block_height, loop: as
                         
             
             if token_eth_price != 0:
-                eth_usd_price = await get_eth_price_usd(block_height, loop)
+                eth_usd_price = await get_eth_price_usd(block_height, loop, redis_conn)
                 token_price = token_eth_price * eth_usd_price 
             
             if debug_log:
