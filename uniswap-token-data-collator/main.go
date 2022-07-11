@@ -545,7 +545,7 @@ func FetchV2PairSummarySnapshot(blockHeight int64) []TokenPairLiquidityProcessed
 		resp, err := apHttpClient.Get(last_block_height_url)
 		if err != nil {
 			log.Error("Error: Could not fetch block height for pairContract:", v2PairsProjectId, " Error:", err)
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(5 * time.Second)
 			continue
 		}
 		defer resp.Body.Close()
@@ -555,6 +555,12 @@ func FetchV2PairSummarySnapshot(blockHeight int64) []TokenPairLiquidityProcessed
 			return nil
 		}
 		log.Trace("Rsp Body", string(body))
+
+		if resp.StatusCode != http.StatusOK {
+			log.Error("Error: Got an error on audit-protocol side for projectID:", v2PairsProjectId, " with status code:", resp.StatusCode)
+			time.Sleep(5 * time.Second)
+			continue
+		}
 
 		if err = json.Unmarshal(body, &v2SummaryResp); err != nil { // Parse []byte to the go struct pointer
 			log.Errorf("Can not unmarshal JSON due to error %+v", err)
