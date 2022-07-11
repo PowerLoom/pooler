@@ -478,7 +478,7 @@ async def get_maker_pair_data(prop):
         return "Maker"
 
 async def get_pair_per_token_metadata(
-        pair_contract_obj, pair_address,
+        pair_address,
         loop: asyncio.AbstractEventLoop,
         redis_conn: aioredis.Redis
 ):
@@ -487,6 +487,10 @@ async def get_pair_per_token_metadata(
         also returns pair symbol by concatenating {token0Symbol}-{token1Symbol}
     """
     try:
+        pair_contract_obj = w3.eth.contract(
+            address=Web3.toChecksumAddress(pair_address),
+            abi=pair_contract_abi
+        )
         pair_address = Web3.toChecksumAddress(pair_address)
         pairTokensAddresses = await redis_conn.hgetall(uniswap_pair_contract_tokens_addresses.format(pair_address))
         if pairTokensAddresses:
@@ -754,11 +758,25 @@ async def get_token_price_at_block_height(token_metadata, block_height, loop: as
                         abi=pair_contract_abi
                     )
                     new_pair_metadata = await get_pair_per_token_metadata(
-                        pair_contract_obj=pair_contract_obj,
                         pair_address=pairAddress,
                         loop=loop,
                         redis_conn=redis_conn
                     )
+
+                    #get reserves of this new pair
+                    pfunc_get_reserves = partial(pair_contract_obj.functions.getReserves().call, block_identifier=block_height)
+                    reserves = await loop.run_in_executor(func=pfunc_get_reserves, executor=None)
+                    if Web3.toChecksumAddress(new_pair_metadata['token1']['address']) == white_token:
+                        reserves_eth = reserves[1]
+                        reserves_eth = reserves_eth/10**int(new_pair_metadata['token1']['decimals'])
+                    else:
+                        reserves_eth = reserves[0]
+                        reserves_eth = reserves_eth/10**int(new_pair_metadata['token0']['decimals'])
+
+                    # ignore if reservers are less than threshold
+                    if reserves_eth < 2:
+                        continue
+
                     white_token_price = await pair_based_token_price(pair_contract_obj, new_pair_metadata, white_token, token_metadata['address'], block_height, loop, redis_conn)
                     if Web3.toChecksumAddress(new_pair_metadata['token0']['address']) == white_token:
                         white_token_derived_eth = await get_derived_eth_per_token(router_contract_obj, new_pair_metadata['token0'], block_height, loop)
@@ -867,7 +885,6 @@ async def get_liquidity_of_each_token_reserve_async(
             else:
                 block_details = None
             pair_per_token_metadata = await get_pair_per_token_metadata(
-                pair_contract_obj=pair,
                 pair_address=pair_address,
                 loop=loop,
                 redis_conn=redis_conn
@@ -1077,7 +1094,6 @@ async def get_pair_contract_trades_async(
                 # logger.debug('Not attempting to get block details of to_block %s', to_block)
                 block_details = None
             pair_per_token_metadata = await get_pair_per_token_metadata(
-                pair_contract_obj=pair,
                 pair_address=pair_address,
                 loop=ev_loop,
                 redis_conn=redis_conn
