@@ -41,7 +41,7 @@ const MAX_RETRIES_BEFORE_EXIT int = 10
 const MAX_RETRIES_FOR_SNAPSHOT_CONFIRM = 18
 
 //TODO: Move the below to config file.
-const periodicRetrievalInterval time.Duration = 120 * time.Second
+const periodicRetrievalInterval time.Duration = 60 * time.Second
 
 //const maxBlockCountToFetch int64 = 500 //Max number of blocks to fetch in 1 shot from Audit Protocol.
 
