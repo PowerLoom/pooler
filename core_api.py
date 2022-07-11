@@ -576,7 +576,7 @@ async def get_v2_pairs_recent_logs(
     )
     if not snapshot_data:
         # fetch from ipfs
-        latest_payload_cid = latest_payload_cid.decode('utf-8')
+        latest_payload_cid = latest_payload_cid.decode('utf-8') if not isinstance(latest_payload_cid, str) else latest_payload_cid
         snapshot_data = await retrieve_payload_data(latest_payload_cid, redis_conn)
         
         # even ipfs doesn't have data, return empty

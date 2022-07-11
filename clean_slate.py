@@ -189,6 +189,11 @@ def redis_cleanup_pooler_namespace():
     except:
         pass
 
+    try:
+        r.delete(*r.keys(f'*uniswap*{settings.NAMESPACE}*ethPriceZset*'))
+    except:
+        pass
+
 
 def cleanup_ipfs():
     client = ipfshttpclient.connect(addr=settings['ipfs_url'], session=True)
