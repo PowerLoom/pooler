@@ -25,6 +25,7 @@ uniswap_token_info_cached_data = "uniswap:tokenInfo:" + settings.NAMESPACE + ":{
 uniswap_pair_cache_daily_stats = 'uniswap:pairContract:'+settings.NAMESPACE+':{}:dailyCache'
 uniswap_projects_dag_verifier_status = "projects:"+settings.NAMESPACE+":dagVerificationStatus"
 uniswap_eth_usd_price_zset = "uniswap:ethBlockHeightPrice:"+settings.NAMESPACE+":ethPriceZset"
+uniswap_tokens_pair_map = "uniswap:pairContract:"+settings.NAMESPACE+":tokensPairMap"
 uniswap_pair_tentative_block_height = "projectID:uniswap_pairContract_trade_volume_{}_"+settings.NAMESPACE+":tentativeBlockHeight"
 uniswap_pair_block_height = "projectID:uniswap_pairContract_trade_volume_{}_"+settings.NAMESPACE+":blockHeight"
 uniswap_pair_cached_block_height_token_price = 'uniswap:pairContract:'+settings.NAMESPACE+':{}:cachedPairBlockHeightTokenPrice'
