@@ -739,7 +739,7 @@ async def get_white_token_data(pair_contract_obj, pair_metadata, white_token, ta
 
 
     except Exception as error:
-        logger.error(f"Error: failed to derived eth per token, error_msg:{str(error)}")
+        logger.error(f"Error: failed to get whitelisted token data, error_msg:{str(error)}")
         raise error
 
 
