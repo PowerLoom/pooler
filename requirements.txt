@@ -14,11 +14,11 @@ cytoolz==0.11.0
 dynaconf==3.1.2
 eth-abi==2.0.0
 eth-account<0.6
-eth-hash==0.2.0
+eth-hash==0.3.3
 eth-keyfile==0.5.1
 eth-keys<1
 eth-rlp==0.2.1
-eth-typing==2.2.2
+eth-typing==2.3.0
 eth-utils<2
 fastapi==0.61.2
 gunicorn==20.0.4
@@ -38,7 +38,7 @@ parsimonious==0.8.1
 pycryptodome==3.9.9
 pydantic==1.7.3
 requests==2.22.0
-rlp==1.2.0
+rlp==2.0.1
 six==1.15.0
 solidity-parser==0.0.7
 starlette==0.13.6
@@ -68,5 +68,5 @@ greenletio
 aioredis>=2.0,<2.1
 redis>=4.2,<4.3
 httpx==0.22.0
-rich
-safe-eth-py
+rich==12.5.1
+safe-eth-py==4.1.3
