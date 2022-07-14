@@ -190,6 +190,54 @@ except Exception as e:
     quick_swap_uniswap_v2_factory_contract = None
     logger.error(e, exc_info=True)
 
+async def check_rpc_rate_limit(redis_conn: aioredis.Redis, request_payload, error_msg, rate_limit_lua_script_shas=None, limit_incr_by=1):
+    """
+        rate limiter for rpc calls
+    """
+    if not rate_limit_lua_script_shas:
+        rate_limit_lua_script_shas = await load_rate_limiter_scripts(redis_conn)
+    redis_storage = AsyncRedisStorage(rate_limit_lua_script_shas, redis_conn)
+    custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
+    app_id = settings.RPC.MATIC[0].split('/')[-1]  # future support for loadbalancing over multiple MaticVigil RPC appID
+    key_bits = [app_id, 'eth_call']  # TODO: add unique elements that can identify a request
+    can_request = False
+    retry_after = 1
+    for each_lim in PARSED_LIMITS:
+        # window_stats = custom_limiter.get_window_stats(each_lim, key_bits)
+        # local_app_cacher_logger.debug(window_stats)
+        # rest_logger.debug('Limit %s expiry: %s', each_lim, each_lim.get_expiry())
+        # async limits rate limit check
+        # if rate limit checks out then we call
+        try:
+            if await custom_limiter.hit(each_lim, limit_incr_by, *[key_bits]) is False:
+                window_stats = await custom_limiter.get_window_stats(each_lim, key_bits)
+                reset_in = 1 + window_stats[0]
+                # if you need information on back offs
+                retry_after = reset_in - int(time.time())
+                retry_after = (datetime.now() + timedelta(0, retry_after)).isoformat()
+                can_request = False
+                break  # make sure to break once false condition is hit
+        except (
+                aioredis.exceptions.ConnectionError, aioredis.exceptions.TimeoutError,
+                aioredis.exceptions.ResponseError
+        ) as e:
+            # shit can happen while each limit check call hits Redis, handle appropriately
+            logger.debug('Bypassing rate limit check for appID because of Redis exception: ' + str(
+                {'appID': app_id, 'exception': e}))
+            raise
+        except Exception as e:
+            logger.error('Caught exception on rate limiter operations: %s', e, exc_info=True)
+            raise
+        else:
+            can_request = True
+
+    if not can_request:
+        raise RPCException(
+            request=request_payload, 
+            response={}, underlying_exception=None, 
+            extra_info=error_msg
+        )
+    return can_request
 
 def get_event_sig_and_abi(event_name):
     event_sig = '0x' + keccak(text=UNISWAP_TRADE_EVENT_SIGS.get(event_name, 'incorrect event name')).hex()
@@ -481,7 +529,8 @@ def get_maker_pair_data(prop):
 async def get_pair_per_token_metadata(
     pair_address,
     loop: asyncio.AbstractEventLoop,
-    redis_conn: aioredis.Redis
+    redis_conn: aioredis.Redis,
+    rate_limit_lua_script_shas
 ):
     """
         returns information on the tokens contained within a pair contract - name, symbol, decimals of token0 and token1
@@ -506,6 +555,11 @@ async def get_pair_per_token_metadata(
             pair_contract_obj = w3.eth.contract(
                 address=Web3.toChecksumAddress(pair_address),
                 abi=pair_contract_abi
+            )
+            await check_rpc_rate_limit(
+                redis_conn=redis_conn, request_payload={"pair_address": pair_address},
+                error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get_pair_metadata fn"},
+                rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
             )
             token0Addr, token1Addr = ethereum_client.batch_call([
                 pair_contract_obj.functions.token0(),
@@ -564,6 +618,11 @@ async def get_pair_per_token_metadata(
                 tasks.append(token1.functions.symbol())
             tasks.append(token1.functions.decimals())
 
+            await check_rpc_rate_limit(
+                redis_conn=redis_conn, request_payload={"pair_address": pair_address},
+                error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get_pair_metadata fn"},
+                rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
+            )
             if maker_token1:
                 [token0_name, token0_symbol, token0_decimals, token1_decimals] = ethereum_client.batch_call(
                     tasks
@@ -612,7 +671,7 @@ async def get_pair_per_token_metadata(
         logger.error(f"RPC error while fetcing metadata for pair {pair_address}, error_msg:{err}", exc_info=True)
         raise err
 
-async def get_eth_price_usd(block_height, loop: asyncio.AbstractEventLoop, redis_conn: aioredis.Redis):
+async def get_eth_price_usd(block_height, loop: asyncio.AbstractEventLoop, redis_conn: aioredis.Redis, rate_limit_lua_script_shas):
     """
         returns the price of eth in usd at a given block height
     """
@@ -632,7 +691,12 @@ async def get_eth_price_usd(block_height, loop: asyncio.AbstractEventLoop, redis
                 eth_price_usd = cached_price['price']
                 return eth_price_usd
 
-        
+        # we are making single batch call here:
+        await check_rpc_rate_limit(
+            redis_conn=redis_conn, request_payload={"block_identifier": block_height},
+            error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get eth usd price fn"},
+            rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
+        )
         [dai_eth_pair_reserves, usdc_eth_pair_reserves, eth_usdt_pair_reserves] = ethereum_client.batch_call([
             dai_eth_contract_obj.functions.getReserves(),
             usdc_eth_contract_obj.functions.getReserves(),
@@ -682,7 +746,15 @@ async def get_eth_price_usd(block_height, loop: asyncio.AbstractEventLoop, redis
     else:
         return float(eth_price_usd)
 
-async def get_white_token_data(pair_contract_obj, pair_metadata, white_token, target_token, block_height, loop: asyncio.AbstractEventLoop, redis_conn):
+async def get_white_token_data(
+    pair_contract_obj, 
+    pair_metadata, 
+    white_token, 
+    target_token, 
+    block_height, 
+    loop: asyncio.AbstractEventLoop, redis_conn,
+    rate_limit_lua_script_shas
+):
     token_price = 0
     white_token_reserves = 0
     white_token = Web3.toChecksumAddress(white_token)
@@ -695,6 +767,12 @@ async def get_white_token_data(pair_contract_obj, pair_metadata, white_token, ta
         #find price of white token in terms of target token
         tasks.append(pair_contract_obj.functions.getReserves())
 
+
+        await check_rpc_rate_limit(
+            redis_conn=redis_conn, request_payload={"token_contract": target_token},
+            error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get_white_token_data fn"},
+            rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
+        )
         if Web3.toChecksumAddress(white_token) == Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH):
             # set derived eth as 1 if token is weth
             token_eth_price = 1
@@ -810,7 +888,13 @@ def return_last_price_value(retry_state):
     wait=wait_random_exponential(multiplier=1, max=10), 
     stop=stop_after_attempt(settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS)
 )
-async def get_token_price_at_block_height(token_metadata, block_height, loop: asyncio.AbstractEventLoop, redis_conn: aioredis.Redis, debug_log=True):
+async def get_token_price_at_block_height(
+    token_metadata, block_height, 
+    loop: asyncio.AbstractEventLoop, 
+    redis_conn: aioredis.Redis, 
+    rate_limit_lua_script_shas=None, 
+    debug_log=True
+):
     """
         returns the price of a token at a given block height
     """
@@ -830,13 +914,13 @@ async def get_token_price_at_block_height(token_metadata, block_height, loop: as
                 return token_price
 
         if Web3.toChecksumAddress(token_metadata['address']) == Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH):
-            token_price = await get_eth_price_usd(block_height, loop, redis_conn)
+            token_price = await get_eth_price_usd(block_height, loop, redis_conn, rate_limit_lua_script_shas)
         else:
             token_eth_price = 0
 
             for white_token in settings.UNISWAP_V2_WHITELIST:
                 white_token = Web3.toChecksumAddress(white_token)
-                pairAddress = await get_pair(factory_contract_obj, white_token, token_metadata['address'], loop, redis_conn)
+                pairAddress = await get_pair(factory_contract_obj, white_token, token_metadata['address'], loop, redis_conn, rate_limit_lua_script_shas)
                 if pairAddress != "0x0000000000000000000000000000000000000000": 
                     pair_contract_obj = w3.eth.contract(
                         address=Web3.toChecksumAddress(pairAddress),
@@ -845,13 +929,14 @@ async def get_token_price_at_block_height(token_metadata, block_height, loop: as
                     new_pair_metadata = await get_pair_per_token_metadata(
                         pair_address=pairAddress,
                         loop=loop,
-                        redis_conn=redis_conn
+                        redis_conn=redis_conn,
+                        rate_limit_lua_script_shas=rate_limit_lua_script_shas
                     )
 
 
                     white_token_price, white_token_reserves, white_token_derived_eth = await get_white_token_data(
                         pair_contract_obj, new_pair_metadata, white_token, 
-                        token_metadata['address'], block_height, loop, redis_conn
+                        token_metadata['address'], block_height, loop, redis_conn, rate_limit_lua_script_shas
                     )
 
                     # ignore if reservers are less than threshold
@@ -864,7 +949,7 @@ async def get_token_price_at_block_height(token_metadata, block_height, loop: as
                         
             
             if token_eth_price != 0:
-                eth_usd_price = await get_eth_price_usd(block_height, loop, redis_conn)
+                eth_usd_price = await get_eth_price_usd(block_height, loop, redis_conn, rate_limit_lua_script_shas)
                 token_price = token_eth_price * eth_usd_price 
             
             if debug_log:
@@ -888,6 +973,9 @@ async def get_token_price_at_block_height(token_metadata, block_height, loop: as
             extra_info={'msg': f"rpc error: {str(err)}"}) from err
 
 
+
+
+
 # asynchronously get liquidity of each token reserve
 @retry(
     reraise=True, 
@@ -896,12 +984,12 @@ async def get_token_price_at_block_height(token_metadata, block_height, loop: as
     stop=stop_after_attempt(settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS)
 )
 async def get_liquidity_of_each_token_reserve_async(
-        loop: asyncio.AbstractEventLoop,
-        rate_limit_lua_script_shas: dict,
-        pair_address,
-        redis_conn: aioredis.Redis,
-        block_identifier='latest',
-        fetch_timestamp=False
+    loop: asyncio.AbstractEventLoop,
+    rate_limit_lua_script_shas: dict,
+    pair_address,
+    redis_conn: aioredis.Redis,
+    block_identifier='latest',
+    fetch_timestamp=False
 ):
     try:
         pair_address = Web3.toChecksumAddress(pair_address)
@@ -910,111 +998,80 @@ async def get_liquidity_of_each_token_reserve_async(
             address=pair_address,
             abi=pair_contract_abi
         )
-        # logger.debug('Got sha load results for rate limiter scripts: %s', lua_scripts)
-        redis_storage = AsyncRedisStorage(rate_limit_lua_script_shas, redis_conn)
-        custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
-        limit_incr_by = 1  # score to be incremented for each request
+
         if fetch_timestamp:
-            limit_incr_by += 1
-        app_id = settings.RPC.MATIC[0].split('/')[
-            -1]  # future support for loadbalancing over multiple MaticVigil RPC appID
-        key_bits = [app_id, 'eth_call']  # TODO: add unique elements that can identify a request
-        can_request = False
-        rate_limit_exception = False
-        retry_after = 1
-        response = None
-        for each_lim in PARSED_LIMITS:
-            # window_stats = custom_limiter.get_window_stats(each_lim, key_bits)
-            # local_app_cacher_logger.debug(window_stats)
-            # rest_logger.debug('Limit %s expiry: %s', each_lim, each_lim.get_expiry())
-            # async limits rate limit check
-            # if rate limit checks out then we call
+            block_det_func = partial(w3.eth.get_block, block_identifier)
             try:
-                if await custom_limiter.hit(each_lim, limit_incr_by, *[key_bits]) is False:
-                    window_stats = await custom_limiter.get_window_stats(each_lim, key_bits)
-                    reset_in = 1 + window_stats[0]
-                    # if you need information on back offs
-                    retry_after = reset_in - int(time.time())
-                    retry_after = (datetime.now() + timedelta(0, retry_after)).isoformat()
-                    can_request = False
-                    break  # make sure to break once false condition is hit
-            except (
-                    aioredis.exceptions.ConnectionError, aioredis.exceptions.TimeoutError,
-                    aioredis.exceptions.ResponseError
-            ) as e:
-                # shit can happen while each limit check call hits Redis, handle appropriately
-                logger.debug('Bypassing rate limit check for appID because of Redis exception: ' + str(
-                    {'appID': app_id, 'exception': e}))
-            except Exception as e:
-                logger.error('Caught exception on rate limiter operations: %s', e, exc_info=True)
-                raise
-            else:
-                can_request = True
-        if can_request:
-            if fetch_timestamp:
-                block_det_func = partial(w3.eth.get_block, block_identifier)
-                try:
-                    block_details = await loop.run_in_executor(func=block_det_func, executor=None)
-                except Exception as err:
-                    logger.error('Error attempting to get block details of block_identifier %s: %s, retrying again', block_identifier, err, exc_info=True)
-                    raise err
-            else:
-                block_details = None
-            
-            pair_per_token_metadata = await get_pair_per_token_metadata(
-                pair_address=pair_address,
-                loop=loop,
-                redis_conn=redis_conn
-            )
-            
-
-            pfunc_get_reserves = partial(pair.functions.getReserves().call, block_identifier=block_identifier)
-            async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(3), wait=wait_random(1, 2)):
-                with attempt:
-                    executor_gather = list()
-                    executor_gather.append(loop.run_in_executor(func=pfunc_get_reserves, executor=None))
-                    executor_gather.append(get_token_price_at_block_height(pair_per_token_metadata['token0'], block_identifier, loop, redis_conn))
-                    executor_gather.append(get_token_price_at_block_height(pair_per_token_metadata['token1'], block_identifier, loop, redis_conn))
-                    [
-                        reserves, token0Price, token1Price
-                    ] = await asyncio.gather(*executor_gather)
-                    if reserves and token0Price and token1Price:
-                        break
-            token0_addr = pair_per_token_metadata['token0']['address']
-            token1_addr = pair_per_token_metadata['token1']['address']
-            token0_decimals = pair_per_token_metadata['token0']['decimals']
-            token1_decimals = pair_per_token_metadata['token1']['decimals']
-            
-            token0Amount = reserves[0] / 10 ** int(token0_decimals)
-            token1Amount = reserves[1] / 10 ** int(token1_decimals)
-            
-            # logger.debug(f"Decimals of token0: {token0_decimals}, Decimals of token1: {token1_decimals}")
-            logger.debug("Token0: %s, Reserves: %s | Token1: %s, Reserves: %s", token0_addr, token0Amount, token1_addr, token1Amount)
-
-            token0USD = 0
-            token1USD = 0
-            if token0Price:
-                token0USD = token0Amount * token0Price
-            else:
-                logger.error(f"Liquidity: Could not find token0 price for {pair_per_token_metadata['token0']['symbol']}-USDT, setting it to 0")
-            
-            if token1Price:
-                token1USD = token1Amount * token1Price
-            else:
-                logger.error(f"Liquidity: Could not find token1 price for {pair_per_token_metadata['token1']['symbol']}-USDT, setting it to 0")
-                
-
-            return {
-                'token0': token0Amount,
-                'token1': token1Amount,
-                'token0USD': token0USD,
-                'token1USD': token1USD,
-                'timestamp': None if not block_details else block_details.timestamp
-            }
+                await check_rpc_rate_limit(
+                    redis_conn=redis_conn, request_payload={"contract": pair_address, "block_identifier": block_identifier},
+                    error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get async liquidity reserves"},
+                    rate_limit_lua_script_shas=rate_limit_lua_script_shas
+                )
+                block_details = await loop.run_in_executor(func=block_det_func, executor=None)
+            except Exception as err:
+                logger.error('Error attempting to get block details of block_identifier %s: %s, retrying again', block_identifier, err, exc_info=True)
+                raise err
         else:
-            raise RPCException(request={"contract": pair_address, "block_identifier": block_identifier}, 
-            response={}, underlying_exception=None, 
-            extra_info={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get async liquidity reserves"})
+            block_details = None
+        
+        pair_per_token_metadata = await get_pair_per_token_metadata(
+            pair_address=pair_address,
+            loop=loop,
+            redis_conn=redis_conn,
+            rate_limit_lua_script_shas=rate_limit_lua_script_shas
+        )
+        
+
+        pfunc_get_reserves = partial(pair.functions.getReserves().call, block_identifier=block_identifier)
+        async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(3), wait=wait_random(1, 2)):
+            with attempt:
+                executor_gather = list()
+                executor_gather.append(loop.run_in_executor(func=pfunc_get_reserves, executor=None))
+                executor_gather.append(get_token_price_at_block_height(pair_per_token_metadata['token0'], block_identifier, loop, redis_conn, rate_limit_lua_script_shas))
+                executor_gather.append(get_token_price_at_block_height(pair_per_token_metadata['token1'], block_identifier, loop, redis_conn, rate_limit_lua_script_shas))
+
+                # get token price function takes care of its own rate limit
+                await check_rpc_rate_limit(
+                    redis_conn=redis_conn, request_payload={"contract": pair_address, "block_identifier": block_identifier},
+                    error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get async liquidity reserves"},
+                    rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
+                )
+                [
+                    reserves, token0Price, token1Price
+                ] = await asyncio.gather(*executor_gather)
+                if reserves and token0Price and token1Price:
+                    break
+        token0_addr = pair_per_token_metadata['token0']['address']
+        token1_addr = pair_per_token_metadata['token1']['address']
+        token0_decimals = pair_per_token_metadata['token0']['decimals']
+        token1_decimals = pair_per_token_metadata['token1']['decimals']
+        
+        token0Amount = reserves[0] / 10 ** int(token0_decimals)
+        token1Amount = reserves[1] / 10 ** int(token1_decimals)
+        
+        # logger.debug(f"Decimals of token0: {token0_decimals}, Decimals of token1: {token1_decimals}")
+        logger.debug("Token0: %s, Reserves: %s | Token1: %s, Reserves: %s", token0_addr, token0Amount, token1_addr, token1Amount)
+
+        token0USD = 0
+        token1USD = 0
+        if token0Price:
+            token0USD = token0Amount * token0Price
+        else:
+            logger.error(f"Liquidity: Could not find token0 price for {pair_per_token_metadata['token0']['symbol']}-USDT, setting it to 0")
+        
+        if token1Price:
+            token1USD = token1Amount * token1Price
+        else:
+            logger.error(f"Liquidity: Could not find token1 price for {pair_per_token_metadata['token1']['symbol']}-USDT, setting it to 0")
+            
+
+        return {
+            'token0': token0Amount,
+            'token1': token1Amount,
+            'token0USD': token0USD,
+            'token1USD': token1USD,
+            'timestamp': None if not block_details else block_details.timestamp
+        }
     except Exception as exc:
         logger.error("error at async_get_liquidity_of_each_token_reserve fn, retrying..., error_msg: %s", exc, exc_info=True)
         raise RPCException(request={"contract": pair_address, "block_height": block_identifier}, 
@@ -1029,16 +1086,7 @@ async def get_trade_volume_epoch_price_map(
         token_metadata,
         redis_conn: aioredis.Redis,
         debug_log=False
-):
-    #ev_loop = asyncio.get_running_loop()
-    # # # prepare for rate limit check
-    redis_storage = AsyncRedisStorage(rate_limit_lua_script_shas, redis_conn)
-    custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
-    limit_incr_by = 1  # score to be incremented for each request
-    app_id = settings.RPC.MATIC[0].split('/')[
-        -1]  # future support for loadbalancing over multiple MaticVigil RPC appID
-    key_bits = [app_id, 'eth_call']  # TODO: add unique elements that can identify a request
-    
+):  
     price_map = {}
     for block in range(from_block, to_block + 1):
         if block != 'latest':
@@ -1053,51 +1101,17 @@ async def get_trade_volume_epoch_price_map(
                 price_map[block] = cached_price['price']
                 continue
 
-        # TODO: refactor rate limit check into something modular and easier to use
-        # # # rate limit check - begin
-        can_request = False
-        rate_limit_exception = False
-        retry_after = 1
-        response = None
-        for each_lim in PARSED_LIMITS:
-            # window_stats = custom_limiter.get_window_stats(each_lim, key_bits)
-            # local_app_cacher_logger.debug(window_stats)
-            # logger.debug('Limit %s expiry: %s', each_lim, each_lim.get_expiry())
-            try:
-                if await custom_limiter.hit(each_lim, limit_incr_by, *[key_bits]) is False:
-                    window_stats = await custom_limiter.get_window_stats(each_lim, key_bits)
-                    reset_in = 1 + window_stats[0]
-                    # if you need information on back offs
-                    retry_after = reset_in - int(time.time())
-                    retry_after = (datetime.now() + timedelta(0, retry_after)).isoformat()
-                    can_request = False
-                    break  # make sure to break once false condition is hit
-            except (
-                    aioredis.exceptions.ConnectionError, aioredis.exceptions.ResponseError,
-                    aioredis.exceptions.RedisError, Exception
-            ) as e:
-                # shit can happen while each limit check call hits Redis, handle appropriately
-                logger.debug('Bypassing rate limit check for appID because of Redis exception: ' + str(
-                    {'appID': app_id, 'exception': e}))
-            else:
-                can_request = True
-        # # # rate limit check - end
-        if can_request:
-            try:
-                async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(3), wait=wait_random(1, 2)):
-                    with attempt:
-                        price = await get_token_price_at_block_height(token_metadata, block, loop, redis_conn, debug_log)
-                        price_map[block] = price
-                        if price:
-                            break
-            except Exception as err:
-                # pair_contract price can't retrieved, this is mostly with sepcific coins log it and fetch price for newer ones
-                logger.error(f"Failed to fetch token price | error_msg: {str(err)} | epoch: {to_block}-{from_block}", exc_info=True)
-                raise err
-        else:
-            raise RPCException(request={"contract": token_metadata["address"], "to_block": to_block, "from_block": from_block}, 
-            response={}, underlying_exception=None, 
-            extra_info={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get_trade_volume_epoch_price_map"})
+        try:
+            async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(3), wait=wait_random(1, 5)):
+                with attempt:
+                    price = await get_token_price_at_block_height(token_metadata, block, loop, redis_conn, rate_limit_lua_script_shas, debug_log)
+                    price_map[block] = price
+                    if price:
+                        break
+        except Exception as err:
+            # pair_contract price can't retrieved, this is mostly with sepcific coins log it and fetch price for newer ones
+            logger.error(f"Failed to fetch token price | error_msg: {str(err)} | epoch: {to_block}-{from_block}", exc_info=True)
+            raise err
     
     return price_map
 
@@ -1119,119 +1133,98 @@ async def get_pair_contract_trades_async(
     fetch_timestamp=True
 ):
     try:
+
         pair_address = Web3.toChecksumAddress(pair_address)
         # pair contract
         pair = w3.eth.contract(
             address=pair_address,
             abi=pair_contract_abi
         )
-        redis_storage = AsyncRedisStorage(rate_limit_lua_script_shas, redis_conn)
-        custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
-        limit_incr_by = 3  # be honest, we will make 3 eth_getLogs queries here
-        app_id = settings.RPC.MATIC[0].split('/')[
-            -1]  # future support for loadbalancing over multiple MaticVigil RPC appID
-        key_bits = [app_id, 'eth_logs']  # TODO: add unique elements that can identify a request
-        can_request = False
-        rate_limit_exception = False
-        retry_after = 1
-        response = None
-        for each_lim in PARSED_LIMITS:
-            # window_stats = custom_limiter.get_window_stats(each_lim, key_bits)
-            # local_app_cacher_logger.debug(window_stats)
-            # rest_logger.debug('Limit %s expiry: %s', each_lim, each_lim.get_expiry())
-            # async limits rate limit check
-            # if rate limit checks out then we call
+
+        if fetch_timestamp:
+            block_det_func = partial(w3.eth.get_block, to_block)
             try:
-                if await custom_limiter.hit(each_lim, limit_incr_by, *[key_bits]) is False:
-                    window_stats = await custom_limiter.get_window_stats(each_lim, key_bits)
-                    reset_in = 1 + window_stats[0]
-                    # if you need information on back offs
-                    retry_after = reset_in - int(time.time())
-                    retry_after = (datetime.now() + timedelta(0, retry_after)).isoformat()
-                    can_request = False
-                    break  # make sure to break once false condition is hit
-            except (
-                aioredis.exceptions.ConnectionError, aioredis.exceptions.ResponseError,
-                aioredis.exceptions.RedisError, Exception
-            ) as e:
-                # shit can happen while each limit check call hits Redis, handle appropriately
-                logger.debug('Bypassing rate limit check for appID because of Redis exception: ' + str({'appID': app_id, 'exception': e}))
-            else:
-                can_request = True
-        if can_request:
-            if fetch_timestamp:
-                # logger.debug('Attempting to get block details of to_block %s', to_block)
-                block_det_func = partial(w3.eth.get_block, to_block)
-                try:
-                    block_details = await ev_loop.run_in_executor(func=block_det_func, executor=None)
-                except Exception as err:
-                    logger.error('Error attempting to get block details of to_block %s: %s, retrying again', to_block, err, exc_info=True)
-                    raise err
-            else:
-                # logger.debug('Not attempting to get block details of to_block %s', to_block)
-                block_details = None
-            pair_per_token_metadata = await get_pair_per_token_metadata(
-                pair_address=pair_address,
-                loop=ev_loop,
-                redis_conn=redis_conn
-            )
-            token0_price_map, token1_price_map = await asyncio.gather(
-                get_trade_volume_epoch_price_map(loop=ev_loop, rate_limit_lua_script_shas=rate_limit_lua_script_shas, to_block=to_block, from_block=from_block, token_metadata=pair_per_token_metadata['token0'], redis_conn=redis_conn),
-                get_trade_volume_epoch_price_map(loop=ev_loop, rate_limit_lua_script_shas=rate_limit_lua_script_shas, to_block=to_block, from_block=from_block, token_metadata=pair_per_token_metadata['token1'], redis_conn=redis_conn)
-            )
-            event_log_fetch_coros = list()
-            for trade_event_name in ['Swap', 'Mint', 'Burn']:
-                event_sig, event_abi = get_event_sig_and_abi(trade_event_name)
-                pfunc_get_event_logs = partial(
-                    get_events_logs, **{
-                        'contract_address': pair_address,
-                        'toBlock': to_block,
-                        'fromBlock': from_block,
-                        'topics': [event_sig],
-                        'event_abi': event_abi
-                    }
+                await check_rpc_rate_limit(
+                    redis_conn=redis_conn, request_payload={"contract": pair_address, "to_block": to_block, "from_block": from_block},
+                    error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get async trade volume"},
+                    rate_limit_lua_script_shas=rate_limit_lua_script_shas
                 )
-                event_log_fetch_coros.append(ev_loop.run_in_executor(func=pfunc_get_event_logs, executor=None))
-            [
-                swap_event_logs, mint_event_logs, burn_event_logs
-            ] = await asyncio.gather(*event_log_fetch_coros)
-            logs_ret = {
-                'Swap': swap_event_logs,
-                'Mint': mint_event_logs,
-                'Burn': burn_event_logs
-            }
-            # extract total trade from them
-            rets = dict()
-            for trade_event_name in ['Swap', 'Mint', 'Burn']:
-                # print(f'Event {trade_event_name} logs: ', logs_ret[trade_event_name])
-                rets.update({
-                    trade_event_name: {
-                        'logs': [{
-                            **dict(k.args),
-                            "transactionHash": k["transactionHash"].hex(),
-                            "logIndex": k["logIndex"],
-                            "blockNumber": k["blockNumber"],
-                            "event": k["event"]
-                        } for k in logs_ret[trade_event_name]],
-                        'trades': await extract_trade_volume_data(
-                            ev_loop=ev_loop,
-                            event_name=trade_event_name,
-                            # event_logs=logs_ret[trade_event_name],
-                            event_logs=logs_ret[trade_event_name],
-                            redis_conn=redis_conn,
-                            pair_per_token_metadata=pair_per_token_metadata,
-                            token0_price_map=token0_price_map, 
-                            token1_price_map=token1_price_map
-                        )
-                    }
-                })
-            max_block_timestamp = None if not block_details else block_details.timestamp
-            rets.update({'timestamp': max_block_timestamp})
-            return rets
+                block_details = await ev_loop.run_in_executor(func=block_det_func, executor=None)
+            except Exception as err:
+                logger.error('Error attempting to get block details of to_block %s: %s, retrying again', to_block, err, exc_info=True)
+                raise err
         else:
-            raise RPCException(request={"contract": pair_address, "fromBlock": from_block, "toBlock": to_block}, 
-            response={}, underlying_exception=None, 
-            extra_info={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get async trade volume"})
+            block_details = None
+
+        pair_per_token_metadata = await get_pair_per_token_metadata(
+            pair_address=pair_address,
+            loop=ev_loop,
+            redis_conn=redis_conn,
+            rate_limit_lua_script_shas=rate_limit_lua_script_shas
+        )
+        token0_price_map, token1_price_map = await asyncio.gather(
+            get_trade_volume_epoch_price_map(loop=ev_loop, rate_limit_lua_script_shas=rate_limit_lua_script_shas, to_block=to_block, from_block=from_block, token_metadata=pair_per_token_metadata['token0'], redis_conn=redis_conn),
+            get_trade_volume_epoch_price_map(loop=ev_loop, rate_limit_lua_script_shas=rate_limit_lua_script_shas, to_block=to_block, from_block=from_block, token_metadata=pair_per_token_metadata['token1'], redis_conn=redis_conn)
+        )
+        event_log_fetch_coros = list()
+        for trade_event_name in ['Swap', 'Mint', 'Burn']:
+            event_sig, event_abi = get_event_sig_and_abi(trade_event_name)
+            pfunc_get_event_logs = partial(
+                get_events_logs, **{
+                    'contract_address': pair_address,
+                    'toBlock': to_block,
+                    'fromBlock': from_block,
+                    'topics': [event_sig],
+                    'event_abi': event_abi
+                }
+            )
+            event_log_fetch_coros.append(ev_loop.run_in_executor(func=pfunc_get_event_logs, executor=None))
+        
+        await check_rpc_rate_limit(
+            redis_conn=redis_conn, request_payload={"contract": pair_address, "to_block": to_block, "from_block": from_block},
+            error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get async trade volume"},
+            rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=3
+        )
+        [
+            swap_event_logs, mint_event_logs, burn_event_logs
+        ] = await asyncio.gather(*event_log_fetch_coros)
+        logs_ret = {
+            'Swap': swap_event_logs,
+            'Mint': mint_event_logs,
+            'Burn': burn_event_logs
+        }
+        # extract total trade from them
+        rets = dict()
+        for trade_event_name in ['Swap', 'Mint', 'Burn']:
+            # print(f'Event {trade_event_name} logs: ', logs_ret[trade_event_name])
+            rets.update({
+                trade_event_name: {
+                    'logs': [{
+                        **dict(k.args),
+                        "transactionHash": k["transactionHash"].hex(),
+                        "logIndex": k["logIndex"],
+                        "blockNumber": k["blockNumber"],
+                        "event": k["event"]
+                    } for k in logs_ret[trade_event_name]],
+                    'trades': await extract_trade_volume_data(
+                        ev_loop=ev_loop,
+                        event_name=trade_event_name,
+                        # event_logs=logs_ret[trade_event_name],
+                        event_logs=logs_ret[trade_event_name],
+                        redis_conn=redis_conn,
+                        pair_per_token_metadata=pair_per_token_metadata,
+                        token0_price_map=token0_price_map, 
+                        token1_price_map=token1_price_map
+                    )
+                }
+            })
+        max_block_timestamp = None if not block_details else block_details.timestamp
+        rets.update({'timestamp': max_block_timestamp})
+        return rets
+
+        # raise RPCException(request={"contract": pair_address, "fromBlock": from_block, "toBlock": to_block}, 
+        # response={}, underlying_exception=None, 
+        # extra_info={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get async trade volume"})
     except Exception as exc:
         logger.error("error at get_pair_contract_trades_async fn: %s", exc, exc_info=True)
         raise RPCException(request={"contract": pair_address, "fromBlock": from_block, "toBlock": to_block}, 
@@ -1279,7 +1272,13 @@ def get_liquidity_of_each_token_reserve(pair_address, block_identifier='latest')
     return {"token0": reservers[0] / 10 ** token0_decimals, "token1": reservers[1] / 10 ** token1_decimals}
 
 
-async def get_pair(factory_contract_obj, token0, token1, loop: asyncio.AbstractEventLoop, redis_conn: aioredis.Redis):
+async def get_pair(
+    factory_contract_obj, 
+    token0, token1, 
+    loop: asyncio.AbstractEventLoop, 
+    redis_conn: aioredis.Redis, 
+    rate_limit_lua_script_shas
+):
 
     #check if pair cache exists
     pair_address_cache = await redis_conn.hget(
@@ -1295,6 +1294,11 @@ async def get_pair(factory_contract_obj, token0, token1, loop: asyncio.AbstractE
         Web3.toChecksumAddress(token0), 
         Web3.toChecksumAddress(token1)
     ).call)
+    await check_rpc_rate_limit(
+        redis_conn=redis_conn, request_payload={"token0": token0, "token1": token1},
+        error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get_pair fn"},
+        rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
+    )
     pair = await loop.run_in_executor(func=pair_func, executor=None)
     
     # cache the pair address
@@ -1321,7 +1325,7 @@ if __name__ == '__main__':
     # rate_limit_lua_script_shas = dict()
     # loop = asyncio.get_event_loop()
     # data = loop.run_until_complete(
-    #     get_pair_contract_trades_async(loop, rate_limit_lua_script_shas, '0x9fae36a18ef8ac2b43186ade5e2b07403dc742b1', 15007407, 15007416)
+    #     get_pair_contract_trades_async(loop, rate_limit_lua_script_shas, '0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc', 15140843, 15140863)
     # )
 
     # loop = asyncio.get_event_loop()
