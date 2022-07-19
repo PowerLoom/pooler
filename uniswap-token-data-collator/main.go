@@ -38,7 +38,7 @@ const pairContractListFile string = "../static/cached_pair_addresses.json"
 const V2_PAIRSUMMARY_PROJECTID string = "uniswap_V2PairsSummarySnapshot_%s"
 const V2_TOKENSUMMARY_PROJECTID string = "uniswap_V2TokensSummarySnapshot_%s"
 const MAX_RETRIES_BEFORE_EXIT int = 10
-const MAX_RETRIES_FOR_SNAPSHOT_CONFIRM = 18
+const MAX_RETRIES_FOR_SNAPSHOT_CONFIRM = 5
 
 //TODO: Move the below to config file.
 const periodicRetrievalInterval time.Duration = 60 * time.Second
@@ -243,7 +243,8 @@ func PrepareAndSubmitV2TokenSummarySnapshot() {
 		time24h := currentTimestamp.AddDate(0, 0, -1)
 		fromTime := float64(time24h.Unix())
 		log.Debug("TimeStamp for 1 day before is:", fromTime)
-
+		//TODO: Fetch lastTokensummaryBlockHeight for the project
+		lastTokensummaryBlockHeight := FetchTokenSummaryLatestBlockHeight()
 		//Update tokenPrice
 		for key, tokenData := range tokenList {
 			tokenData.Price = FetchTokenPriceAtBlockHeight(tokenData.ContractAddress, int64(tokenData.Block_height))
@@ -259,13 +260,13 @@ func PrepareAndSubmitV2TokenSummarySnapshot() {
 				//delete(tokenList, key)
 			}
 		}
-		tentativeBlockHeight, err := CommitV2TokenSummaryPayload()
+		err = CommitV2TokenSummaryPayload()
 		if err != nil {
 			log.Errorf("Failed to commit payload at blockHeight %d due to error %s", curBlockHeight, err.Error())
 			ResetTokenData()
 			return
 		}
-
+		tentativeBlockHeight := lastTokensummaryBlockHeight + 1
 		payloadCID, txHash, err := WaitAndFetchLatestV2TokenSummaryCID(tentativeBlockHeight, MAX_RETRIES_FOR_SNAPSHOT_CONFIRM)
 		if err != nil {
 			log.Errorf("Failed to Fetch payloadCID at blockHeight %d due to error %s", tentativeBlockHeight, err.Error())
@@ -285,6 +286,37 @@ func PrepareAndSubmitV2TokenSummarySnapshot() {
 		log.Debugf("PairSummary blockHeight has not moved yet and is still at %d, lastSnapshotBlockHeight is %d. Hence not processing anything.",
 			curBlockHeight, lastSnapshotBlockHeight)
 	}
+}
+
+func FetchTokenSummaryLatestBlockHeight() int64 {
+	v2PairsProjectId := fmt.Sprintf(V2_TOKENSUMMARY_PROJECTID, settingsObj.Development.Namespace)
+	last_block_height_url := settingsObj.Development.AuditProtocolEngine.URL + "/" + v2PairsProjectId + "/payloads/height"
+	log.Debug("Fetching Blockheight URL:", last_block_height_url)
+	var heightResp AuditProtocolBlockHeightResp
+
+	for retryCount := 0; retryCount < 3; retryCount++ {
+		resp, err := apHttpClient.Get(last_block_height_url)
+		if err != nil {
+			log.Error("Error: Could not fetch block height for pairContract:", v2PairsProjectId, " Error:", err)
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		defer resp.Body.Close()
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Error("Unable to read HTTP resp.", err)
+			return 0
+		}
+		log.Trace("Rsp Body", string(body))
+
+		if err = json.Unmarshal(body, &heightResp); err != nil { // Parse []byte to the go struct pointer
+			log.Errorf("Can not unmarshal JSON resp for due to error %+v", err)
+			continue
+		}
+		break
+	}
+	log.Debugf("Last Block Height for projectID %s is : %d", v2PairsProjectId, heightResp.Height)
+	return heightResp.Height
 }
 
 func ResetTokenData() {
@@ -472,7 +504,7 @@ func PruneTokenSummarySnapshotsZSet() {
 	}
 }
 
-func CommitV2TokenSummaryPayload() (int64, error) {
+func CommitV2TokenSummaryPayload() error {
 	url := settingsObj.Development.AuditProtocolEngine.URL + "/commit_payload"
 
 	var apCommitResp AuditProtocolCommitPayloadResp
@@ -489,7 +521,7 @@ func CommitV2TokenSummaryPayload() (int64, error) {
 	body, err := json.Marshal(request)
 	if err != nil {
 		log.Fatalf("Failed to marshal request %+v towards Audit-Protocol with error %+v", request, err)
-		return 0, err
+		return err
 	}
 	log.Debugf("URL %s. Committing Payload %s", url, string(body))
 	retryCount := 0
@@ -530,9 +562,9 @@ func CommitV2TokenSummaryPayload() (int64, error) {
 		break
 	}
 	if retryCount >= 3 {
-		return 0, errors.New("failed to commit payload after max retries")
+		return errors.New("failed to commit payload after max retries")
 	}
-	return int64(apCommitResp.TentativeHeight), nil
+	return nil
 }
 
 func FetchV2PairSummarySnapshot(blockHeight int64) []TokenPairLiquidityProcessedData {
@@ -634,7 +666,7 @@ func FetchV2SummaryLatestBlockHeight() int64 {
 		resp, err := apHttpClient.Get(last_block_height_url)
 		if err != nil {
 			log.Error("Error: Could not fetch block height for pairContract:", v2PairsProjectId, " Error:", err)
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(5 * time.Second)
 			continue
 		}
 		defer resp.Body.Close()
