@@ -806,6 +806,9 @@ async def get_white_token_data(
         pair_reserve_token0 = pair_reserve[0]/10**int(pair_metadata['token0']["decimals"])
         pair_reserve_token1 = pair_reserve[1]/10**int(pair_metadata['token1']["decimals"])
 
+        if pair_reserve_token0 == 0 or pair_reserve_token1 == 0:
+            return token_price, white_token_reserves, float(token_eth_price)
+
         if Web3.toChecksumAddress(pair_metadata['token0']["address"]) == white_token:
             token_price = float(pair_reserve_token0 / pair_reserve_token1)
             white_token_reserves = pair_reserve_token0
