@@ -15,7 +15,7 @@ from init_rabbitmq import init_rmq_exchange_queue_async
 from proto_system_logging import config_logger_with_namespace
 from tenacity import retry, RetryError, wait_fixed, stop_after_attempt, stop_after_delay, retry_if_result
 from datetime import datetime, timedelta
-import aioredis
+from redis import asyncio as aioredis
 import json
 import aiohttp
 import logging.config

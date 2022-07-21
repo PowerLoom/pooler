@@ -9,7 +9,6 @@ from web3._utils.events import get_event_data
 from eth_abi.codec import ABICodec
 import asyncio
 import aiohttp
-from redis_conn import provide_async_redis_conn_insta
 from dynaconf import settings
 import logging.config
 import os
@@ -18,7 +17,7 @@ import json
 from bounded_pool_executor import BoundedThreadPoolExecutor
 import threading
 from concurrent.futures import as_completed
-import aioredis
+from redis import asyncio as aioredis
 from async_limits.strategies import AsyncFixedWindowRateLimiter
 from async_limits.storage import AsyncRedisStorage
 from async_limits import parse_many as limit_parse_many

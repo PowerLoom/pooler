@@ -7,7 +7,7 @@ from dynaconf import settings
 import logging
 import sys
 import coloredlogs
-import aioredis
+from redis import asyncio as aioredis
 import aiohttp
 import json
 import os

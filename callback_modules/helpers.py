@@ -13,7 +13,7 @@ from functools import reduce
 from typing import Union, Dict
 import sys
 import resource
-import aioredis
+from redis import asyncio as aioredis
 import requests
 import logging
 import logging.handlers

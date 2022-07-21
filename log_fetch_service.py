@@ -9,7 +9,7 @@ from uuid import uuid4
 from init_rabbitmq import get_rabbitmq_channel_async, get_rabbitmq_connection_async
 from functools import partial
 from dynaconf import settings
-import aioredis
+from redis import asyncio as aioredis
 import asyncio
 from aio_pika import connect, Channel, Message, DeliveryMode, ExchangeType
 from aio_pika.pool import Pool
