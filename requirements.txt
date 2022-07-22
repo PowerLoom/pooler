@@ -63,7 +63,7 @@ cached-property==1.5.2
 web3==5.23.1
 timeago
 limits==1.5.1
-async_limits @ git+https://github.com/anomit/limits.git
+async_limits@git+https://github.com/powerloom/limits.git
 greenletio
 redis>=4.2.0rc1
 httpx==0.22.0
