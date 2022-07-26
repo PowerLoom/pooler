@@ -7,7 +7,7 @@ from dynaconf import settings
 import logging
 import sys
 import coloredlogs
-import aioredis
+from redis import asyncio as aioredis
 import aiohttp
 import json
 import os
@@ -268,6 +268,11 @@ async def get_v2_pairs_data(
     latest_payload = json.loads(latest_payload.decode('utf-8'))
     latest_payload_cid = latest_payload.get("cid")
     txHash = latest_payload.get("txHash")
+    begin_block_height_24h = latest_payload.get("begin_block_height_24h")
+    begin_block_timestamp_24h = latest_payload.get("begin_block_timestamp_24h")
+    begin_block_height_7d = latest_payload.get("begin_block_height_7d")
+    begin_block_timestamp_7d = latest_payload.get("begin_block_timestamp_7d")
+
 
     snapshot_data = await redis_conn.get(
         name=uniswap_V2_snapshot_at_blockheight.format(int(latest_block_height))
@@ -286,7 +291,9 @@ async def get_v2_pairs_data(
     if "/v1/api" in request.url._url:
         return {
             "data": data, "txHash": txHash, "cid": latest_payload_cid,
-            "block_height": data[0].get("block_height", None), "block_timestamp": data[0].get("block_timestamp", None)
+            "block_height": data[0].get("block_height", None), "block_timestamp": data[0].get("block_timestamp", None),
+            "begin_block_height_24h": begin_block_height_24h, "begin_block_timestamp_24h": begin_block_timestamp_24h,
+            "begin_block_height_7d": begin_block_height_7d, "begin_block_timestamp_7d": begin_block_timestamp_7d
         }
     else:
         return data
@@ -337,6 +344,10 @@ async def get_v2_pairs_data(
     latest_payload = json.loads(latest_payload[0].decode('utf-8'))
     payload_cid = latest_payload.get("cid")
     txHash = latest_payload.get("txHash")
+    begin_block_height_24h = latest_payload.get("begin_block_height_24h")
+    begin_block_timestamp_24h = latest_payload.get("begin_block_timestamp_24h")
+    begin_block_height_7d = latest_payload.get("begin_block_height_7d")
+    begin_block_timestamp_7d = latest_payload.get("begin_block_timestamp_7d")
 
     # serve redis cache
     if snapshot_data:
@@ -345,7 +356,9 @@ async def get_v2_pairs_data(
         if "/v1/api" in request.url._url:
             return {
                 "data": data, "txHash": txHash, "cid": payload_cid, 
-                "block_height": block_height, "block_timestamp": data[0].get("block_timestamp", None)
+                "block_height": block_height, "block_timestamp": data[0].get("block_timestamp", None),
+                "begin_block_height_24h": begin_block_height_24h, "begin_block_timestamp_24h": begin_block_timestamp_24h,
+                "begin_block_height_7d": begin_block_height_7d, "begin_block_timestamp_7d": begin_block_timestamp_7d
             }
         else:
             return data
@@ -362,7 +375,9 @@ async def get_v2_pairs_data(
     if "/v1/api" in request.url._url:
         return {
             "data": payload_data, "txHash": txHash, "cid": payload_cid,
-            "block_height": block_height, "block_timestamp": payload_data[0].get("block_timestamp", None)
+            "block_height": block_height, "block_timestamp": payload_data[0].get("block_timestamp", None),
+            "begin_block_height_24h": begin_block_height_24h, "begin_block_timestamp_24h": begin_block_timestamp_24h,
+            "begin_block_height_7d": begin_block_height_7d, "begin_block_timestamp_7d": begin_block_timestamp_7d
         }
     else:
         return payload_data
@@ -416,6 +431,7 @@ async def get_v2_daily_stats_by_block(
         )
         if not snapshot_data:
             # fetch from ipfs
+            payload_cid = payload_cid.decode('utf-8') if not isinstance(payload_cid, str) else payload_cid
             snapshot_data = await retrieve_payload_data(payload_cid, redis_conn)
 
         # even ipfs doesn't have payload then exit
@@ -725,7 +741,7 @@ async def get_v2_pairs_daily_stats(
         )
         if not snapshot_data:
             # fetch from ipfs
-            payload_cid = payload_cid.decode('utf-8')
+            payload_cid = payload_cid.decode('utf-8') if not isinstance(payload_cid, str) else payload_cid
             snapshot_data = await retrieve_payload_data(payload_cid, redis_conn)
 
         # even ipfs doesn't have payload then exit

@@ -105,7 +105,8 @@
         "port": 9002,
         "audit_protocol_engine": {
             "url": "http://localhost:9000",
-            "retry": 5
+            "retry": 5,
+            "skip_anchor_proof":true
         },
         "audit_protocol_engine_2": {
             "url": "http://localhost:9199",

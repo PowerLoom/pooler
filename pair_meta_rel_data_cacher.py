@@ -15,7 +15,7 @@ from async_limits.storage import AsyncRedisStorage
 from async_limits import parse_many as limit_parse_many
 from redis_conn import RedisPoolCache
 from tenacity import Retrying, wait_random_exponential, stop_after_attempt
-import aioredis
+from redis import asyncio as aioredis
 import time
 from datetime import datetime, timedelta
 from dynaconf import settings

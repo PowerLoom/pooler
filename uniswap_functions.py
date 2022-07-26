@@ -9,7 +9,6 @@ from web3._utils.events import get_event_data
 from eth_abi.codec import ABICodec
 import asyncio
 import aiohttp
-from redis_conn import provide_async_redis_conn_insta
 from dynaconf import settings
 import logging.config
 import os
@@ -18,7 +17,7 @@ import json
 from bounded_pool_executor import BoundedThreadPoolExecutor
 import threading
 from concurrent.futures import as_completed
-import aioredis
+from redis import asyncio as aioredis
 from async_limits.strategies import AsyncFixedWindowRateLimiter
 from async_limits.storage import AsyncRedisStorage
 from async_limits import parse_many as limit_parse_many
@@ -805,6 +804,9 @@ async def get_white_token_data(
 
         pair_reserve_token0 = pair_reserve[0]/10**int(pair_metadata['token0']["decimals"])
         pair_reserve_token1 = pair_reserve[1]/10**int(pair_metadata['token1']["decimals"])
+
+        if pair_reserve_token0 == 0 or pair_reserve_token1 == 0:
+            return token_price, white_token_reserves, float(token_eth_price)
 
         if Web3.toChecksumAddress(pair_metadata['token0']["address"]) == white_token:
             token_price = float(pair_reserve_token0 / pair_reserve_token1)
