@@ -1,7 +1,7 @@
 from urllib.parse import urljoin
 from fastapi import FastAPI, Request, Response, Header, BackgroundTasks
 from redis_conn import provide_async_redis_conn
-import aioredis
+from redis import asyncio as aioredis
 import time
 import json
 from dynaconf import settings

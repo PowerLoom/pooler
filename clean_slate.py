@@ -10,7 +10,7 @@ import argparse
 # Define the parser
 parser = argparse.ArgumentParser(description='clean slate script')
 parser.add_argument(
-    '--ipfs', action=argparse.BooleanOptionalAction, type=bool, dest='ipfs', 
+    '--ipfs', action=argparse.BooleanOptionalAction, type=bool, dest='ipfs',
     default=False, help='cleanup ipfs keys'
 )
 args = parser.parse_args()
@@ -35,6 +35,10 @@ def redis_cleanup_audit_protocol():
     }
 
     r = Redis(**REDIS_AUDIT_PROTOCOL_CONFIG)
+    try:
+        c = r.delete(f'projects:{settings.NAMESPACE}:IndexStatus')
+    except:
+        pass
 
     try:
         c = r.delete(*r.keys(f'*{settings.NAMESPACE}*Cid*'))
@@ -232,7 +236,7 @@ def cleanup_ipfs():
             max='+inf'
         )
         cids = cids + [cid.decode('utf-8') for cid in res] if res else []
-    
+
     print(f"Total cids to be deleted: {len(cids)}")
 
     for cid in cids:
@@ -245,14 +249,14 @@ def cleanup_ipfs():
             else:
                 print(f"Unknown error: {err}")
                 raise err
-        
+
     #print('Running garbage collector: ')
     #print(client.repo.gc())
     #TODO: we need to enforce gc here but it might timeout if there are too many cids
-    #      default gc is set to 1hour, any objects which are not pinned and not queried 
+    #      default gc is set to 1hour, any objects which are not pinned and not queried
     #      should get gc’d in an hour.
 
-    
+
 
 
 
