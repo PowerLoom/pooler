@@ -431,7 +431,7 @@ async def get_v2_daily_stats_by_block(
         )
         if not snapshot_data:
             # fetch from ipfs
-            payload_cid = payload_cid.decode('utf-8') if not isinstance(payload_cid, str) else payload_cid
+            payload_cid = payload_cid.decode('utf-8') if type(payload_cid) != str else payload_cid
             snapshot_data = await retrieve_payload_data(payload_cid, redis_conn)
 
         # even ipfs doesn't have payload then exit
@@ -592,7 +592,7 @@ async def get_v2_pairs_recent_logs(
     )
     if not snapshot_data:
         # fetch from ipfs
-        latest_payload_cid = latest_payload_cid.decode('utf-8') if not isinstance(latest_payload_cid, str) else latest_payload_cid
+        latest_payload_cid = latest_payload_cid.decode('utf-8') if type(latest_payload_cid) != str else latest_payload_cid
         snapshot_data = await retrieve_payload_data(latest_payload_cid, redis_conn)
         
         # even ipfs doesn't have data, return empty
@@ -741,7 +741,7 @@ async def get_v2_pairs_daily_stats(
         )
         if not snapshot_data:
             # fetch from ipfs
-            payload_cid = payload_cid.decode('utf-8') if not isinstance(payload_cid, str) else payload_cid
+            payload_cid = payload_cid.decode('utf-8') if type(payload_cid) != str else payload_cid
             snapshot_data = await retrieve_payload_data(payload_cid, redis_conn)
 
         # even ipfs doesn't have payload then exit
