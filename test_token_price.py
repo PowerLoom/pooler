@@ -4,7 +4,7 @@ import asyncio
 from functools import partial
 import json
 from uniswap_functions import get_pair_per_token_metadata, provide_async_redis_conn_insta
-import aioredis
+from redis import asyncio as aioredis
 
 
 w3 = Web3(Web3.HTTPProvider(settings.RPC.MATIC[0]))

@@ -1,6 +1,6 @@
 from dynaconf import settings as settings_conf
 from functools import wraps
-import aioredis
+from redis import asyncio as aioredis
 import contextlib
 import tenacity
 import redis.exceptions as redis_exc
@@ -24,7 +24,8 @@ REDIS_CONN_CONF = {
     "host": settings_conf['redis']['host'],
     "port": settings_conf['redis']['port'],
     "password": settings_conf['redis']['password'],
-    "db": settings_conf['redis']['db']
+    "db": settings_conf['redis']['db'],
+    "retry_on_error": [redis.exceptions.ReadOnlyError, ]
 }
 
 
@@ -39,6 +40,7 @@ def construct_redis_url():
 async def get_aioredis_pool(pool_size=200):
     return await aioredis.from_url(
         url=construct_redis_url(),
+        retry_on_error=[redis.exceptions.ReadOnlyError, ],
         max_connections=pool_size
     )
 
@@ -133,7 +135,8 @@ def provide_async_redis_conn_insta(fn):
                     host=REDIS_CONN_CONF['host'],
                     port=REDIS_CONN_CONF['port'],
                     db=REDIS_CONN_CONF['db'],
-                    password=REDIS_CONN_CONF['password']
+                    password=REDIS_CONN_CONF['password'],
+                    retry_on_error=[redis.exceptions.ReadOnlyError, ]
                 )
             kwargs[arg_conn] = connection
             try:

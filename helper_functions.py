@@ -14,7 +14,7 @@ from uuid import uuid4
 import redis
 import psutil
 import os
-import aioredis
+from redis import asyncio as aioredis
 import asyncio
 import aiohttp
 import logging
