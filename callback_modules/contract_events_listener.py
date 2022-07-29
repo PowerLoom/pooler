@@ -12,7 +12,8 @@ import asyncio
 
 
 trade_logger = logging.getLogger(__name__)
-socket_log_handler = logging.handlers.SocketHandler('localhost', logging.handlers.DEFAULT_TCP_LOGGING_PORT)
+socket_log_handler = logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST','localhost'),
+            port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT))
 trade_logger.addHandler(socket_log_handler)
 app = FastAPI()
 

@@ -29,7 +29,8 @@ import time
 # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|EthLogs|worker'))
 log_entry_logger = logging.getLogger('PowerLoom|EthLogs|worker')
 log_entry_logger.setLevel(logging.DEBUG)
-log_entry_logger.handlers = [logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
+log_entry_logger.handlers = [logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST','localhost'),
+            port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT))]
 
 
 #Initialize rate limits when program starts

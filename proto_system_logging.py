@@ -1,7 +1,7 @@
 from typing import Union
 from loguru import logger
 import logging.handlers
-
+from dynaconf import settings
 
 # #BEGIN  legacy logging config for central logging server to use loguru logging interceptor
 class actorLogFilter(logging.Filter):
@@ -70,8 +70,8 @@ def config_logger_with_namespace(namespace: Union[str, None], remove_root_config
             'socketHandler': {
                 'class': 'logging.handlers.SocketHandler',
                 'level': logging.DEBUG,
-                'host': 'localhost',
-                'port': logging.handlers.DEFAULT_TCP_LOGGING_PORT
+                'host': settings.get('LOGGING_SERVER.HOST','localhost'),
+                'port': settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT)
             },
         },
         'loggers': {'root': {'handlers': ['socketHandler'], 'level': logging.DEBUG}}

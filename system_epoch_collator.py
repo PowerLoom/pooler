@@ -150,7 +150,8 @@ class EpochCollatorProcess(Process):
         self._logger = logging.getLogger('PowerLoom|EpochCollator')
         self._logger.setLevel(logging.DEBUG)
         self._logger.handlers = [
-            logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)
+            logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST','localhost'),
+            port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT))
         ]
         self._tooz_reporter = Thread(target=self.state_report_thread)
         self._tooz_reporter.start()

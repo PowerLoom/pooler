@@ -40,7 +40,8 @@ w3 = Web3(Web3.HTTPProvider(settings.RPC.MATIC[0]))
 
 logger = logging.getLogger('PowerLoom|UniswapHelpers')
 logger.setLevel(logging.DEBUG)
-logger.handlers = [logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
+logger.handlers = [logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST','localhost'),
+            port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT))]
 
 # Initialize rate limits when program starts
 GLOBAL_RPC_RATE_LIMIT_STR = settings.RPC.rate_limit
@@ -99,11 +100,11 @@ def read_json_file(file_path: str):
     return json_data
 
 
-pair_contract_abi = read_json_file(f"abis/UniswapV2Pair.json")
-erc20_abi = read_json_file('abis/IERC20.json')
-router_contract_abi = read_json_file(f"abis/UniswapV2Router.json")
-uniswap_trade_events_abi = read_json_file('abis/UniswapTradeEvents.json')
-factory_contract_abi = read_json_file(f"abis/IUniswapV2Factory.json")
+pair_contract_abi = read_json_file(settings.UNISWAP_CONTRACT_ABIS.PAIR_CONTRACT)
+erc20_abi = read_json_file(settings.UNISWAP_CONTRACT_ABIS.erc20)
+router_contract_abi = read_json_file(settings.UNISWAP_CONTRACT_ABIS.ROUTER)
+uniswap_trade_events_abi = read_json_file(settings.UNISWAP_CONTRACT_ABIS.TRADE_EVENTS)
+factory_contract_abi = read_json_file(settings.UNISWAP_CONTRACT_ABIS.FACTORY)
 
 router_addr = settings.CONTRACT_ADDRESSES.IUNISWAP_V2_ROUTER
 dai = settings.CONTRACT_ADDRESSES.DAI
@@ -183,7 +184,7 @@ try:
     # instantiate UniswapV2Factory contract (using quick swap v2 factory address)
     quick_swap_uniswap_v2_factory_contract = w3.eth.contract(
         address=Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.IUNISWAP_V2_FACTORY),
-        abi=read_json_file('./abis/IUniswapV2Factory.json')
+        abi=read_json_file(settings.UNISWAP_CONTRACT_ABIS.FACTORY)
     )
 
 except Exception as e:
@@ -233,8 +234,8 @@ async def check_rpc_rate_limit(redis_conn: aioredis.Redis, request_payload, erro
 
     if not can_request:
         raise RPCException(
-            request=request_payload, 
-            response={}, underlying_exception=None, 
+            request=request_payload,
+            response={}, underlying_exception=None,
             extra_info=error_msg
         )
     return can_request
@@ -268,7 +269,7 @@ async def get_block_details(ev_loop, block_number):
         block_details = dict() if not block_details else block_details
     except Exception as e:
         logger.error('Error attempting to get block details of recent transaction timestamp %s: %s', block_number, e, exc_info=True)
-        block_details = dict()      
+        block_details = dict()
         raise e
     else:
         return block_details
@@ -283,7 +284,7 @@ async def store_price_at_block_range(begin_block, end_block, token0, token1, pri
             "block_number": i,
             "timestamp": int(time.time())
         })]= i
-        
+
 
     await redis_conn.zadd(
         name=uniswap_pair_cached_block_height_token_price.format(f"{token0}-{token1}"),
@@ -310,12 +311,12 @@ async def extract_recent_transaction_logs(ev_loop, event_name, event_logs, pair_
                 current0_swapped = log.args.get('amount0Out') / 10 ** int(pair_per_token_metadata['token0']['decimals'])
                 token0_amount = current0_swapped
                 token0_swapped_usd = current0_swapped * token0_price_map.get(log["blockNumber"], list(token0_price_map.values())[0])
-                
+
                 current1_swapped = log.args.get('amount1In') / 10 ** int(pair_per_token_metadata['token1']['decimals'])
                 token1_amount = current1_swapped
                 token1_swapped_usd = current1_swapped * token1_price_map.get(log["blockNumber"], list(token1_price_map.values())[0])
             elif log.args.get('amount0Out') == 0:
-                current0_swapped = log.args.get('amount0In') / 10 ** int(pair_per_token_metadata['token0']['decimals']) 
+                current0_swapped = log.args.get('amount0In') / 10 ** int(pair_per_token_metadata['token0']['decimals'])
                 token0_amount = current0_swapped
                 token0_swapped_usd = current0_swapped * token0_price_map.get(log["blockNumber"], list(token0_price_map.values())[0])
 
@@ -327,11 +328,11 @@ async def extract_recent_transaction_logs(ev_loop, event_name, event_logs, pair_
             current0_swapped = log.args.get('amount0') / 10 ** int(pair_per_token_metadata['token0']['decimals'])
             token0_amount = current0_swapped
             token0_swapped_usd = current0_swapped * token0_price_map.get(log["blockNumber"], list(token0_price_map.values())[0])
-            
-            current1_swapped = log.args.get('amount1') / 10 ** int(pair_per_token_metadata['token1']['decimals']) 
+
+            current1_swapped = log.args.get('amount1') / 10 ** int(pair_per_token_metadata['token1']['decimals'])
             token1_amount = current1_swapped
             token1_swapped_usd = current1_swapped * token1_price_map.get(log["blockNumber"], list(token1_price_map.values())[0])
-        
+
 
         if event_name == 'Swap':
             if token1_swapped_usd and token0_swapped_usd:
@@ -378,18 +379,18 @@ async def extract_trade_volume_data(ev_loop, event_name, event_logs: List[Attrib
     for parsed_log_obj_values in log_topic_values:
         if event_name == 'Swap':
             if parsed_log_obj_values.get('amount1Out') == 0:
-            
+
                 current0_swapped = parsed_log_obj_values.get('amount0Out') / 10 ** int(pair_per_token_metadata['token0']['decimals'])
                 token0_swapped += current0_swapped
                 token0_swapped_usd += current0_swapped * token0_price_map.get(parsed_log_obj_values.get('blockNumber'), list(token0_price_map.values())[0])
-                
+
                 current1_swapped = parsed_log_obj_values.get('amount1In') / 10 ** int(pair_per_token_metadata['token1']['decimals'])
                 token1_swapped += current1_swapped
                 token1_swapped_usd += current1_swapped * token1_price_map.get(parsed_log_obj_values.get('blockNumber'), list(token1_price_map.values())[0])
 
             elif parsed_log_obj_values.get('amount0Out') == 0:
 
-                current0_swapped = parsed_log_obj_values.get('amount0In') / 10 ** int(pair_per_token_metadata['token0']['decimals']) 
+                current0_swapped = parsed_log_obj_values.get('amount0In') / 10 ** int(pair_per_token_metadata['token0']['decimals'])
                 token0_swapped += current0_swapped
                 token0_swapped_usd += current0_swapped * token0_price_map.get(parsed_log_obj_values.get('blockNumber'), list(token0_price_map.values())[0])
 
@@ -399,12 +400,12 @@ async def extract_trade_volume_data(ev_loop, event_name, event_logs: List[Attrib
 
 
         elif event_name == 'Mint' or event_name == 'Burn':
-            
+
             current0_swapped = parsed_log_obj_values.get('amount0') / 10 ** int(pair_per_token_metadata['token0']['decimals'])
             token0_swapped += current0_swapped
             token0_swapped_usd += current0_swapped * token0_price_map.get(parsed_log_obj_values.get('blockNumber'), list(token0_price_map.values())[0])
-            
-            current1_swapped = parsed_log_obj_values.get('amount1') / 10 ** int(pair_per_token_metadata['token1']['decimals']) 
+
+            current1_swapped = parsed_log_obj_values.get('amount1') / 10 ** int(pair_per_token_metadata['token1']['decimals'])
             token1_swapped += current1_swapped
             token1_swapped_usd += current1_swapped * token1_price_map.get(parsed_log_obj_values.get('blockNumber'), list(token1_price_map.values())[0])
 
@@ -413,14 +414,14 @@ async def extract_trade_volume_data(ev_loop, event_name, event_logs: List[Attrib
     # get conversion
     trade_volume_usd = 0
     trade_fee_usd = 0
-    
+
     #Add Recent Transactions Logs
     recent_transaction_logs = await extract_recent_transaction_logs(ev_loop, event_name, event_logs, pair_per_token_metadata, token0_price_map, token1_price_map)
 
 
     # if event is 'Swap' then only add single token in total volume calculation
     if event_name == 'Swap':
-        
+
         # set one side token value in swap case
         if token1_swapped_usd and token0_swapped_usd:
             trade_volume_usd = token1_swapped_usd if token1_swapped_usd > token0_swapped_usd else token0_swapped_usd
@@ -439,10 +440,10 @@ async def extract_trade_volume_data(ev_loop, event_name, event_logs: List[Attrib
             'token1TradeVolumeUSD': token1_swapped_usd,
             'recent_transaction_logs': recent_transaction_logs
         }
-    
+
 
     trade_volume_usd = token0_swapped_usd + token1_swapped_usd
-    
+
     return {
         'totalTradesUSD': trade_volume_usd,
         'token0TradeVolume': token0_swapped,
@@ -595,7 +596,7 @@ async def get_pair_per_token_metadata(
             token1_name = pair_tokens_data_cache[b"token1_name"].decode('utf-8')
         else:
             tasks = list()
-            
+
             #special case to handle maker token
             maker_token0 = None
             maker_token1 = None
@@ -635,7 +636,7 @@ async def get_pair_per_token_metadata(
                 [
                     token0_name, token0_symbol, token0_decimals, token1_name, token1_symbol, token1_decimals
                 ] = ethereum_client.batch_call(tasks)
-            
+
             await redis_conn.hset(
                 name=uniswap_pair_contract_tokens_data.format(pair_address),
                 mapping={
@@ -678,7 +679,7 @@ async def get_eth_price_usd(block_height, loop: asyncio.AbstractEventLoop, redis
 
     try:
         eth_price_usd = 0
-        
+
         if block_height != 'latest':
             cached_price = await redis_conn.zrangebyscore(
                 name=uniswap_eth_usd_price_zset,
@@ -714,7 +715,7 @@ async def get_eth_price_usd(block_height, loop: asyncio.AbstractEventLoop, redis
         usdt_eth_pair_eth_reserve = eth_usdt_pair_reserves[0]/10**tokens_decimals["WETH"]
         usdt_eth_pair_usdt_reserve = eth_usdt_pair_reserves[1]/10**tokens_decimals["USDT"]
         usdt_price = usdt_eth_pair_usdt_reserve / usdt_eth_pair_eth_reserve
-        
+
         total_eth_liquidity = dai_eth_pair_eth_reserve + usdc_eth_pair_eth_reserve + usdt_eth_pair_eth_reserve
 
         daiWeight = dai_eth_pair_eth_reserve / total_eth_liquidity
@@ -747,11 +748,11 @@ async def get_eth_price_usd(block_height, loop: asyncio.AbstractEventLoop, redis
         return float(eth_price_usd)
 
 async def get_white_token_data(
-    pair_contract_obj, 
-    pair_metadata, 
-    white_token, 
-    target_token, 
-    block_height, 
+    pair_contract_obj,
+    pair_metadata,
+    white_token,
+    target_token,
+    block_height,
     loop: asyncio.AbstractEventLoop, redis_conn,
     rate_limit_lua_script_shas
 ):
@@ -776,29 +777,29 @@ async def get_white_token_data(
         if Web3.toChecksumAddress(white_token) == Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH):
             # set derived eth as 1 if token is weth
             token_eth_price = 1
-            
+
             [pair_reserve] = ethereum_client.batch_call(
                 tasks, block_identifier=block_height
             )
         else:
             tasks.append(router_contract_obj.functions.getAmountsOut(
-                10 ** int(white_token_metadata['decimals']), 
+                10 ** int(white_token_metadata['decimals']),
                 [
                     Web3.toChecksumAddress(white_token_metadata['address']),
                     Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH)
                 ]
             ))
-            
+
             [pair_reserve, token_eth_price] = ethereum_client.batch_call(
                 tasks, block_identifier=block_height
             )
-            
+
             if token_eth_price:
                 token_eth_price = token_eth_price[1]/10**tokens_decimals["WETH"] if token_eth_price[1] !=0 else 0
             else:
                 token_eth_price = 0
 
-            
+
 
         if not pair_reserve:
             return token_price, white_token_reserves, float(token_eth_price)
@@ -852,7 +853,7 @@ async def get_derived_eth_per_token(contract_obj, token_metadata, block_height, 
             token_eth_price = 1
         else:
             priceFunction_token0 = partial(contract_obj.functions.getAmountsOut(
-                10 ** int(token_metadata['decimals']), 
+                10 ** int(token_metadata['decimals']),
                 [
                     Web3.toChecksumAddress(token_metadata['address']),
                     Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH)
@@ -884,15 +885,15 @@ def return_last_price_value(retry_state):
 
 @retry(
     reraise=True,
-    retry=retry_if_exception_type(RPCException), 
-    wait=wait_random_exponential(multiplier=1, max=10), 
+    retry=retry_if_exception_type(RPCException),
+    wait=wait_random_exponential(multiplier=1, max=10),
     stop=stop_after_attempt(settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS)
 )
 async def get_token_price_at_block_height(
-    token_metadata, block_height, 
-    loop: asyncio.AbstractEventLoop, 
-    redis_conn: aioredis.Redis, 
-    rate_limit_lua_script_shas=None, 
+    token_metadata, block_height,
+    loop: asyncio.AbstractEventLoop,
+    redis_conn: aioredis.Redis,
+    rate_limit_lua_script_shas=None,
     debug_log=True
 ):
     """
@@ -910,7 +911,7 @@ async def get_token_price_at_block_height(
             cached_price = cached_price[0].decode('utf-8') if len(cached_price) > 0 else False
             if cached_price:
                 cached_price = json.loads(cached_price)
-                token_price = cached_price['price'] 
+                token_price = cached_price['price']
                 return token_price
 
         if Web3.toChecksumAddress(token_metadata['address']) == Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH):
@@ -921,7 +922,7 @@ async def get_token_price_at_block_height(
             for white_token in settings.UNISWAP_V2_WHITELIST:
                 white_token = Web3.toChecksumAddress(white_token)
                 pairAddress = await get_pair(factory_contract_obj, white_token, token_metadata['address'], loop, redis_conn, rate_limit_lua_script_shas)
-                if pairAddress != "0x0000000000000000000000000000000000000000": 
+                if pairAddress != "0x0000000000000000000000000000000000000000":
                     pair_contract_obj = w3.eth.contract(
                         address=Web3.toChecksumAddress(pairAddress),
                         abi=pair_contract_abi
@@ -935,7 +936,7 @@ async def get_token_price_at_block_height(
 
 
                     white_token_price, white_token_reserves, white_token_derived_eth = await get_white_token_data(
-                        pair_contract_obj, new_pair_metadata, white_token, 
+                        pair_contract_obj, new_pair_metadata, white_token,
                         token_metadata['address'], block_height, loop, redis_conn, rate_limit_lua_script_shas
                     )
 
@@ -946,15 +947,15 @@ async def get_token_price_at_block_height(
 
                     token_eth_price = white_token_price * white_token_derived_eth
                     break
-                        
-            
+
+
             if token_eth_price != 0:
                 eth_usd_price = await get_eth_price_usd(block_height, loop, redis_conn, rate_limit_lua_script_shas)
-                token_price = token_eth_price * eth_usd_price 
-            
+                token_price = token_eth_price * eth_usd_price
+
             if debug_log:
                 logger.debug(f"{token_metadata['symbol']}: price is {token_price} | its eth price is {token_eth_price}")
-            
+
         # cache price at height
         if block_height != 'latest':
             await redis_conn.zadd(
@@ -964,12 +965,12 @@ async def get_token_price_at_block_height(
                     'price': token_price
                 }): int(block_height)} # timestamp so zset do not ignore same height on multiple heights
             )
-        
+
         return token_price
 
     except Exception as err:
-        raise RPCException(request={"contract": token_metadata['address'], "block_identifier": block_height}, 
-            response={}, underlying_exception=None, 
+        raise RPCException(request={"contract": token_metadata['address'], "block_identifier": block_height},
+            response={}, underlying_exception=None,
             extra_info={'msg': f"rpc error: {str(err)}"}) from err
 
 
@@ -978,9 +979,9 @@ async def get_token_price_at_block_height(
 
 # asynchronously get liquidity of each token reserve
 @retry(
-    reraise=True, 
-    retry=retry_if_exception_type(RPCException), 
-    wait=wait_random_exponential(multiplier=1, max=10), 
+    reraise=True,
+    retry=retry_if_exception_type(RPCException),
+    wait=wait_random_exponential(multiplier=1, max=10),
     stop=stop_after_attempt(settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS)
 )
 async def get_liquidity_of_each_token_reserve_async(
@@ -1013,14 +1014,14 @@ async def get_liquidity_of_each_token_reserve_async(
                 raise err
         else:
             block_details = None
-        
+
         pair_per_token_metadata = await get_pair_per_token_metadata(
             pair_address=pair_address,
             loop=loop,
             redis_conn=redis_conn,
             rate_limit_lua_script_shas=rate_limit_lua_script_shas
         )
-        
+
 
         pfunc_get_reserves = partial(pair.functions.getReserves().call, block_identifier=block_identifier)
         async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(3), wait=wait_random(1, 2)):
@@ -1045,10 +1046,10 @@ async def get_liquidity_of_each_token_reserve_async(
         token1_addr = pair_per_token_metadata['token1']['address']
         token0_decimals = pair_per_token_metadata['token0']['decimals']
         token1_decimals = pair_per_token_metadata['token1']['decimals']
-        
+
         token0Amount = reserves[0] / 10 ** int(token0_decimals)
         token1Amount = reserves[1] / 10 ** int(token1_decimals)
-        
+
         # logger.debug(f"Decimals of token0: {token0_decimals}, Decimals of token1: {token1_decimals}")
         logger.debug("Token0: %s, Reserves: %s | Token1: %s, Reserves: %s", token0_addr, token0Amount, token1_addr, token1Amount)
 
@@ -1058,12 +1059,12 @@ async def get_liquidity_of_each_token_reserve_async(
             token0USD = token0Amount * token0Price
         else:
             logger.error(f"Liquidity: Could not find token0 price for {pair_per_token_metadata['token0']['symbol']}-USDT, setting it to 0")
-        
+
         if token1Price:
             token1USD = token1Amount * token1Price
         else:
             logger.error(f"Liquidity: Could not find token1 price for {pair_per_token_metadata['token1']['symbol']}-USDT, setting it to 0")
-            
+
 
         return {
             'token0': token0Amount,
@@ -1074,8 +1075,8 @@ async def get_liquidity_of_each_token_reserve_async(
         }
     except Exception as exc:
         logger.error("error at async_get_liquidity_of_each_token_reserve fn, retrying..., error_msg: %s", exc, exc_info=True)
-        raise RPCException(request={"contract": pair_address, "block_height": block_identifier}, 
-            response={}, underlying_exception=None, 
+        raise RPCException(request={"contract": pair_address, "block_height": block_identifier},
+            response={}, underlying_exception=None,
             extra_info={'msg': f"Error: async_get_liquidity_of_each_token_reserve error_msg: {str(exc)}"}) from exc
 
 
@@ -1086,7 +1087,7 @@ async def get_trade_volume_epoch_price_map(
         token_metadata,
         redis_conn: aioredis.Redis,
         debug_log=False
-):  
+):
     price_map = {}
     for block in range(from_block, to_block + 1):
         if block != 'latest':
@@ -1112,15 +1113,15 @@ async def get_trade_volume_epoch_price_map(
             # pair_contract price can't retrieved, this is mostly with sepcific coins log it and fetch price for newer ones
             logger.error(f"Failed to fetch token price | error_msg: {str(err)} | epoch: {to_block}-{from_block}", exc_info=True)
             raise err
-    
+
     return price_map
 
 
 # asynchronously get trades on a pair contract
 @retry(
-    reraise=True, 
-    retry=retry_if_exception_type(RPCException), 
-    wait=wait_random_exponential(multiplier=1, max=10), 
+    reraise=True,
+    retry=retry_if_exception_type(RPCException),
+    wait=wait_random_exponential(multiplier=1, max=10),
     stop=stop_after_attempt(settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS)
 )
 async def get_pair_contract_trades_async(
@@ -1179,7 +1180,7 @@ async def get_pair_contract_trades_async(
                 }
             )
             event_log_fetch_coros.append(ev_loop.run_in_executor(func=pfunc_get_event_logs, executor=None))
-        
+
         await check_rpc_rate_limit(
             redis_conn=redis_conn, request_payload={"contract": pair_address, "to_block": to_block, "from_block": from_block},
             error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get async trade volume"},
@@ -1213,7 +1214,7 @@ async def get_pair_contract_trades_async(
                         event_logs=logs_ret[trade_event_name],
                         redis_conn=redis_conn,
                         pair_per_token_metadata=pair_per_token_metadata,
-                        token0_price_map=token0_price_map, 
+                        token0_price_map=token0_price_map,
                         token1_price_map=token1_price_map
                     )
                 }
@@ -1222,13 +1223,13 @@ async def get_pair_contract_trades_async(
         rets.update({'timestamp': max_block_timestamp})
         return rets
 
-        # raise RPCException(request={"contract": pair_address, "fromBlock": from_block, "toBlock": to_block}, 
-        # response={}, underlying_exception=None, 
+        # raise RPCException(request={"contract": pair_address, "fromBlock": from_block, "toBlock": to_block},
+        # response={}, underlying_exception=None,
         # extra_info={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get async trade volume"})
     except Exception as exc:
         logger.error("error at get_pair_contract_trades_async fn: %s", exc, exc_info=True)
-        raise RPCException(request={"contract": pair_address, "fromBlock": from_block, "toBlock": to_block}, 
-            response={}, underlying_exception=None, 
+        raise RPCException(request={"contract": pair_address, "fromBlock": from_block, "toBlock": to_block},
+            response={}, underlying_exception=None,
             extra_info={'msg': f"error: get_pair_contract_trades_async, error_msg: {str(exc)}"}) from exc
 
 
@@ -1273,25 +1274,25 @@ def get_liquidity_of_each_token_reserve(pair_address, block_identifier='latest')
 
 
 async def get_pair(
-    factory_contract_obj, 
-    token0, token1, 
-    loop: asyncio.AbstractEventLoop, 
-    redis_conn: aioredis.Redis, 
+    factory_contract_obj,
+    token0, token1,
+    loop: asyncio.AbstractEventLoop,
+    redis_conn: aioredis.Redis,
     rate_limit_lua_script_shas
 ):
 
     #check if pair cache exists
     pair_address_cache = await redis_conn.hget(
-        uniswap_tokens_pair_map, 
+        uniswap_tokens_pair_map,
         f"{Web3.toChecksumAddress(token0)}-{Web3.toChecksumAddress(token1)}"
-    ) 
+    )
     if pair_address_cache:
         pair_address_cache = pair_address_cache.decode('utf-8')
         return Web3.toChecksumAddress(pair_address_cache)
 
-    # get pair from eth rpc 
+    # get pair from eth rpc
     pair_func = partial(factory_contract_obj.functions.getPair(
-        Web3.toChecksumAddress(token0), 
+        Web3.toChecksumAddress(token0),
         Web3.toChecksumAddress(token1)
     ).call)
     await check_rpc_rate_limit(
@@ -1300,13 +1301,13 @@ async def get_pair(
         rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
     )
     pair = await loop.run_in_executor(func=pair_func, executor=None)
-    
+
     # cache the pair address
     await redis_conn.hset(
         name=uniswap_tokens_pair_map,
         mapping={f"{Web3.toChecksumAddress(token0)}-{Web3.toChecksumAddress(token1)}": Web3.toChecksumAddress(pair)}
     )
-    
+
     return pair
 
 
