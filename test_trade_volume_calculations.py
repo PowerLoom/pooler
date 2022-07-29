@@ -2,9 +2,12 @@ import asyncio
 import json
 import requests
 import time
-from uniswap_functions import get_pair_contract_trades_async, provide_async_redis_conn_insta, load_rate_limiter_scripts
+from uniswap_functions import get_pair_contract_trades_async, load_rate_limiter_scripts
+from redis_conn import provide_async_redis_conn_insta
 import os
 from rich.console import Console
+from clean_slate import redis_cleanup_pooler_namespace
+from dynaconf import settings
 
 console = Console()
 
@@ -114,8 +117,14 @@ def calculate_extra_log_stats(directory_path, file_path, uniswap_url, uniswap_pa
         console.print(f"\n\t [bold magenta]uniswap_payload:[bold magenta] {uniswap_payload}")
 
 @provide_async_redis_conn_insta
-async def verify_trade_volume_calculations(loop, pair_contract, start_block, end_block, debug_logs, redis_conn=None):
+async def verify_trade_volume_calculations(loop, pair_contract, timePeriod, start_block, end_block, debug_logs, redis_conn=None):
     current_time = int(time.time())
+    if timePeriod == '7d':
+        from_time = current_time - 7*24*60*60
+    elif timePeriod == '24h':
+        from_time = current_time - 24*60*60
+    else:
+        from_time = current_time - 24*60*60
     
     # process logs to gather usd calculated volume on events/transaction
     processed_logs_batches = []
@@ -161,7 +170,7 @@ async def verify_trade_volume_calculations(loop, pair_contract, start_block, end
             total_trades_in_usd += processed_logs[each_event]['trades']['totalTradesUSD']
     
     trade_volume_data = {
-        "powerloom_24h_trade_volume": float(f'{total_trades_in_usd: .6f}')
+        "powerloom_trade_volume": float(f'{total_trades_in_usd: .6f}')
     }
 
 
@@ -171,27 +180,26 @@ async def verify_trade_volume_calculations(loop, pair_contract, start_block, end
     headers = {'Content-Type': 'text/plain'}
     response = requests.request("POST", uniswap_url, headers=headers, data=uniswap_payload)
     if response.status_code == 200:
-        timestamp_24h = current_time - 60 * 60 * 24
         total_trades_in_usd = 0
         data = json.loads(response.text)
         data = data["data"]
         for each_event in data:
             for obj in data[each_event]:
-                if int(obj['timestamp']) >= int(timestamp_24h):
+                if int(obj['timestamp']) >= int(from_time):
                     debug_trade_logs["uniswap"][each_event].append(obj)
                     total_trades_in_usd += int(float(obj['amountUSD']))
-        trade_volume_data["uniswap_24h_trade_volume"] = int(total_trades_in_usd)
+        trade_volume_data["uniswap_trade_volume"] = int(total_trades_in_usd)
     else:
         print(f"Error fetching data from uniswap THE GRAPH")
-        trade_volume_data["uniswap_24h_trade_volume"] = None
+        trade_volume_data["uniswap_trade_volume"] = None
 
     console.print("\n[bold magenta]pair_contract:[/bold magenta]", f"[bold bright_cyan]{pair_contract}[/bold bright_cyan]\n")
 
     # PRINT RESULTS
     #console.print("[bold magenta]DAG CID:[/bold magenta]", f"[bold bright_cyan]{dag_cid}[/bold bright_cyan]")
-    console.print("\n [bold magenta]24 hour Trade volume calculated by each indexer:[/bold magenta]")
-    console.print(f"\t [bold magenta]Powerloom indexer[bold magenta]:  [bold bright_cyan]${trade_volume_data['powerloom_24h_trade_volume']}[bold bright_cyan]")
-    console.print(f"\t [bold magenta]Uniswap indexer[bold magenta]:    [bold bright_cyan]${trade_volume_data['uniswap_24h_trade_volume']}[bold bright_cyan]")
+    console.print(f"\n [bold magenta]{timePeriod} Trade volume calculated by each indexer:[/bold magenta]")
+    console.print(f"\t [bold magenta]Powerloom indexer[bold magenta]:  [bold bright_cyan]${trade_volume_data['powerloom_trade_volume']}[bold bright_cyan]")
+    console.print(f"\t [bold magenta]Uniswap indexer[bold magenta]:    [bold bright_cyan]${trade_volume_data['uniswap_trade_volume']}[bold bright_cyan]")
     print("\n")
 
     # print debug logs     
@@ -216,18 +224,28 @@ async def verify_trade_volume_calculations(loop, pair_contract, start_block, end
         calculate_extra_log_stats(temp_directory, extra_logs_path, uniswap_url, uniswap_payload)
         print("\n\n")
 
+    # Clean testing redis
+    if settings.from_env('testing').IS_TESTING_ENV:
+        redis_cleanup_pooler_namespace({
+            "host": settings['redis']['host'],
+            "port": settings['redis']['port'],
+            "password": settings['redis']['password'],
+            "db": settings['redis']['db']
+        })
+
 
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     debug_logs = True
 
-    # ************* CHANGE THESE VALUES FOR CURRENT TIME ****************** 
-    pair_contract = '0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc'
-    start_block = 15093496 # 24h old block on etherscan 
-    end_block = 15100017 # latest block on etherscan
+    # ************* CHANGE THESE VALUES ****************** 
+    pair_contract = '0x004375dff511095cc5a197a54140a24efef3a416'
+    timePeriod = '24h'# '24h' OR '7d' 
+    start_block = 15222100 # 24h/7d old block on etherscan 
+    end_block = 15222400 # latest block on etherscan
     # ********************************************************************
 
     loop.run_until_complete(
-        verify_trade_volume_calculations(loop, pair_contract, start_block, end_block, debug_logs)
+        verify_trade_volume_calculations(loop, pair_contract, timePeriod, start_block, end_block, debug_logs)
     )
