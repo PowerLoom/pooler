@@ -117,9 +117,11 @@ def calculate_extra_log_stats(directory_path, file_path, uniswap_url, uniswap_pa
         console.print(f"\n\t [bold magenta]uniswap_payload:[bold magenta] {uniswap_payload}")
 
 @provide_async_redis_conn_insta
-async def verify_trade_volume_calculations(loop, pair_contract, timePeriod, start_block, end_block, debug_logs, redis_conn=None):
-    current_time = int(time.time())
-    if timePeriod == '7d':
+async def verify_trade_volume_calculations(loop, pair_contract, timePeriod, start_block, end_block, start_block_timestamp, end_block_timestamp, debug_logs, redis_conn=None):
+    current_time = end_block_timestamp if isinstance(end_block_timestamp, int) else int(time.time())
+    if isinstance(start_block_timestamp, int):
+        from_time = start_block_timestamp
+    elif timePeriod == '7d':
         from_time = current_time - 7*24*60*60
     elif timePeriod == '24h':
         from_time = current_time - 24*60*60
@@ -244,8 +246,10 @@ if __name__ == '__main__':
     timePeriod = '24h'# '24h' OR '7d' 
     start_block = 15222100 # 24h/7d old block on etherscan 
     end_block = 15222400 # latest block on etherscan
+    start_block_timestamp = None # 24h/7d old timestamp_int or None
+    end_block_timestamp = None # latest to_block timestamp_int or None
     # ********************************************************************
 
     loop.run_until_complete(
-        verify_trade_volume_calculations(loop, pair_contract, timePeriod, start_block, end_block, debug_logs)
+        verify_trade_volume_calculations(loop, pair_contract, timePeriod, start_block, end_block, start_block_timestamp, end_block_timestamp, debug_logs)
     )
