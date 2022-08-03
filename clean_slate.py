@@ -124,8 +124,8 @@ def redis_cleanup_audit_protocol():
         pass
 
 
-def redis_cleanup_pooler_namespace():
-    r = Redis(**REDIS_CONN_CONF)
+def redis_cleanup_pooler_namespace(redis_config=None):
+    r = Redis(**redis_config) if isinstance(redis_config, dict) else Redis(**REDIS_CONN_CONF)
 
     try:
         r.delete(*r.keys(f'*projectID*{settings.NAMESPACE}*'))
