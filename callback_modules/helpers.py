@@ -323,7 +323,8 @@ class CallbackAsyncWorker(multiprocessing.Process):
         # self._logger.debug('Launched %s ', self._unique_id)
         # self._logger.debug('Launched PID: %s', self.pid)
         self._logger.handlers = [
-            logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT),
+            logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST','localhost'),
+            port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT)),
             stdout_handler, stderr_handler
         ]
         ev_loop = asyncio.get_event_loop()

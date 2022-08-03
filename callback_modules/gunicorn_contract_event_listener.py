@@ -68,7 +68,8 @@ def main():
     # logging.basicConfig(handlers=[intercept_handler], level=LOG_LEVEL)
     # logging.root.handlers = [intercept_handler]
     logging.root.setLevel(LOG_LEVEL)
-    socket_log_handler = logging.handlers.SocketHandler('localhost', logging.handlers.DEFAULT_TCP_LOGGING_PORT)
+    socket_log_handler = logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST','localhost'),
+            port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT))
 
     seen = set()
     for name in [

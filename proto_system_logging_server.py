@@ -6,6 +6,7 @@ import logging
 import logging.handlers
 import logging.config
 import sys
+from dynaconf import settings
 
 
 class InterceptHandler(logging.Handler):
@@ -91,8 +92,8 @@ class LogRecordSocketReceiver(socketserver.ThreadingTCPServer):
     """
     allow_reuse_address = True
 
-    def __init__(self, host='localhost',
-                 port=logging.handlers.DEFAULT_TCP_LOGGING_PORT,
+    def __init__(self, host=settings.get('LOGGING_SERVER.HOST','localhost'),
+            port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT),
                  handler=LogRecordStreamHandler):
         socketserver.ThreadingTCPServer.__init__(self, (host, port), handler)
         self.abort = 0

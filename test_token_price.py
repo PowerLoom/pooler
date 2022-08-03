@@ -22,8 +22,8 @@ def read_json_file(file_path: str):
         json_data = json.loads(f_.read())
     return json_data
 
-router_contract_abi = read_json_file(f"abis/UniswapV2Router.json")
-pair_contract_abi = read_json_file(f"abis/UniswapV2Pair.json")
+router_contract_abi = read_json_file(settings.UNISWAP_CONTRACT_ABIS.ROUTER)
+pair_contract_abi = read_json_file(settings.UNISWAP_CONTRACT_ABIS.PAIR_CONTRACT)
 all_contracts = read_json_file(f"static/cached_pair_addresses.json")
 
 async def get_token_price_at_block_height(token_contract_obj, token_metadata, block_height, loop: asyncio.AbstractEventLoop, redis_conn=None, debug_log=True):
@@ -32,7 +32,7 @@ async def get_token_price_at_block_height(token_contract_obj, token_metadata, bl
     """
     try:
         token_price = 0
-        
+
         # else fetch from rpc
         stable_coins_addresses = {
             "USDC": Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDC),
@@ -57,20 +57,20 @@ async def get_token_price_at_block_height(token_contract_obj, token_metadata, bl
             }
         }
 
-        # this is used to avoid INSUFFICIENT_INPUT_AMOUNT error 
+        # this is used to avoid INSUFFICIENT_INPUT_AMOUNT error
         token_amount_multiplier = 10 ** 18
-        
+
         # check if token is a stable coin if so then ignore price fetch call
         if Web3.toChecksumAddress(token_metadata['address']) in list(stable_coins_addresses.values()):
                 token_price = 1
                 if debug_log:
                     print(f"## {token_metadata['symbol']}: ignored stablecoin calculation for token0: {token_metadata['symbol']} - WETH - USDT conversion: {token_price}")
 
-        # check if token has no pair with stablecoin and weth if so then use hardcoded path 
+        # check if token has no pair with stablecoin and weth if so then use hardcoded path
         elif nonStable_coins_addresses.get(Web3.toChecksumAddress(token_metadata['address'])):
             contract_metadata = nonStable_coins_addresses.get(Web3.toChecksumAddress(token_metadata['address']))
             priceFunction_token0 = partial(token_contract_obj.functions.getAmountsOut(
-                10 ** int(contract_metadata['decimals']), 
+                10 ** int(contract_metadata['decimals']),
                 [
                     contract_metadata['token0'],
                     contract_metadata['token1'],
@@ -84,16 +84,16 @@ async def get_token_price_at_block_height(token_contract_obj, token_metadata, bl
 
         # 1. if is not equals to weth then check its price against each stable coin take out heighest
         # 2. if price is still 0/None then pass path as token->weth-usdt
-        # 3. if price is still 0/None then increase token amount in path (token->weth-usdc) 
+        # 3. if price is still 0/None then increase token amount in path (token->weth-usdc)
         elif Web3.toChecksumAddress(token_metadata['address']) \
                 != Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH):
-            
+
             # iterate over all stable coin to find price
             stable_coins_len = len(stable_coins_addresses)
             for key, value in stable_coins_addresses.items():
                 try:
                     priceFunction_token0 = partial(token_contract_obj.functions.getAmountsOut(
-                        10 ** int(token_metadata['decimals']), 
+                        10 ** int(token_metadata['decimals']),
                         [
                             Web3.toChecksumAddress(token_metadata['address']),
                             value
@@ -102,7 +102,7 @@ async def get_token_price_at_block_height(token_contract_obj, token_metadata, bl
                     temp_token_price = await loop.run_in_executor(func=priceFunction_token0, executor=None)
                     if temp_token_price:
                         temp_token_price = temp_token_price[1]/10**stable_coins_decimals[key] if temp_token_price[1] !=0 else 0  #USDT decimals
-                        
+
                         print(f"## {token_metadata['symbol']}->{key}: token price: {temp_token_price}")
 
                         token_price = temp_token_price if token_price < temp_token_price else token_price
@@ -115,7 +115,7 @@ async def get_token_price_at_block_height(token_contract_obj, token_metadata, bl
                     # if there was no exception and price is still 0 then increase token amount in path (token->stablecoin)
                     if temp_token_price == 0:
                         priceFunction_token0 = partial(token_contract_obj.functions.getAmountsOut(
-                            10 ** int(token_metadata['decimals']) * token_amount_multiplier, 
+                            10 ** int(token_metadata['decimals']) * token_amount_multiplier,
                             [
                                 Web3.toChecksumAddress(token_metadata['address']),
                                 value
@@ -127,20 +127,20 @@ async def get_token_price_at_block_height(token_contract_obj, token_metadata, bl
                             temp_token_price = temp_token_price/token_amount_multiplier
 
                             print(f"## {token_metadata['symbol']}->{key}: (increased_input_amount) token price : {temp_token_price}")
-                            
+
                             token_price = temp_token_price if token_price < temp_token_price else token_price
-                            
+
                 stable_coins_len -= 1
                 if stable_coins_len <= 0:
                     break
-            
+
             print(f"## {token_metadata['symbol']}: chosed token price after all stable coin conversions: {token_price}")
-            
+
             # After iterating over all stable coin, check if path conversion by token->weth->usdt give a higher price of token
             # if so then replace it, as for some tokens we get accurate price by token->weth->usdt path only
             try:
                 priceFunction_token0 = partial(token_contract_obj.functions.getAmountsOut(
-                    10 ** int(token_metadata['decimals']), 
+                    10 ** int(token_metadata['decimals']),
                     [
                         Web3.toChecksumAddress(token_metadata['address']),
                         Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH),
@@ -160,7 +160,7 @@ async def get_token_price_at_block_height(token_contract_obj, token_metadata, bl
             # then increase token amount in path (token->weth-usdt)
             if token_price == 0:
                 priceFunction_token0 = partial(token_contract_obj.functions.getAmountsOut(
-                    10 ** int(token_metadata['decimals']) * token_amount_multiplier, 
+                    10 ** int(token_metadata['decimals']) * token_amount_multiplier,
                     [
                         Web3.toChecksumAddress(token_metadata['address']),
                         Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH),
@@ -171,15 +171,15 @@ async def get_token_price_at_block_height(token_contract_obj, token_metadata, bl
 
                 if temp_token_price:
                     temp_token_price = temp_token_price[2]/10**stable_coins_decimals["USDT"] if temp_token_price[2] !=0 else 0  #USDT decimals
-                    temp_token_price = temp_token_price/token_amount_multiplier                   
+                    temp_token_price = temp_token_price/token_amount_multiplier
                     print(f"## {token_metadata['symbol']}: token price after weth->stablecoin (increased_input_amount): {temp_token_price}")
                     token_price = temp_token_price if token_price < temp_token_price else token_price
-        
+
             if debug_log:
                 print(f"## {token_metadata['symbol']}: final price: {token_price}")
-        
+
         # if token is weth then directly check its price against stable coin
-        else:    
+        else:
             priceFunction_token0 = partial(token_contract_obj.functions.getAmountsOut(
                 10 ** int(token_metadata['decimals']), [
                     Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH),
@@ -192,7 +192,7 @@ async def get_token_price_at_block_height(token_contract_obj, token_metadata, bl
     except Exception as err:
         print(f"Error: failed to fetch token price | error_msg: {str(err)} | contract: {token_metadata['address']}")
     finally:
-        return float(token_price) 
+        return float(token_price)
 
 
 async def get_all_pairs_token_price(loop, redis_conn: aioredis.Redis = None):
@@ -205,7 +205,7 @@ async def get_all_pairs_token_price(loop, redis_conn: aioredis.Redis = None):
             address=Web3.toChecksumAddress(contract),
             abi=pair_contract_abi
         )
-    
+
         pair_per_token_metadata = await get_pair_per_token_metadata(
             pair_contract_obj=pair_contract_obj,
             pair_address=contract,

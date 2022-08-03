@@ -621,7 +621,8 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
         setproctitle(self.name)
         self._logger.setLevel(logging.DEBUG)
         self._logger.handlers = [
-            logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
+            logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST','localhost'),
+            port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT))]
         self._connection_pool = redis.BlockingConnectionPool(**REDIS_CONN_CONF)
         queue_name = f'powerloom-backend-cb:{settings.NAMESPACE}'
         self._rabbitmq_interactor: RabbitmqSelectLoopInteractor = RabbitmqSelectLoopInteractor(

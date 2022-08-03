@@ -53,7 +53,8 @@ if __name__ == '__main__':
                 seen.add(name.split(".")[0])
                 logging.getLogger(name).handlers = [intercept_handler]
             else:
-                logging.getLogger(name).handlers = [logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
+                logging.getLogger(name).handlers = [logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST','localhost'),
+            port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT))]
     # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|EthLogs|RequestAPI'))
 
     logger.configure(handlers=[

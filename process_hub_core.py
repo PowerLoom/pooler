@@ -124,7 +124,7 @@ class ProcessHubCore(Process):
                         callback_worker_class, callback_worker_unique_id, worker_obj.pid, pid
                     )
                     return
-                        
+
                 for k, worker_unique_id in self._spawned_processes_map.items():
                     if worker_unique_id != -1 and worker_unique_id.pid == pid:
                         self._logger.debug('RESPAWNING: process for %s', k)
@@ -147,7 +147,7 @@ class ProcessHubCore(Process):
         _logger = logging.getLogger('PowerLoom|ProcessHub|Core')
         p = psutil.Process(pid)
         _logger.debug('Attempting to send SIGTERM to process ID %s for following command', pid)
-        p.terminate() 
+        p.terminate()
         _logger.debug('Waiting for 3 seconds to confirm termination of process')
         gone, alive = psutil.wait_procs([p], timeout=3)
         for p_ in alive:
@@ -187,17 +187,18 @@ class ProcessHubCore(Process):
         # self._logger = get_mp_logger()
         # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|ProcessHub|Core'))
         setproctitle(f'PowerLoom|ProcessHub|Core')
-        self._logger = logging.getLogger('PowerLoom|ProcessHub|Core') 
+        self._logger = logging.getLogger('PowerLoom|ProcessHub|Core')
         self._logger.setLevel(logging.DEBUG)
         stdout_handler = logging.StreamHandler(sys.stdout)
         stdout_handler.setLevel(logging.DEBUG)
         stderr_handler = logging.StreamHandler(sys.stderr)
         stderr_handler.setLevel(logging.ERROR)
         self._logger.handlers = [
-            logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT),
+            logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST','localhost'),
+            port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT)),
             stdout_handler, stderr_handler
         ]
-        
+
         for signame in [SIGINT, SIGTERM, SIGQUIT, SIGCHLD]:
             signal(signame, self.signal_handler)
 
@@ -244,7 +245,7 @@ class ProcessHubCore(Process):
             self._logger.error('ProcessHubCore received unrecognized command')
             self._logger.error(command)
             return
-        
+
         if cmd_json.command == 'stop':
             self._logger.debug('Process Hub Core received stop command: %s', cmd_json)
             process_id = cmd_json.pid
@@ -309,7 +310,8 @@ if __name__ == '__main__':
     stderr_handler = logging.StreamHandler(sys.stderr)
     stderr_handler.setLevel(logging.ERROR)
     logger.handlers = [
-        logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT),
+        logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST','localhost'),
+            port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT)),
         stdout_handler, stderr_handler
     ]
 

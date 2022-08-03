@@ -21,7 +21,8 @@ import multiprocessing
 # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|EpochFinalizer'))
 finalizer_logger = logging.getLogger('PowerLoom|EpochFinalizer')
 finalizer_logger.setLevel(logging.DEBUG)
-finalizer_logger.handlers = [logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
+finalizer_logger.handlers = [logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST','localhost'),
+            port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT))]
 
 
 def rabbitmq_tooz_cleanup(fn):
@@ -82,7 +83,8 @@ class EpochFinalizerProcess(multiprocessing.Process):
         stderr_handler = logging.StreamHandler(sys.stderr)
         stderr_handler.setLevel(logging.ERROR)
         self._logger.handlers = [
-            logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT),
+            logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST','localhost'),
+            port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT)),
             stdout_handler, stderr_handler
         ]
         setproctitle(f'PowerLoom|EpochFinalizer')

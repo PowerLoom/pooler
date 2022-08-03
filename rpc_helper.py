@@ -8,11 +8,13 @@ import logging.handlers
 import multiprocessing
 import sys
 import tenacity
+from dynaconf import settings
 
 formatter = logging.Formatter('%(levelname)-8s %(name)-4s %(asctime)s,%(msecs)d %(module)s-%(funcName)s: %(message)s')
 rpc_logger = logging.getLogger('NodeRPCHelper')
 rpc_logger.setLevel(logging.DEBUG)
-rpc_logger.handlers = [logging.handlers.SocketHandler(host='localhost', port=logging.handlers.DEFAULT_TCP_LOGGING_PORT)]
+rpc_logger.handlers = [logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST','localhost'),
+            port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT))]
 # rpc_logger.handlers[0].setFormatter(formatter)
 
 
