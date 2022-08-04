@@ -46,6 +46,21 @@ type AuditProtocolBlockResp struct {
 	TxHash    string   `json:"txHash"`
 }
 
+const (
+	SNAPSHOT_COMMIT_PENDING = 1
+	TX_ACK_PENDING          = 2
+	TX_CONFIRMATION_PENDING = 3
+	TX_CONFIRMED            = 4
+)
+
+type AuditProtocolBlockHeightStatusResp struct {
+	ProjectId   string `json:"project_id"`
+	BlockHeight int    `json:"block_height"`
+	PayloadCid  string `json:"payload_cid"`
+	TxHash      string `json:"tx_hash"`
+	Status      int    `json:"status"`
+}
+
 type TokenPriceHistoryEntry struct {
 	Timestamp   float64 `json:"timeStamp"`
 	Price       float64 `json:"price"`
