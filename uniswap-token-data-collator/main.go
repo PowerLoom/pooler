@@ -267,7 +267,7 @@ func PrepareAndSubmitV2TokenSummarySnapshot() {
 			return
 		}
 		tentativeBlockHeight := lastTokensummaryBlockHeight + 1
-		payloadCID, txHash, err := WaitAndFetchLatestV2TokenSummaryCID(tentativeBlockHeight, MAX_RETRIES_FOR_SNAPSHOT_CONFIRM)
+		payloadCID, txHash, err := WaitAndFetchBlockHeightStatus(tentativeBlockHeight, MAX_RETRIES_FOR_SNAPSHOT_CONFIRM)
 		if err != nil {
 			log.Errorf("Failed to Fetch payloadCID at blockHeight %d due to error %s", tentativeBlockHeight, err.Error())
 			ResetTokenData()
@@ -609,12 +609,12 @@ func FetchV2PairSummarySnapshot(blockHeight int64) []TokenPairLiquidityProcessed
 	return nil
 }
 
-func WaitAndFetchLatestV2TokenSummaryCID(blockHeight int64, retries int) (string, string, error) {
+func WaitAndFetchBlockHeightStatus(blockHeight int64, retries int) (string, string, error) {
 	projectID := fmt.Sprintf(V2_TOKENSUMMARY_PROJECTID, settingsObj.Development.Namespace)
-	url := fmt.Sprintf("%s/%s/payload/%d", settingsObj.Development.AuditProtocolEngine.URL, projectID, blockHeight)
+	url := fmt.Sprintf("%s/%s/payload/%d/status", settingsObj.Development.AuditProtocolEngine.URL, projectID, blockHeight)
 	log.Debug("Fetching CID at Blockheight URL:", url)
 
-	var apResp map[string]AuditProtocolBlockResp
+	var apResp AuditProtocolBlockHeightStatusResp
 	var retryCount int
 	for retryCount = 0; retryCount <= retries; retryCount++ {
 		resp, err := apHttpClient.Get(url)
@@ -642,13 +642,14 @@ func WaitAndFetchLatestV2TokenSummaryCID(blockHeight int64, retries int) (string
 			continue
 		}
 
-		log.Debugf("Successfully got response  %+v for CID fetch for URL %s is", apResp, url)
-		if len(apResp) > 0 {
-			for _, val := range apResp {
-				log.Debugf("Got CID %s at Block Height %d for projectID %s", val.Data.Cid.LinkData, blockHeight, projectID)
-				return val.Data.Cid.LinkData, val.TxHash, nil
-			}
+		log.Debugf("Successfully received response  %+v for CID fetch for URL %s is", apResp, url)
+		if apResp.Status < TX_CONFIRMATION_PENDING {
+			log.Debugf("BlockHeight %d status is still pending %d. Retrying", blockHeight, apResp.Status)
+			time.Sleep(10 * time.Second)
+			continue
 		}
+		log.Debugf("Got CID %s, txHash %s at Block Height %d for projectID %s", apResp.PayloadCid, apResp.TxHash, blockHeight, projectID)
+		return apResp.PayloadCid, apResp.TxHash, nil
 	}
 
 	log.Errorf("Max retries reached while trying to fetch payloadCID at height %d. Not retrying anymore.", blockHeight)
