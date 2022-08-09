@@ -83,14 +83,8 @@ type TokenData struct {
 	PriceChangePercent_24h float64 `json:"priceChangePercent_24h"`
 }
 
-type V2PairSummaryDataResp map[string]V2PairSummarySnapshot
-
-type V2PairSummarySnapshot struct {
-	Cid     string `json:"cid"`
-	Type    string `json:"type"`
-	Payload struct {
-		Data []TokenPairLiquidityProcessedData `json:"data"`
-	} `json:"payload"`
+type PairSummarySnapshot struct {
+	Data []TokenPairLiquidityProcessedData `json:"data"`
 }
 
 type TokenPairLiquidityProcessedData struct {
