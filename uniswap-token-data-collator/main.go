@@ -36,7 +36,7 @@ type TokenDataRefs struct {
 const settingsFile string = "../settings.json"
 const pairContractListFile string = "../static/cached_pair_addresses.json"
 const V2_PAIRSUMMARY_PROJECTID string = "uniswap_V2PairsSummarySnapshot_%s"
-const V2_TOKENSUMMARY_PROJECTID string = "uniswap_V2TokensSummarySnapshot_%s"
+const TOKENSUMMARY_PROJECTID string = "uniswap_V2TokensSummarySnapshot_%s"
 const MAX_RETRIES_BEFORE_EXIT int = 10
 const MAX_RETRIES_FOR_SNAPSHOT_CONFIRM = 5
 
@@ -95,12 +95,12 @@ func main() {
 
 func Run(pairContractAddress string) {
 	PopulatePairContractList(pairContractAddress)
-	var v2SummaryBlockHeight int64
+	var pairsSummaryBlockHeight int64
 	for {
-		log.Info("Waiting for first V2 Summary snapshot to be formed...")
-		v2SummaryBlockHeight = FetchV2SummaryLatestBlockHeight()
-		if v2SummaryBlockHeight != 0 {
-			log.Infof("v2Summary snapshot has been created at height %d", v2SummaryBlockHeight)
+		log.Info("Waiting for first Pairs Summary snapshot to be formed...")
+		pairsSummaryBlockHeight = FetchPairsSummaryLatestBlockHeight()
+		if pairsSummaryBlockHeight != 0 {
+			log.Infof("PairsSummary snapshot has been created at height %d", pairsSummaryBlockHeight)
 			break
 		}
 		time.Sleep(periodicRetrievalInterval)
@@ -109,7 +109,7 @@ func Run(pairContractAddress string) {
 	FetchTokensMetaData()
 
 	for {
-		PrepareAndSubmitV2TokenSummarySnapshot()
+		PrepareAndSubmitTokenSummarySnapshot()
 
 		log.Info("Sleeping for " + periodicRetrievalInterval.String() + " secs")
 		time.Sleep(periodicRetrievalInterval)
@@ -194,12 +194,12 @@ func FetchAndFillTokenMetaData(pairContractAddr string) {
 	tokenPairTokenMapping[pairContractAddr] = tokenRefs
 }
 
-func PrepareAndSubmitV2TokenSummarySnapshot() {
+func PrepareAndSubmitTokenSummarySnapshot() {
 
-	curBlockHeight := FetchV2SummaryLatestBlockHeight()
+	curBlockHeight := FetchPairsSummaryLatestBlockHeight()
 	if curBlockHeight > lastSnapshotBlockHeight {
 		var sourceBlockHeight int64
-		tokensPairData := FetchV2PairSummarySnapshot(curBlockHeight)
+		tokensPairData := FetchPairSummarySnapshot(curBlockHeight)
 		log.Debugf("Collating tokenData at blockHeight %d", curBlockHeight)
 		for _, tokenPairProcessedData := range tokensPairData {
 			//TODO: Need to remove 0x from contractAddress saved as string.
@@ -260,7 +260,7 @@ func PrepareAndSubmitV2TokenSummarySnapshot() {
 				//delete(tokenList, key)
 			}
 		}
-		err = CommitV2TokenSummaryPayload()
+		err = CommitTokenSummaryPayload()
 		if err != nil {
 			log.Errorf("Failed to commit payload at blockHeight %d due to error %s", curBlockHeight, err.Error())
 			ResetTokenData()
@@ -274,7 +274,7 @@ func PrepareAndSubmitV2TokenSummarySnapshot() {
 			return
 		}
 		StoreTokenSummaryCIDInSnapshotsZSet(sourceBlockHeight, payloadCID, txHash)
-		StoreV2TokensSummaryPayload(sourceBlockHeight)
+		StoreTokensSummaryPayload(sourceBlockHeight)
 		ResetTokenData()
 		lastSnapshotBlockHeight = curBlockHeight
 
@@ -289,7 +289,7 @@ func PrepareAndSubmitV2TokenSummarySnapshot() {
 }
 
 func FetchTokenSummaryLatestBlockHeight() int64 {
-	v2PairsProjectId := fmt.Sprintf(V2_TOKENSUMMARY_PROJECTID, settingsObj.Development.Namespace)
+	v2PairsProjectId := fmt.Sprintf(TOKENSUMMARY_PROJECTID, settingsObj.Development.Namespace)
 	last_block_height_url := settingsObj.Development.AuditProtocolEngine.URL + "/" + v2PairsProjectId + "/payloads/height"
 	log.Debug("Fetching Blockheight URL:", last_block_height_url)
 	var heightResp AuditProtocolBlockHeightResp
@@ -432,8 +432,8 @@ func FetchTokenPriceAtBlockHeight(tokenContractAddr string, blockHeight int64) f
 	return tokenPriceAtHeight.Price
 }
 
-func StoreV2TokensSummaryPayload(blockHeight int64) {
-	key := fmt.Sprintf(REDIS_KEY_V2_TOKENS_SUMMARY_SNAPSHOT_AT_BLOCKHEIGHT, settingsObj.Development.Namespace, blockHeight)
+func StoreTokensSummaryPayload(blockHeight int64) {
+	key := fmt.Sprintf(REDIS_KEY_TOKENS_SUMMARY_SNAPSHOT_AT_BLOCKHEIGHT, settingsObj.Development.Namespace, blockHeight)
 	payload := make([]*TokenData, len(tokenList))
 	var i int
 	for _, tokenData := range tokenList {
@@ -458,7 +458,7 @@ func StoreV2TokensSummaryPayload(blockHeight int64) {
 }
 
 func StoreTokenSummaryCIDInSnapshotsZSet(blockHeight int64, payloadCID string, txHash string) {
-	key := fmt.Sprintf(REDIS_KEY_V2_TOKENS_SUMMARY_SNAPSHOTS_ZSET, settingsObj.Development.Namespace)
+	key := fmt.Sprintf(REDIS_KEY_TOKENS_SUMMARY_SNAPSHOTS_ZSET, settingsObj.Development.Namespace)
 	var ZsetMember TokenSummarySnapshot
 	ZsetMember.Cid = payloadCID
 	ZsetMember.TxHash = txHash
@@ -484,7 +484,7 @@ func StoreTokenSummaryCIDInSnapshotsZSet(blockHeight int64, payloadCID string, t
 }
 
 func PruneTokenSummarySnapshotsZSet() {
-	redisKey := fmt.Sprintf(REDIS_KEY_V2_TOKENS_SUMMARY_SNAPSHOTS_ZSET, settingsObj.Development.Namespace)
+	redisKey := fmt.Sprintf(REDIS_KEY_TOKENS_SUMMARY_SNAPSHOTS_ZSET, settingsObj.Development.Namespace)
 	res := redisClient.ZCard(redisKey)
 	zsetLen := res.Val()
 	log.Debugf("ZSet length is %d", zsetLen)
@@ -504,12 +504,12 @@ func PruneTokenSummarySnapshotsZSet() {
 	}
 }
 
-func CommitV2TokenSummaryPayload() error {
+func CommitTokenSummaryPayload() error {
 	url := settingsObj.Development.AuditProtocolEngine.URL + "/commit_payload"
 
 	var apCommitResp AuditProtocolCommitPayloadResp
 	var request AuditProtocolCommitPayloadReq
-	request.ProjectId = fmt.Sprintf(V2_TOKENSUMMARY_PROJECTID, settingsObj.Development.Namespace)
+	request.ProjectId = fmt.Sprintf(TOKENSUMMARY_PROJECTID, settingsObj.Development.Namespace)
 	request.Payload.TokensData = make([]*TokenData, len(tokenList))
 	request.Web3Storage = true //Always store TokenData snapshot in web3.storage.
 	request.SkipAnchorProof = false
@@ -567,50 +567,32 @@ func CommitV2TokenSummaryPayload() error {
 	return nil
 }
 
-func FetchV2PairSummarySnapshot(blockHeight int64) []TokenPairLiquidityProcessedData {
-	v2PairsProjectId := fmt.Sprintf(V2_PAIRSUMMARY_PROJECTID, settingsObj.Development.Namespace)
-	last_block_height_url := fmt.Sprintf("%s/%s/payload/%d/data", settingsObj.Development.AuditProtocolEngine.URL, v2PairsProjectId, blockHeight)
-	log.Debug("Fetching Blockheight URL:", last_block_height_url)
-	var v2SummaryResp V2PairSummaryDataResp
+func FetchPairSummarySnapshot(blockHeight int64) []TokenPairLiquidityProcessedData {
+	key := fmt.Sprintf(REDIS_KEY_PAIRS_SUMMARY_SNAPSHOT_BLOCKHEIGHT, settingsObj.Development.Namespace, blockHeight)
+	log.Debugf("Fetching latest PairSummary snapshot from redis key %s", key)
+	var pairsSummarySnapshot PairSummarySnapshot
 
 	for retryCount := 0; retryCount < 3; retryCount++ {
-		resp, err := apHttpClient.Get(last_block_height_url)
-		if err != nil {
-			log.Error("Error: Could not fetch block height for pairContract:", v2PairsProjectId, " Error:", err)
+		res := redisClient.Get(key)
+		if res.Err() != nil {
+			log.Error("Error: Could not fetch latest PairSummary snapshot from redis. Error %+v. Retrying %d", res.Err(), retryCount)
 			time.Sleep(5 * time.Second)
 			continue
 		}
-		defer resp.Body.Close()
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			log.Error("Unable to read HTTP resp.", err)
-			return nil
-		}
-		log.Trace("Rsp Body", string(body))
-
-		if resp.StatusCode != http.StatusOK {
-			log.Error("Error: Got an error on audit-protocol side for projectID:", v2PairsProjectId, " with status code:", resp.StatusCode)
-			time.Sleep(5 * time.Second)
-			continue
-		}
-
-		if err = json.Unmarshal(body, &v2SummaryResp); err != nil { // Parse []byte to the go struct pointer
+		res.Val()
+		log.Tracef("Rsp Body %s", res.Val())
+		if err := json.Unmarshal([]byte(res.Val()), &pairsSummarySnapshot); err != nil { // Parse []byte to the go struct pointer
 			log.Errorf("Can not unmarshal JSON due to error %+v", err)
 			continue
 		}
-		break
-	}
-	log.Debugf("v2Pairs Summary data for projectID %s is : %+v", v2PairsProjectId, v2SummaryResp)
-	if len(v2SummaryResp) > 0 {
-		for _, val := range v2SummaryResp {
-			return val.Payload.Data
-		}
+		log.Debugf("Pairs Summary snapshot is : %+v", pairsSummarySnapshot)
+		return pairsSummarySnapshot.Data
 	}
 	return nil
 }
 
 func WaitAndFetchBlockHeightStatus(blockHeight int64, retries int) (string, string, error) {
-	projectID := fmt.Sprintf(V2_TOKENSUMMARY_PROJECTID, settingsObj.Development.Namespace)
+	projectID := fmt.Sprintf(TOKENSUMMARY_PROJECTID, settingsObj.Development.Namespace)
 	url := fmt.Sprintf("%s/%s/payload/%d/status", settingsObj.Development.AuditProtocolEngine.URL, projectID, blockHeight)
 	log.Debug("Fetching CID at Blockheight URL:", url)
 
@@ -657,35 +639,23 @@ func WaitAndFetchBlockHeightStatus(blockHeight int64, retries int) (string, stri
 
 }
 
-func FetchV2SummaryLatestBlockHeight() int64 {
-	v2PairsProjectId := fmt.Sprintf(V2_PAIRSUMMARY_PROJECTID, settingsObj.Development.Namespace)
-	last_block_height_url := settingsObj.Development.AuditProtocolEngine.URL + "/" + v2PairsProjectId + "/payloads/height"
-	log.Debug("Fetching Blockheight URL:", last_block_height_url)
-	var heightResp AuditProtocolBlockHeightResp
+func FetchPairsSummaryLatestBlockHeight() int64 {
+	key := fmt.Sprintf(REDIS_KEY_PAIRS_SUMMARY_SNAPSHOTS_ZSET, settingsObj.Development.Namespace)
+	log.Debug("Fetching latest available PairSummarySnapshot Blockheight from %s", key)
 
 	for retryCount := 0; retryCount < 3; retryCount++ {
-		resp, err := apHttpClient.Get(last_block_height_url)
-		if err != nil {
-			log.Error("Error: Could not fetch block height for pairContract:", v2PairsProjectId, " Error:", err)
+		res := redisClient.ZRangeWithScores(key, -1, -1)
+		if res.Err() != nil {
+			log.Errorf("Error: Could not latest block height for PairSummarySnapshot. Error: %+v. Retrying %d", res.Err(), retryCount)
 			time.Sleep(5 * time.Second)
 			continue
 		}
-		defer resp.Body.Close()
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			log.Error("Unable to read HTTP resp.", err)
-			return 0
-		}
-		log.Trace("Rsp Body", string(body))
-
-		if err = json.Unmarshal(body, &heightResp); err != nil { // Parse []byte to the go struct pointer
-			log.Errorf("Can not unmarshal JSON resp for due to error %+v", err)
-			continue
-		}
-		break
+		blockHeight := int64(res.Val()[0].Score)
+		log.Debugf("Latest available snapshot for PairSummarySnapshot is at height: %d", blockHeight)
+		return blockHeight
 	}
-	log.Debugf("Last Block Height for projectID %s is : %d", v2PairsProjectId, heightResp.Height)
-	return heightResp.Height
+	log.Errorf("Could not retrieve latest available blockHeight for PairSummarySnapshot even after max retries.")
+	return 0
 }
 
 func PopulatePairContractList(pairContractAddr string) {
