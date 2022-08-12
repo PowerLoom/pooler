@@ -200,6 +200,9 @@ func PrepareAndSubmitTokenSummarySnapshot() {
 	if curBlockHeight > lastSnapshotBlockHeight {
 		var sourceBlockHeight int64
 		tokensPairData := FetchPairSummarySnapshot(curBlockHeight)
+		if tokensPairData == nil {
+			return
+		}
 		log.Debugf("Collating tokenData at blockHeight %d", curBlockHeight)
 		for _, tokenPairProcessedData := range tokensPairData {
 			//TODO: Need to remove 0x from contractAddress saved as string.
@@ -575,7 +578,11 @@ func FetchPairSummarySnapshot(blockHeight int64) []TokenPairLiquidityProcessedDa
 	for retryCount := 0; retryCount < 3; retryCount++ {
 		res := redisClient.Get(key)
 		if res.Err() != nil {
-			log.Error("Error: Could not fetch latest PairSummary snapshot from redis. Error %+v. Retrying %d", res.Err(), retryCount)
+			if res.Err() == redis.Nil {
+				log.Errorf("Key %s not found in redis", key)
+				return nil
+			}
+			log.Errorf("Error: Could not fetch latest PairSummary snapshot from redis. Error %+v. Retrying %d", res.Err(), retryCount)
 			time.Sleep(5 * time.Second)
 			continue
 		}
@@ -649,6 +656,10 @@ func FetchPairsSummaryLatestBlockHeight() int64 {
 			log.Errorf("Error: Could not latest block height for PairSummarySnapshot. Error: %+v. Retrying %d", res.Err(), retryCount)
 			time.Sleep(5 * time.Second)
 			continue
+		}
+		if len(res.Val()) == 0 {
+			log.Debugf("No latest BlockHeight available for PairSummarySnapshot")
+			return 0
 		}
 		blockHeight := int64(res.Val()[0].Score)
 		log.Debugf("Latest available snapshot for PairSummarySnapshot is at height: %d", blockHeight)
