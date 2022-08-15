@@ -3,11 +3,13 @@ package main
 const MAX_TOKEN_PRICE_HISTORY_INDEX int = 300
 
 type TokenSummarySnapshotMeta struct {
-	Cid        string `json:"cid"`
-	TxHash     string `json:"txHash"`
-	TxStatus   int    `json:"txStatus"`
-	PrevTxHash string `json:"prevTxHash,omitempty"`
-	DAGHeight  int    `json:"dagHeight"`
+	Cid                          string  `json:"cid"`
+	TxHash                       string  `json:"txHash"`
+	TxStatus                     int     `json:"txStatus"`
+	PrevTxHash                   string  `json:"prevTxHash,omitempty"`
+	DAGHeight                    int     `json:"dagHeight"`
+	BeginBlockHeight24h          int64   `json:"beginBlockHeight24h"`
+	BeginBlockheightTimeStamp24h float64 `json:"beginBlockheightTimeStamp24h"`
 }
 
 type AuditProtocolErrorResp struct {

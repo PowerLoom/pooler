@@ -242,19 +242,26 @@ func PrepareAndSubmitTokenSummarySnapshot() {
 		}
 		currentTimestamp := time.Unix(tm, 0)
 		toTime := float64(currentTimestamp.Unix())
-
+		//TODO: Make this logic more generic to support diffrent time based indexes.
 		time24h := currentTimestamp.AddDate(0, 0, -1)
 		fromTime := float64(time24h.Unix())
 		log.Debug("TimeStamp for 1 day before is:", fromTime)
 		//TODO: Fetch lastTokensummaryBlockHeight for the project
 		lastTokensummaryBlockHeight := FetchTokenSummaryLatestBlockHeight()
 		//Update tokenPrice
+		beginBlockHeight24h := 0
+		beginTimeStamp24h := 0.0
 		for key, tokenData := range tokenList {
 			tokenData.Price = FetchTokenPriceAtBlockHeight(tokenData.ContractAddress, int64(tokenData.Block_height))
 			if tokenData.Price != 0 {
 				//Update TokenPrice in History Zset
 				UpdateTokenPriceHistoryRedis(toTime, fromTime, tokenData)
-				CalculateAndFillPriceChange(fromTime, tokenData)
+
+				tokenPrice24hEntry := CalculateAndFillPriceChange(fromTime, tokenData)
+				if beginBlockHeight24h == 0 {
+					beginBlockHeight24h = tokenPrice24hEntry.BlockHeight
+					beginTimeStamp24h = tokenPrice24hEntry.Timestamp
+				}
 				//tokenList[key] = tokenData
 			} else {
 				//TODO: Should we create a snapshot if we don't have any tokenPrice at specified height?
@@ -276,6 +283,8 @@ func PrepareAndSubmitTokenSummarySnapshot() {
 			ResetTokenData()
 			return
 		}
+		tokenSummarySnapshotMeta.BeginBlockHeight24h = int64(beginBlockHeight24h)
+		tokenSummarySnapshotMeta.BeginBlockheightTimeStamp24h = beginTimeStamp24h
 		StoreTokenSummaryCIDInSnapshotsZSet(sourceBlockHeight, tokenSummarySnapshotMeta)
 		StoreTokensSummaryPayload(sourceBlockHeight)
 		ResetTokenData()
@@ -393,7 +402,7 @@ func ResetTokenData() {
 	}
 }
 
-func CalculateAndFillPriceChange(fromTime float64, tokenData *TokenData) {
+func CalculateAndFillPriceChange(fromTime float64, tokenData *TokenData) *TokenPriceHistoryEntry {
 	curTimeEpoch := float64(time.Now().Unix())
 	key := fmt.Sprintf(REDIS_KEY_TOKEN_PRICE_HISTORY, settingsObj.Development.Namespace, tokenData.ContractAddress)
 
@@ -403,18 +412,19 @@ func CalculateAndFillPriceChange(fromTime float64, tokenData *TokenData) {
 	})
 	if zRangeByScore.Err() != nil {
 		log.Error("Could not fetch entries error: ", zRangeByScore.Err().Error(), "fromTime:", fromTime)
-		return
+		return nil
 	}
 	//Fetch the oldest Value closest to 24h
 	var tokenPriceHistoryEntry TokenPriceHistoryEntry
 	err := json.Unmarshal([]byte(zRangeByScore.Val()[0]), &tokenPriceHistoryEntry)
 	if err != nil {
 		log.Error("Unable to decode value fetched from Zset...something wrong!!")
-		return
+		return nil
 	}
 	//TODO: Need to add validation if value is newer than x hours, should we still show as priceChange?
 	oldPrice := tokenPriceHistoryEntry.Price
 	tokenData.PriceChangePercent_24h = (tokenData.Price - oldPrice) * 100 / tokenData.Price
+	return &tokenPriceHistoryEntry
 }
 
 func UpdateTokenPriceHistoryRedis(toTime float64, fromTime float64, tokenData *TokenData) {
@@ -695,7 +705,7 @@ func WaitAndFetchBlockHeightStatus(blockHeight int64, retries int) (*TokenSummar
 			continue
 		}
 		log.Debugf("Got CID %s, txHash %s at Block Height %d for projectID %s", apResp.PayloadCid, apResp.TxHash, blockHeight, projectID)
-		tokenSummarySnapshotMeta := TokenSummarySnapshotMeta{apResp.PayloadCid, apResp.TxHash, apResp.Status, "", apResp.BlockHeight}
+		tokenSummarySnapshotMeta := TokenSummarySnapshotMeta{apResp.PayloadCid, apResp.TxHash, apResp.Status, "", apResp.BlockHeight, 0, 0}
 		return &tokenSummarySnapshotMeta, nil
 	}
 
