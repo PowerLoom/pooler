@@ -200,6 +200,9 @@ func PrepareAndSubmitTokenSummarySnapshot() {
 	if curBlockHeight > lastSnapshotBlockHeight {
 		var sourceBlockHeight int64
 		tokensPairData := FetchPairSummarySnapshot(curBlockHeight)
+		if tokensPairData == nil {
+			return
+		}
 		log.Debugf("Collating tokenData at blockHeight %d", curBlockHeight)
 		for _, tokenPairProcessedData := range tokensPairData {
 			//TODO: Need to remove 0x from contractAddress saved as string.
@@ -239,19 +242,26 @@ func PrepareAndSubmitTokenSummarySnapshot() {
 		}
 		currentTimestamp := time.Unix(tm, 0)
 		toTime := float64(currentTimestamp.Unix())
-
+		//TODO: Make this logic more generic to support diffrent time based indexes.
 		time24h := currentTimestamp.AddDate(0, 0, -1)
 		fromTime := float64(time24h.Unix())
 		log.Debug("TimeStamp for 1 day before is:", fromTime)
 		//TODO: Fetch lastTokensummaryBlockHeight for the project
 		lastTokensummaryBlockHeight := FetchTokenSummaryLatestBlockHeight()
 		//Update tokenPrice
+		beginBlockHeight24h := 0
+		beginTimeStamp24h := 0.0
 		for key, tokenData := range tokenList {
 			tokenData.Price = FetchTokenPriceAtBlockHeight(tokenData.ContractAddress, int64(tokenData.Block_height))
 			if tokenData.Price != 0 {
 				//Update TokenPrice in History Zset
 				UpdateTokenPriceHistoryRedis(toTime, fromTime, tokenData)
-				CalculateAndFillPriceChange(fromTime, tokenData)
+
+				tokenPrice24hEntry := CalculateAndFillPriceChange(fromTime, tokenData)
+				if beginBlockHeight24h == 0 {
+					beginBlockHeight24h = tokenPrice24hEntry.BlockHeight
+					beginTimeStamp24h = tokenPrice24hEntry.Timestamp
+				}
 				//tokenList[key] = tokenData
 			} else {
 				//TODO: Should we create a snapshot if we don't have any tokenPrice at specified height?
@@ -267,13 +277,15 @@ func PrepareAndSubmitTokenSummarySnapshot() {
 			return
 		}
 		tentativeBlockHeight := lastTokensummaryBlockHeight + 1
-		payloadCID, txHash, err := WaitAndFetchBlockHeightStatus(tentativeBlockHeight, MAX_RETRIES_FOR_SNAPSHOT_CONFIRM)
+		tokenSummarySnapshotMeta, err := WaitAndFetchBlockHeightStatus(tentativeBlockHeight, MAX_RETRIES_FOR_SNAPSHOT_CONFIRM)
 		if err != nil {
 			log.Errorf("Failed to Fetch payloadCID at blockHeight %d due to error %s", tentativeBlockHeight, err.Error())
 			ResetTokenData()
 			return
 		}
-		StoreTokenSummaryCIDInSnapshotsZSet(sourceBlockHeight, payloadCID, txHash)
+		tokenSummarySnapshotMeta.BeginBlockHeight24h = int64(beginBlockHeight24h)
+		tokenSummarySnapshotMeta.BeginBlockheightTimeStamp24h = beginTimeStamp24h
+		StoreTokenSummaryCIDInSnapshotsZSet(sourceBlockHeight, tokenSummarySnapshotMeta)
 		StoreTokensSummaryPayload(sourceBlockHeight)
 		ResetTokenData()
 		lastSnapshotBlockHeight = curBlockHeight
@@ -282,41 +294,101 @@ func PrepareAndSubmitTokenSummarySnapshot() {
 		for _, tokenData := range tokenList {
 			PruneTokenPriceZSet(tokenData.ContractAddress, int64(tokenData.Block_height))
 		}
+		FetchAndUpdateStatusOfOlderSnapshots()
+
 	} else {
 		log.Debugf("PairSummary blockHeight has not moved yet and is still at %d, lastSnapshotBlockHeight is %d. Hence not processing anything.",
 			curBlockHeight, lastSnapshotBlockHeight)
+		FetchAndUpdateStatusOfOlderSnapshots()
 	}
 }
 
-func FetchTokenSummaryLatestBlockHeight() int64 {
-	v2PairsProjectId := fmt.Sprintf(TOKENSUMMARY_PROJECTID, settingsObj.Development.Namespace)
-	last_block_height_url := settingsObj.Development.AuditProtocolEngine.URL + "/" + v2PairsProjectId + "/payloads/height"
-	log.Debug("Fetching Blockheight URL:", last_block_height_url)
-	var heightResp AuditProtocolBlockHeightResp
-
-	for retryCount := 0; retryCount < 3; retryCount++ {
-		resp, err := apHttpClient.Get(last_block_height_url)
+func FetchAndUpdateStatusOfOlderSnapshots() error {
+	// Fetch all entries in snapshotZSet
+	//Any entry that has a txStatus as TX_CONFIRM_PENDING, query its updated status and update ZSet
+	//If txHash changes, store old one in prevTxhash and update the new one in txHash
+	key := fmt.Sprintf(REDIS_KEY_TOKENS_SUMMARY_SNAPSHOTS_ZSET, settingsObj.Development.Namespace)
+	log.Debugf("Checking and updating status of older blockHeight entries in snapshotsZset")
+	res := redisClient.ZRangeByScoreWithScores(key, redis.ZRangeBy{Min: "-inf", Max: "+inf"})
+	if res.Err() != nil {
+		if res.Err() == redis.Nil {
+			log.Infof("No entries found in snapshotsZSet")
+			return nil
+		}
+		log.Errorf("Failed to fetch entries from snapshotZSet. Retry in next cycle")
+		return res.Err()
+	}
+	snapshotsMeta := res.Val()
+	for i := range snapshotsMeta {
+		var snapshotMeta TokenSummarySnapshotMeta
+		snapshot := fmt.Sprintf("%v", snapshotsMeta[i].Member)
+		err := json.Unmarshal([]byte(snapshot), &snapshotMeta)
 		if err != nil {
-			log.Error("Error: Could not fetch block height for pairContract:", v2PairsProjectId, " Error:", err)
+			log.Errorf("Critical! Unable to unmarshal snapshot meta data")
+			return err
+		}
+		if snapshotMeta.DAGHeight == 0 {
+			//skip processing of blockHeight snapshots if DAGheight is not available to fetch status.
+			continue
+		}
+		if snapshotMeta.TxStatus <= TX_CONFIRMATION_PENDING {
+			res := redisClient.ZRem(key, snapshot)
+			if res.Err() != nil {
+				log.Errorf("Failed to remove snapshotsZset entry due to error %+v", res.Err())
+				continue
+			}
+			//Fetch updated status.
+			snapshotMetaNew, err := WaitAndFetchBlockHeightStatus(int64(snapshotMeta.DAGHeight), 3)
+			if err != nil {
+				log.Infof("Could not get blockheight status for TokensSummary at height %d", snapshotMeta.DAGHeight)
+			}
+			if snapshotMeta.TxHash != snapshotMetaNew.TxHash {
+				snapshotMeta.PrevTxHash = snapshotMeta.TxHash
+				snapshotMeta.TxHash = snapshotMetaNew.TxHash
+			}
+			snapshotMeta.TxStatus = snapshotMetaNew.TxStatus
+			snapshotNew, err := json.Marshal(snapshotMeta)
+			if err != nil {
+				log.Errorf("CRITICAL! Json marshal failed for snapshotMeta %+v with error %+v", snapshotMetaNew, err)
+			}
+
+			for j := 0; j < 3; j++ {
+				res = redisClient.ZAdd(key, redis.Z{
+					Score:  snapshotsMeta[i].Score,
+					Member: snapshotNew,
+				})
+				if res.Err() != nil {
+					log.Errorf("Failed to Add entry at score %f due to error %+v. Retrying", snapshotsMeta[i].Score, res.Err())
+					time.Sleep(2 * time.Second)
+					continue
+				}
+				break
+			}
+		}
+	}
+	return nil
+}
+
+func FetchTokenSummaryLatestBlockHeight() int64 {
+	key := fmt.Sprintf(REDIS_KEY_TOKENS_SUMMARY_TENTATIVE_HEIGHT, settingsObj.Development.Namespace)
+	for retryCount := 0; retryCount < 3; retryCount++ {
+		res := redisClient.Get(key)
+		if res.Err() != nil {
+			log.Errorf("Could not fetch tentativeblock height Error %+v", res.Err())
 			time.Sleep(5 * time.Second)
 			continue
 		}
-		defer resp.Body.Close()
-		body, err := ioutil.ReadAll(resp.Body)
+
+		tentativeHeight, err := strconv.Atoi(res.Val())
 		if err != nil {
-			log.Error("Unable to read HTTP resp.", err)
+			log.Errorf("CRITICAL! Unable to extract tentativeHeight from redis result due to err %+v", err)
 			return 0
 		}
-		log.Trace("Rsp Body", string(body))
 
-		if err = json.Unmarshal(body, &heightResp); err != nil { // Parse []byte to the go struct pointer
-			log.Errorf("Can not unmarshal JSON resp for due to error %+v", err)
-			continue
-		}
-		break
+		log.Debugf("Latest tentative block height for TokenSummary project is : %d", tentativeHeight)
+		return int64(tentativeHeight)
 	}
-	log.Debugf("Last Block Height for projectID %s is : %d", v2PairsProjectId, heightResp.Height)
-	return heightResp.Height
+	return 0
 }
 
 func ResetTokenData() {
@@ -330,7 +402,7 @@ func ResetTokenData() {
 	}
 }
 
-func CalculateAndFillPriceChange(fromTime float64, tokenData *TokenData) {
+func CalculateAndFillPriceChange(fromTime float64, tokenData *TokenData) *TokenPriceHistoryEntry {
 	curTimeEpoch := float64(time.Now().Unix())
 	key := fmt.Sprintf(REDIS_KEY_TOKEN_PRICE_HISTORY, settingsObj.Development.Namespace, tokenData.ContractAddress)
 
@@ -340,18 +412,19 @@ func CalculateAndFillPriceChange(fromTime float64, tokenData *TokenData) {
 	})
 	if zRangeByScore.Err() != nil {
 		log.Error("Could not fetch entries error: ", zRangeByScore.Err().Error(), "fromTime:", fromTime)
-		return
+		return nil
 	}
 	//Fetch the oldest Value closest to 24h
 	var tokenPriceHistoryEntry TokenPriceHistoryEntry
 	err := json.Unmarshal([]byte(zRangeByScore.Val()[0]), &tokenPriceHistoryEntry)
 	if err != nil {
 		log.Error("Unable to decode value fetched from Zset...something wrong!!")
-		return
+		return nil
 	}
 	//TODO: Need to add validation if value is newer than x hours, should we still show as priceChange?
 	oldPrice := tokenPriceHistoryEntry.Price
 	tokenData.PriceChangePercent_24h = (tokenData.Price - oldPrice) * 100 / tokenData.Price
+	return &tokenPriceHistoryEntry
 }
 
 func UpdateTokenPriceHistoryRedis(toTime float64, fromTime float64, tokenData *TokenData) {
@@ -457,12 +530,9 @@ func StoreTokensSummaryPayload(blockHeight int64) {
 	}
 }
 
-func StoreTokenSummaryCIDInSnapshotsZSet(blockHeight int64, payloadCID string, txHash string) {
+func StoreTokenSummaryCIDInSnapshotsZSet(blockHeight int64, tokenSummarySnapshotMeta *TokenSummarySnapshotMeta) {
 	key := fmt.Sprintf(REDIS_KEY_TOKENS_SUMMARY_SNAPSHOTS_ZSET, settingsObj.Development.Namespace)
-	var ZsetMember TokenSummarySnapshot
-	ZsetMember.Cid = payloadCID
-	ZsetMember.TxHash = txHash
-	ZsetMemberJson, err := json.Marshal(ZsetMember)
+	ZsetMemberJson, err := json.Marshal(tokenSummarySnapshotMeta)
 	if err != nil {
 		log.Fatalf("Json marshal error %+v", err)
 		return
@@ -473,11 +543,11 @@ func StoreTokenSummaryCIDInSnapshotsZSet(blockHeight int64, payloadCID string, t
 			Member: ZsetMemberJson,
 		}).Err()
 		if err != nil {
-			log.Errorf("Failed to add payloadCID %s at blockHeight %d due to error %+v, retrying %d", payloadCID, blockHeight, err, retryCount)
+			log.Errorf("Failed to add payloadCID %s at blockHeight %d due to error %+v, retrying %d", tokenSummarySnapshotMeta.Cid, blockHeight, err, retryCount)
 			time.Sleep(5 * time.Second)
 			continue
 		}
-		log.Debugf("Added payloadCID %s at blockHeight %d successfully at key %s", payloadCID, blockHeight, key)
+		log.Debugf("Added payloadCID %s at blockHeight %d successfully at key %s", tokenSummarySnapshotMeta.Cid, blockHeight, key)
 		break
 	}
 	PruneTokenSummarySnapshotsZSet()
@@ -575,7 +645,11 @@ func FetchPairSummarySnapshot(blockHeight int64) []TokenPairLiquidityProcessedDa
 	for retryCount := 0; retryCount < 3; retryCount++ {
 		res := redisClient.Get(key)
 		if res.Err() != nil {
-			log.Error("Error: Could not fetch latest PairSummary snapshot from redis. Error %+v. Retrying %d", res.Err(), retryCount)
+			if res.Err() == redis.Nil {
+				log.Errorf("Key %s not found in redis", key)
+				return nil
+			}
+			log.Errorf("Error: Could not fetch latest PairSummary snapshot from redis. Error %+v. Retrying %d", res.Err(), retryCount)
 			time.Sleep(5 * time.Second)
 			continue
 		}
@@ -591,7 +665,7 @@ func FetchPairSummarySnapshot(blockHeight int64) []TokenPairLiquidityProcessedDa
 	return nil
 }
 
-func WaitAndFetchBlockHeightStatus(blockHeight int64, retries int) (string, string, error) {
+func WaitAndFetchBlockHeightStatus(blockHeight int64, retries int) (*TokenSummarySnapshotMeta, error) {
 	projectID := fmt.Sprintf(TOKENSUMMARY_PROJECTID, settingsObj.Development.Namespace)
 	url := fmt.Sprintf("%s/%s/payload/%d/status", settingsObj.Development.AuditProtocolEngine.URL, projectID, blockHeight)
 	log.Debug("Fetching CID at Blockheight URL:", url)
@@ -631,11 +705,12 @@ func WaitAndFetchBlockHeightStatus(blockHeight int64, retries int) (string, stri
 			continue
 		}
 		log.Debugf("Got CID %s, txHash %s at Block Height %d for projectID %s", apResp.PayloadCid, apResp.TxHash, blockHeight, projectID)
-		return apResp.PayloadCid, apResp.TxHash, nil
+		tokenSummarySnapshotMeta := TokenSummarySnapshotMeta{apResp.PayloadCid, apResp.TxHash, apResp.Status, "", apResp.BlockHeight, 0, 0}
+		return &tokenSummarySnapshotMeta, nil
 	}
 
 	log.Errorf("Max retries reached while trying to fetch payloadCID at height %d. Not retrying anymore.", blockHeight)
-	return "", "", fmt.Errorf("max retries reached to fetch payloadCID at height %d", blockHeight)
+	return nil, fmt.Errorf("max retries reached to fetch payloadCID at height %d", blockHeight)
 
 }
 
@@ -649,6 +724,10 @@ func FetchPairsSummaryLatestBlockHeight() int64 {
 			log.Errorf("Error: Could not latest block height for PairSummarySnapshot. Error: %+v. Retrying %d", res.Err(), retryCount)
 			time.Sleep(5 * time.Second)
 			continue
+		}
+		if len(res.Val()) == 0 {
+			log.Debugf("No latest BlockHeight available for PairSummarySnapshot")
+			return 0
 		}
 		blockHeight := int64(res.Val()[0].Score)
 		log.Debugf("Latest available snapshot for PairSummarySnapshot is at height: %d", blockHeight)
