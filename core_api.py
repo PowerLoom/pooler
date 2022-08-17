@@ -38,6 +38,13 @@ REDIS_CONN_CONF = {
     "db": settings['redis']['db']
 }
 
+SNAPSHOT_STATUS_MAP = {
+    1: "SNAPSHOT_COMMIT_PENDING",
+	2: "TX_ACK_PENDING",
+	3: "TX_CONFIRMATION_PENDING",
+	4: "TX_CONFIRMED"
+}
+
 formatter = logging.Formatter(u"%(levelname)-8s %(name)-4s %(asctime)s,%(msecs)d %(module)s-%(funcName)s: %(message)s")
 
 stdout_handler = logging.StreamHandler(sys.stdout)
@@ -268,6 +275,8 @@ async def get_v2_pairs_data(
     latest_payload = json.loads(latest_payload.decode('utf-8'))
     latest_payload_cid = latest_payload.get("cid")
     txHash = latest_payload.get("txHash")
+    txStatus = latest_payload.get("txStatus")
+    prevTxHash = latest_payload.get("prevTxHash")
     begin_block_height_24h = latest_payload.get("begin_block_height_24h")
     begin_block_timestamp_24h = latest_payload.get("begin_block_timestamp_24h")
     begin_block_height_7d = latest_payload.get("begin_block_height_7d")
@@ -291,6 +300,7 @@ async def get_v2_pairs_data(
     if "/v1/api" in request.url._url:
         return {
             "data": data, "txHash": txHash, "cid": latest_payload_cid,
+            "txStatus": SNAPSHOT_STATUS_MAP[txStatus], "prevTxHash": prevTxHash,
             "block_height": data[0].get("block_height", None), "block_timestamp": data[0].get("block_timestamp", None),
             "begin_block_height_24h": begin_block_height_24h, "begin_block_timestamp_24h": begin_block_timestamp_24h,
             "begin_block_height_7d": begin_block_height_7d, "begin_block_timestamp_7d": begin_block_timestamp_7d
@@ -344,6 +354,8 @@ async def get_v2_pairs_data(
     latest_payload = json.loads(latest_payload[0].decode('utf-8'))
     payload_cid = latest_payload.get("cid")
     txHash = latest_payload.get("txHash")
+    txStatus = latest_payload.get("txStatus")
+    prevTxHash = latest_payload.get("prevTxHash")
     begin_block_height_24h = latest_payload.get("begin_block_height_24h")
     begin_block_timestamp_24h = latest_payload.get("begin_block_timestamp_24h")
     begin_block_height_7d = latest_payload.get("begin_block_height_7d")
@@ -356,6 +368,7 @@ async def get_v2_pairs_data(
         if "/v1/api" in request.url._url:
             return {
                 "data": data, "txHash": txHash, "cid": payload_cid, 
+                "txStatus": SNAPSHOT_STATUS_MAP[txStatus], "prevTxHash": prevTxHash,
                 "block_height": block_height, "block_timestamp": data[0].get("block_timestamp", None),
                 "begin_block_height_24h": begin_block_height_24h, "begin_block_timestamp_24h": begin_block_timestamp_24h,
                 "begin_block_height_7d": begin_block_height_7d, "begin_block_timestamp_7d": begin_block_timestamp_7d
@@ -423,6 +436,8 @@ async def get_v2_daily_stats_by_block(
     latest_payload = json.loads(latest_payload[0].decode('utf-8'))
     payload_cid = latest_payload.get("cid")
     txHash = latest_payload.get("txHash")
+    txStatus = latest_payload.get("txStatus")
+    prevTxHash = latest_payload.get("prevTxHash")
 
 
     try:
@@ -487,6 +502,7 @@ async def get_v2_daily_stats_by_block(
         if "/v1/api" in request.url._url:
             return {
                 "data": daily_stats, "txHash": txHash, "cid": payload_cid,
+                "txStatus": SNAPSHOT_STATUS_MAP[txStatus], "prevTxHash": prevTxHash,
                 "block_height": snapshot_data[0].get("block_height", None), "block_timestamp": snapshot_data[0].get("block_timestamp", None)
             }
         else:
@@ -586,6 +602,8 @@ async def get_v2_pairs_recent_logs(
     latest_payload = json.loads(latest_payload.decode('utf-8'))
     latest_payload_cid = latest_payload.get("cid")
     txHash = latest_payload.get("txHash")
+    txStatus = latest_payload.get("txStatus")
+    prevTxHash = latest_payload.get("prevTxHash")
 
     snapshot_data = await redis_conn.get(
         name=uniswap_V2_tokens_at_blockheight.format(int(latest_block_height))
@@ -622,6 +640,7 @@ async def get_v2_pairs_recent_logs(
     if "/v1/api" in request.url._url:
         return {
             "data": data, "txHash": txHash, "cid": latest_payload_cid,
+            "txStatus": SNAPSHOT_STATUS_MAP[txStatus], "prevTxHash": prevTxHash,
             "block_height": data[0].get("block_height", None), "block_timestamp": data[0].get("block_timestamp", None)
         }
     else:
@@ -669,6 +688,8 @@ async def get_v2_tokens_data_by_block(
     latest_payload = json.loads(latest_payload[0].decode('utf-8'))
     payload_cid = latest_payload.get("cid")
     txHash = latest_payload.get("txHash")
+    txStatus = latest_payload.get("txStatus")
+    prevTxHash = latest_payload.get("prevTxHash")
 
     snapshot_data = await redis_conn.get(
         name=uniswap_V2_tokens_at_blockheight.format(block_height)
@@ -705,6 +726,7 @@ async def get_v2_tokens_data_by_block(
     if "/v1/api" in request.url._url:
         return {
             "data": snapshot_data, "txHash": txHash, "cid": payload_cid,
+            "txStatus": SNAPSHOT_STATUS_MAP[txStatus], "prevTxHash": prevTxHash,
             "block_height": snapshot_data[0].get("block_height", None), "block_timestamp": snapshot_data[0].get("block_timestamp", None)
         }
     else:
@@ -734,6 +756,8 @@ async def get_v2_pairs_daily_stats(
         latest_payload = json.loads(latest_payload.decode('utf-8'))
         payload_cid = latest_payload.get("cid")
         txHash = latest_payload.get("txHash")
+        txStatus = latest_payload.get("txStatus")
+        prevTxHash = latest_payload.get("prevTxHash")
 
 
         snapshot_data = await redis_conn.get(
@@ -797,6 +821,7 @@ async def get_v2_pairs_daily_stats(
         if "/v1/api" in request.url._url:
             return {
                 "data": daily_stats, "txHash": txHash, "cid": payload_cid,
+                "txStatus": SNAPSHOT_STATUS_MAP[txStatus], "prevTxHash": prevTxHash,
                 "block_height": snapshot_data[0].get("block_height", None), "block_timestamp": snapshot_data[0].get("block_timestamp", None)
             }
         else:

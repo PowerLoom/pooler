@@ -364,8 +364,12 @@ func FetchAndUpdateStatusOfOlderSnapshots() error {
 				}
 				break
 			}
+
 		}
 	}
+
+	log.Debugf("Updated old snapshot txHashs status!")
+
 	return nil
 }
 
