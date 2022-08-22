@@ -9,3 +9,4 @@ logs/
 screenlog*
 temp/*
 uniswapTokenData
+test.py
