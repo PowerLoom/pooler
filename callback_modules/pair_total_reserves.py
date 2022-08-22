@@ -224,19 +224,16 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             total_token1_vol_usd = 0
             recent_events_logs = list()
             self._logger.debug('Trade volume processed snapshot: %s', trade_vol_processed_snapshot)
-            for each_event in trade_vol_processed_snapshot:
-                if each_event == 'timestamp':
-                    continue
-                # self._logger.debug('Event under process: %s | event subdict: %s', each_event, trade_vol_processed_snapshot[each_event])
-                # self._logger.debug('event trades: %s', trade_vol_processed_snapshot[each_event]['trades'])
-                total_trades_in_usd += trade_vol_processed_snapshot[each_event]['trades']['totalTradesUSD']
-                total_fee_in_usd += trade_vol_processed_snapshot[each_event]['trades'].get('totalFeeUSD', 0)
-                total_token0_vol += trade_vol_processed_snapshot[each_event]['trades']['token0TradeVolume']
-                total_token1_vol += trade_vol_processed_snapshot[each_event]['trades']['token1TradeVolume']
-                total_token0_vol_usd += trade_vol_processed_snapshot[each_event]['trades']['token0TradeVolumeUSD']
-                total_token1_vol_usd += trade_vol_processed_snapshot[each_event]['trades']['token1TradeVolumeUSD']
-                recent_events_logs.extend(trade_vol_processed_snapshot[each_event]['trades'].get("recent_transaction_logs", []))
-                trade_vol_processed_snapshot[each_event]['trades'].pop('recent_transaction_logs', None)
+            
+            #Set effective trade volume at top level
+            total_trades_in_usd = trade_vol_processed_snapshot['Trades']['totalTradesUSD']
+            total_fee_in_usd = trade_vol_processed_snapshot['Trades']['totalFeeUSD']
+            total_token0_vol = trade_vol_processed_snapshot['Trades']['token0TradeVolume']
+            total_token1_vol = trade_vol_processed_snapshot['Trades']['token1TradeVolume']
+            total_token0_vol_usd = trade_vol_processed_snapshot['Trades']['token0TradeVolumeUSD']
+            total_token1_vol_usd = trade_vol_processed_snapshot['Trades']['token1TradeVolumeUSD']
+
+
             if not trade_vol_processed_snapshot.get('timestamp', None):
                 self._logger.error(
                     f'Could not fetch timestamp for max block height in broadcast {msg_obj} '
