@@ -251,8 +251,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 token1TradeVolume=float(f'{total_token1_vol: .6f}'),
                 token0TradeVolumeUSD=float(f'{total_token0_vol_usd: .6f}'),
                 token1TradeVolumeUSD=float(f'{total_token1_vol_usd: .6f}'),
-                events=trade_vol_processed_snapshot,
-                recent_logs=recent_events_logs
+                events=trade_vol_processed_snapshot
             ))
             return trade_volume_snapshot
 
