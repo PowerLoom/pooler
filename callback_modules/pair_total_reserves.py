@@ -1,7 +1,6 @@
 from httpx import AsyncClient
 from setproctitle import setproctitle
-from uniswap_functions import get_pair_contract_trades_async, load_rate_limiter_scripts
-from uniswap_v2 import get_pair_reserves
+from uniswap_functions import get_pair_trade_volume, load_rate_limiter_scripts, get_pair_reserves
 from eth_utils import keccak
 from uuid import uuid4
 from signal import SIGINT, SIGTERM, SIGQUIT
@@ -212,7 +211,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             return None
         
         try:
-            trade_vol_processed_snapshot = await get_pair_contract_trades_async(
+            trade_vol_processed_snapshot = await get_pair_trade_volume(
                 ev_loop=asyncio.get_running_loop(),
                 rate_limit_lua_script_shas=self._rate_limiting_lua_scripts,
                 pair_address=msg_obj.contract,
