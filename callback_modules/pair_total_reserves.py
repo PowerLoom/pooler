@@ -1,8 +1,7 @@
 from httpx import AsyncClient
 from setproctitle import setproctitle
-from uniswap_functions import (
-    get_pair_contract_trades_async, get_liquidity_of_each_token_reserve_async, load_rate_limiter_scripts
-)
+from uniswap_functions import get_pair_contract_trades_async, load_rate_limiter_scripts
+from uniswap_v2 import get_pair_reserves
 from eth_utils import keccak
 from uuid import uuid4
 from signal import SIGINT, SIGTERM, SIGQUIT
@@ -91,33 +90,39 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                               'reserves processing: %s', queued_epochs)
             for x in queued_epochs:
                 await self._redis_conn.rpush(uniswap_discarded_query_pair_total_reserves_epochs_redis_q_f.format(msg_obj.contract), x.json())
-        for block_num in range(min_chain_height, max_chain_height+1):
-            fetch_ts = True if block_num == max_chain_height else False
-            try:
-                pair_reserve_total = await get_liquidity_of_each_token_reserve_async(
-                    loop=asyncio.get_running_loop(),
-                    pair_address=msg_obj.contract,
-                    block_identifier=block_num,
-                    fetch_timestamp=fetch_ts,
-                    redis_conn=self._redis_conn,
-                    rate_limit_lua_script_shas=self._rate_limiting_lua_scripts
-                )
-            except:
-                # if querying fails, we are going to ensure it is recorded for future processing
-                enqueue_epoch = True
-                break
-            else:
-                epoch_reserves_snapshot_map_token0[f'block{block_num}'] = pair_reserve_total['token0']
-                epoch_reserves_snapshot_map_token1[f'block{block_num}'] = pair_reserve_total['token1']
-                epoch_usd_reserves_snapshot_map_token0[f'block{block_num}'] = pair_reserve_total['token0USD']
-                epoch_usd_reserves_snapshot_map_token1[f'block{block_num}'] = pair_reserve_total['token1USD']
+        
+        try:
+            pair_reserve_total = await get_pair_reserves(
+                loop=asyncio.get_running_loop(),
+                pair_address=msg_obj.contract,
+                from_block=min_chain_height,
+                to_block=max_chain_height,
+                fetch_timestamp=True,
+                redis_conn=self._redis_conn,
+                rate_limit_lua_script_shas=self._rate_limiting_lua_scripts
+            )
+        except:
+            # if querying fails, we are going to ensure it is recorded for future processing
+            enqueue_epoch = True
+        else:
+            for block_num in range(min_chain_height, max_chain_height+1):
+                
+                block_pair_total_reserves = pair_reserve_total.get(block_num)
+                fetch_ts = True if block_num == max_chain_height else False
+
+                epoch_reserves_snapshot_map_token0[f'block{block_num}'] = block_pair_total_reserves['token0']
+                epoch_reserves_snapshot_map_token1[f'block{block_num}'] = block_pair_total_reserves['token1']
+                epoch_usd_reserves_snapshot_map_token0[f'block{block_num}'] = block_pair_total_reserves['token0USD']
+                epoch_usd_reserves_snapshot_map_token1[f'block{block_num}'] = block_pair_total_reserves['token1USD']
+                
                 if fetch_ts:
-                    if not pair_reserve_total.get('timestamp', None):
+                    if not block_pair_total_reserves.get('timestamp', None):
                         self._logger.error(
                             f'Could not fetch timestamp for max block height in broadcast {msg_obj} '
                             f'against pair reserves calculation')
                     else:
                         max_block_timestamp = pair_reserve_total.get('timestamp')
+        
         if enqueue_epoch:
             if enqueue_on_failure:
                 # if coalescing was achieved, ensure that is recorded and enqueued as well
