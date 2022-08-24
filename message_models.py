@@ -59,6 +59,13 @@ class logsTradeModel(BaseModel):
     trades: Dict[str, float]
 
 
+class UniswapTradeEvents(BaseModel):
+    Swap: logsTradeModel
+    Mint: logsTradeModel
+    Burn: logsTradeModel
+    Trades: Dict[str, float]
+
+
 class UniswapTradesSnapshot(BaseModel):
     contract: str
     totalTrade: float  # in USD
@@ -67,7 +74,7 @@ class UniswapTradesSnapshot(BaseModel):
     token1TradeVolume: float  # in token native decimals supply
     token0TradeVolumeUSD: float
     token1TradeVolumeUSD: float
-    events: Dict[str, Dict]
+    events: UniswapTradeEvents
     chainHeightRange: EpochBase
     timestamp: float
 
