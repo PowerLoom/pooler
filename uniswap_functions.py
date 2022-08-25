@@ -1062,17 +1062,17 @@ if __name__ == '__main__':
     # weth = "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619"
     # pair_address = get_pair("0x29bf8Df7c9a005a080E4599389Bf11f15f6afA6A", "0xc2132d05d31c914a87c6611c10748aeb04b58e8f")
     # print(f"pair_address: {pair_address}")
-    rate_limit_lua_script_shas = dict()
-    loop = asyncio.get_event_loop()
-    data = loop.run_until_complete(
-        get_pair_trade_volume(
-            loop, 
-            rate_limit_lua_script_shas, 
-            '0x853ee4b2a13f8a742d64c8f088be7ba2131f670d', 
-            32299809, 
-            32299889
-        )
-    )
+    # rate_limit_lua_script_shas = dict()
+    # loop = asyncio.get_event_loop()
+    # data = loop.run_until_complete(
+    #     get_pair_trade_volume(
+    #         loop, 
+    #         rate_limit_lua_script_shas, 
+    #         '0x853ee4b2a13f8a742d64c8f088be7ba2131f670d', 
+    #         32299809, 
+    #         32299889
+    #     )
+    # )
 
     # loop = asyncio.get_event_loop()
     # rate_limit_lua_script_shas = dict()
@@ -1081,11 +1081,11 @@ if __name__ == '__main__':
     #         loop=loop, 
     #         rate_limit_lua_script_shas=rate_limit_lua_script_shas, 
     #         pair_address='0x369582d2010b6ed950b571f4101e3bb9b554876f',
-    #         from_block=32299572,
-    #         to_block=32299592,
+    #         from_block=32300448,
+    #         to_block=32300468,
     #         fetch_timestamp=True
     #     )
     # )
 
-    #print(f"\n\n{data}\n")
+    # print(f"\n\n{data}\n")
     pass
