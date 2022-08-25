@@ -593,9 +593,12 @@ async def get_block_details_in_range(
                 min=int(from_block),
                 max=int(to_block)
             )
-            cached_details = cached_details[0].decode('utf-8') if len(cached_details) > 0 else False
-            if cached_details:
-                pass
+            
+            # check if we have cached value for each block number
+            if cached_details and len(cached_details) == to_block - (from_block - 1):
+                cached_details = {json.loads(block_detail.decode('utf-8'))['number']: json.loads(block_detail.decode('utf-8')) for block_detail in cached_details}
+                return cached_details
+
 
         await check_rpc_rate_limit(
             redis_conn=redis_conn, request_payload={ "from_block": from_block, "to_block": to_block},
@@ -782,11 +785,12 @@ async def get_block_details(ev_loop, block_number):
     else:
         return block_details
 
-async def extract_trade_volume_log(ev_loop, event_name, log, pair_per_token_metadata, token0_price_map, token1_price_map):
-    token0_amount = 0
-    token1_amount = 0
-    token0_amount_usd = 0
-    token1_amount_usd = 0    
+def extract_trade_volume_log(event_name, log, pair_per_token_metadata, token0_price_map, token1_price_map, block_details_dict):
+    token0_swapped = 0
+    token1_swapped = 0
+    token0_swapped_usd = 0
+    token1_swapped_usd = 0
+    log_args = log.args        
 
     def token_native_and_usd_amount(token, token_type, token_price_map):
         if log.args.get(token_type) <= 0:
@@ -831,7 +835,7 @@ async def extract_trade_volume_log(ev_loop, event_name, log, pair_per_token_meta
     trade_fee_usd = 0
     
     
-    block_details = await get_block_details(ev_loop, log.get('blockNumber', False))
+    block_details = block_details_dict.get(int(log.get('blockNumber', 0)), {})
     log = json.loads(Web3.toJSON(log))
     log["token0_amount"] = token0_amount
     log["token1_amount"] = token1_amount
@@ -898,21 +902,14 @@ async def get_pair_trade_volume(
 ):
     try:
         pair_address = Web3.toChecksumAddress(pair_address)
-
+        block_details_dict = dict()
+   
         if fetch_timestamp:
-            block_det_func = partial(w3.eth.get_block, to_block)
             try:
-                await check_rpc_rate_limit(
-                    redis_conn=redis_conn, request_payload={"contract": pair_address, "to_block": to_block, "from_block": from_block},
-                    error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get async trade volume"},
-                    logger=logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas
-                )
-                block_details = await ev_loop.run_in_executor(func=block_det_func, executor=None)
+                block_details_dict = await get_block_details_in_range(redis_conn, from_block, to_block, rate_limit_lua_script_shas)
             except Exception as err:
                 logger.error('Error attempting to get block details of to_block %s: %s, retrying again', to_block, err, exc_info=True)
                 raise err
-        else:
-            block_details = None
 
         pair_per_token_metadata = await get_pair_metadata(
             pair_address=pair_address,
@@ -1013,20 +1010,14 @@ async def get_pair_trade_volume(
 
             # iterate over each txHash logs
             for log in logs:
-                
-                await check_rpc_rate_limit(
-                    redis_conn=redis_conn, request_payload={"contract": pair_address, "to_block": to_block, "from_block": from_block},
-                    error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get async trade volume"},
-                    logger=logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
-                )
                 # fetch trade value fog log
-                trades_result, processed_log = await extract_trade_volume_log(
-                    ev_loop=ev_loop,
+                trades_result, processed_log = extract_trade_volume_log(
                     event_name=log.event,
                     log=log,
                     pair_per_token_metadata=pair_per_token_metadata,
-                    token0_price_map=token0_price_map, 
-                    token1_price_map=token1_price_map
+                    token0_price_map=token0_price_map,
+                    token1_price_map=token1_price_map,
+                    block_details_dict=block_details_dict
                 )
 
                 if log.event == "Swap":
@@ -1053,7 +1044,8 @@ async def get_pair_trade_volume(
             epoch_results.Trades += abs(tx_hash_trades)
 
         epoch_trade_logs = epoch_results.dict()
-        max_block_timestamp = None if not block_details else block_details.timestamp
+        max_block_details = block_details_dict.get(to_block, {})
+        max_block_timestamp = max_block_details.get('timestamp', None)
         epoch_trade_logs.update({'timestamp': max_block_timestamp})            
         return epoch_trade_logs
     except Exception as exc:
@@ -1070,17 +1062,17 @@ if __name__ == '__main__':
     # weth = "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619"
     # pair_address = get_pair("0x29bf8Df7c9a005a080E4599389Bf11f15f6afA6A", "0xc2132d05d31c914a87c6611c10748aeb04b58e8f")
     # print(f"pair_address: {pair_address}")
-    # rate_limit_lua_script_shas = dict()
-    # loop = asyncio.get_event_loop()
-    # data = loop.run_until_complete(
-    #     get_pair_trade_volume(
-    #         loop, 
-    #         rate_limit_lua_script_shas, 
-    #         '0x853ee4b2a13f8a742d64c8f088be7ba2131f670d', 
-    #         32270016, 
-    #         32270116
-    #     )
-    # )
+    rate_limit_lua_script_shas = dict()
+    loop = asyncio.get_event_loop()
+    data = loop.run_until_complete(
+        get_pair_trade_volume(
+            loop, 
+            rate_limit_lua_script_shas, 
+            '0x853ee4b2a13f8a742d64c8f088be7ba2131f670d', 
+            32299809, 
+            32299889
+        )
+    )
 
     # loop = asyncio.get_event_loop()
     # rate_limit_lua_script_shas = dict()
@@ -1089,8 +1081,8 @@ if __name__ == '__main__':
     #         loop=loop, 
     #         rate_limit_lua_script_shas=rate_limit_lua_script_shas, 
     #         pair_address='0x369582d2010b6ed950b571f4101e3bb9b554876f',
-    #         from_block=32270049,
-    #         to_block=32270069,
+    #         from_block=32299572,
+    #         to_block=32299592,
     #         fetch_timestamp=True
     #     )
     # )
