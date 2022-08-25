@@ -93,12 +93,12 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         try:
             pair_reserve_total = await get_pair_reserves(
                 loop=asyncio.get_running_loop(),
+                rate_limit_lua_script_shas=self._rate_limiting_lua_scripts,
                 pair_address=msg_obj.contract,
                 from_block=min_chain_height,
                 to_block=max_chain_height,
-                fetch_timestamp=True,
                 redis_conn=self._redis_conn,
-                rate_limit_lua_script_shas=self._rate_limiting_lua_scripts
+                fetch_timestamp=True
             )
         except:
             # if querying fails, we are going to ensure it is recorded for future processing
@@ -120,7 +120,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                             f'Could not fetch timestamp for max block height in broadcast {msg_obj} '
                             f'against pair reserves calculation')
                     else:
-                        max_block_timestamp = pair_reserve_total.get('timestamp')
+                        max_block_timestamp = block_pair_total_reserves.get('timestamp')
         
         if enqueue_epoch:
             if enqueue_on_failure:

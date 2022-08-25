@@ -533,7 +533,7 @@ async def get_token_price_at_block_height(
             response={}, underlying_exception=None,
             extra_info={'msg': f"rpc error: {str(err)}"}) from err
 
-async def get_trade_volume_epoch_price_map(
+async def get_token_price_map_for_epoch(
         loop,
         rate_limit_lua_script_shas: dict,
         to_block, from_block,
@@ -645,7 +645,6 @@ async def get_block_details_in_range(
             response={}, underlying_exception=None,
             extra_info={'msg': f"block details in range rpc error: {str(err)}"}) from err
 
-@provide_async_redis_conn_insta
 @retry(
     reraise=True,
     retry=retry_if_exception_type(RPCException),
@@ -684,11 +683,11 @@ async def get_pair_reserves(
         )
 
         token0_price_map, token1_price_map = await asyncio.gather(
-            get_trade_volume_epoch_price_map(
+            get_token_price_map_for_epoch(
                 loop=loop, rate_limit_lua_script_shas=rate_limit_lua_script_shas, to_block=to_block, 
                 from_block=from_block, token_metadata=pair_per_token_metadata['token0'], redis_conn=redis_conn
             ),
-            get_trade_volume_epoch_price_map(
+            get_token_price_map_for_epoch(
                 loop=loop, rate_limit_lua_script_shas=rate_limit_lua_script_shas, to_block=to_block, 
                 from_block=from_block, token_metadata=pair_per_token_metadata['token1'], redis_conn=redis_conn
             )
@@ -884,7 +883,6 @@ def extract_trade_volume_log(event_name, log, pair_per_token_metadata, token0_pr
     ), log
 
 # asynchronously get trades on a pair contract
-@provide_async_redis_conn_insta
 @retry(
     reraise=True,
     retry=retry_if_exception_type(RPCException),
@@ -918,11 +916,11 @@ async def get_pair_trade_volume(
             rate_limit_lua_script_shas=rate_limit_lua_script_shas
         )
         token0_price_map, token1_price_map = await asyncio.gather(
-            get_trade_volume_epoch_price_map(
+            get_token_price_map_for_epoch(
                 loop=ev_loop, rate_limit_lua_script_shas=rate_limit_lua_script_shas, to_block=to_block, 
                 from_block=from_block, token_metadata=pair_per_token_metadata['token0'], redis_conn=redis_conn
             ),
-            get_trade_volume_epoch_price_map(
+            get_token_price_map_for_epoch(
                 loop=ev_loop, rate_limit_lua_script_shas=rate_limit_lua_script_shas, to_block=to_block, 
                 from_block=from_block, token_metadata=pair_per_token_metadata['token1'], redis_conn=redis_conn
             )
@@ -1080,12 +1078,12 @@ if __name__ == '__main__':
     #     get_pair_reserves(
     #         loop=loop, 
     #         rate_limit_lua_script_shas=rate_limit_lua_script_shas, 
-    #         pair_address='0x369582d2010b6ed950b571f4101e3bb9b554876f',
-    #         from_block=32300448,
-    #         to_block=32300468,
+    #         pair_address='0x21b8065d10f73ee2e260e5b47d3344d3ced7596e',
+    #         from_block=15408400,
+    #         to_block=15408410,
     #         fetch_timestamp=True
     #     )
     # )
 
-    # print(f"\n\n{data}\n")
+    #print(f"\n\n{data}\n")
     pass

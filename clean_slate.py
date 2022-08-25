@@ -218,6 +218,11 @@ def redis_cleanup_pooler_namespace(redis_config=None):
     except:
         pass
 
+    try:
+        r.delete(*r.keys(f'*blockDetail*{settings.NAMESPACE}*blockDetailZset*'))
+    except:
+        pass
+
 
 def cleanup_ipfs():
     client = ipfshttpclient.connect(addr=settings['ipfs_url'], session=True)
