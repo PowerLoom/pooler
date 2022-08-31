@@ -1,6 +1,9 @@
 from httpx import AsyncClient
 from setproctitle import setproctitle
-from uniswap_functions import get_pair_trade_volume, load_rate_limiter_scripts, get_pair_reserves
+from uniswap_functions import (
+    get_pair_trade_volume, load_rate_limiter_scripts, get_pair_reserves,
+    get_eth_price_usd, get_block_details_in_range
+)
 from eth_utils import keccak
 from uuid import uuid4
 from signal import SIGINT, SIGTERM, SIGQUIT
@@ -40,6 +43,39 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             **kwargs
         )
         self._rate_limiting_lua_scripts = dict()
+
+    async def _warm_up_cache_for_epoch_data(self, msg_obj: PowerloomCallbackProcessMessage):
+        """
+            Function to warm up the cache which is used acrross multiple snapshot constructors 
+            and/or for all pair-contracts.
+            : cache block details for epoch 
+            : cache ETH USD price for epoch
+        """
+        try:
+            max_chain_height = msg_obj.end
+            min_chain_height = msg_obj.begin
+            
+            await asyncio.gather(
+                get_eth_price_usd(
+                    loop=asyncio.get_running_loop(),
+                    from_block=min_chain_height,
+                    to_block=max_chain_height,
+                    redis_conn=self._redis_conn,
+                    rate_limit_lua_script_shas=self._rate_limiting_lua_scripts
+                ), 
+                get_block_details_in_range(
+                    redis_conn=self._redis_conn,
+                    from_block=min_chain_height,
+                    to_block=max_chain_height,
+                    rate_limit_lua_script_shas=self._rate_limiting_lua_scripts
+                ),
+                return_exceptions=True
+            )
+        except Exception as exc:
+            self._logger.warning(f"There was an error while warming-up cache for epoch data. error_msg: {exc}")
+            pass
+
+        return None
 
     async def _construct_pair_reserves_epoch_snapshot_data(self, msg_obj: PowerloomCallbackProcessMessage, enqueue_on_failure=False):
         max_chain_height = msg_obj.end
@@ -100,7 +136,8 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 redis_conn=self._redis_conn,
                 fetch_timestamp=True
             )
-        except:
+        except Exception as exc:
+            self._logger.error(f"Pair-Reserves function failed for epoch: {min_chain_height}-{max_chain_height} | error_msg:{exc}")
             # if querying fails, we are going to ensure it is recorded for future processing
             enqueue_epoch = True
         else:
@@ -260,6 +297,8 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             return trade_volume_snapshot
 
         except Exception as e:
+            self._logger.error(f"Pair Trade-volume function failed for epoch: {from_block}-{to_block} | error_msg:{e}")
+            
             if enqueue_on_failure:
                 # if coalescing was achieved, ensure that is recorded and enqueued as well
                 if continuity and queued_epochs:
@@ -319,6 +358,11 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
 
         self._httpx_session_client: AsyncClient = await self._aiohttp_session_interface.get_httpx_session_client
         self._logger.debug('Got aiohttp session cache. Attempting to snapshot total reserves data in epoch %s...', msg_obj)
+
+
+        # warm-up cache before constructing snapshots
+        await self._warm_up_cache_for_epoch_data(msg_obj=msg_obj)
+
 
         pair_total_reserves_epoch_snapshot = await self._construct_pair_reserves_epoch_snapshot_data(msg_obj=msg_obj, enqueue_on_failure=True)
         if not pair_total_reserves_epoch_snapshot:

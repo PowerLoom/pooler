@@ -228,9 +228,9 @@ def get_encoded_function_signature(abi_dict, function_name, params: list = []):
     get function encoded signature with params
     """
     function_signature = abi_dict.get(function_name)['signature']
-    encoded_signature = '0x' + keccak(text=function_signature).hex()
+    encoded_signature = '0x' + keccak(text=function_signature).hex()[:8]
     if len(params) > 0:
-        encoded_signature += eth_abi.encode(abi_dict.get(function_name)['input'], params).hex()
+        encoded_signature += eth_abi.encode_abi(abi_dict.get(function_name)['input'], params).hex()
     return encoded_signature
 
 
@@ -242,8 +242,7 @@ def batch_eth_call_on_block_range(abi_dict, function_name, contract_address, fro
     """
     
     from_address = from_address if from_address else Web3.toChecksumAddress('0x0000000000000000000000000000000000000000')
-    function_signature = get_encoded_function_signature(abi_dict, function_name)
-
+    function_signature = get_encoded_function_signature(abi_dict, function_name, params)
     rpc_query = []
 
     if from_block == 'latest' and to_block == 'latest':
@@ -252,7 +251,7 @@ def batch_eth_call_on_block_range(abi_dict, function_name, contract_address, fro
             "method": "eth_call",
             "params": [
                 {
-                    "to": contract_address,
+                    "to": Web3.toChecksumAddress(contract_address),
                     "data": function_signature
                 },
                 to_block
@@ -331,3 +330,6 @@ def batch_eth_get_block(from_block, to_block):
         )
 
     return response
+
+
+# batch_call_same_function
