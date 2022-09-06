@@ -6,17 +6,18 @@ import time
 import logging
 import logging.handlers
 import multiprocessing
-import sys
-import tenacity
 from dynaconf import settings
 from web3 import Web3
 from hexbytes import HexBytes
 import eth_abi
 from eth_utils import keccak
+from web3._utils.events import get_event_data
+from eth_abi.codec import ABICodec
 import json
+from async_limits import parse_many as limit_parse_many
+from gnosis.eth import EthereumClient
 
 
-RPC_URL = settings.RPC.MATIC[0]
 formatter = logging.Formatter('%(levelname)-8s %(name)-4s %(asctime)s,%(msecs)d %(module)s-%(funcName)s: %(message)s')
 rpc_logger = logging.getLogger('NodeRPCHelper')
 rpc_logger.setLevel(logging.DEBUG)
@@ -204,6 +205,35 @@ class RPCException(Exception):
         return self.__str__()
 
 
+
+def load_web3_providers_and_rate_limits(full_nodes, archive_nodes):
+    web3_providers = {
+        "full_nodes":  list(),  
+        "archive_nodes": list()
+    }
+
+    count=1
+    for node in full_nodes:
+        web3_providers["full_nodes"].append({
+            "web3_client": EthereumClient(node.url),
+            "rate_limit": limit_parse_many(node.rate_limit),
+            "rpc_url": node.url,
+            "index": count
+        })
+
+    count=1
+    for node in archive_nodes:
+        web3_providers["archive_nodes"].append({
+            "web3_client": EthereumClient(node.url),
+            "rate_limit": limit_parse_many(node.rate_limit),
+            "rpc_url": node.url,
+            "index": count
+        })
+
+    return web3_providers
+
+
+
 def contract_abi_dict(abi):
     """
     Create dictionary of ABI {function_name -> {signature, abi, input, output}}
@@ -234,7 +264,7 @@ def get_encoded_function_signature(abi_dict, function_name, params: list = []):
     return encoded_signature
 
 
-def batch_eth_call_on_block_range(abi_dict, function_name, contract_address, from_block='latest', to_block='latest', params=[], from_address=None):
+def batch_eth_call_on_block_range(rpc_endpoint, abi_dict, function_name, contract_address, from_block='latest', to_block='latest', params=[], from_address=None):
     """
     Batch call "single-function" on a contract for given block-range
     
@@ -277,7 +307,7 @@ def batch_eth_call_on_block_range(abi_dict, function_name, contract_address, fro
             request_id+=1
 
     rpc_response = []
-    response = requests.post(url=RPC_URL, json=rpc_query)
+    response = requests.post(url=rpc_endpoint, json=rpc_query)
     response = response.json()
     response_exceptions = list(map(lambda r: r, filter(lambda y: y.get('error', False), response)))
 
@@ -296,7 +326,7 @@ def batch_eth_call_on_block_range(abi_dict, function_name, contract_address, fro
 
 
 
-def batch_eth_get_block(from_block, to_block):
+def batch_eth_get_block(rpc_endpoint, from_block, to_block):
     """
     Batch call "eth_getBlockByNumber" in a range of block numbers
     
@@ -318,7 +348,7 @@ def batch_eth_get_block(from_block, to_block):
         })
         request_id+=1
         
-    response = requests.post(url=RPC_URL, json=rpc_query)
+    response = requests.post(url=rpc_endpoint, json=rpc_query)
     response = response.json()
     response_exceptions = list(map(lambda r: r, filter(lambda y: y.get('error', False), response)))
 
@@ -332,4 +362,25 @@ def batch_eth_get_block(from_block, to_block):
     return response
 
 
-# batch_call_same_function
+def get_event_sig_and_abi(event_signatures, event_abis):
+    event_sig = ['0x' + keccak(text=sig).hex() for name, sig in event_signatures.items()]
+    event_abi = {'0x' + keccak(text=sig).hex(): event_abis.get(name, 'incorrect event name') for name, sig in event_signatures.items()}
+    return event_sig, event_abi
+
+
+def get_events_logs(web3Provider, contract_address, toBlock, fromBlock, topics, event_abi):
+    event_log = web3Provider.eth.get_logs({
+        'address': Web3.toChecksumAddress(contract_address),
+        'toBlock': toBlock,
+        'fromBlock': fromBlock,
+        'topics': topics
+    })
+
+    codec: ABICodec = web3Provider.codec
+    all_events = []
+    for log in event_log:
+        abi = event_abi.get(log.topics[0].hex(), "") 
+        evt = get_event_data(codec, abi, log)
+        all_events.append(evt)
+
+    return all_events

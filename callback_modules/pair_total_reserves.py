@@ -2,7 +2,7 @@ from httpx import AsyncClient
 from setproctitle import setproctitle
 from uniswap_functions import (
     get_pair_trade_volume, load_rate_limiter_scripts, get_pair_reserves,
-    get_eth_price_usd, get_block_details_in_range
+    get_eth_price_usd, get_token_price_in_block_range
 )
 from eth_utils import keccak
 from uuid import uuid4
@@ -63,7 +63,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                     redis_conn=self._redis_conn,
                     rate_limit_lua_script_shas=self._rate_limiting_lua_scripts
                 ), 
-                get_block_details_in_range(
+                get_token_price_in_block_range(
                     redis_conn=self._redis_conn,
                     from_block=min_chain_height,
                     to_block=max_chain_height,
@@ -127,6 +127,11 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 await self._redis_conn.rpush(uniswap_discarded_query_pair_total_reserves_epochs_redis_q_f.format(msg_obj.contract), x.json())
         
         try:
+            web3_provider = {}
+            # set RPC archive node if there are multiple epochs enqueued
+            if max_chain_height - (min_chain_height - 1) > settings.RPC.FORCE_ARCHIVE_BLOCKS:
+                web3_provider = {"force_archive": True}
+
             pair_reserve_total = await get_pair_reserves(
                 loop=asyncio.get_running_loop(),
                 rate_limit_lua_script_shas=self._rate_limiting_lua_scripts,
@@ -134,7 +139,8 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 from_block=min_chain_height,
                 to_block=max_chain_height,
                 redis_conn=self._redis_conn,
-                fetch_timestamp=True
+                fetch_timestamp=True,
+                web3_provider=web3_provider
             )
         except Exception as exc:
             self._logger.error(f"Pair-Reserves function failed for epoch: {min_chain_height}-{max_chain_height} | error_msg:{exc}")
@@ -238,6 +244,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                                 'processing: %s', queued_epochs)
                 for x in queued_epochs:
                     await self._redis_conn.rpush(uniswap_discarded_query_pair_trade_volume_epochs_redis_q_f.format(msg_obj.contract), x.json())
+
         except Exception as e:
             # Stroing epoch for next time to be processed or discarded
             await self._redis_conn.rpush(
@@ -248,13 +255,19 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             return None
         
         try:
+            # set RPC archive node if there are multiple epoch enqueued
+            web3_provider = {}
+            if to_block - (from_block - 1) > settings.RPC.FORCE_ARCHIVE_BLOCKS:
+                web3_provider = {"force_archive": True}
+
             trade_vol_processed_snapshot = await get_pair_trade_volume(
                 ev_loop=asyncio.get_running_loop(),
                 rate_limit_lua_script_shas=self._rate_limiting_lua_scripts,
                 pair_address=msg_obj.contract,
                 from_block=from_block,
                 to_block=to_block,
-                redis_conn=self._redis_conn
+                redis_conn=self._redis_conn,
+                web3_provider=web3_provider
             )
         
             total_trades_in_usd = 0

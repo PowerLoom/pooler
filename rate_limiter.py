@@ -61,7 +61,7 @@ async def load_rate_limiter_scripts(redis_conn: aioredis.Redis):
 
 
 
-async def check_rpc_rate_limit(redis_conn: aioredis.Redis, request_payload, error_msg, logger, rate_limit_lua_script_shas=None, limit_incr_by=1):
+async def check_rpc_rate_limit(parsed_limits: list, app_id, redis_conn: aioredis.Redis, request_payload, error_msg, logger, rate_limit_lua_script_shas=None, limit_incr_by=1):
     """
         rate limiter for rpc calls
     """
@@ -69,11 +69,11 @@ async def check_rpc_rate_limit(redis_conn: aioredis.Redis, request_payload, erro
         rate_limit_lua_script_shas = await load_rate_limiter_scripts(redis_conn)
     redis_storage = AsyncRedisStorage(rate_limit_lua_script_shas, redis_conn)
     custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
-    app_id = settings.RPC.MATIC[0].split('/')[-1]  # future support for loadbalancing over multiple MaticVigil RPC appID
+    app_id = app_id
     key_bits = [app_id, 'eth_call']  # TODO: add unique elements that can identify a request
     can_request = False
     retry_after = 1
-    for each_lim in PARSED_LIMITS:
+    for each_lim in parsed_limits:
         # window_stats = custom_limiter.get_window_stats(each_lim, key_bits)
         # local_app_cacher_logger.debug(window_stats)
         # rest_logger.debug('Limit %s expiry: %s', each_lim, each_lim.get_expiry())
