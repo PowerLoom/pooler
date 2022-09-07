@@ -309,7 +309,7 @@ def batch_eth_call_on_block_range(rpc_endpoint, abi_dict, function_name, contrac
     rpc_response = []
     response = requests.post(url=rpc_endpoint, json=rpc_query)
     response = response.json()
-    response_exceptions = list(map(lambda r: r, filter(lambda y: y.get('error', False), response)))
+    response_exceptions = list(map(lambda r: r, filter(lambda y: y.get('error', False), response))) if isinstance(response, list) else response
 
     if len(response_exceptions) > 0:
         raise RPCException(

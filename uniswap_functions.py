@@ -142,7 +142,7 @@ def inject_web3_provider_on_exception(retry_state):
             current_provider_index = retry_state.kwargs["web3_provider"]['index']
             if retry_state.kwargs["web3_provider"] in GLOBAL_WEB3_PROVIDER["archive_nodes"] and \
                 current_provider_index < len(GLOBAL_WEB3_PROVIDER["archive_nodes"]):
-                retry_state.kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["archive_nodes"][current_provider_index+1]
+                retry_state.kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["archive_nodes"][current_provider_index]
             # else use first archive node
             else:
                 retry_state.kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["archive_nodes"][0]
@@ -151,7 +151,7 @@ def inject_web3_provider_on_exception(retry_state):
             # if available use next full_node provider
             current_provider_index = retry_state.kwargs["web3_provider"]['index']
             if current_provider_index < len(GLOBAL_WEB3_PROVIDER["full_nodes"]):
-                retry_state.kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["full_nodes"][current_provider_index+1]
+                retry_state.kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["full_nodes"][current_provider_index]
             # use first full_node provider
             else:
                 retry_state.kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["full_nodes"][0]
@@ -650,7 +650,7 @@ async def get_token_price_in_block_range(
                         rate_limit_lua_script_shas=rate_limit_lua_script_shas
                     )
                     white_token_metadata = new_pair_metadata["token0"] if white_token == new_pair_metadata["token0"]["address"] else new_pair_metadata["token1"]
-
+    
                     white_token_price_dict, white_token_reserves_dict = await get_token_pair_price_and_white_token_reserves(
                         pair_address=pairAddress, from_block=from_block, to_block=to_block,
                         pair_metadata=new_pair_metadata, white_token=white_token, redis_conn=redis_conn,
@@ -703,6 +703,7 @@ async def get_token_price_in_block_range(
         return token_price_dict
 
     except Exception as err:
+        logger.error(f"Error while calculating price of token: {token_metadata['symbol']} | {token_metadata['address']} | err: {str(err)}")
         raise RPCException(request={"contract": token_metadata['address'], "from_block": from_block, "to_block": to_block},
             response={}, underlying_exception=None,
             extra_info={'msg': f"rpc error: {str(err)}"}) from err
@@ -1229,7 +1230,7 @@ if __name__ == '__main__':
     # print(f"\n\n{data}\n")
     # print(f"time taken to fetch price in epoch range: {start_time} - {end_time}")
     
-    # toBlock = 32721380
+    # toBlock = 32794776
     # rate_limit_lua_script_shas = dict()
     # loop = asyncio.get_event_loop()
     # start_time = datetime.now()
@@ -1237,9 +1238,11 @@ if __name__ == '__main__':
     #     get_pair_trade_volume(
     #         loop, 
     #         rate_limit_lua_script_shas, 
-    #         '0x6e7a5fafcec6bb1e78bae2a1f0b612012bf14827', 
-    #         from_block=toBlock-75,
-    #         to_block=toBlock
+    #         '0x56Ea2342232ce09Bc204e5f7d3641Df4303BbD8a', 
+    #         from_block=32771059,
+    #         to_block=32771358,
+    #         fetch_timestamp=True,
+    #         web3_provider={"force_archive": True}
     #     )
     # )
     # end_time = datetime.now()
