@@ -21,6 +21,7 @@ from redis import asyncio as aioredis
 from async_limits.strategies import AsyncFixedWindowRateLimiter
 from async_limits.storage import AsyncRedisStorage
 from async_limits import parse_many as limit_parse_many
+from redis_conn import provide_async_redis_conn_insta
 import time
 from datetime import datetime, timedelta
 from redis_keys import (
@@ -31,6 +32,10 @@ from redis_keys import (
 from helper_functions import (
     acquire_threading_semaphore
 )
+from data_models import (
+    trade_data, event_trade_data, epoch_event_trade_data
+)
+
 
 ethereum_client = EthereumClient(settings.RPC.MATIC[0])
 w3 = Web3(Web3.HTTPProvider(settings.RPC.MATIC[0]))
@@ -139,6 +144,12 @@ UNISWAP_TRADE_EVENT_SIGS = {
     'Burn': "Burn(address,uint256,uint256,address)"
 }
 
+UNISWAP_EVENTS_ABI = {
+    'Swap': usdc_eth_contract_obj.events.Swap._get_event_abi(),
+    'Mint': usdc_eth_contract_obj.events.Mint._get_event_abi(),
+    'Burn': usdc_eth_contract_obj.events.Burn._get_event_abi(),
+}
+
 tokens_decimals = {
     "USDT": 6,
     "DAI": 18,
@@ -239,10 +250,11 @@ async def check_rpc_rate_limit(redis_conn: aioredis.Redis, request_payload, erro
         )
     return can_request
 
-def get_event_sig_and_abi(event_name):
-    event_sig = '0x' + keccak(text=UNISWAP_TRADE_EVENT_SIGS.get(event_name, 'incorrect event name')).hex()
-    abi = uniswap_trade_events_abi.get(event_name, 'incorrect event name')
-    return event_sig, abi
+
+def get_event_sig_and_abi():
+    event_sig = ['0x' + keccak(text=sig).hex() for name, sig in UNISWAP_TRADE_EVENT_SIGS.items()]
+    event_abi = {'0x' + keccak(text=sig).hex(): UNISWAP_EVENTS_ABI.get(name, 'incorrect event name') for name, sig in UNISWAP_TRADE_EVENT_SIGS.items()}
+    return event_sig, event_abi
 
 
 def get_events_logs(contract_address, toBlock, fromBlock, topics, event_abi):
@@ -255,7 +267,8 @@ def get_events_logs(contract_address, toBlock, fromBlock, topics, event_abi):
 
     all_events = []
     for log in event_log:
-        evt = get_event_data(codec, event_abi, log)
+        abi = event_abi.get(log.topics[0].hex(), "") 
+        evt = get_event_data(codec, abi, log)
         all_events.append(evt)
 
     return all_events
@@ -290,167 +303,6 @@ async def store_price_at_block_range(begin_block, end_block, token0, token1, pri
         mapping=block_prices
     )
     return len(block_prices)
-
-
-async def extract_recent_transaction_logs(ev_loop, event_name, event_logs, pair_per_token_metadata, token0_price_map, token1_price_map):
-    """
-    Get trade value in USD "for each transaction"
-    with amount of each token, txHash and account addresses
-    """
-    recent_transaction_logs = list()
-    for log in event_logs:
-        token0_amount = 0
-        token1_amount = 0
-        token1_swapped_usd = 0
-        token0_swapped_usd = 0
-        trade_amount_usd = 0
-        if event_name == 'Swap':
-            if log.args.get('amount1Out') == 0:
-
-                current0_swapped = log.args.get('amount0Out') / 10 ** int(pair_per_token_metadata['token0']['decimals'])
-                token0_amount = current0_swapped
-                token0_swapped_usd = current0_swapped * token0_price_map.get(log["blockNumber"], list(token0_price_map.values())[0])
-
-                current1_swapped = log.args.get('amount1In') / 10 ** int(pair_per_token_metadata['token1']['decimals'])
-                token1_amount = current1_swapped
-                token1_swapped_usd = current1_swapped * token1_price_map.get(log["blockNumber"], list(token1_price_map.values())[0])
-            elif log.args.get('amount0Out') == 0:
-                current0_swapped = log.args.get('amount0In') / 10 ** int(pair_per_token_metadata['token0']['decimals'])
-                token0_amount = current0_swapped
-                token0_swapped_usd = current0_swapped * token0_price_map.get(log["blockNumber"], list(token0_price_map.values())[0])
-
-                current1_swapped = log.args.get('amount1Out') / 10 ** int(pair_per_token_metadata['token1']['decimals'])
-                token1_amount = current1_swapped
-                token1_swapped_usd = current1_swapped * token1_price_map.get(log["blockNumber"], list(token1_price_map.values())[0])
-
-        elif event_name == 'Mint' or event_name == 'Burn':
-            current0_swapped = log.args.get('amount0') / 10 ** int(pair_per_token_metadata['token0']['decimals'])
-            token0_amount = current0_swapped
-            token0_swapped_usd = current0_swapped * token0_price_map.get(log["blockNumber"], list(token0_price_map.values())[0])
-
-            current1_swapped = log.args.get('amount1') / 10 ** int(pair_per_token_metadata['token1']['decimals'])
-            token1_amount = current1_swapped
-            token1_swapped_usd = current1_swapped * token1_price_map.get(log["blockNumber"], list(token1_price_map.values())[0])
-
-
-        if event_name == 'Swap':
-            if token1_swapped_usd and token0_swapped_usd:
-                trade_amount_usd = token1_swapped_usd if token1_swapped_usd > token0_swapped_usd else token0_swapped_usd
-            else:
-                trade_amount_usd = token1_swapped_usd if token1_swapped_usd else token0_swapped_usd
-        elif event_name == 'Mint' or event_name == 'Burn':
-            trade_amount_usd = token1_swapped_usd + token0_swapped_usd
-
-        block_details = await get_block_details(ev_loop, log["blockNumber"])
-
-        recent_transaction_logs.append({
-            "sender": log.args.get("sender", ""),
-            "to": log.args.get("to", ""),
-            "transactionHash": log["transactionHash"].hex(),
-            "logIndex": log["logIndex"],
-            "blockNumber": log["blockNumber"],
-            "event": log["event"],
-            "token0_amount": token0_amount,
-            "token1_amount": token1_amount,
-            "trade_amount_usd": trade_amount_usd,
-            "timestamp": block_details.get("timestamp", "")
-        })
-
-    return recent_transaction_logs
-
-
-async def extract_trade_volume_data(ev_loop, event_name, event_logs: List[AttributeDict], redis_conn: aioredis.Redis, pair_per_token_metadata, token0_price_map, token1_price_map):
-    log_topic_values = list()
-    token0_swapped = 0
-    token1_swapped = 0
-    token0_swapped_usd = 0
-    token1_swapped_usd = 0
-    for log in event_logs:
-        log_parent = log
-        log = log.args
-        topics = dict()
-        for field in uniswap_trade_events_abi[event_name]['inputs']:
-            field = field['name']
-            topics[field] = log.get(field)
-        topics['blockNumber'] = log_parent.get('blockNumber')
-        log_topic_values.append(topics)
-
-    for parsed_log_obj_values in log_topic_values:
-        if event_name == 'Swap':
-            if parsed_log_obj_values.get('amount1Out') == 0:
-
-                current0_swapped = parsed_log_obj_values.get('amount0Out') / 10 ** int(pair_per_token_metadata['token0']['decimals'])
-                token0_swapped += current0_swapped
-                token0_swapped_usd += current0_swapped * token0_price_map.get(parsed_log_obj_values.get('blockNumber'), list(token0_price_map.values())[0])
-
-                current1_swapped = parsed_log_obj_values.get('amount1In') / 10 ** int(pair_per_token_metadata['token1']['decimals'])
-                token1_swapped += current1_swapped
-                token1_swapped_usd += current1_swapped * token1_price_map.get(parsed_log_obj_values.get('blockNumber'), list(token1_price_map.values())[0])
-
-            elif parsed_log_obj_values.get('amount0Out') == 0:
-
-                current0_swapped = parsed_log_obj_values.get('amount0In') / 10 ** int(pair_per_token_metadata['token0']['decimals'])
-                token0_swapped += current0_swapped
-                token0_swapped_usd += current0_swapped * token0_price_map.get(parsed_log_obj_values.get('blockNumber'), list(token0_price_map.values())[0])
-
-                current1_swapped = parsed_log_obj_values.get('amount1Out') / 10 ** int(pair_per_token_metadata['token1']['decimals'])
-                token1_swapped += current1_swapped
-                token1_swapped_usd += current1_swapped * token1_price_map.get(parsed_log_obj_values.get('blockNumber'), list(token1_price_map.values())[0])
-
-
-        elif event_name == 'Mint' or event_name == 'Burn':
-
-            current0_swapped = parsed_log_obj_values.get('amount0') / 10 ** int(pair_per_token_metadata['token0']['decimals'])
-            token0_swapped += current0_swapped
-            token0_swapped_usd += current0_swapped * token0_price_map.get(parsed_log_obj_values.get('blockNumber'), list(token0_price_map.values())[0])
-
-            current1_swapped = parsed_log_obj_values.get('amount1') / 10 ** int(pair_per_token_metadata['token1']['decimals'])
-            token1_swapped += current1_swapped
-            token1_swapped_usd += current1_swapped * token1_price_map.get(parsed_log_obj_values.get('blockNumber'), list(token1_price_map.values())[0])
-
-
-    #TODO: instead of fetching the price from the redis cache, fetch price from rpc using block_number
-    # get conversion
-    trade_volume_usd = 0
-    trade_fee_usd = 0
-
-    #Add Recent Transactions Logs
-    recent_transaction_logs = await extract_recent_transaction_logs(ev_loop, event_name, event_logs, pair_per_token_metadata, token0_price_map, token1_price_map)
-
-
-    # if event is 'Swap' then only add single token in total volume calculation
-    if event_name == 'Swap':
-
-        # set one side token value in swap case
-        if token1_swapped_usd and token0_swapped_usd:
-            trade_volume_usd = token1_swapped_usd if token1_swapped_usd > token0_swapped_usd else token0_swapped_usd
-        else:
-            trade_volume_usd = token1_swapped_usd if token1_swapped_usd else token0_swapped_usd
-
-        # calculate uniswap LP fee
-        trade_fee_usd = token1_swapped_usd  * 0.003 if token1_swapped_usd else token0_swapped_usd * 0.003 # uniswap LP fee rate
-
-        return {
-            'totalTradesUSD': trade_volume_usd,
-            'totalFeeUSD': trade_fee_usd,
-            'token0TradeVolume': token0_swapped,
-            'token1TradeVolume': token1_swapped,
-            'token0TradeVolumeUSD': token0_swapped_usd,
-            'token1TradeVolumeUSD': token1_swapped_usd,
-            'recent_transaction_logs': recent_transaction_logs
-        }
-
-
-    trade_volume_usd = token0_swapped_usd + token1_swapped_usd
-
-    return {
-        'totalTradesUSD': trade_volume_usd,
-        'token0TradeVolume': token0_swapped,
-        'token1TradeVolume': token1_swapped,
-        'token0TradeVolumeUSD': token0_swapped_usd,
-        'token1TradeVolumeUSD': token1_swapped_usd,
-        'recent_transaction_logs': recent_transaction_logs
-    }
 
 
 # get allPairLength
@@ -1082,6 +934,7 @@ async def get_liquidity_of_each_token_reserve_async(
             extra_info={'msg': f"Error: async_get_liquidity_of_each_token_reserve error_msg: {str(exc)}"}) from exc
 
 
+
 async def get_trade_volume_epoch_price_map(
         loop,
         rate_limit_lua_script_shas: dict,
@@ -1119,6 +972,98 @@ async def get_trade_volume_epoch_price_map(
     return price_map
 
 
+async def extract_trade_volume_log(ev_loop, event_name, log, pair_per_token_metadata, token0_price_map, token1_price_map):
+    token0_swapped = 0
+    token1_swapped = 0
+    token0_swapped_usd = 0
+    token1_swapped_usd = 0
+    log_args = log.args        
+
+    if event_name == 'Swap':
+        if log_args.get('amount1Out') == 0:
+
+            token0_amount = log_args.get('amount0Out') / 10 ** int(pair_per_token_metadata['token0']['decimals'])
+            token0_swapped += token0_amount
+            token0_swapped_usd += token0_amount * token0_price_map.get(log_args.get('blockNumber'), list(token0_price_map.values())[0])
+
+            token1_amount = log_args.get('amount1In') / 10 ** int(pair_per_token_metadata['token1']['decimals'])
+            token1_swapped += token1_amount
+            token1_swapped_usd += token1_amount * token1_price_map.get(log_args.get('blockNumber'), list(token1_price_map.values())[0])
+
+        elif log_args.get('amount0Out') == 0:
+
+            token0_amount = log_args.get('amount0In') / 10 ** int(pair_per_token_metadata['token0']['decimals'])
+            token0_swapped += token0_amount
+            token0_swapped_usd += token0_amount * token0_price_map.get(log_args.get('blockNumber'), list(token0_price_map.values())[0])
+
+            token1_amount = log_args.get('amount1Out') / 10 ** int(pair_per_token_metadata['token1']['decimals'])
+            token1_swapped += token1_amount
+            token1_swapped_usd += token1_amount * token1_price_map.get(log_args.get('blockNumber'), list(token1_price_map.values())[0])
+
+
+    elif event_name == 'Mint' or event_name == 'Burn':
+
+        token0_amount = log_args.get('amount0') / 10 ** int(pair_per_token_metadata['token0']['decimals'])
+        token0_swapped += token0_amount
+        token0_swapped_usd += token0_amount * token0_price_map.get(log_args.get('blockNumber'), list(token0_price_map.values())[0])
+
+        token1_amount = log_args.get('amount1') / 10 ** int(pair_per_token_metadata['token1']['decimals'])
+        token1_swapped += token1_amount
+        token1_swapped_usd += token1_amount * token1_price_map.get(log_args.get('blockNumber'), list(token1_price_map.values())[0])
+        
+
+    trade_volume_usd = 0
+    trade_fee_usd = 0
+    
+    
+    block_details = await get_block_details(ev_loop, log.get('blockNumber', False))
+    log = json.loads(Web3.toJSON(log))
+    log["token0_amount"] = token0_amount
+    log["token1_amount"] = token1_amount
+    log["timestamp"] = block_details.get("timestamp", "")
+    # pop unused log props
+    log.pop('blockHash', None)
+    log.pop('transactionIndex', None)
+
+    # if event is 'Swap' then only add single token in total volume calculation
+    if event_name == 'Swap':
+
+        # set one side token value in swap case
+        if token1_swapped_usd and token0_swapped_usd:
+            trade_volume_usd = token1_swapped_usd if token1_swapped_usd > token0_swapped_usd else token0_swapped_usd
+        else:
+            trade_volume_usd = token1_swapped_usd if token1_swapped_usd else token0_swapped_usd
+
+        # calculate uniswap LP fee
+        trade_fee_usd = token1_swapped_usd  * 0.003 if token1_swapped_usd else token0_swapped_usd * 0.003 # uniswap LP fee rate
+
+        #set final usd amount for swap
+        log["trade_amount_usd"] = trade_volume_usd
+
+        return trade_data(
+            totalTradesUSD=trade_volume_usd,
+            totalFeeUSD=trade_fee_usd,
+            token0TradeVolume=token0_swapped,
+            token1TradeVolume=token1_swapped,
+            token0TradeVolumeUSD=token0_swapped_usd,
+            token1TradeVolumeUSD=token1_swapped_usd
+        ), log
+
+
+    trade_volume_usd = token0_swapped_usd + token1_swapped_usd
+
+    #set final usd amount for other events
+    log["trade_amount_usd"] = trade_volume_usd
+
+    return trade_data(
+        totalTradesUSD=trade_volume_usd,
+        totalFeeUSD=0.0,
+        token0TradeVolume=token0_swapped,
+        token1TradeVolume=token1_swapped,
+        token0TradeVolumeUSD=token0_swapped_usd,
+        token1TradeVolumeUSD=token1_swapped_usd
+    ), log
+
 # asynchronously get trades on a pair contract
 @retry(
     reraise=True,
@@ -1132,17 +1077,11 @@ async def get_pair_contract_trades_async(
     pair_address,
     from_block,
     to_block,
-    redis_conn: aioredis.Redis,
+    redis_conn: aioredis.Redis=None,
     fetch_timestamp=True
 ):
     try:
-
         pair_address = Web3.toChecksumAddress(pair_address)
-        # pair contract
-        pair = w3.eth.contract(
-            address=pair_address,
-            abi=pair_contract_abi
-        )
 
         if fetch_timestamp:
             block_det_func = partial(w3.eth.get_block, to_block)
@@ -1169,65 +1108,109 @@ async def get_pair_contract_trades_async(
             get_trade_volume_epoch_price_map(loop=ev_loop, rate_limit_lua_script_shas=rate_limit_lua_script_shas, to_block=to_block, from_block=from_block, token_metadata=pair_per_token_metadata['token0'], redis_conn=redis_conn),
             get_trade_volume_epoch_price_map(loop=ev_loop, rate_limit_lua_script_shas=rate_limit_lua_script_shas, to_block=to_block, from_block=from_block, token_metadata=pair_per_token_metadata['token1'], redis_conn=redis_conn)
         )
-        event_log_fetch_coros = list()
-        for trade_event_name in ['Swap', 'Mint', 'Burn']:
-            event_sig, event_abi = get_event_sig_and_abi(trade_event_name)
-            pfunc_get_event_logs = partial(
-                get_events_logs, **{
-                    'contract_address': pair_address,
-                    'toBlock': to_block,
-                    'fromBlock': from_block,
-                    'topics': [event_sig],
-                    'event_abi': event_abi
-                }
-            )
-            event_log_fetch_coros.append(ev_loop.run_in_executor(func=pfunc_get_event_logs, executor=None))
 
+        # fetch logs for swap, mint & burn
+        event_sig, event_abi = get_event_sig_and_abi()
+        pfunc_get_event_logs = partial(
+            get_events_logs, **{
+                'contract_address': pair_address,
+                'toBlock': to_block,
+                'fromBlock': from_block,
+                'topics': [event_sig],
+                'event_abi': event_abi
+            }
+        )
         await check_rpc_rate_limit(
             redis_conn=redis_conn, request_payload={"contract": pair_address, "to_block": to_block, "from_block": from_block},
             error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get async trade volume"},
-            rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=3
+            rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
         )
-        [
-            swap_event_logs, mint_event_logs, burn_event_logs
-        ] = await asyncio.gather(*event_log_fetch_coros)
-        logs_ret = {
-            'Swap': swap_event_logs,
-            'Mint': mint_event_logs,
-            'Burn': burn_event_logs
-        }
-        # extract total trade from them
-        rets = dict()
-        for trade_event_name in ['Swap', 'Mint', 'Burn']:
-            # print(f'Event {trade_event_name} logs: ', logs_ret[trade_event_name])
-            rets.update({
-                trade_event_name: {
-                    'logs': [{
-                        **dict(k.args),
-                        "transactionHash": k["transactionHash"].hex(),
-                        "logIndex": k["logIndex"],
-                        "blockNumber": k["blockNumber"],
-                        "event": k["event"]
-                    } for k in logs_ret[trade_event_name]],
-                    'trades': await extract_trade_volume_data(
-                        ev_loop=ev_loop,
-                        event_name=trade_event_name,
-                        # event_logs=logs_ret[trade_event_name],
-                        event_logs=logs_ret[trade_event_name],
-                        redis_conn=redis_conn,
-                        pair_per_token_metadata=pair_per_token_metadata,
-                        token0_price_map=token0_price_map,
-                        token1_price_map=token1_price_map
-                    )
-                }
-            })
-        max_block_timestamp = None if not block_details else block_details.timestamp
-        rets.update({'timestamp': max_block_timestamp})
-        return rets
+        events_log = await ev_loop.run_in_executor(func=pfunc_get_event_logs, executor=None)
 
-        # raise RPCException(request={"contract": pair_address, "fromBlock": from_block, "toBlock": to_block},
-        # response={}, underlying_exception=None,
-        # extra_info={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get async trade volume"})
+        # group logs by txHashs ==> {txHash: [logs], ...}
+        grouped_by_tx = dict()
+        [grouped_by_tx[log.transactionHash.hex()].append(log) if log.transactionHash.hex() in grouped_by_tx else grouped_by_tx.update({log.transactionHash.hex(): [log]}) for log in events_log]
+        
+        
+        # init data models with empty/0 values
+        init_trade_data = trade_data(
+            totalTradesUSD=float(),
+            totalFeeUSD=float(),
+            token0TradeVolume=float(),
+            token1TradeVolume=float(),
+            token0TradeVolumeUSD=float(),
+            token1TradeVolumeUSD=float(),
+            recent_transaction_logs=list()
+        )
+        epoch_results = epoch_event_trade_data(
+            Swap=event_trade_data(logs=[], trades=init_trade_data),
+            Mint=event_trade_data(logs=[], trades=init_trade_data),
+            Burn=event_trade_data(logs=[], trades=init_trade_data),
+            Trades=init_trade_data
+        )
+
+
+        # prepare final trade logs structure
+        for tx_hash, logs in grouped_by_tx.items():
+
+            # init temporary trade object to track trades at txHash level
+            tx_hash_trades = trade_data(
+                totalTradesUSD=float(),
+                totalFeeUSD=float(),
+                token0TradeVolume=float(),
+                token1TradeVolume=float(),
+                token0TradeVolumeUSD=float(),
+                token1TradeVolumeUSD=float(),
+                recent_transaction_logs=list()
+            )
+            # shift Burn logs in end of list to check if equal size of mint already exist and then cancel out burn with mint
+            logs = sorted(logs, key=lambda x: x.event, reverse=True)
+
+            # iterate over each txHash logs
+            for log in logs:
+                
+                await check_rpc_rate_limit(
+                    redis_conn=redis_conn, request_payload={"contract": pair_address, "to_block": to_block, "from_block": from_block},
+                    error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get async trade volume"},
+                    rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
+                )
+                # fetch trade value fog log
+                trades_result, processed_log = await extract_trade_volume_log(
+                    ev_loop=ev_loop,
+                    event_name=log.event,
+                    log=log,
+                    pair_per_token_metadata=pair_per_token_metadata,
+                    token0_price_map=token0_price_map, 
+                    token1_price_map=token1_price_map
+                )
+
+                if log.event == "Swap":
+                    epoch_results.Swap.logs.append(processed_log)
+                    epoch_results.Swap.trades += trades_result
+                    tx_hash_trades += trades_result # swap in single txHash should be added
+                
+                elif log.event == "Mint":
+                    epoch_results.Mint.logs.append(processed_log)
+                    epoch_results.Mint.trades += trades_result
+                    tx_hash_trades += trades_result # Mint in identical txHash should be added
+                
+                elif log.event == "Burn":
+                    epoch_results.Burn.logs.append(processed_log)
+                    epoch_results.Burn.trades += trades_result
+                    
+                    # Check if enough Mint amount exist that we can "substract" Burn events, else "add" the Burn events in a identical txHash
+                    if epoch_results.Mint.trades.totalTradesUSD >= math.ceil(trades_result.totalTradesUSD):
+                        tx_hash_trades -= trades_result
+                    else:
+                        tx_hash_trades += trades_result
+
+            # At the end of txHash logs we must normalize trade values, so it don't affect result of other txHash logs
+            epoch_results.Trades += abs(tx_hash_trades)
+
+        epoch_trade_logs = epoch_results.dict()
+        max_block_timestamp = None if not block_details else block_details.timestamp
+        epoch_trade_logs.update({'timestamp': max_block_timestamp})            
+        return epoch_trade_logs
     except Exception as exc:
         logger.error("error at get_pair_contract_trades_async fn: %s", exc, exc_info=True)
         raise RPCException(request={"contract": pair_address, "fromBlock": from_block, "toBlock": to_block},
@@ -1325,11 +1308,11 @@ if __name__ == '__main__':
     # weth = "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619"
     # pair_address = get_pair("0x29bf8Df7c9a005a080E4599389Bf11f15f6afA6A", "0xc2132d05d31c914a87c6611c10748aeb04b58e8f")
     # print(f"pair_address: {pair_address}")
-    # rate_limit_lua_script_shas = dict()
-    # loop = asyncio.get_event_loop()
-    # data = loop.run_until_complete(
-    #     get_pair_contract_trades_async(loop, rate_limit_lua_script_shas, '0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc', 15140843, 15140863)
-    # )
+    rate_limit_lua_script_shas = dict()
+    loop = asyncio.get_event_loop()
+    data = loop.run_until_complete(
+        get_pair_contract_trades_async(loop, rate_limit_lua_script_shas, '0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc', 15314851, 15314856)
+    )
 
     # loop = asyncio.get_event_loop()
     # rate_limit_lua_script_shas = dict()
@@ -1337,5 +1320,5 @@ if __name__ == '__main__':
     #     get_liquidity_of_each_token_reserve_async(loop, rate_limit_lua_script_shas, '0xec54859519293b8784bc5bf28144166f313618af')
     # )
 
-    # print(f"\n\n{data}\n")
+    print(f"\n\n{data}\n")
     pass
