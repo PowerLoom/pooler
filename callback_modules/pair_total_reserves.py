@@ -1,8 +1,8 @@
 from httpx import AsyncClient
 from setproctitle import setproctitle
 from uniswap_functions import (
-    get_pair_trade_volume, load_rate_limiter_scripts, get_pair_reserves,
-    get_eth_price_usd, get_token_price_in_block_range
+    load_rate_limiter_scripts, get_pair_trade_volume, get_pair_reserves,
+    warm_up_cache_for_snapshot_constructors
 )
 from eth_utils import keccak
 from uuid import uuid4
@@ -46,30 +46,19 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
 
     async def _warm_up_cache_for_epoch_data(self, msg_obj: PowerloomCallbackProcessMessage):
         """
-            Function to warm up the cache which is used acrross multiple snapshot constructors 
-            and/or for all pair-contracts.
-            : cache block details for epoch 
-            : cache ETH USD price for epoch
+            Function to warm up the cache which is used acrross all snapshot constructors 
+            and/or for internal helper functions.
         """
         try:
             max_chain_height = msg_obj.end
             min_chain_height = msg_obj.begin
-            
-            await asyncio.gather(
-                get_eth_price_usd(
-                    loop=asyncio.get_running_loop(),
-                    from_block=min_chain_height,
-                    to_block=max_chain_height,
-                    redis_conn=self._redis_conn,
-                    rate_limit_lua_script_shas=self._rate_limiting_lua_scripts
-                ), 
-                get_token_price_in_block_range(
-                    redis_conn=self._redis_conn,
-                    from_block=min_chain_height,
-                    to_block=max_chain_height,
-                    rate_limit_lua_script_shas=self._rate_limiting_lua_scripts
-                ),
-                return_exceptions=True
+
+            await warm_up_cache_for_snapshot_constructors(
+                loop=asyncio.get_running_loop(),
+                from_block=min_chain_height,
+                to_block=max_chain_height,
+                redis_conn=self._redis_conn,
+                rate_limit_lua_script_shas=self._rate_limiting_lua_scripts
             )
         except Exception as exc:
             self._logger.warning(f"There was an error while warming-up cache for epoch data. error_msg: {exc}")

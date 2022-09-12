@@ -5,7 +5,6 @@ from rpc_helper import (
     get_event_sig_and_abi, get_events_logs, load_web3_providers_and_rate_limits
 )
 from rate_limiter import load_rate_limiter_scripts, check_rpc_rate_limit
-from async_limits import parse_many as limit_parse_many
 from file_utils import read_json_file
 import logging.config
 import json
