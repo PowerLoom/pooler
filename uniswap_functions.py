@@ -1349,5 +1349,5 @@ if __name__ == '__main__':
     #     get_liquidity_of_each_token_reserve_async(loop, rate_limit_lua_script_shas, '0xec54859519293b8784bc5bf28144166f313618af')
     # )
 
-    print(f"\n\n{data}\n")
+    #print(f"\n\n{data}\n")
     pass
