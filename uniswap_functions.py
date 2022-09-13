@@ -1175,8 +1175,8 @@ async def warm_up_cache_for_snapshot_constructors(
     web3_provider=global_w3_client
 ):
     """
-    This function warm-up cache for uniswap helper functions. Genearated cache will be used across
-    snapshot constructors or in multiple pair-contract caluclations.
+    This function warm-up cache for uniswap helper functions. Generated cache will be used across
+    snapshot constructors or in multiple pair-contract calculations.
     : cache block details for epoch 
     : cache ETH USD price for epoch
     """

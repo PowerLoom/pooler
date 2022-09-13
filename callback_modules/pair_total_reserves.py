@@ -46,7 +46,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
 
     async def _warm_up_cache_for_epoch_data(self, msg_obj: PowerloomCallbackProcessMessage):
         """
-            Function to warm up the cache which is used acrross all snapshot constructors 
+            Function to warm up the cache which is used across all snapshot constructors
             and/or for internal helper functions.
         """
         try:
