@@ -213,7 +213,7 @@ def load_web3_providers_and_rate_limits(full_nodes, archive_nodes):
     }
 
     def iterate_rpc_node(node_list, node_type):
-        count = 1
+        count = 0
         for node in node_list:
             web3_providers[node_type].append({
                 "web3_client": EthereumClient(node.url),

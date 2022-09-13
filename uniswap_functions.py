@@ -4,6 +4,7 @@ from rpc_helper import (
     RPCException, batch_eth_call_on_block_range, contract_abi_dict, batch_eth_get_block,
     get_event_sig_and_abi, get_events_logs, load_web3_providers_and_rate_limits
 )
+from functools import wraps
 from rate_limiter import load_rate_limiter_scripts, check_rpc_rate_limit
 from file_utils import read_json_file
 import logging.config
@@ -106,24 +107,29 @@ tokens_decimals = {
 #######################
 
 
-def inject_web3_provider_first_run(retry_state):
+def inject_web3_provider_first_run(fn):
     """
-    Tenacity retry before handler: to inject web3 provider config based on 
-    first attempt of function. 
-    Here we consume flags given to 'this' function. 
+    Decorator to inject web3 provider config based on first run. 
+    Here we consume web3 provider flags given to 'this' function. 
     """
-    if retry_state.attempt_number == 1:
-
+    @wraps(fn)
+    async def wrapped(*args, **kwargs):
         # if web3_provider was not given then just use first full node
-        if not retry_state.kwargs.get('web3_provider', False):
-            retry_state.kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["full_nodes"][0]
-
+        if not kwargs.get('web3_provider', False):
+            kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["full_nodes"][0]
         # if force_archive flag is passed then use last archive node
-        elif retry_state.kwargs["web3_provider"].get('force_archive', False):
-            retry_state.kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["archive_nodes"][0]
+        elif kwargs["web3_provider"].get('force_archive', False):
+            kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["archive_nodes"][0]
         else:
             # there is no preset flag then use first full node web3 obj
-            retry_state.kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["full_nodes"][0]
+            kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["full_nodes"][0]
+
+        try:
+            return await fn(*args, **kwargs)
+        except Exception:
+            raise
+
+    return wrapped
 
 def inject_web3_provider_on_exception(retry_state):
     """
@@ -140,8 +146,8 @@ def inject_web3_provider_on_exception(retry_state):
             # if current web3 provider is an archive node AND we have another archive node, then use next one
             current_provider_index = retry_state.kwargs["web3_provider"]['index']
             if retry_state.kwargs["web3_provider"] in GLOBAL_WEB3_PROVIDER["archive_nodes"] and \
-                current_provider_index < len(GLOBAL_WEB3_PROVIDER["archive_nodes"]):
-                retry_state.kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["archive_nodes"][current_provider_index]
+                current_provider_index+1 < len(GLOBAL_WEB3_PROVIDER["archive_nodes"]):
+                retry_state.kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["archive_nodes"][current_provider_index+1]
             # else use first archive node
             else:
                 retry_state.kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["archive_nodes"][0]
@@ -149,8 +155,8 @@ def inject_web3_provider_on_exception(retry_state):
         else:
             # if available use next full_node provider
             current_provider_index = retry_state.kwargs["web3_provider"]['index']
-            if current_provider_index < len(GLOBAL_WEB3_PROVIDER["full_nodes"]):
-                retry_state.kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["full_nodes"][current_provider_index]
+            if current_provider_index+1 < len(GLOBAL_WEB3_PROVIDER["full_nodes"]):
+                retry_state.kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["full_nodes"][current_provider_index+1]
             # use first full_node provider
             else:
                 retry_state.kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["full_nodes"][0]
@@ -594,13 +600,6 @@ async def get_token_derived_eth(
     return token_derived_eth_dict
         
 
-
-@retry(
-    reraise=True,
-    retry=retry_if_exception_type(RPCException),
-    wait=wait_random_exponential(multiplier=1, max=10),
-    stop=stop_after_attempt(settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS)
-)
 async def get_token_price_in_block_range(
     token_metadata,
     from_block, to_block,
@@ -708,13 +707,6 @@ async def get_token_price_in_block_range(
             extra_info={'msg': f"rpc error: {str(err)}"}) from err
 
 
-
-@retry(
-    reraise=True,
-    retry=retry_if_exception_type(RPCException),
-    wait=wait_random_exponential(multiplier=1, max=10),
-    stop=stop_after_attempt(settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS)
-)
 async def get_block_details_in_block_range(
     redis_conn: aioredis.Redis,
     from_block,
@@ -789,14 +781,14 @@ async def get_block_details_in_block_range(
             response=err, underlying_exception=err,
             extra_info={'msg': str(err)}) from err
 
-@provide_async_redis_conn_insta
+
+@inject_web3_provider_first_run
 @retry(
     reraise=True,
     retry=retry_if_exception_type(RPCException),
     wait=wait_random_exponential(multiplier=1, max=10),
     stop=stop_after_attempt(settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS),
-    before_sleep=inject_web3_provider_on_exception,
-    before=inject_web3_provider_first_run
+    before_sleep=inject_web3_provider_on_exception
 )
 async def get_pair_reserves(
     loop: asyncio.AbstractEventLoop,
@@ -847,24 +839,23 @@ async def get_pair_reserves(
 
         # create dictionary of ABI {function_name -> {signature, abi, input, output}}
         pair_abi_dict = contract_abi_dict(pair_contract_abi)
-        async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(3), wait=wait_random(1, 2)):
-            with attempt:
-                # get token price function takes care of its own rate limit
-                await check_rpc_rate_limit(
-                    parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], redis_conn=redis_conn, 
-                    request_payload={"contract": pair_address, "from_block": from_block, "to_block": to_block},
-                    error_msg={'msg': "exhausted_api_key_rate_limit inside get_pair_reserves"},
-                    logger=logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
-                )
-                reserves_array = batch_eth_call_on_block_range(
-                    rpc_endpoint=web3_provider.get('rpc_url'), abi_dict=pair_abi_dict, function_name='getReserves', 
-                    contract_address=pair_address, from_block=from_block, to_block=to_block
-                )
-                if reserves_array:
-                    break
-            
-        logger.debug(f"Total reserves fetched getReserves results: {pair_address}")
+        # get token price function takes care of its own rate limit
+        await check_rpc_rate_limit(
+            parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], redis_conn=redis_conn, 
+            request_payload={"contract": pair_address, "from_block": from_block, "to_block": to_block},
+            error_msg={'msg': "exhausted_api_key_rate_limit inside get_pair_reserves"},
+            logger=logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
+        )
+        reserves_array = batch_eth_call_on_block_range(
+            rpc_endpoint=web3_provider.get('rpc_url'), abi_dict=pair_abi_dict, function_name='getReserves', 
+            contract_address=pair_address, from_block=from_block, to_block=to_block
+        )       
+        if not reserves_array:
+            raise RPCException(request={"contract": pair_address, "from_block": from_block, "to_block": to_block},
+                response=reserves_array, underlying_exception=None,
+                extra_info={'msg': f"Error: failed to retrieve pair reserves from RPC"})
 
+        logger.debug(f"Total reserves fetched getReserves results: {pair_address}")
         token0_decimals = pair_per_token_metadata['token0']['decimals']
         token1_decimals = pair_per_token_metadata['token1']['decimals']
 
@@ -900,12 +891,11 @@ async def get_pair_reserves(
 
 
 def extract_trade_volume_log(event_name, log, pair_per_token_metadata, token0_price_map, token1_price_map, block_details_dict):
-    token0_swapped = 0
-    token1_swapped = 0
-    token0_swapped_usd = 0
-    token1_swapped_usd = 0
-    log_args = log.args        
-
+    token0_amount = 0
+    token1_amount = 0
+    token0_amount_usd = 0
+    token1_amount_usd = 0
+    
     def token_native_and_usd_amount(token, token_type, token_price_map):
         if log.args.get(token_type) <= 0:
             return 0, 0
@@ -998,14 +988,13 @@ def extract_trade_volume_log(event_name, log, pair_per_token_metadata, token0_pr
     ), log
 
 # asynchronously get trades on a pair contract
-@provide_async_redis_conn_insta
+@inject_web3_provider_first_run
 @retry(
     reraise=True,
     retry=retry_if_exception_type(RPCException),
     wait=wait_random_exponential(multiplier=1, max=10),
     stop=stop_after_attempt(settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS),
-    before_sleep=inject_web3_provider_on_exception,
-    before=inject_web3_provider_first_run
+    before_sleep=inject_web3_provider_on_exception
 )
 async def get_pair_trade_volume(
     ev_loop: asyncio.AbstractEventLoop,
@@ -1217,9 +1206,9 @@ if __name__ == '__main__':
     #     get_pair_reserves(
     #         loop=loop, 
     #         rate_limit_lua_script_shas=rate_limit_lua_script_shas, 
-    #         pair_address='0x369582d2010b6ed950b571f4101e3bb9b554876f',
-    #         from_block=toBlock - 75,
-    #         to_block=toBlock,
+    #         pair_address='0xc34F686947Df1e91e9709777CB70BC8a5584cE92', 
+    #         from_block=15351298,
+    #         to_block=15351372,
     #         fetch_timestamp=True,
     #         web3_provider={}
     #     )
@@ -1229,7 +1218,6 @@ if __name__ == '__main__':
     # print(f"\n\n{data}\n")
     # print(f"time taken to fetch price in epoch range: {start_time} - {end_time}")
     
-    # toBlock = 32794776
     # rate_limit_lua_script_shas = dict()
     # loop = asyncio.get_event_loop()
     # start_time = datetime.now()
@@ -1237,9 +1225,9 @@ if __name__ == '__main__':
     #     get_pair_trade_volume(
     #         loop, 
     #         rate_limit_lua_script_shas, 
-    #         '0x56Ea2342232ce09Bc204e5f7d3641Df4303BbD8a', 
-    #         from_block=32771059,
-    #         to_block=32771358,
+    #         pair_address='0xc34F686947Df1e91e9709777CB70BC8a5584cE92', 
+    #         from_block=15351298,
+    #         to_block=15351372,
     #         fetch_timestamp=True,
     #         web3_provider={"force_archive": True}
     #     )
