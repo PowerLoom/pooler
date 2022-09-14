@@ -36,6 +36,11 @@ def redis_cleanup_audit_protocol():
 
     r = Redis(**REDIS_AUDIT_PROTOCOL_CONFIG)
     try:
+        c = r.delete('projects:pruningStatus')
+    except:
+        pass
+
+    try:
         c = r.delete(f'projects:{settings.NAMESPACE}:IndexStatus')
     except:
         pass
