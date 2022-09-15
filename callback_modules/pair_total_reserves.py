@@ -44,28 +44,6 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         )
         self._rate_limiting_lua_scripts = dict()
 
-    async def _warm_up_cache_for_epoch_data(self, msg_obj: PowerloomCallbackProcessMessage):
-        """
-            Function to warm up the cache which is used across all snapshot constructors
-            and/or for internal helper functions.
-        """
-        try:
-            max_chain_height = msg_obj.end
-            min_chain_height = msg_obj.begin
-
-            await warm_up_cache_for_snapshot_constructors(
-                loop=asyncio.get_running_loop(),
-                from_block=min_chain_height,
-                to_block=max_chain_height,
-                redis_conn=self._redis_conn,
-                rate_limit_lua_script_shas=self._rate_limiting_lua_scripts
-            )
-        except Exception as exc:
-            self._logger.warning(f"There was an error while warming-up cache for epoch data. error_msg: {exc}")
-            pass
-
-        return None
-
     async def _construct_pair_reserves_epoch_snapshot_data(self, msg_obj: PowerloomCallbackProcessMessage, enqueue_on_failure=False):
         max_chain_height = msg_obj.end
         min_chain_height = msg_obj.begin
@@ -361,11 +339,6 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         self._httpx_session_client: AsyncClient = await self._aiohttp_session_interface.get_httpx_session_client
         self._logger.debug('Got aiohttp session cache. Attempting to snapshot total reserves data in epoch %s...', msg_obj)
 
-
-        # warm-up cache before constructing snapshots
-        await self._warm_up_cache_for_epoch_data(msg_obj=msg_obj)
-
-
         pair_total_reserves_epoch_snapshot = await self._construct_pair_reserves_epoch_snapshot_data(msg_obj=msg_obj, enqueue_on_failure=True)
         if not pair_total_reserves_epoch_snapshot:
             self._logger.error('No epoch snapshot to commit. Construction of snapshot failed for %s', msg_obj)
@@ -606,6 +579,27 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
         # )
         # setup_loguru_intercept()
 
+    async def _warm_up_cache_for_epoch_data(self, msg_obj: PowerloomCallbackProcessMessage):
+        """
+            Function to warm up the cache which is used across all snapshot constructors
+            and/or for internal helper functions.
+        """
+        try:
+            max_chain_height = msg_obj.end
+            min_chain_height = msg_obj.begin
+
+            await warm_up_cache_for_snapshot_constructors(
+                loop=self.ev_loop,
+                from_block=min_chain_height,
+                to_block=max_chain_height
+            )
+                
+        except Exception as exc:
+            self._logger.warning(f"There was an error while warming-up cache for epoch data. error_msg: {exc}")
+            pass
+
+        return None
+
     def _distribute_callbacks(self, dont_use_ch, method, properties, body):
         # following check avoids processing messages meant for routing keys for sub workers
         # for eg: 'powerloom-backend-callback.pair_total_reserves.seeder'
@@ -620,6 +614,9 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
         except Exception as e:
             self._logger.error('Unexpected message format of epoch callback', exc_info=True)
             return
+
+        # warm-up cache before constructing snapshots
+        self.ev_loop.run_until_complete(self._warm_up_cache_for_epoch_data(msg_obj=msg_obj))
 
         for contract in msg_obj.contracts:
             contract = contract.lower()
@@ -671,6 +668,7 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
             port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT))]
         self._connection_pool = redis.BlockingConnectionPool(**REDIS_CONN_CONF)
         queue_name = f'powerloom-backend-cb:{settings.NAMESPACE}'
+        self.ev_loop = asyncio.get_event_loop()
         self._rabbitmq_interactor: RabbitmqSelectLoopInteractor = RabbitmqSelectLoopInteractor(
             consume_queue_name=queue_name,
             consume_callback=self._distribute_callbacks,

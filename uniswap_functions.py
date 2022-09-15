@@ -365,9 +365,10 @@ async def get_pair(
     return pair
 
 
+@provide_async_redis_conn_insta
 async def get_eth_price_usd(
     loop, from_block, to_block, 
-    redis_conn: aioredis.Redis, 
+    redis_conn: aioredis.Redis=None, 
     rate_limit_lua_script_shas={}, 
     web3_provider=global_w3_client
 ):
@@ -484,7 +485,7 @@ async def get_eth_price_usd(
         return eth_price_usd_dict
 
     except Exception as err:
-        logger.error(f"RPC ERROR failed to fetch ETH price, error_msg:{err}")
+        logger.error(f"RPC ERROR failed to fetch ETH price, error_msg:{err}", exc_info=True)
         raise err
 
 async def get_token_pair_price_and_white_token_reserves(
@@ -707,10 +708,11 @@ async def get_token_price_in_block_range(
             extra_info={'msg': f"rpc error: {str(err)}"}) from err
 
 
+@provide_async_redis_conn_insta
 async def get_block_details_in_block_range(
-    redis_conn: aioredis.Redis,
     from_block,
     to_block,
+    redis_conn: aioredis.Redis=None,
     rate_limit_lua_script_shas=None,
     web3_provider=global_w3_client
 ):
@@ -808,8 +810,8 @@ async def get_pair_reserves(
         if fetch_timestamp:
             try:
                 block_details_dict = await get_block_details_in_block_range(
-                    redis_conn, from_block, to_block, 
-                    rate_limit_lua_script_shas, web3_provider=web3_provider
+                    from_block, to_block, redis_conn=redis_conn,
+                    rate_limit_lua_script_shas=rate_limit_lua_script_shas, web3_provider=web3_provider
                 )
             except Exception as err:
                 logger.error('Error attempting to get block details of block-range %s-%s: %s, retrying again', from_block, to_block, err, exc_info=True)
@@ -1170,8 +1172,8 @@ async def get_pair_trade_volume(
 async def warm_up_cache_for_snapshot_constructors(
     loop: asyncio.AbstractEventLoop, 
     from_block, to_block, 
-    redis_conn: aioredis.Redis, 
-    rate_limit_lua_script_shas,
+    rate_limit_lua_script_shas=None,
+    redis_conn: aioredis.Redis=None,
     web3_provider=global_w3_client
 ):
     """
@@ -1183,12 +1185,11 @@ async def warm_up_cache_for_snapshot_constructors(
     await asyncio.gather(
         get_eth_price_usd(
             loop=loop, from_block=from_block, to_block=to_block,
-            redis_conn=redis_conn, web3_provider=web3_provider,
-            rate_limit_lua_script_shas=rate_limit_lua_script_shas
+            web3_provider=web3_provider
         ), 
         get_block_details_in_block_range(
-            redis_conn=redis_conn, from_block=from_block, to_block=to_block,
-            rate_limit_lua_script_shas=rate_limit_lua_script_shas, web3_provider=web3_provider
+            from_block=from_block, to_block=to_block,
+            web3_provider=web3_provider
         ),
         return_exceptions=True
     )
