@@ -215,13 +215,18 @@ def load_web3_providers_and_rate_limits(full_nodes, archive_nodes):
     def iterate_rpc_node(node_list, node_type):
         count = 0
         for node in node_list:
-            web3_providers[node_type].append({
-                "web3_client": EthereumClient(node.url),
-                "rate_limit": limit_parse_many(node.rate_limit),
-                "rpc_url": node.url,
-                "index": count
-            })
-            count += 1   
+            try:
+                web3_providers[node_type].append({
+                    "web3_client": EthereumClient(node.url),
+                    "rate_limit": limit_parse_many(node.rate_limit),
+                    "rpc_url": node.url,
+                    "index": count
+                })
+            except Exception as exc:
+                print(f"Error while initialising one of the web3 providers, err_msg: {exc}")
+                rpc_logger.error(f"Error while initialising one of the web3 providers, err_msg: {exc}", exc_info=True)
+            else:
+                count += 1
 
     iterate_rpc_node(full_nodes, "full_nodes")
     iterate_rpc_node(archive_nodes, "archive_nodes")

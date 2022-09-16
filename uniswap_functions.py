@@ -120,6 +120,7 @@ def inject_web3_provider_first_run(fn):
         # if force_archive flag is passed then use last archive node
         elif kwargs["web3_provider"].get('force_archive', False):
             kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["archive_nodes"][0]
+            logger.warning(f"Got force_archive flag, injected archive_node | from_block:{kwargs.get('from_block')} | to_block:{kwargs.get('to_block')} | pair_address:{kwargs.get('pair_address')}")
         else:
             # there is no preset flag then use first full node web3 obj
             kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["full_nodes"][0]
@@ -152,6 +153,8 @@ def inject_web3_provider_on_exception(retry_state):
             else:
                 retry_state.kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["archive_nodes"][0]
 
+            logger.warning(f"Found exception injected archive node | exception: {retry_state.outcome.exception().extra_info.get('msg')} | function:{retry_state.fn}")
+
         else:
             # if available use next full_node provider
             current_provider_index = retry_state.kwargs["web3_provider"]['index']
@@ -160,6 +163,8 @@ def inject_web3_provider_on_exception(retry_state):
             # use first full_node provider
             else:
                 retry_state.kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["full_nodes"][0]
+
+            logger.warning(f"Found exception injected next full_node | exception: {retry_state.outcome.exception().extra_info.get('msg')} | function:{retry_state.fn}")
 
     else:
         # if there was no error or any flag then use first full node web3 obj
