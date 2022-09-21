@@ -1,7 +1,8 @@
 from httpx import AsyncClient
 from setproctitle import setproctitle
 from uniswap_functions import (
-    get_pair_contract_trades_async, get_liquidity_of_each_token_reserve_async, load_rate_limiter_scripts
+    load_rate_limiter_scripts, get_pair_trade_volume, get_pair_reserves,
+    warm_up_cache_for_snapshot_constructors
 )
 from eth_utils import keccak
 from uuid import uuid4
@@ -91,33 +92,46 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                               'reserves processing: %s', queued_epochs)
             for x in queued_epochs:
                 await self._redis_conn.rpush(uniswap_discarded_query_pair_total_reserves_epochs_redis_q_f.format(msg_obj.contract), x.json())
-        for block_num in range(min_chain_height, max_chain_height+1):
-            fetch_ts = True if block_num == max_chain_height else False
-            try:
-                pair_reserve_total = await get_liquidity_of_each_token_reserve_async(
-                    loop=asyncio.get_running_loop(),
-                    pair_address=msg_obj.contract,
-                    block_identifier=block_num,
-                    fetch_timestamp=fetch_ts,
-                    redis_conn=self._redis_conn,
-                    rate_limit_lua_script_shas=self._rate_limiting_lua_scripts
-                )
-            except:
-                # if querying fails, we are going to ensure it is recorded for future processing
-                enqueue_epoch = True
-                break
-            else:
-                epoch_reserves_snapshot_map_token0[f'block{block_num}'] = pair_reserve_total['token0']
-                epoch_reserves_snapshot_map_token1[f'block{block_num}'] = pair_reserve_total['token1']
-                epoch_usd_reserves_snapshot_map_token0[f'block{block_num}'] = pair_reserve_total['token0USD']
-                epoch_usd_reserves_snapshot_map_token1[f'block{block_num}'] = pair_reserve_total['token1USD']
+        
+        try:
+            web3_provider = {}
+            # set RPC archive node if there are multiple epochs enqueued
+            if max_chain_height - (min_chain_height - 1) > settings.RPC.FORCE_ARCHIVE_BLOCKS:
+                web3_provider = {"force_archive": True}
+
+            pair_reserve_total = await get_pair_reserves(
+                loop=asyncio.get_running_loop(),
+                rate_limit_lua_script_shas=self._rate_limiting_lua_scripts,
+                pair_address=msg_obj.contract,
+                from_block=min_chain_height,
+                to_block=max_chain_height,
+                redis_conn=self._redis_conn,
+                fetch_timestamp=True,
+                web3_provider=web3_provider
+            )
+        except Exception as exc:
+            self._logger.error(f"Pair-Reserves function failed for epoch: {min_chain_height}-{max_chain_height} | error_msg:{exc}")
+            # if querying fails, we are going to ensure it is recorded for future processing
+            enqueue_epoch = True
+        else:
+            for block_num in range(min_chain_height, max_chain_height+1):
+                
+                block_pair_total_reserves = pair_reserve_total.get(block_num)
+                fetch_ts = True if block_num == max_chain_height else False
+
+                epoch_reserves_snapshot_map_token0[f'block{block_num}'] = block_pair_total_reserves['token0']
+                epoch_reserves_snapshot_map_token1[f'block{block_num}'] = block_pair_total_reserves['token1']
+                epoch_usd_reserves_snapshot_map_token0[f'block{block_num}'] = block_pair_total_reserves['token0USD']
+                epoch_usd_reserves_snapshot_map_token1[f'block{block_num}'] = block_pair_total_reserves['token1USD']
+                
                 if fetch_ts:
-                    if not pair_reserve_total.get('timestamp', None):
+                    if not block_pair_total_reserves.get('timestamp', None):
                         self._logger.error(
                             f'Could not fetch timestamp for max block height in broadcast {msg_obj} '
                             f'against pair reserves calculation')
                     else:
-                        max_block_timestamp = pair_reserve_total.get('timestamp')
+                        max_block_timestamp = block_pair_total_reserves.get('timestamp')
+        
         if enqueue_epoch:
             if enqueue_on_failure:
                 # if coalescing was achieved, ensure that is recorded and enqueued as well
@@ -197,6 +211,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                                 'processing: %s', queued_epochs)
                 for x in queued_epochs:
                     await self._redis_conn.rpush(uniswap_discarded_query_pair_trade_volume_epochs_redis_q_f.format(msg_obj.contract), x.json())
+
         except Exception as e:
             # Stroing epoch for next time to be processed or discarded
             await self._redis_conn.rpush(
@@ -207,13 +222,19 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             return None
         
         try:
-            trade_vol_processed_snapshot = await get_pair_contract_trades_async(
+            # set RPC archive node if there are multiple epoch enqueued
+            web3_provider = {}
+            if to_block - (from_block - 1) > settings.RPC.FORCE_ARCHIVE_BLOCKS:
+                web3_provider = {"force_archive": True}
+
+            trade_vol_processed_snapshot = await get_pair_trade_volume(
                 ev_loop=asyncio.get_running_loop(),
                 rate_limit_lua_script_shas=self._rate_limiting_lua_scripts,
                 pair_address=msg_obj.contract,
                 from_block=from_block,
                 to_block=to_block,
-                redis_conn=self._redis_conn
+                redis_conn=self._redis_conn,
+                web3_provider=web3_provider
             )
         
             total_trades_in_usd = 0
@@ -256,6 +277,8 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             return trade_volume_snapshot
 
         except Exception as e:
+            self._logger.error(f"Pair Trade-volume function failed for epoch: {from_block}-{to_block} | error_msg:{e}")
+            
             if enqueue_on_failure:
                 # if coalescing was achieved, ensure that is recorded and enqueued as well
                 if continuity and queued_epochs:
@@ -556,6 +579,27 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
         # )
         # setup_loguru_intercept()
 
+    async def _warm_up_cache_for_epoch_data(self, msg_obj: PowerloomCallbackProcessMessage):
+        """
+            Function to warm up the cache which is used across all snapshot constructors
+            and/or for internal helper functions.
+        """
+        try:
+            max_chain_height = msg_obj.end
+            min_chain_height = msg_obj.begin
+
+            await warm_up_cache_for_snapshot_constructors(
+                loop=self.ev_loop,
+                from_block=min_chain_height,
+                to_block=max_chain_height
+            )
+                
+        except Exception as exc:
+            self._logger.warning(f"There was an error while warming-up cache for epoch data. error_msg: {exc}")
+            pass
+
+        return None
+
     def _distribute_callbacks(self, dont_use_ch, method, properties, body):
         # following check avoids processing messages meant for routing keys for sub workers
         # for eg: 'powerloom-backend-callback.pair_total_reserves.seeder'
@@ -570,6 +614,9 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
         except Exception as e:
             self._logger.error('Unexpected message format of epoch callback', exc_info=True)
             return
+
+        # warm-up cache before constructing snapshots
+        self.ev_loop.run_until_complete(self._warm_up_cache_for_epoch_data(msg_obj=msg_obj))
 
         for contract in msg_obj.contracts:
             contract = contract.lower()
@@ -621,6 +668,7 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
             port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT))]
         self._connection_pool = redis.BlockingConnectionPool(**REDIS_CONN_CONF)
         queue_name = f'powerloom-backend-cb:{settings.NAMESPACE}'
+        self.ev_loop = asyncio.get_event_loop()
         self._rabbitmq_interactor: RabbitmqSelectLoopInteractor = RabbitmqSelectLoopInteractor(
             consume_queue_name=queue_name,
             consume_callback=self._distribute_callbacks,
