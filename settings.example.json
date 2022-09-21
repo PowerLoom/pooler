@@ -57,6 +57,23 @@
             "matic": [
                 "https://rpc-mainnet.maticvigil.com/v1/"
             ],
+            "full_nodes": [
+                {
+                  "url": "https://rpc-public-bck.maticvigil.com/v1/****",
+                  "rate_limit": "100000000/day;20000/minute;2500/second"
+                },
+                {
+                  "url": "https://rpc-mainnet.maticvigil.com/v1/****",
+                  "rate_limit": "100000000/day;20000/minute;2500/second"
+                }
+            ],
+            "archive_nodes": [
+                {
+                  "url": "https://dimensional-floral-water.matic.discover.quiknode.pro/****/",
+                  "rate_limit": "10000000/month;2304000/day;1600/minute;25/second"
+                }
+            ],
+            "force_archive_blocks": 100,
             "logs_query": {
                 "chunk": 1000000,
                 "retry": 2,
@@ -80,6 +97,11 @@
             "basic": 5,
             "archival": 180,
             "connection_init": 2
+        },
+        "module_queues_config":{
+            "pair_total_reserves": {
+              "num_instances": 16
+            }
         },
         "epoch": {
             "height": 10,
@@ -249,6 +271,23 @@
             "matic": [
                 "https://rpc-mainnet.maticvigil.com/v1/"
             ],
+            "full_nodes": [
+                {
+                  "url": "https://rpc-public-bck.maticvigil.com/v1/****",
+                  "rate_limit": "100000000/day;20000/minute;2500/second"
+                },
+                {
+                  "url": "https://rpc-mainnet.maticvigil.com/v1/****",
+                  "rate_limit": "100000000/day;20000/minute;2500/second"
+                }
+            ],
+            "archive_nodes": [
+                {
+                  "url": "https://dimensional-floral-water.matic.discover.quiknode.pro/****/",
+                  "rate_limit": "10000000/month;2304000/day;1600/minute;25/second"
+                }
+            ],
+            "force_archive_blocks": 100,
             "logs_query": {
                 "chunk": 1000000,
                 "retry": 2,
@@ -272,6 +311,11 @@
             "basic": 5,
             "archival": 180,
             "connection_init": 2
+        },
+        "module_queues_config":{
+            "pair_total_reserves": {
+              "num_instances": 16
+            }
         },
         "epoch": {
             "height": 10,

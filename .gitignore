@@ -9,3 +9,5 @@ logs/
 screenlog*
 temp/*
 uniswapTokenData
+test.py
+static/cached_pair_addresses.json

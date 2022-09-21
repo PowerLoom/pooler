@@ -6,9 +6,17 @@ import time
 import logging
 import logging.handlers
 import multiprocessing
-import sys
-import tenacity
 from dynaconf import settings
+from web3 import Web3
+from hexbytes import HexBytes
+import eth_abi
+from eth_utils import keccak
+from web3._utils.events import get_event_data
+from eth_abi.codec import ABICodec
+import json
+from async_limits import parse_many as limit_parse_many
+from gnosis.eth import EthereumClient
+
 
 formatter = logging.Formatter('%(levelname)-8s %(name)-4s %(asctime)s,%(msecs)d %(module)s-%(funcName)s: %(message)s')
 rpc_logger = logging.getLogger('NodeRPCHelper')
@@ -174,3 +182,206 @@ class ConstructRPC:
         if defaultBlock is not None:
             self._querystring["params"].append(defaultBlock)
         return self._querystring
+
+class RPCException(Exception):
+    def __init__(self, request, response, underlying_exception, extra_info):
+        self.request = request
+        self.response = response
+        self.underlying_exception: Exception = underlying_exception
+        self.extra_info = extra_info
+
+    def __str__(self):
+        ret = {
+            'request': self.request,
+            'response': self.response,
+            'extra_info': self.extra_info,
+            'exception': None
+        }
+        if isinstance(self.underlying_exception, Exception):
+            ret.update({'exception': self.underlying_exception.__str__()})
+        return json.dumps(ret)
+
+    def __repr__(self):
+        return self.__str__()
+
+
+
+def load_web3_providers_and_rate_limits(full_nodes, archive_nodes):
+    web3_providers = {
+        "full_nodes":  list(),  
+        "archive_nodes": list()
+    }
+
+    def iterate_rpc_node(node_list, node_type):
+        count = 0
+        for node in node_list:
+            try:
+                web3_providers[node_type].append({
+                    "web3_client": EthereumClient(node.url),
+                    "rate_limit": limit_parse_many(node.rate_limit),
+                    "rpc_url": node.url,
+                    "index": count
+                })
+            except Exception as exc:
+                print(f"Error while initialising one of the web3 providers, err_msg: {exc}")
+                rpc_logger.error(f"Error while initialising one of the web3 providers, err_msg: {exc}", exc_info=True)
+            else:
+                count += 1
+
+    iterate_rpc_node(full_nodes, "full_nodes")
+    iterate_rpc_node(archive_nodes, "archive_nodes")
+
+    return web3_providers
+
+
+
+def contract_abi_dict(abi):
+    """
+    Create dictionary of ABI {function_name -> {signature, abi, input, output}}
+    """
+    abi_dict = {}
+    for abi_obj in [obj for obj in abi if obj['type'] == 'function']:
+        name = abi_obj['name']
+        input_types = [input['type'] for input in abi_obj['inputs']]
+        output_types = [output['type'] for output in abi_obj['outputs']]
+        abi_dict[name] = {
+            "signature": '{}({})'.format(name,','.join(input_types)), 
+            'output': output_types, 
+            'input': input_types, 
+            'abi': abi_obj
+        }
+
+    return abi_dict
+
+
+def get_encoded_function_signature(abi_dict, function_name, params: list = []):
+    """
+    get function encoded signature with params
+    """
+    function_signature = abi_dict.get(function_name)['signature']
+    encoded_signature = '0x' + keccak(text=function_signature).hex()[:8]
+    if len(params) > 0:
+        encoded_signature += eth_abi.encode_abi(abi_dict.get(function_name)['input'], params).hex()
+    return encoded_signature
+
+
+def batch_eth_call_on_block_range(rpc_endpoint, abi_dict, function_name, contract_address, from_block='latest', to_block='latest', params=[], from_address=None):
+    """
+    Batch call "single-function" on a contract for given block-range
+    
+    RPC_BATCH: for_each_block -> call_function_x
+    """
+    
+    from_address = from_address if from_address else Web3.toChecksumAddress('0x0000000000000000000000000000000000000000')
+    function_signature = get_encoded_function_signature(abi_dict, function_name, params)
+    rpc_query = []
+
+    if from_block == 'latest' and to_block == 'latest':
+        rpc_query.append({
+            "jsonrpc": "2.0",
+            "method": "eth_call",
+            "params": [
+                {
+                    "to": Web3.toChecksumAddress(contract_address),
+                    "data": function_signature
+                },
+                to_block
+            ],
+            "id": "1"
+        })
+    else: 
+        request_id = 1
+        for block in range(from_block, to_block+1):
+            rpc_query.append({
+                "jsonrpc": "2.0",
+                "method": "eth_call",
+                "params": [
+                    {
+                        "from": from_address,
+                        "to": Web3.toChecksumAddress(contract_address),
+                        "data": function_signature,
+                    },
+                    hex(block)
+                ],
+                "id": f'{request_id}'
+            })
+            request_id+=1
+
+    rpc_response = []
+    response = requests.post(url=rpc_endpoint, json=rpc_query)
+    response = response.json()
+    response_exceptions = list(map(lambda r: r, filter(lambda y: y.get('error', False), response))) if isinstance(response, list) else response
+
+    if len(response_exceptions) > 0:
+        raise RPCException(
+            request={contract_address: contract_address, function_name: function_name, 'params': params, 'from_block': from_block, 'to_block': to_block},
+            response=response_exceptions, underlying_exception=None,
+            extra_info=f"RPC_BATCH_ETH_CALL_ERRORS: {str(response_exceptions)}"
+        )
+    else:
+        response = response if isinstance(response, list) else [response]
+        for result in response:
+            rpc_response.append(eth_abi.decode_abi(abi_dict.get(function_name)['output'], HexBytes(result['result'])))
+
+    return rpc_response
+
+
+
+def batch_eth_get_block(rpc_endpoint, from_block, to_block):
+    """
+    Batch call "eth_getBlockByNumber" in a range of block numbers
+    
+    RPC_BATCH: for_each_block -> eth_getBlockByNumber
+    """
+    
+    rpc_query = []
+
+    request_id = 1
+    for block in range(from_block, to_block+1):
+        rpc_query.append({
+            "jsonrpc": "2.0",
+            "method": "eth_getBlockByNumber",
+            "params": [
+                hex(block),
+                True
+            ],
+            "id": f'{request_id}'
+        })
+        request_id+=1
+        
+    response = requests.post(url=rpc_endpoint, json=rpc_query)
+    response = response.json()
+    response_exceptions = list(map(lambda r: r, filter(lambda y: y.get('error', False), response)))
+
+    if len(response_exceptions) > 0:
+        raise RPCException(
+            request={'from_block': from_block, 'to_block': to_block},
+            response=response_exceptions, underlying_exception=None,
+            extra_info=f"RPC_BATCH_ETH_GET_BLOCK_ERRORS: {str(response_exceptions)}"
+        )
+
+    return response
+
+
+def get_event_sig_and_abi(event_signatures, event_abis):
+    event_sig = ['0x' + keccak(text=sig).hex() for name, sig in event_signatures.items()]
+    event_abi = {'0x' + keccak(text=sig).hex(): event_abis.get(name, 'incorrect event name') for name, sig in event_signatures.items()}
+    return event_sig, event_abi
+
+
+def get_events_logs(web3Provider, contract_address, toBlock, fromBlock, topics, event_abi):
+    event_log = web3Provider.eth.get_logs({
+        'address': Web3.toChecksumAddress(contract_address),
+        'toBlock': toBlock,
+        'fromBlock': fromBlock,
+        'topics': topics
+    })
+
+    codec: ABICodec = web3Provider.codec
+    all_events = []
+    for log in event_log:
+        abi = event_abi.get(log.topics[0].hex(), "") 
+        evt = get_event_data(codec, abi, log)
+        all_events.append(evt)
+
+    return all_events

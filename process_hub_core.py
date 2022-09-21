@@ -208,7 +208,16 @@ class ProcessHubCore(Process):
             for each_worker in worker_list:
                 # print(each_worker)
                 worker_class = getattr(importlib.import_module(f'callback_modules.{callback_worker_file}'), each_worker['class'])
-                worker_count = each_worker.get('num_instances', 1)
+                worker_count = None
+
+                # check if there is settings-config for workers
+                if each_worker.get('class', '') == 'PairTotalReservesProcessor': 
+                    worker_count = settings.get('MODULE_QUEUES_CONFIG.PAIR_TOTAL_RESERVES.NUM_INSTANCES', None)
+                
+                # else if settings-config doesn't exist then use module_queues_config
+                if not worker_count:
+                    worker_count = each_worker.get('num_instances', 1)
+
                 self._spawned_cb_processes_map[each_worker['class']] = dict()
                 for _ in range(worker_count):
                     unique_id = str(uuid.uuid4())[:5]
