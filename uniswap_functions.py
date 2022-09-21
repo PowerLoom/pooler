@@ -141,8 +141,10 @@ def inject_web3_provider_on_exception(retry_state):
     # if there was an error then set web3 object depending on exception Type
     if retry_state.outcome and isinstance(retry_state.outcome.exception(), Exception):
         
-        # TODO: need to gather different kind of errors, when we want to shift to archive node
-        if "missing trie node" in retry_state.outcome.exception().extra_info.get('msg') or retry_state.kwargs["web3_provider"] in GLOBAL_WEB3_PROVIDER["archive_nodes"]:
+        if any(error_string in retry_state.outcome.exception().extra_info.get('msg') for error_string in [
+            "header not found", 
+            "missing trie node"
+        ]) or retry_state.kwargs["web3_provider"] in GLOBAL_WEB3_PROVIDER["archive_nodes"]:
 
             # if current web3 provider is an archive node AND we have another archive node, then use next one
             current_provider_index = retry_state.kwargs["web3_provider"]['index']
@@ -1212,9 +1214,9 @@ if __name__ == '__main__':
     #     get_pair_reserves(
     #         loop=loop, 
     #         rate_limit_lua_script_shas=rate_limit_lua_script_shas, 
-    #         pair_address='0xc34F686947Df1e91e9709777CB70BC8a5584cE92', 
-    #         from_block=15351298,
-    #         to_block=15351372,
+    #         pair_address='0x369582d2010b6ed950b571f4101e3bb9b554876f', 
+    #         from_block=33373342,
+    #         to_block=33373352,
     #         fetch_timestamp=True,
     #         web3_provider={}
     #     )
