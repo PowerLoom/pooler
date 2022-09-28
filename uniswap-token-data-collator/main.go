@@ -48,10 +48,13 @@ const periodicRetrievalInterval time.Duration = 60 * time.Second
 //const maxBlockCountToFetch int64 = 500 //Max number of blocks to fetch in 1 shot from Audit Protocol.
 
 func main() {
+	// first read config settings
+	ReadSettings()
+
 	var pairContractAddressesFile string
 
 	http.HandleFunc("/block_height_confirm_callback", blockHeightConfirmCallback)
-	port := INDEXER_AGGREGATOR_SERVER_PORT
+	port := settingsObj.Development.TokenDataAggregator.Port
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -97,8 +100,7 @@ func main() {
 		pairContractAddressesFile = os.Args[2]
 	}
 
-	ReadSettings()
-	RegisterArrgatorCallbackKey()
+	RegisterAggregatorCallbackKey()
 	SetupRedisClient()
 	InitAuditProtocolClient()
 	tokenList = make(map[string]*TokenData)
@@ -133,9 +135,13 @@ func Run(pairContractAddress string) {
 func blockHeightConfirmCallback(w http.ResponseWriter, req *http.Request) {
 	log.Infof("Received block height confirm callback %+v : ", *req)
 	reqBytes, _ := ioutil.ReadAll(req.Body)
-	var reqPayload blockHeightConfirmationPayload
+	var reqPayload BlockHeightConfirmationPayload
 
-	json.Unmarshal(reqBytes, &reqPayload)
+	err := json.Unmarshal(reqBytes, &reqPayload)
+	if err != nil {
+		log.Errorf("Error while parsing json body of callback confirmation %s", err.Error())
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	resp := make(map[string]string)
@@ -146,41 +152,54 @@ func blockHeightConfirmCallback(w http.ResponseWriter, req *http.Request) {
 	}
 	w.Write(jsonResp)
 
-	FetchAndUpdateStatusOfOlderSnapshots(reqPayload.ProjectId)
+	go func() {
+		FetchAndUpdateStatusOfOlderSnapshots(reqPayload.ProjectId)
+	}()
 }
 
-func RegisterArrgatorCallbackKey() {
+func RegisterAggregatorCallbackKey() {
 	tokenSummaryProjectId := fmt.Sprintf(TOKENSUMMARY_PROJECTID, settingsObj.Development.Namespace)
 	pairSummaryProjectId := fmt.Sprintf(PAIRSUMMARY_PROJECTID, settingsObj.Development.Namespace)
 	dailyStatsSummaryProjectId := fmt.Sprintf(DAILYSTATSSUMMARY_PROJECTID, settingsObj.Development.Namespace)
 
 	body, _ := json.Marshal(map[string]string{
-		"callbackURL": fmt.Sprintf("http://localhost:%d/block_height_confirm_callback", INDEXER_AGGREGATOR_SERVER_PORT),
+		"callbackURL": fmt.Sprintf("http://localhost:%d/block_height_confirm_callback", settingsObj.Development.TokenDataAggregator.Port),
 	})
 
 	token_summary_url := fmt.Sprintf("%s/%s/confirmations/callback", settingsObj.Development.AuditProtocolEngine.URL, tokenSummaryProjectId)
-	log.Info("token_summary_url: %s", token_summary_url)
-	tokenResp, err := apHttpClient.Post(token_summary_url, "application/json", bytes.NewBuffer(body))
-	if err != nil {
-		log.Errorf("Failed to register token summary callback due error %s", err.Error())
-	} else {
+	for retryCount := 0; retryCount < 3; retryCount++ {
+		tokenResp, err := apHttpClient.Post(token_summary_url, "application/json", bytes.NewBuffer(body))
+		if err != nil {
+			log.Errorf("Failed to register token summary callback due error %+v", err.Error())
+			time.Sleep(5 * time.Second)
+			continue
+		}
 		log.Debugf("Registered callback keys for tokenSummary aggregator: %s", tokenResp)
+		break
 	}
 
 	pair_summary_url := fmt.Sprintf("%s/%s/confirmations/callback", settingsObj.Development.AuditProtocolEngine.URL, pairSummaryProjectId)
-	pairResp, err := apHttpClient.Post(pair_summary_url, "application/json", bytes.NewBuffer(body))
-	if err != nil {
-		log.Errorf("Failed to register pair summary callback due error %s", err.Error())
-	} else {
+	for retryCount := 0; retryCount < 3; retryCount++ {
+		pairResp, err := apHttpClient.Post(pair_summary_url, "application/json", bytes.NewBuffer(body))
+		if err != nil {
+			log.Errorf("Failed to register pair summary callback due error %+v", err.Error())
+			time.Sleep(3 * time.Second)
+			continue
+		}
 		log.Debugf("Registered callback keys for pairSummary aggregator: %s", pairResp)
+		break
 	}
 
 	daily_stats_url := fmt.Sprintf("%s/%s/confirmations/callback", settingsObj.Development.AuditProtocolEngine.URL, dailyStatsSummaryProjectId)
-	dailyResp, err := apHttpClient.Post(daily_stats_url, "application/json", bytes.NewBuffer(body))
-	if err != nil {
-		log.Errorf("Failed to register daily stats summary callback due error %s", err.Error())
-	} else {
+	for retryCount := 0; retryCount < 3; retryCount++ {
+		dailyResp, err := apHttpClient.Post(daily_stats_url, "application/json", bytes.NewBuffer(body))
+		if err != nil {
+			log.Errorf("Failed to register daily stats summary callback due error %+v", err.Error())
+			time.Sleep(3 * time.Second)
+			continue
+		}
 		log.Debugf("Registered callback keys for dailySummary aggregator: %s", dailyResp)
+		break
 	}
 }
 
@@ -376,23 +395,23 @@ func FetchAndUpdateStatusOfOlderSnapshots(projectId string) error {
 	//Any entry that has a txStatus as TX_CONFIRM_PENDING, query its updated status and update ZSet
 	//If txHash changes, store old one in prevTxhash and update the new one in txHash
 
-	var redis_aggregator_project_id string
+	var redisAggregatorProjectId string
 	switch projectId {
 	case fmt.Sprintf(TOKENSUMMARY_PROJECTID, settingsObj.Development.Namespace):
-		redis_aggregator_project_id = fmt.Sprintf(
+		redisAggregatorProjectId = fmt.Sprintf(
 			REDIS_KEY_TOKENS_SUMMARY_SNAPSHOTS_ZSET,
 			settingsObj.Development.Namespace)
 	case fmt.Sprintf(PAIRSUMMARY_PROJECTID, settingsObj.Development.Namespace):
-		redis_aggregator_project_id = fmt.Sprintf(
+		redisAggregatorProjectId = fmt.Sprintf(
 			REDIS_KEY_PAIRS_SUMMARY_SNAPSHOTS_ZSET,
 			settingsObj.Development.Namespace)
 	case fmt.Sprintf(DAILYSTATSSUMMARY_PROJECTID, settingsObj.Development.Namespace):
-		redis_aggregator_project_id = fmt.Sprintf(
+		redisAggregatorProjectId = fmt.Sprintf(
 			REDIS_KEY_DAILY_STATS_SUMMARY_SNAPSHOTS_ZSET,
 			settingsObj.Development.Namespace)
 	}
 
-	key := redis_aggregator_project_id
+	key := redisAggregatorProjectId
 	log.Debugf("Checking and updating status of older blockHeight entries in snapshotsZset")
 	res := redisClient.ZRangeByScoreWithScores(key, redis.ZRangeBy{Min: "-inf", Max: "+inf"})
 	if res.Err() != nil {

@@ -1,7 +1,6 @@
 package main
 
 const MAX_TOKEN_PRICE_HISTORY_INDEX int = 300
-const INDEXER_AGGREGATOR_SERVER_PORT int = 8000
 
 type TokenSummarySnapshotMeta struct {
 	Cid                          string  `json:"cid"`
@@ -73,10 +72,9 @@ type TokenPriceHistoryEntry struct {
 	BlockHeight int     `json:"blockHeight"`
 }
 
-type blockHeightConfirmationPayload struct {
+type BlockHeightConfirmationPayload struct {
 	CommitId        string `json:"commitID"`
 	ProjectId       string `json:"projectId"`
-	Status          int    `json:"status"`
 	FinalizedHeight int    `json:"finalized_height"`
 }
 
@@ -295,6 +293,9 @@ type ProjectSettings struct {
 			Host     string `json:"host"`
 			Port     int    `json:"port"`
 		} `json:"zookeeper"`
+		TokenDataAggregator struct {
+			Port int `json:"port"`
+		} `json:"token_data_aggregator"`
 		Host                string `json:"host"`
 		Port                int    `json:"port"`
 		AuditProtocolEngine struct {
