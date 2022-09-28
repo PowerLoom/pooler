@@ -73,9 +73,8 @@ type TokenPriceHistoryEntry struct {
 }
 
 type BlockHeightConfirmationPayload struct {
-	CommitId        string `json:"commitID"`
-	ProjectId       string `json:"projectId"`
-	FinalizedHeight int    `json:"finalized_height"`
+	CommitId  string `json:"commitID"`
+	ProjectId string `json:"projectId"`
 }
 
 type TokenData struct {
