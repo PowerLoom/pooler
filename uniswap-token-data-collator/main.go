@@ -49,6 +49,7 @@ const periodicRetrievalInterval time.Duration = 60 * time.Second
 
 func main() {
 	var pairContractAddressesFile string
+
 	http.HandleFunc("/block_height_confirm_callback", blockHeightConfirmCallback)
 	port := INDEXER_AGGREGATOR_SERVER_PORT
 	var wg sync.WaitGroup
@@ -97,6 +98,7 @@ func main() {
 	}
 
 	ReadSettings()
+	RegisterArrgatorCallbackKey()
 	SetupRedisClient()
 	InitAuditProtocolClient()
 	tokenList = make(map[string]*TokenData)
@@ -145,6 +147,41 @@ func blockHeightConfirmCallback(w http.ResponseWriter, req *http.Request) {
 	w.Write(jsonResp)
 
 	FetchAndUpdateStatusOfOlderSnapshots(reqPayload.ProjectId)
+}
+
+func RegisterArrgatorCallbackKey() {
+	tokenSummaryProjectId := fmt.Sprintf(TOKENSUMMARY_PROJECTID, settingsObj.Development.Namespace)
+	pairSummaryProjectId := fmt.Sprintf(PAIRSUMMARY_PROJECTID, settingsObj.Development.Namespace)
+	dailyStatsSummaryProjectId := fmt.Sprintf(DAILYSTATSSUMMARY_PROJECTID, settingsObj.Development.Namespace)
+
+	body, _ := json.Marshal(map[string]string{
+		"callbackURL": fmt.Sprintf("http://localhost:%d/block_height_confirm_callback", INDEXER_AGGREGATOR_SERVER_PORT),
+	})
+
+	token_summary_url := fmt.Sprintf("%s/%s/confirmations/callback", settingsObj.Development.AuditProtocolEngine.URL, tokenSummaryProjectId)
+	log.Info("token_summary_url: %s", token_summary_url)
+	tokenResp, err := apHttpClient.Post(token_summary_url, "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		log.Errorf("Failed to register token summary callback due error %s", err.Error())
+	} else {
+		log.Debugf("Registered callback keys for tokenSummary aggregator: %s", tokenResp)
+	}
+
+	pair_summary_url := fmt.Sprintf("%s/%s/confirmations/callback", settingsObj.Development.AuditProtocolEngine.URL, pairSummaryProjectId)
+	pairResp, err := apHttpClient.Post(pair_summary_url, "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		log.Errorf("Failed to register pair summary callback due error %s", err.Error())
+	} else {
+		log.Debugf("Registered callback keys for pairSummary aggregator: %s", pairResp)
+	}
+
+	daily_stats_url := fmt.Sprintf("%s/%s/confirmations/callback", settingsObj.Development.AuditProtocolEngine.URL, dailyStatsSummaryProjectId)
+	dailyResp, err := apHttpClient.Post(daily_stats_url, "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		log.Errorf("Failed to register daily stats summary callback due error %s", err.Error())
+	} else {
+		log.Debugf("Registered callback keys for dailySummary aggregator: %s", dailyResp)
+	}
 }
 
 func FetchTokensMetaData() {
