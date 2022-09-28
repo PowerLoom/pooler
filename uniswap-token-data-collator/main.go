@@ -341,15 +341,15 @@ func FetchAndUpdateStatusOfOlderSnapshots(projectId string) error {
 
 	var redis_aggregator_project_id string
 	switch projectId {
-	case TOKENSUMMARY_PROJECTID:
+	case fmt.Sprintf(TOKENSUMMARY_PROJECTID, settingsObj.Development.Namespace):
 		redis_aggregator_project_id = fmt.Sprintf(
 			REDIS_KEY_TOKENS_SUMMARY_SNAPSHOTS_ZSET,
 			settingsObj.Development.Namespace)
-	case PAIRSUMMARY_PROJECTID:
+	case fmt.Sprintf(PAIRSUMMARY_PROJECTID, settingsObj.Development.Namespace):
 		redis_aggregator_project_id = fmt.Sprintf(
 			REDIS_KEY_PAIRS_SUMMARY_SNAPSHOTS_ZSET,
 			settingsObj.Development.Namespace)
-	case DAILYSTATSSUMMARY_PROJECTID:
+	case fmt.Sprintf(DAILYSTATSSUMMARY_PROJECTID, settingsObj.Development.Namespace):
 		redis_aggregator_project_id = fmt.Sprintf(
 			REDIS_KEY_DAILY_STATS_SUMMARY_SNAPSHOTS_ZSET,
 			settingsObj.Development.Namespace)
