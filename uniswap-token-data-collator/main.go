@@ -134,6 +134,7 @@ func blockHeightConfirmCallback(w http.ResponseWriter, req *http.Request) {
 	var reqPayload blockHeightConfirmationPayload
 
 	json.Unmarshal(reqBytes, &reqPayload)
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	resp := make(map[string]string)
 	resp["message"] = "Callback Recieved"
@@ -143,7 +144,7 @@ func blockHeightConfirmCallback(w http.ResponseWriter, req *http.Request) {
 	}
 	w.Write(jsonResp)
 
-	FetchAndUpdateStatusOfOlderSnapshots(req.FormValue("dagChainProjectId"), reqPayload.ProjectId)
+	FetchAndUpdateStatusOfOlderSnapshots(reqPayload.ProjectId)
 }
 
 func FetchTokensMetaData() {
@@ -333,12 +334,28 @@ func PrepareAndSubmitTokenSummarySnapshot() {
 	}
 }
 
-func FetchAndUpdateStatusOfOlderSnapshots(dagChainProjectId string, projectId string) error {
+func FetchAndUpdateStatusOfOlderSnapshots(projectId string) error {
 	// Fetch all entries in snapshotZSet
 	//Any entry that has a txStatus as TX_CONFIRM_PENDING, query its updated status and update ZSet
 	//If txHash changes, store old one in prevTxhash and update the new one in txHash
 
-	key := fmt.Sprintf(REDIS_KEY_AGGREGATORS_SNAPSHOTS_ZSET, projectId, settingsObj.Development.Namespace)
+	var redis_aggregator_project_id string
+	switch projectId {
+	case TOKENSUMMARY_PROJECTID:
+		redis_aggregator_project_id = fmt.Sprintf(
+			REDIS_KEY_TOKENS_SUMMARY_SNAPSHOTS_ZSET,
+			settingsObj.Development.Namespace)
+	case PAIRSUMMARY_PROJECTID:
+		redis_aggregator_project_id = fmt.Sprintf(
+			REDIS_KEY_PAIRS_SUMMARY_SNAPSHOTS_ZSET,
+			settingsObj.Development.Namespace)
+	case DAILYSTATSSUMMARY_PROJECTID:
+		redis_aggregator_project_id = fmt.Sprintf(
+			REDIS_KEY_DAILY_STATS_SUMMARY_SNAPSHOTS_ZSET,
+			settingsObj.Development.Namespace)
+	}
+
+	key := redis_aggregator_project_id
 	log.Debugf("Checking and updating status of older blockHeight entries in snapshotsZset")
 	res := redisClient.ZRangeByScoreWithScores(key, redis.ZRangeBy{Min: "-inf", Max: "+inf"})
 	if res.Err() != nil {
@@ -369,7 +386,7 @@ func FetchAndUpdateStatusOfOlderSnapshots(dagChainProjectId string, projectId st
 				continue
 			}
 			//Fetch updated status.
-			snapshotMetaNew, err := WaitAndFetchBlockHeightStatus(dagChainProjectId, int64(snapshotMeta.DAGHeight), 3)
+			snapshotMetaNew, err := WaitAndFetchBlockHeightStatus(projectId, int64(snapshotMeta.DAGHeight), 3)
 			if err != nil {
 				log.Infof("Could not get blockheight status for TokensSummary at height %d", snapshotMeta.DAGHeight)
 			}
