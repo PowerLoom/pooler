@@ -54,7 +54,7 @@ async def get_rabbitmq_channel_async(connection_pool) -> aio_pika.Channel:
 def processhub_command_publish(ch, cmd):
     ch.basic_publish(
         exchange=f'{settings.RABBITMQ.SETUP.CORE.EXCHANGE}:{settings.NAMESPACE}',
-        routing_key=f'processhub-commands:{settings.NAMESPACE}',
+        routing_key=f'processhub-commands:{settings.NAMESPACE}:{settings.INSTANCE_ID}',
         body=cmd.encode('utf-8'),
         properties=pika.BasicProperties(
             delivery_mode=2,
@@ -75,16 +75,16 @@ def init_callback_queue(ch: pika.adapters.blocking_connection.BlockingChannel):
     init_rmq_logger.debug('Initialized RabbitMQ Topic exchange for top level callbacks: %s', callback_exchange_name)
     # for example, callbacks for trade volume calculation may be sent on routing key
     # 'powerloom-backend-callback:{settings.NAMESPACE}.trade_volume'
-    routing_key_pattern = f'powerloom-backend-callback:{settings.NAMESPACE}.*'
-    queue_name = f'powerloom-backend-cb:{settings.NAMESPACE}'
+    routing_key_pattern = f'powerloom-backend-callback:{settings.NAMESPACE}:{settings.INSTANCE_ID}.*'
+    queue_name = f'powerloom-backend-cb:{settings.NAMESPACE}:{settings.INSTANCE_ID}'
     init_queue(ch, queue_name=queue_name, routing_key=routing_key_pattern, exchange_name=callback_exchange_name)
     # for internal worker distribution by top level callback modules
     sub_topic_exchange_name = f'{settings.RABBITMQ.SETUP.CALLBACKS.EXCHANGE}.subtopics:{settings.NAMESPACE}'
     ch.exchange_declare(exchange=sub_topic_exchange_name, exchange_type='direct', durable=True)
     for topic in callback_q_config['callback_topics'].keys():
         for sub_topic in callback_q_config['callback_topics'][topic]['sub_topics']:
-            sub_topic_routing_key = f'powerloom-backend-callback:{settings.NAMESPACE}.{topic}_worker.{sub_topic}'
-            queue_name = f'powerloom-backend-cb-{topic}-{sub_topic}:{settings.NAMESPACE}'
+            sub_topic_routing_key = f'powerloom-backend-callback:{settings.NAMESPACE}:{settings.INSTANCE_ID}.{topic}_worker.{sub_topic}'
+            queue_name = f'powerloom-backend-cb-{topic}-{sub_topic}:{settings.NAMESPACE}:{settings.INSTANCE_ID}'
             init_queue(ch, queue_name, sub_topic_routing_key, sub_topic_exchange_name)
 
 
@@ -102,6 +102,7 @@ def init_queue(ch: pika.adapters.blocking_connection.BlockingChannel, queue_name
 def init_exchanges_queues():
     c = create_rabbitmq_conn()
     ch: pika.adapters.blocking_connection.BlockingChannel = c.channel()
+    # core exchange remains same for multiple pooler instances in the namespace to share across different instance IDs
     exchange_name = f'{settings.RABBITMQ.SETUP.CORE.EXCHANGE}:{settings.NAMESPACE}'
     ch.exchange_declare(exchange=exchange_name, exchange_type='direct', durable=True)
     init_rmq_logger.debug('Initialized RabbitMQ Direct exchange: %s', exchange_name)
@@ -111,9 +112,9 @@ def init_exchanges_queues():
         ('powerloom-epoch-broadcast-q', 'epoch-broadcast'), ('powerloom-epoch-confirm-cb-q', 'epoch-confirm-cb')
     ]
     for queue_name, routing_key in to_be_inited:
-        # add namespace
-        q = f'{queue_name}:{settings.NAMESPACE}'
-        r = f'{routing_key}:{settings.NAMESPACE}'
+        # add namespace and instance ID to facilitate multiple pooler instances sharing same rabbitmq setup and broker
+        q = f'{queue_name}:{settings.NAMESPACE}:{settings.INSTANCE_ID}'
+        r = f'{routing_key}:{settings.NAMESPACE}:{settings.INSTANCE_ID}'
         init_queue(ch, q, r, exchange_name)
 
     init_callback_queue(ch)

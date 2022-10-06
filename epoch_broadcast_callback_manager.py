@@ -53,10 +53,10 @@ class EpochCallbackManager(Process):
         with create_redis_conn(self._connection_pool) as r:
             for topic in self._callback_q_config['callback_topics'].keys():
                 # send epoch context to third party worker modules as registered
-                routing_key = f'powerloom-backend-callback:{settings.NAMESPACE}.{topic}'
+                routing_key = f'powerloom-backend-callback:{settings.NAMESPACE}:{settings.INSTANCE_ID}.{topic}'
                 self.rabbitmq_interactor.enqueue_msg_delivery(
                     exchange=callback_exchange_name,
-                    routing_key=f'powerloom-backend-callback:{settings.NAMESPACE}.{topic}',
+                    routing_key=routing_key,
                     msg_body=json.dumps(broadcast_json)
                 )
                 self._logger.debug(f'Sent epoch to callback routing key {routing_key}: {body}')
@@ -65,7 +65,7 @@ class EpochCallbackManager(Process):
                     'update': {
                         'action': 'CallbackQueue.Publish',
                         'info': {
-                            'routing_key': f'powerloom-backend-callback:{settings.NAMESPACE}.{topic}',
+                            'routing_key': routing_key,
                             'exchange': callback_exchange_name,
                             'msg': broadcast_json
                         }
@@ -95,8 +95,8 @@ class EpochCallbackManager(Process):
         # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|EpochCallbackManager'))
         for signame in [SIGINT, SIGTERM, SIGQUIT]:
             signal.signal(signame, self._exit_signal_handler)
-        setproctitle(f'PowerLoom|EpochCallbackManager')
-        self._logger = logging.getLogger('PowerLoom|EpochCallbackManager')
+        setproctitle(f'PowerLoom|EpochCallbackManager:{settings.NAMESPACE}-{settings.INSTANCE_ID[:5]}')
+        self._logger = logging.getLogger(f'PowerLoom|EpochCallbackManager:{settings.NAMESPACE}-{settings.INSTANCE_ID}')
         self._logger.setLevel(logging.DEBUG)
         stdout_handler = logging.StreamHandler(sys.stdout)
         stdout_handler.setLevel(logging.DEBUG)
@@ -111,7 +111,7 @@ class EpochCallbackManager(Process):
         self._logger.debug('Launched PowerLoom|EpochCallbackManager with PID: %s', self.pid)
         # self._asys = ActorSystem('multiprocTCPBase', logDefs=logcfg_thespian_main)
         self._connection_pool = redis.BlockingConnectionPool(**REDIS_CONN_CONF)
-        queue_name = f"powerloom-epoch-broadcast-q:{settings.NAMESPACE}"
+        queue_name = f"powerloom-epoch-broadcast-q:{settings.NAMESPACE}:{settings.INSTANCE_ID}"
         self.rabbitmq_interactor: RabbitmqSelectLoopInteractor = RabbitmqSelectLoopInteractor(
             consume_queue_name=queue_name,
             consume_callback=self._epoch_broadcast_callback

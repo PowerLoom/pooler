@@ -43,8 +43,8 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
     def __init__(self, name, **kwargs):
         super(PairTotalReservesProcessor, self).__init__(
             name=name,
-            rmq_q=f'powerloom-backend-cb-pair_total_reserves-processor:{settings.NAMESPACE}',
-            rmq_routing=f'powerloom-backend-callback:{settings.NAMESPACE}.pair_total_reserves_worker.processor',
+            rmq_q=f'powerloom-backend-cb-pair_total_reserves-processor:{settings.NAMESPACE}:{settings.INSTANCE_ID}',
+            rmq_routing=f'powerloom-backend-callback:{settings.NAMESPACE}:{settings.INSTANCE_ID}.pair_total_reserves_worker.processor',
             **kwargs
         )
         self._rate_limiting_lua_scripts = dict()
@@ -587,7 +587,7 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
             signal.signal(signame, self._exit_signal_handler)
         # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|Callbacks|TradeVolumeProcessDistributor'))
         self._logger = logging.getLogger(
-            f'PowerLoom|Callbacks|PairTotalReservesProcessDistributor:{settings.NAMESPACE}'
+            f'PowerLoom|Callbacks|PairTotalReservesProcessDistributor:{settings.NAMESPACE}-{settings.INSTANCE_ID}'
         )
         self._logger.setLevel(logging.DEBUG)
         self._logger.handlers = [
@@ -595,12 +595,12 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
                                            port=settings.get('LOGGING_SERVER.PORT',
                                                              logging.handlers.DEFAULT_TCP_LOGGING_PORT))]
         self._connection_pool = redis.BlockingConnectionPool(**REDIS_CONN_CONF)
-        queue_name = f'powerloom-backend-cb:{settings.NAMESPACE}'
+        queue_name = f'powerloom-backend-cb:{settings.NAMESPACE}:{settings.INSTANCE_ID}'
         self.ev_loop = asyncio.get_event_loop()
         self._rabbitmq_interactor: RabbitmqSelectLoopInteractor = RabbitmqSelectLoopInteractor(
             consume_queue_name=queue_name,
             consume_callback=self._distribute_callbacks,
-            consumer_worker_name=f'PowerLoom|Callbacks|PairTotalReservesProcessDistributor:{settings.NAMESPACE}'
+            consumer_worker_name=f'PowerLoom|Callbacks|PairTotalReservesProcessDistributor:{settings.NAMESPACE}-{settings.INSTANCE_ID}'
         )
         # self.rabbitmq_interactor.start_publishing()
         self._logger.debug('Starting RabbitMQ consumer on queue %s', queue_name)

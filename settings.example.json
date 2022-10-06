@@ -9,6 +9,7 @@
             "public_rate_limit": "100000000/day;20000/minute;2500/second"
         },
         "chain_id": 1,
+        "instance_id": "generated-uuid",
         "uniswap_contract_abis":{
             "factory":"./abis/IUniswapV2Factory.json",
             "router":"./abis/UniswapV2Router.json",

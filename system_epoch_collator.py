@@ -70,10 +70,10 @@ class EpochCollatorProcess(Process):
             self._rabbitmq_interactor.stop()
 
     def state_report_thread(self):
-        member_id = f'powerloom:epoch:collator:{settings.NAMESPACE}'
+        member_id = f'powerloom:epoch:collator:{settings.NAMESPACE}:{settings.INSTANCE_ID}'
         coordinator = coordination.get_coordinator(f'kazoo://{construct_kazoo_url()}', member_id)
         coordinator.start(start_heart=True)
-        group_id = f'powerloom:epoch:reports:{settings.NAMESPACE}'
+        group_id = f'powerloom:epoch:reports:{settings.NAMESPACE}:{settings.INSTANCE_ID}'
         group_id = group_id.encode('utf-8')
         try:
             coordinator.create_group(group_id).get()
@@ -157,7 +157,7 @@ class EpochCollatorProcess(Process):
         self._tooz_reporter.start()
         self._logger.debug('Started Epoch Collator tooz reporter thread')
 
-        queue_name = f"powerloom-epoch-consensus-q:{settings.NAMESPACE}"
+        queue_name = f"powerloom-epoch-consensus-q:{settings.NAMESPACE}:{settings.INSTANCE_ID}"
         self._rabbitmq_interactor: RabbitmqSelectLoopInteractor = RabbitmqSelectLoopInteractor(
             consume_queue_name=queue_name,
             consume_callback=self._epoch_collator,

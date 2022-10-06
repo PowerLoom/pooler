@@ -48,7 +48,7 @@ def pidStatus(connections: bool = False):
 
     r = redis.Redis(**REDIS_CONN_CONF, single_connection_client=True)
     print("\n")
-    for k, v in r.hgetall(name=f'powerloom:uniswap:{settings.NAMESPACE}:Processes').items():
+    for k, v in r.hgetall(name=f'powerloom:uniswap:{settings.NAMESPACE}:{settings.INSTANCE_ID}:Processes').items():
         key = k.decode('utf-8')
         value = v.decode('utf-8')
 
