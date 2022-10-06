@@ -52,7 +52,7 @@ class EpochFinalizerProcess(multiprocessing.Process):
         self._rabbitmq_queue = queue.Queue()
         self._tooz_coordinator = None
         self._shutdown_initiated = False
-        self._group_id = f'powerloom:epoch:reports:{settings.NAMESPACE}'.encode('utf-8')  # tooz group ID
+        self._group_id = f'powerloom:epoch:reports:{settings.NAMESPACE}:{settings.INSTANCE_ID}'.encode('utf-8')  # tooz group ID
 
     def _interactor_wrapper(self, q: queue.Queue):  # run in a separate thread
         self._rabbitmq_interactor = RabbitmqThreadedSelectLoopInteractor(
@@ -72,11 +72,11 @@ class EpochFinalizerProcess(multiprocessing.Process):
         for signame in [signal.SIGINT, signal.SIGTERM, signal.SIGQUIT]:
             signal.signal(signame, self._generic_exit_handler)
         exchange = f'{settings.RABBITMQ.SETUP.CORE.EXCHANGE}:{settings.NAMESPACE}'
-        routing_key = f'epoch-broadcast:{settings.NAMESPACE}'
+        routing_key = f'epoch-broadcast:{settings.NAMESPACE}:{settings.INSTANCE_ID}'
         self._rabbitmq_thread = threading.Thread(target=self._interactor_wrapper, kwargs={'q': self._rabbitmq_queue})
         self._rabbitmq_thread.start()
 
-        self._logger = logging.getLogger('PowerLoom|EpochFinalizer')
+        self._logger = logging.getLogger(f'PowerLoom|EpochFinalizer|{settings.NAMESPACE}-{settings.INSTANCE_ID[:5]}')
         self._logger.setLevel(logging.DEBUG)
         stdout_handler = logging.StreamHandler(sys.stdout)
         stdout_handler.setLevel(logging.DEBUG)
@@ -88,7 +88,7 @@ class EpochFinalizerProcess(multiprocessing.Process):
             stdout_handler, stderr_handler
         ]
         setproctitle(f'PowerLoom|EpochFinalizer')
-        member_id = f'powerloom:epoch:finalizer:{settings.NAMESPACE}'
+        member_id = f'powerloom:epoch:finalizer:{settings.NAMESPACE}:{settings.INSTANCE_ID}'
         self._tooz_coordinator = coordination.get_coordinator(f'kazoo://{construct_kazoo_url()}', member_id)
         self._tooz_coordinator.start(start_heart=True)
         last_reorg_state = SystemEpochStatusReport(begin=0, end=0, reorg=False, broadcast_id='dummy')
@@ -125,7 +125,7 @@ class EpochFinalizerProcess(multiprocessing.Process):
             for member, cap in get_capabilities:
                 # print("Member %s has capabilities: %s" % (member, cap.get()))
                 member_name = member.decode('utf-8') if type(member) == bytes else member
-                if 'powerloom:epoch:collator' in member_name and settings.NAMESPACE in member_name:
+                if member_name == f'powerloom:epoch:collator:{settings.NAMESPACE}:{settings.INSTANCE_ID}':
                     report = cap.get()
                     try:
                         report_obj = SystemEpochStatusReport(**report)

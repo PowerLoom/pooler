@@ -9,7 +9,6 @@ from eth_utils import keccak
 from functools import wraps, reduce
 from dynaconf import settings
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception, RetryCallState
-from proto_system_logging import config_logger_with_namespace
 from uuid import uuid4
 import redis
 import psutil

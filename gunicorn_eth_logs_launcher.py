@@ -5,7 +5,6 @@ from loguru import logger
 from dynaconf import settings
 from log_fetch_service import app
 from gunicorn_core_launcher import StubbedGunicornLogger, StandaloneApplication
-from proto_system_logging import config_logger_with_namespace
 import os
 import logging
 import sys

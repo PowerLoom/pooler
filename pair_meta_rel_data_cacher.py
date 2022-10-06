@@ -30,10 +30,10 @@ import sys
 from setproctitle import setproctitle
 
 
-setproctitle(f'PowerLoom|UniswapFunctions|PairMetadataCacher')
+setproctitle(f'PowerLoom|UniswapFunctions|PairMetadataCacher:{settings.NAMESPACE}-{settings.INSTANCE_ID[:5]}')
 
 """ Inititalize the logger """
-retrieval_logger = logging.getLogger('PowerLoom|UniswapFunctions|PairMetadataCacher')
+retrieval_logger = logging.getLogger(f'PowerLoom|UniswapFunctions|PairMetadataCacher:{settings.NAMESPACE}-{settings.INSTANCE_ID}')
 retrieval_logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter("%(levelname)-8s %(name)-4s %(asctime)s %(msecs)d %(module)s-%(funcName)s: %(message)s")
 stdout_handler = logging.StreamHandler(sys.stdout)
@@ -52,7 +52,7 @@ w3 = Web3(Web3.HTTPProvider(settings.RPC.MATIC[0]))
 
 router_contract_obj = w3.eth.contract(
     address=Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.IUNISWAP_V2_ROUTER),
-    abi=read_json_file(settings.UNISWAP_CONTRACT_ABIS.ROUTER)
+    abi=read_json_file(settings.UNISWAP_CONTRACT_ABIS.ROUTER, logger=retrieval_logger),
 )
 retrieval_logger.debug("Got uniswap v2 router object")
 

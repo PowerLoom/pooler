@@ -76,16 +76,16 @@ class LinearTickerProcess(Process):
         for signame in [signal.SIGINT, signal.SIGTERM, signal.SIGQUIT]:
             signal.signal(signame, self._generic_exit_handler)
         exchange = f'{settings.RABBITMQ.SETUP.CORE.EXCHANGE}:{settings.NAMESPACE}'
-        routing_key = f'epoch-consensus:{settings.NAMESPACE}'
+        routing_key = f'epoch-consensus:{settings.NAMESPACE}:{settings.INSTANCE_ID}'
         self._rabbitmq_thread = threading.Thread(target=self._interactor_wrapper, kwargs={'q': self._rabbitmq_queue})
         self._rabbitmq_thread.start()
         # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|EpochTicker|Linear'))
-        self._logger = logging.getLogger('PowerLoom|EpochTicker|Linear')
+        self._logger = logging.getLogger(f'PowerLoom|EpochTicker|Linear:{settings.NAMESPACE}-{settings.INSTANCE_ID}')
         self._logger.setLevel(logging.DEBUG)
         self._logger.handlers = [
             logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST','localhost'),
             port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT))]
-        setproctitle('PowerLoom|SystemEpochClock|Linear')
+        setproctitle(f'PowerLoom|EpochTicker|Linear:{settings.NAMESPACE}-{settings.INSTANCE_ID}')
         begin_block_epoch = self._begin
         end_block_epoch = self._end
         sleep_secs_between_chunks = 60

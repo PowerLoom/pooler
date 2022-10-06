@@ -144,7 +144,7 @@ class ProcessHubCore(Process):
             # raise GenericExitOnSignal
 
     def kill_process(self, pid: int):
-        _logger = logging.getLogger('PowerLoom|ProcessHub|Core')
+        _logger = logging.getLogger(f'PowerLoom|ProcessHub|Core:{settings.NAMESPACE}-{settings.INSTANCE_ID}')
         p = psutil.Process(pid)
         _logger.debug('Attempting to send SIGTERM to process ID %s for following command', pid)
         p.terminate()
@@ -178,9 +178,9 @@ class ProcessHubCore(Process):
                 for worker_unique_id, worker_process_details in unique_worker_entries.items():
                     proc_id_map['callback_workers'][k][worker_unique_id] = {'pid': worker_process_details['process'].pid, 'id': worker_process_details['id']}
             proc_id_map['callback_workers'] = json.dumps(proc_id_map['callback_workers'])
-            redis_conn.hset(name=f'powerloom:uniswap:{settings.NAMESPACE}:Processes', mapping=proc_id_map)
+            redis_conn.hset(name=f'powerloom:uniswap:{settings.NAMESPACE}:{settings.INSTANCE_ID}:Processes', mapping=proc_id_map)
         self._logger.error('Caught thread shutdown notification event. Deleting process worker map in redis...')
-        redis_conn.delete(f'powerloom:uniswap:{settings.NAMESPACE}:Processes')
+        redis_conn.delete(f'powerloom:uniswap:{settings.NAMESPACE}:{settings.INSTANCE_ID}:Processes')
 
     @cleanup_children_procs
     def run(self) -> None:
@@ -221,23 +221,27 @@ class ProcessHubCore(Process):
                 self._spawned_cb_processes_map[each_worker['class']] = dict()
                 for _ in range(worker_count):
                     unique_id = str(uuid.uuid4())[:5]
-                    unique_name = each_worker['name']+'-'+unique_id
+                    unique_name = f'each_worker[\'name\']:{settings.NAMESPACE}:{settings.INSTANCE_ID}'+'-'+unique_id
                     worker_obj: Process = worker_class(name=unique_name)
                     worker_obj.start()
                     self._spawned_cb_processes_map[each_worker['class']].update({unique_id: {'id': unique_name, 'process': worker_obj}})
+                    self._logger.debug(
+                        'Process Hub Core launched process %s for callback worker %s with PID: %s',
+                         unique_name, each_worker['class'], worker_obj.pid
+                    )
+
                 # self._spawned_processes_map[each_worker['name']] = worker_obj
-                self._logger.debug('Process Hub Core launched process for callback worker %s with PID: %s', each_worker['class'], worker_obj.pid)
             self._logger.debug('='*80)
         self._logger.debug('Starting Internal Process State reporter for Process Hub Core...')
         self._reporter_thread = Thread(target=self.internal_state_reporter)
         self._reporter_thread.start()
         self._logger.debug('Starting Process Hub Core...')
 
-        queue_name = f"powerloom-processhub-commands-q:{settings.NAMESPACE}"
+        queue_name = f"powerloom-processhub-commands-q:{settings.NAMESPACE}:{settings.INSTANCE_ID}"
         self.rabbitmq_interactor: RabbitmqSelectLoopInteractor = RabbitmqSelectLoopInteractor(
             consume_queue_name=queue_name,
             consume_callback=self.callback,
-            consumer_worker_name='PowerLoom|ProcessHub|Core'
+            consumer_worker_name=f'PowerLoom|ProcessHub|Core-{settings.INSTANCE_ID[:5]}'
         )
         self._logger.debug('Starting RabbitMQ consumer on queue %s', queue_name)
         self.rabbitmq_interactor.run()

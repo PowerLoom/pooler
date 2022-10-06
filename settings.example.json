@@ -1,6 +1,7 @@
 {
     "development": {
         "namespace": "staging",
+        "instance_id": "generated-uuid",
         "uniswap_contract_abis":{
             "factory":"./abis/IUniswapV2Factory.json",
             "router":"./abis/UniswapV2Router.json",

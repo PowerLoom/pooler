@@ -18,8 +18,8 @@ def main():
         signal.signal(signame, generic_exit_handler)
     # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|ProcessHub|Core|Launcher'))
     # logging.config.dictConfig(config_logger_with_namespace(namespace=None))
-    setproctitle(f'PowerLoom|UniswapPoolerProcessHub|Core|Launcher')
-    logger = logging.getLogger('PowerLoom|UniswapPoolerProcessHub|Core|Launcher')
+    setproctitle(f'PowerLoom|UniswapPoolerProcessHub|Core|Launcher:{settings.NAMESPACE}-{settings.INSTANCE_ID[:5]}')
+    logger = logging.getLogger(f'PowerLoom|UniswapPoolerProcessHub|Core|Launcher:{settings.NAMESPACE}-{settings.INSTANCE_ID}')
     logger.setLevel(logging.DEBUG)
     stdout_handler = logging.StreamHandler(sys.stdout)
     stdout_handler.setLevel(logging.DEBUG)
@@ -31,27 +31,30 @@ def main():
         stdout_handler, stderr_handler
     ]
     init_exchanges_queues()
-    core = ProcessHubCore(name='PowerLoom|UniswapPoolerProcessHub|Core')
+    p_name = f'PowerLoom|UniswapPoolerProcessHub|Core-{settings.INSTANCE_ID[:5]}'
+    core = ProcessHubCore(name=p_name)
     core.start()
-    logger.debug('Launched PowerLoom|UniswapPoolerProcessHub|Core with PID %s', core.pid)
+    logger.debug('Launched %s with PID %s', p_name, core.pid)
     try:
         logger.debug(
-            'PowerLoom|UniswapPoolerProcessHub|Core Launcher still waiting on core to join...')
+            '%s Launcher still waiting on core to join...', p_name
+        )
         core.join()
     except GenericExitOnSignal:
-        logger.debug('PowerLoom|UniswapPoolerProcessHub|Core Launcher received SIGTERM. Will attempt to join with ProcessHubCore process...')
+        logger.debug('%s Launcher received SIGTERM. Will attempt to join with ProcessHubCore process...', p_name)
     finally:
         try:
             logger.debug(
-                'PowerLoom|UniswapPoolerProcessHub|Core Launcher still waiting on core to join...')
+                '%s Launcher still waiting on core to join...', p_name
+            )
             core.join()
         except Exception as e:
             logger.info(
-                'PowerLoom|UniswapPoolerProcessHub|Core Launcher caught exception still waiting on core to join... %s',
-                e
+                '%s Launcher caught exception still waiting on core to join... %s',
+                p_name, e
             )
         logger.debug(
-            'PowerLoom|UniswapPoolerProcessHub|Core Launcher found alive status of core: %s', core.is_alive()
+            '%s Launcher found alive status of core: %s', p_name, core.is_alive()
         )
 
 
