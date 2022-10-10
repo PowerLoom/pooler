@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -35,8 +36,9 @@ type TokenDataRefs struct {
 
 const settingsFile string = "../settings.json"
 const pairContractListFile string = "../static/cached_pair_addresses.json"
-const V2_PAIRSUMMARY_PROJECTID string = "uniswap_V2PairsSummarySnapshot_%s"
 const TOKENSUMMARY_PROJECTID string = "uniswap_V2TokensSummarySnapshot_%s"
+const PAIRSUMMARY_PROJECTID string = "uniswap_V2PairsSummarySnapshot_%s"
+const DAILYSTATSSUMMARY_PROJECTID string = "uniswap_V2DailyStatsSnapshot_%s"
 const MAX_RETRIES_BEFORE_EXIT int = 10
 const MAX_RETRIES_FOR_SNAPSHOT_CONFIRM = 5
 
@@ -46,7 +48,21 @@ const periodicRetrievalInterval time.Duration = 60 * time.Second
 //const maxBlockCountToFetch int64 = 500 //Max number of blocks to fetch in 1 shot from Audit Protocol.
 
 func main() {
+	// first read config settings
+	ReadSettings()
+
 	var pairContractAddressesFile string
+
+	http.HandleFunc("/block_height_confirm_callback", blockHeightConfirmCallback)
+	port := settingsObj.Development.TokenDataAggregator.Port
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		log.Infof("Starting HTTP server on port %d in a go routine.", port)
+		http.ListenAndServe(fmt.Sprint(":", port), nil)
+	}()
+
 	log.SetOutput(ioutil.Discard) // Send all logs to nowhere by default
 	log.SetReportCaller(true)
 	log.AddHook(&writer.Hook{ // Send logs with level higher than warning to stderr
@@ -84,13 +100,13 @@ func main() {
 		pairContractAddressesFile = os.Args[2]
 	}
 
-	ReadSettings()
+	RegisterAggregatorCallbackKey()
 	SetupRedisClient()
 	InitAuditProtocolClient()
 	tokenList = make(map[string]*TokenData)
 	tokenPairTokenMapping = make(map[string]TokenDataRefs)
 	Run(pairContractAddressesFile)
-
+	wg.Wait()
 }
 
 func Run(pairContractAddress string) {
@@ -113,6 +129,77 @@ func Run(pairContractAddress string) {
 
 		log.Info("Sleeping for " + periodicRetrievalInterval.String() + " secs")
 		time.Sleep(periodicRetrievalInterval)
+	}
+}
+
+func blockHeightConfirmCallback(w http.ResponseWriter, req *http.Request) {
+	log.Infof("Received block height confirm callback %+v : ", *req)
+	reqBytes, _ := ioutil.ReadAll(req.Body)
+	var reqPayload BlockHeightConfirmationPayload
+
+	err := json.Unmarshal(reqBytes, &reqPayload)
+	if err != nil {
+		log.Errorf("Error while parsing json body of callback confirmation %s", err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	resp := make(map[string]string)
+	resp["message"] = "Callback Recieved"
+	jsonResp, err := json.Marshal(resp)
+	if err != nil {
+		log.Fatalf("Callback Confirmation: Error happened in JSON marshal. Err: %s", err)
+	}
+	w.Write(jsonResp)
+
+	go func() {
+		FetchAndUpdateStatusOfOlderSnapshots(reqPayload.ProjectId)
+	}()
+}
+
+func RegisterAggregatorCallbackKey() {
+	tokenSummaryProjectId := fmt.Sprintf(TOKENSUMMARY_PROJECTID, settingsObj.Development.Namespace)
+	pairSummaryProjectId := fmt.Sprintf(PAIRSUMMARY_PROJECTID, settingsObj.Development.Namespace)
+	dailyStatsSummaryProjectId := fmt.Sprintf(DAILYSTATSSUMMARY_PROJECTID, settingsObj.Development.Namespace)
+
+	body, _ := json.Marshal(map[string]string{
+		"callbackURL": fmt.Sprintf("http://localhost:%d/block_height_confirm_callback", settingsObj.Development.TokenDataAggregator.Port),
+	})
+
+	token_summary_url := fmt.Sprintf("%s/%s/confirmations/callback", settingsObj.Development.AuditProtocolEngine.URL, tokenSummaryProjectId)
+	for retryCount := 0; retryCount < 3; retryCount++ {
+		tokenResp, err := apHttpClient.Post(token_summary_url, "application/json", bytes.NewBuffer(body))
+		if err != nil {
+			log.Errorf("Failed to register token summary callback due error %+v", err.Error())
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		log.Debugf("Registered callback keys for tokenSummary aggregator: %s", tokenResp)
+		break
+	}
+
+	pair_summary_url := fmt.Sprintf("%s/%s/confirmations/callback", settingsObj.Development.AuditProtocolEngine.URL, pairSummaryProjectId)
+	for retryCount := 0; retryCount < 3; retryCount++ {
+		pairResp, err := apHttpClient.Post(pair_summary_url, "application/json", bytes.NewBuffer(body))
+		if err != nil {
+			log.Errorf("Failed to register pair summary callback due error %+v", err.Error())
+			time.Sleep(3 * time.Second)
+			continue
+		}
+		log.Debugf("Registered callback keys for pairSummary aggregator: %s", pairResp)
+		break
+	}
+
+	daily_stats_url := fmt.Sprintf("%s/%s/confirmations/callback", settingsObj.Development.AuditProtocolEngine.URL, dailyStatsSummaryProjectId)
+	for retryCount := 0; retryCount < 3; retryCount++ {
+		dailyResp, err := apHttpClient.Post(daily_stats_url, "application/json", bytes.NewBuffer(body))
+		if err != nil {
+			log.Errorf("Failed to register daily stats summary callback due error %+v", err.Error())
+			time.Sleep(3 * time.Second)
+			continue
+		}
+		log.Debugf("Registered callback keys for dailySummary aggregator: %s", dailyResp)
+		break
 	}
 }
 
@@ -197,6 +284,8 @@ func FetchAndFillTokenMetaData(pairContractAddr string) {
 func PrepareAndSubmitTokenSummarySnapshot() {
 
 	curBlockHeight := FetchPairsSummaryLatestBlockHeight()
+	dagChainProjectId := fmt.Sprintf(TOKENSUMMARY_PROJECTID, settingsObj.Development.Namespace)
+
 	if curBlockHeight > lastSnapshotBlockHeight {
 		var sourceBlockHeight int64
 		tokensPairData := FetchPairSummarySnapshot(curBlockHeight)
@@ -277,7 +366,7 @@ func PrepareAndSubmitTokenSummarySnapshot() {
 			return
 		}
 		tentativeBlockHeight := lastTokensummaryBlockHeight + 1
-		tokenSummarySnapshotMeta, err := WaitAndFetchBlockHeightStatus(tentativeBlockHeight, MAX_RETRIES_FOR_SNAPSHOT_CONFIRM)
+		tokenSummarySnapshotMeta, err := WaitAndFetchBlockHeightStatus(dagChainProjectId, tentativeBlockHeight, MAX_RETRIES_FOR_SNAPSHOT_CONFIRM)
 		if err != nil {
 			log.Errorf("Failed to Fetch payloadCID at blockHeight %d due to error %s", tentativeBlockHeight, err.Error())
 			ResetTokenData()
@@ -294,20 +383,35 @@ func PrepareAndSubmitTokenSummarySnapshot() {
 		for _, tokenData := range tokenList {
 			PruneTokenPriceZSet(tokenData.ContractAddress, int64(tokenData.Block_height))
 		}
-		FetchAndUpdateStatusOfOlderSnapshots()
 
 	} else {
 		log.Debugf("PairSummary blockHeight has not moved yet and is still at %d, lastSnapshotBlockHeight is %d. Hence not processing anything.",
 			curBlockHeight, lastSnapshotBlockHeight)
-		FetchAndUpdateStatusOfOlderSnapshots()
 	}
 }
 
-func FetchAndUpdateStatusOfOlderSnapshots() error {
+func FetchAndUpdateStatusOfOlderSnapshots(projectId string) error {
 	// Fetch all entries in snapshotZSet
 	//Any entry that has a txStatus as TX_CONFIRM_PENDING, query its updated status and update ZSet
 	//If txHash changes, store old one in prevTxhash and update the new one in txHash
-	key := fmt.Sprintf(REDIS_KEY_TOKENS_SUMMARY_SNAPSHOTS_ZSET, settingsObj.Development.Namespace)
+
+	var redisAggregatorProjectId string
+	switch projectId {
+	case fmt.Sprintf(TOKENSUMMARY_PROJECTID, settingsObj.Development.Namespace):
+		redisAggregatorProjectId = fmt.Sprintf(
+			REDIS_KEY_TOKENS_SUMMARY_SNAPSHOTS_ZSET,
+			settingsObj.Development.Namespace)
+	case fmt.Sprintf(PAIRSUMMARY_PROJECTID, settingsObj.Development.Namespace):
+		redisAggregatorProjectId = fmt.Sprintf(
+			REDIS_KEY_PAIRS_SUMMARY_SNAPSHOTS_ZSET,
+			settingsObj.Development.Namespace)
+	case fmt.Sprintf(DAILYSTATSSUMMARY_PROJECTID, settingsObj.Development.Namespace):
+		redisAggregatorProjectId = fmt.Sprintf(
+			REDIS_KEY_DAILY_STATS_SUMMARY_SNAPSHOTS_ZSET,
+			settingsObj.Development.Namespace)
+	}
+
+	key := redisAggregatorProjectId
 	log.Debugf("Checking and updating status of older blockHeight entries in snapshotsZset")
 	res := redisClient.ZRangeByScoreWithScores(key, redis.ZRangeBy{Min: "-inf", Max: "+inf"})
 	if res.Err() != nil {
@@ -338,7 +442,7 @@ func FetchAndUpdateStatusOfOlderSnapshots() error {
 				continue
 			}
 			//Fetch updated status.
-			snapshotMetaNew, err := WaitAndFetchBlockHeightStatus(int64(snapshotMeta.DAGHeight), 3)
+			snapshotMetaNew, err := WaitAndFetchBlockHeightStatus(projectId, int64(snapshotMeta.DAGHeight), 3)
 			if err != nil {
 				log.Infof("Could not get blockheight status for TokensSummary at height %d", snapshotMeta.DAGHeight)
 			}
@@ -669,8 +773,7 @@ func FetchPairSummarySnapshot(blockHeight int64) []TokenPairLiquidityProcessedDa
 	return nil
 }
 
-func WaitAndFetchBlockHeightStatus(blockHeight int64, retries int) (*TokenSummarySnapshotMeta, error) {
-	projectID := fmt.Sprintf(TOKENSUMMARY_PROJECTID, settingsObj.Development.Namespace)
+func WaitAndFetchBlockHeightStatus(projectID string, blockHeight int64, retries int) (*TokenSummarySnapshotMeta, error) {
 	url := fmt.Sprintf("%s/%s/payload/%d/status", settingsObj.Development.AuditProtocolEngine.URL, projectID, blockHeight)
 	log.Debug("Fetching CID at Blockheight URL:", url)
 
