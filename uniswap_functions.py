@@ -622,6 +622,7 @@ async def get_token_price_in_block_range(
     """
     try:
         token_price_dict = dict()
+            
 
         # check if cahce exist for given epoch
         if from_block != 'latest' and to_block != 'latest':
@@ -682,6 +683,7 @@ async def get_token_price_in_block_range(
 
                     # if reserves are less than threshold then try next whitelist token pair
                     if less_than_minimum_liquidity:
+                        token_eth_price_dict = {}
                         continue
                     
                     break
@@ -692,7 +694,11 @@ async def get_token_price_in_block_range(
                     rate_limit_lua_script_shas=rate_limit_lua_script_shas, web3_provider=web3_provider
                 )
                 for block_num in range(from_block, to_block + 1):
-                    token_price_dict[block_num] = token_eth_price_dict.get(block_num) * eth_usd_price_dict.get(block_num)
+                    token_price_dict[block_num] = token_eth_price_dict.get(block_num, 0) * eth_usd_price_dict.get(block_num, 0)
+            else:
+                for block_num in range(from_block, to_block + 1):
+                    token_price_dict[block_num] = 0
+
 
             if debug_log:
                 logger.debug(f"{token_metadata['symbol']}: price is {token_price_dict} | its eth price is {token_eth_price_dict}")
@@ -871,8 +877,8 @@ async def get_pair_reserves(
         pair_reserves_arr = dict()
         block_count = 0
         for block_num in range(from_block, to_block + 1):  
-            token0Amount = reserves_array[block_count][0] / 10 ** int(token0_decimals)
-            token1Amount = reserves_array[block_count][1] / 10 ** int(token1_decimals)
+            token0Amount = reserves_array[block_count][0] / 10 ** int(token0_decimals) if reserves_array[block_count][0] else 0
+            token1Amount = reserves_array[block_count][1] / 10 ** int(token1_decimals) if reserves_array[block_count][1] else 0
 
             token0USD = token0Amount * token0_price_map.get(block_num, 0)
             token1USD = token1Amount * token1_price_map.get(block_num, 0)
@@ -1214,9 +1220,9 @@ if __name__ == '__main__':
     #     get_pair_reserves(
     #         loop=loop, 
     #         rate_limit_lua_script_shas=rate_limit_lua_script_shas, 
-    #         pair_address='0x369582d2010b6ed950b571f4101e3bb9b554876f', 
-    #         from_block=33373342,
-    #         to_block=33373352,
+    #         pair_address='0x0e9971ff778b042d549994415fb2774b5a3fe7b6', 
+    #         from_block=15724103,
+    #         to_block=15724113,
     #         fetch_timestamp=True,
     #         web3_provider={}
     #     )
