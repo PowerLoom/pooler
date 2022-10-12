@@ -86,8 +86,11 @@ class LinearTickerProcess(Process):
         self._logger = logging.getLogger(f'PowerLoom|EpochTicker|Linear:{settings.NAMESPACE}-{settings.INSTANCE_ID}')
         self._logger.setLevel(logging.DEBUG)
         self._logger.handlers = [
-            logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST','localhost'),
-            port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT))]
+            logging.handlers.SocketHandler(
+                host=settings.get('LOGGING_SERVER.HOST', 'localhost'),
+                port=settings.get('LOGGING_SERVER.PORT', logging.handlers.DEFAULT_TCP_LOGGING_PORT)
+            )
+        ]
         setproctitle(f'PowerLoom|EpochTicker|Linear:{settings.NAMESPACE}-{settings.INSTANCE_ID}')
         begin_block_epoch = self._begin
         end_block_epoch = self._end
