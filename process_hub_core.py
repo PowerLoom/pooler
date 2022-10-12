@@ -221,13 +221,13 @@ class ProcessHubCore(Process):
                 self._spawned_cb_processes_map[each_worker['class']] = dict()
                 for _ in range(worker_count):
                     unique_id = str(uuid.uuid4())[:5]
-                    unique_name = f'each_worker[\'name\']:{settings.NAMESPACE}:{settings.INSTANCE_ID}'+'-'+unique_id
+                    unique_name = f'{each_worker["name"]}:{settings.NAMESPACE}:{settings.INSTANCE_ID}'+'-'+unique_id
                     worker_obj: Process = worker_class(name=unique_name)
                     worker_obj.start()
                     self._spawned_cb_processes_map[each_worker['class']].update({unique_id: {'id': unique_name, 'process': worker_obj}})
                     self._logger.debug(
                         'Process Hub Core launched process %s for callback worker %s with PID: %s',
-                         unique_name, each_worker['class'], worker_obj.pid
+                        unique_name, each_worker['class'], worker_obj.pid
                     )
 
                 # self._spawned_processes_map[each_worker['name']] = worker_obj

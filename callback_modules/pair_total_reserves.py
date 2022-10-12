@@ -628,7 +628,7 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
             )
             self._rabbitmq_interactor.enqueue_msg_delivery(
                 exchange=f'{settings.RABBITMQ.SETUP.CALLBACKS.EXCHANGE}.subtopics:{settings.NAMESPACE}',
-                routing_key=f'powerloom-backend-callback:{settings.NAMESPACE}.pair_total_reserves_worker.processor',
+                routing_key=f'powerloom-backend-callback:{settings.NAMESPACE}:{settings.INSTANCE_ID}.pair_total_reserves_worker.processor',
                 msg_body=pair_total_reserves_process_unit.json()
             )
             self._logger.debug(f'Sent out epoch to be processed by worker to calculate total reserves for pair contract: {pair_total_reserves_process_unit}')
