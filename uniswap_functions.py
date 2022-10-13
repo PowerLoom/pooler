@@ -1149,21 +1149,13 @@ async def get_pair_trade_volume(
                 elif log.event == "Mint":
                     epoch_results.Mint.logs.append(processed_log)
                     epoch_results.Mint.trades += trades_result
-                    tx_hash_trades += trades_result # Mint in identical txHash should be added
                 
                 elif log.event == "Burn":
                     epoch_results.Burn.logs.append(processed_log)
                     epoch_results.Burn.trades += trades_result
-                    
-                    # Check if enough Mint amount exist that we can "substract" Burn events, else "add" the Burn events in a identical txHash
-                    if epoch_results.Mint.trades.totalTradesUSD >= math.ceil(trades_result.totalTradesUSD):
-                        tx_hash_trades -= trades_result
-                    else:
-                        tx_hash_trades += trades_result
 
             # At the end of txHash logs we must normalize trade values, so it don't affect result of other txHash logs
             epoch_results.Trades += abs(tx_hash_trades)
-
         epoch_trade_logs = epoch_results.dict()
         max_block_details = block_details_dict.get(to_block, {})
         max_block_timestamp = max_block_details.get('timestamp', None)
@@ -1233,9 +1225,9 @@ if __name__ == '__main__':
     #     get_pair_trade_volume(
     #         loop, 
     #         rate_limit_lua_script_shas, 
-    #         pair_address='0xc34F686947Df1e91e9709777CB70BC8a5584cE92', 
-    #         from_block=15351298,
-    #         to_block=15351372,
+    #         pair_address='0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc', 
+    #         from_block=15674700,
+    #         to_block=15674710,
     #         fetch_timestamp=True,
     #         web3_provider={"force_archive": True}
     #     )
