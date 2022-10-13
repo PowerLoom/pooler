@@ -124,6 +124,8 @@ def inject_web3_provider_first_run(fn):
 
     return wrapped
 
+
+#TODO: should include a check on the last retry attempt to indicate if data fetch failed
 def inject_web3_provider_on_exception(retry_state):
     """
     Tenacity retry before_sleep exception handler: to inject web3 provider config
