@@ -474,6 +474,7 @@ async def get_eth_price_usd(
 
             eth_price_usd_dict[block_num] = float(eth_price_usd)
             redis_cache_mapping[json.dumps({ 'blockHeight': block_num, 'price': float(eth_price_usd)})] = int(block_num)
+            block_count += 1
 
         # cache price at height
         if from_block != 'latest' and to_block != 'latest':
