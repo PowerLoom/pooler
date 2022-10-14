@@ -72,6 +72,11 @@ type TokenPriceHistoryEntry struct {
 	BlockHeight int     `json:"blockHeight"`
 }
 
+type BlockHeightConfirmationPayload struct {
+	CommitId  string `json:"commitID"`
+	ProjectId string `json:"projectId"`
+}
+
 type TokenData struct {
 	ContractAddress        string  `json:"contractAddress"`
 	Block_height           int     `json:"block_height"`
@@ -287,6 +292,9 @@ type ProjectSettings struct {
 			Host     string `json:"host"`
 			Port     int    `json:"port"`
 		} `json:"zookeeper"`
+		TokenDataAggregator struct {
+			Port int `json:"port"`
+		} `json:"token_data_aggregator"`
 		Host                string `json:"host"`
 		Port                int    `json:"port"`
 		AuditProtocolEngine struct {

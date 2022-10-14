@@ -474,6 +474,7 @@ async def get_eth_price_usd(
 
             eth_price_usd_dict[block_num] = float(eth_price_usd)
             redis_cache_mapping[json.dumps({ 'blockHeight': block_num, 'price': float(eth_price_usd)})] = int(block_num)
+            block_count += 1
 
         # cache price at height
         if from_block != 'latest' and to_block != 'latest':
@@ -622,6 +623,7 @@ async def get_token_price_in_block_range(
     """
     try:
         token_price_dict = dict()
+            
 
         # check if cahce exist for given epoch
         if from_block != 'latest' and to_block != 'latest':
@@ -682,6 +684,7 @@ async def get_token_price_in_block_range(
 
                     # if reserves are less than threshold then try next whitelist token pair
                     if less_than_minimum_liquidity:
+                        token_eth_price_dict = {}
                         continue
                     
                     break
@@ -692,7 +695,11 @@ async def get_token_price_in_block_range(
                     rate_limit_lua_script_shas=rate_limit_lua_script_shas, web3_provider=web3_provider
                 )
                 for block_num in range(from_block, to_block + 1):
-                    token_price_dict[block_num] = token_eth_price_dict.get(block_num) * eth_usd_price_dict.get(block_num)
+                    token_price_dict[block_num] = token_eth_price_dict.get(block_num, 0) * eth_usd_price_dict.get(block_num, 0)
+            else:
+                for block_num in range(from_block, to_block + 1):
+                    token_price_dict[block_num] = 0
+
 
             if debug_log:
                 logger.debug(f"{token_metadata['symbol']}: price is {token_price_dict} | its eth price is {token_eth_price_dict}")
@@ -871,8 +878,8 @@ async def get_pair_reserves(
         pair_reserves_arr = dict()
         block_count = 0
         for block_num in range(from_block, to_block + 1):  
-            token0Amount = reserves_array[block_count][0] / 10 ** int(token0_decimals)
-            token1Amount = reserves_array[block_count][1] / 10 ** int(token1_decimals)
+            token0Amount = reserves_array[block_count][0] / 10 ** int(token0_decimals) if reserves_array[block_count][0] else 0
+            token1Amount = reserves_array[block_count][1] / 10 ** int(token1_decimals) if reserves_array[block_count][1] else 0
 
             token0USD = token0Amount * token0_price_map.get(block_num, 0)
             token1USD = token1Amount * token1_price_map.get(block_num, 0)
@@ -1149,21 +1156,13 @@ async def get_pair_trade_volume(
                 elif log.event == "Mint":
                     epoch_results.Mint.logs.append(processed_log)
                     epoch_results.Mint.trades += trades_result
-                    tx_hash_trades += trades_result # Mint in identical txHash should be added
                 
                 elif log.event == "Burn":
                     epoch_results.Burn.logs.append(processed_log)
                     epoch_results.Burn.trades += trades_result
-                    
-                    # Check if enough Mint amount exist that we can "substract" Burn events, else "add" the Burn events in a identical txHash
-                    if epoch_results.Mint.trades.totalTradesUSD >= math.ceil(trades_result.totalTradesUSD):
-                        tx_hash_trades -= trades_result
-                    else:
-                        tx_hash_trades += trades_result
 
             # At the end of txHash logs we must normalize trade values, so it don't affect result of other txHash logs
             epoch_results.Trades += abs(tx_hash_trades)
-
         epoch_trade_logs = epoch_results.dict()
         max_block_details = block_details_dict.get(to_block, {})
         max_block_timestamp = max_block_details.get('timestamp', None)
@@ -1214,9 +1213,9 @@ if __name__ == '__main__':
     #     get_pair_reserves(
     #         loop=loop, 
     #         rate_limit_lua_script_shas=rate_limit_lua_script_shas, 
-    #         pair_address='0x369582d2010b6ed950b571f4101e3bb9b554876f', 
-    #         from_block=33373342,
-    #         to_block=33373352,
+    #         pair_address='0x0e9971ff778b042d549994415fb2774b5a3fe7b6', 
+    #         from_block=15724103,
+    #         to_block=15724113,
     #         fetch_timestamp=True,
     #         web3_provider={}
     #     )
@@ -1233,9 +1232,9 @@ if __name__ == '__main__':
     #     get_pair_trade_volume(
     #         loop, 
     #         rate_limit_lua_script_shas, 
-    #         pair_address='0xc34F686947Df1e91e9709777CB70BC8a5584cE92', 
-    #         from_block=15351298,
-    #         to_block=15351372,
+    #         pair_address='0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc', 
+    #         from_block=15674700,
+    #         to_block=15674710,
     #         fetch_timestamp=True,
     #         web3_provider={"force_archive": True}
     #     )
