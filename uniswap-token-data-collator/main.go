@@ -28,6 +28,7 @@ var apHttpClient http.Client
 var lastSnapshotBlockHeight int64
 
 var tokenPairTokenMapping map[string]TokenDataRefs
+var snapshotCallbackProjectLocks map[string]*sync.Mutex
 
 type TokenDataRefs struct {
 	token0Ref *TokenData
@@ -52,6 +53,7 @@ func main() {
 	ReadSettings()
 
 	var pairContractAddressesFile string
+	snapshotCallbackProjectLocks = make(map[string]*sync.Mutex)
 
 	http.HandleFunc("/block_height_confirm_callback", blockHeightConfirmCallback)
 	port := settingsObj.Development.TokenDataAggregator.Port
@@ -175,6 +177,11 @@ func RegisterAggregatorCallbackKey() {
 			continue
 		}
 		log.Debugf("Registered callback keys for tokenSummary aggregator: %s", tokenResp)
+
+		// add projectId to callback lock
+		var token_summary_lock sync.Mutex
+		snapshotCallbackProjectLocks[tokenSummaryProjectId] = &token_summary_lock
+		log.Debugf("Created lock for token summary callbacks", tokenSummaryProjectId)
 		break
 	}
 
@@ -187,6 +194,11 @@ func RegisterAggregatorCallbackKey() {
 			continue
 		}
 		log.Debugf("Registered callback keys for pairSummary aggregator: %s", pairResp)
+
+		// add projectId to callback lock
+		var pair_summary_lock sync.Mutex
+		snapshotCallbackProjectLocks[pairSummaryProjectId] = &pair_summary_lock
+		log.Debugf("Created lock for pair summary callbacks", pairSummaryProjectId)
 		break
 	}
 
@@ -199,6 +211,11 @@ func RegisterAggregatorCallbackKey() {
 			continue
 		}
 		log.Debugf("Registered callback keys for dailySummary aggregator: %s", dailyResp)
+
+		// add projectId to callback lock
+		var daily_stats_lock sync.Mutex
+		snapshotCallbackProjectLocks[dailyStatsSummaryProjectId] = &daily_stats_lock
+		log.Debugf("Created lock for daily stats callbacks", dailyStatsSummaryProjectId)
 		break
 	}
 }
@@ -394,6 +411,11 @@ func FetchAndUpdateStatusOfOlderSnapshots(projectId string) error {
 	// Fetch all entries in snapshotZSet
 	//Any entry that has a txStatus as TX_CONFIRM_PENDING, query its updated status and update ZSet
 	//If txHash changes, store old one in prevTxhash and update the new one in txHash
+
+	projectLock := snapshotCallbackProjectLocks[projectId]
+
+	projectLock.Lock()
+	defer projectLock.Unlock()
 
 	var redisAggregatorProjectId string
 	switch projectId {
