@@ -12,22 +12,17 @@ import json
 import math
 from functools import partial
 from dynaconf import settings
-import asyncio
 from redis import asyncio as aioredis
 from web3 import Web3
-from web3.middleware import geth_poa_middleware
-from gnosis.eth import EthereumClient
 from data_models import (
     trade_data, event_trade_data, epoch_event_trade_data
 )
-from datetime import datetime
-
-
 from redis_keys import (
     uniswap_pair_contract_tokens_addresses, uniswap_pair_contract_tokens_data, uniswap_pair_cached_token_price,
     uniswap_pair_contract_V2_pair_data, uniswap_pair_cached_block_height_token_price,uniswap_eth_usd_price_zset,
     uniswap_tokens_pair_map, cached_block_details_at_height
 )
+import asyncio
 
 
 # RPC_URL = settings.RPC.MATIC[0]
@@ -801,6 +796,7 @@ async def get_block_details_in_block_range(
     stop=stop_after_attempt(settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS),
     before_sleep=inject_web3_provider_on_exception
 )
+@provide_async_redis_conn_insta  # useful in test envs
 async def get_pair_reserves(
     loop: asyncio.AbstractEventLoop,
     rate_limit_lua_script_shas: dict,

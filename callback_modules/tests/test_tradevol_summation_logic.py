@@ -5,10 +5,7 @@ from message_models import (
     PolymarketTradeVolumeBase, PolymarketTradeSnapshotTotalTrade
 )
 from callback_modules.helpers import AuditProtocolCommandsHelper
-from helper_functions import get_market_data_by_address, seed_trade_volume
 from functools import reduce
-from thespian.actors import *
-from thespian.transient import transient
 from pydantic import ValidationError
 from typing import List
 from uuid import uuid4

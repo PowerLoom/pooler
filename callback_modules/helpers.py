@@ -227,6 +227,24 @@ class CallbackAsyncWorker(multiprocessing.Process):
         self._redis_conn: Union[None, aioredis.Redis] = None
         self._running_callback_tasks: Dict[str, asyncio.Task] = dict()
         super(CallbackAsyncWorker, self).__init__(name=name, **kwargs)
+        self._logger = logging.getLogger(self.name)
+        self._logger.setLevel(logging.DEBUG)
+        formatter = logging.Formatter(
+            "%(levelname)-8s %(name)-4s %(asctime)s %(msecs)d %(module)s-%(funcName)s: %(message)s")
+        stdout_handler = logging.StreamHandler(sys.stdout)
+        stdout_handler.setLevel(logging.DEBUG)
+        stdout_handler.setFormatter(formatter)
+        stderr_handler = logging.StreamHandler(sys.stderr)
+        stderr_handler.setLevel(logging.ERROR)
+        stderr_handler.setFormatter(formatter)
+        # self._logger.debug('Launched %s ', self._unique_id)
+        # self._logger.debug('Launched PID: %s', self.pid)
+        self._logger.handlers = [
+            logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST', 'localhost'),
+                                           port=settings.get('LOGGING_SERVER.PORT',
+                                                             logging.handlers.DEFAULT_TCP_LOGGING_PORT)),
+            stdout_handler, stderr_handler
+        ]
         # logger.add(
         #     sink='logs/' + self._unique_id + '_{time}.log', rotation='20MB', retention=20, compression='gz'
         # )

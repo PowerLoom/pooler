@@ -1,3 +1,4 @@
+from typing import Optional, List
 from httpx import AsyncClient
 from setproctitle import setproctitle
 from uniswap_functions import (
@@ -30,10 +31,12 @@ import signal
 import redis
 import asyncio
 import json
+import os
 import logging
 import time
 import multiprocessing
 
+SETTINGS_ENV = os.getenv('ENV_FOR_DYNACONF', 'development')
 
 class PairTotalReservesProcessor(CallbackAsyncWorker):
     def __init__(self, name, **kwargs):
@@ -72,7 +75,6 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             self._logger.error(
                 f"Pair-Reserves function failed for epoch: {min_chain_height}-{max_chain_height} | error_msg:{exc}")
             # if querying fails, we are going to ensure it is recorded for future processing
-            enqueue_epoch = True
             return None
         else:
             for block_num in range(min_chain_height, max_chain_height + 1):
@@ -89,8 +91,9 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                     if not block_pair_total_reserves.get('timestamp', None):
                         self._logger.error(
                             'Could not fetch timestamp against max block height in epoch %s - %s'
-                            'against pair reserves calculation',
-                            min_chain_height, max_chain_height
+                            'to calculate pair reserves for contract %s. '
+                            'Using current time stamp for snapshot construction',
+                            pair_contract_address, min_chain_height, max_chain_height
                         )
                     else:
                         max_block_timestamp = block_pair_total_reserves.get('timestamp')
@@ -105,29 +108,37 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             })
             return pair_total_reserves_snapshot
 
-    async def _construct_pair_reserves_epoch_snapshot_data(self, msg_obj: PowerloomCallbackProcessMessage,
-                                                           enqueue_on_failure=False):
-        # check for enqueued failed query epochs
-        failed_query_epoch = await self._redis_conn.lpop(
-            uniswap_failed_query_pair_total_reserves_epochs_redis_q_f.format(msg_obj.contract))
+    async def _prepare_epochs(
+            self,
+            failed_query_epochs_key,
+            discarded_query_epochs_key,
+            current_epoch: PowerloomCallbackProcessMessage,
+            snapshot_name: str,
+            failed_query_epochs_l: Optional[List]
+    ):
         queued_epochs = list()
-        while failed_query_epoch:
-            epoch_broadcast: PowerloomCallbackProcessMessage = PowerloomCallbackProcessMessage.parse_raw(
-                failed_query_epoch.decode('utf-8')
-            )
-            self._logger.info(
-                'Found queued epochs that previously failed in RPC query and construction stage for pair total reserves: %s',
-                epoch_broadcast
-            )
-            queued_epochs.append(epoch_broadcast)
-            failed_query_epoch = await self._redis_conn.lpop(
-                uniswap_failed_query_pair_total_reserves_epochs_redis_q_f.format(msg_obj.contract))
-        queued_epochs.append(msg_obj)
-        # check for continuity in epochs before coalescing them
-        # assuming the best
+        # checks for any previously queued epochs, returns a list of such epochs in increasing order of blockheights
+        if 'test' not in SETTINGS_ENV:
+            failed_query_epochs = await self._redis_conn.lpop(failed_query_epochs_key)
+            while failed_query_epochs:
+                epoch_broadcast: PowerloomCallbackProcessMessage = PowerloomCallbackProcessMessage.parse_raw(
+                    failed_query_epochs.decode('utf-8')
+                )
+                self._logger.info(
+                    'Found queued epoch against which snapshot construction for pair contract\'s '
+                    '%s failed earlier: %s',
+                    snapshot_name, epoch_broadcast
+                )
+                queued_epochs.append(epoch_broadcast)
+                # uniswap_failed_query_pair_total_reserves_epochs_redis_q_f.format(current_epoch.contract)
+                failed_query_epochs = await self._redis_conn.lpop(failed_query_epochs_key)
+        else:
+            queued_epochs = failed_query_epochs_l if failed_query_epochs_l else list()
+        queued_epochs.append(current_epoch)
+        # check for continuity in epochs before ordering them
         self._logger.info(
-            'Attempting to check for continuity in queued epochs against pair total reserves including current '
-            'epoch: %s', queued_epochs
+            'Attempting to check for continuity in queued epochs to generate snapshots against pair contract\'s '
+            '%s including current epoch: %s', snapshot_name, queued_epochs
         )
         continuity = True
         for idx, each_epoch in enumerate(queued_epochs):
@@ -139,17 +150,38 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         if not continuity:
             # pop off current epoch added to end of this list
             queued_epochs = queued_epochs[:-1]
-            self._logger.info('Recording epochs as discarded during snapshot construction stage for pair total '
-                              'reserves processing: %s', queued_epochs)
+            self._logger.info(
+                'Recording epochs as discarded during snapshot construction stage for %s: %s',
+                snapshot_name, queued_epochs
+            )
             for x in queued_epochs:
                 await self._redis_conn.rpush(
-                    uniswap_discarded_query_pair_total_reserves_epochs_redis_q_f.format(msg_obj.contract), x.json())
+                    discarded_query_epochs_key,
+                    x.json()
+                )
+
+        return queued_epochs
+
+    async def _construct_pair_reserves_epoch_snapshot_data(
+            self,
+            msg_obj: PowerloomCallbackProcessMessage,
+            past_failed_epochs: Optional[List],
+            enqueue_on_failure=False
+    ):
+        # check for enqueued failed query epochs
+        epochs = await self._prepare_epochs(
+            failed_query_epochs_key=uniswap_failed_query_pair_total_reserves_epochs_redis_q_f.format(msg_obj.contract),
+            discarded_query_epochs_key=uniswap_discarded_query_pair_total_reserves_epochs_redis_q_f.format(msg_obj.contract),
+            current_epoch=msg_obj,
+            snapshot_name='pair reserves',
+            failed_query_epochs_l=past_failed_epochs
+        )
 
         tasks_map = dict()
-        for each_epoch in queued_epochs:
+        for each_epoch in epochs:
             tasks_map[(each_epoch.begin, each_epoch.end, each_epoch.broadcast_id)] = self._fetch_token_reserves_on_chain(each_epoch.begin, each_epoch.end, msg_obj.contract)
 
-        results = asyncio.gather(*tasks_map.values(), return_exceptions=True)
+        results = await asyncio.gather(*tasks_map.values(), return_exceptions=True)
         results_map = dict()
         for idx, each_result in enumerate(results):
             epoch_against_result = list(tasks_map.keys())[idx]
@@ -172,6 +204,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 results_map[(epoch_against_result[0], epoch_against_result[1])] = None
             else:
                 results_map[(epoch_against_result[0], epoch_against_result[1])] = each_result
+        return results_map
 
     async def _construct_trade_volume_epoch_snapshot_data(self, msg_obj: PowerloomCallbackProcessMessage,
                                                           enqueue_on_failure=False):
@@ -222,7 +255,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                         uniswap_discarded_query_pair_trade_volume_epochs_redis_q_f.format(msg_obj.contract), x.json())
 
         except Exception as e:
-            # Stroing epoch for next time to be processed or discarded
+            # Storing epoch for next time to be processed or discarded
             await self._redis_conn.rpush(
                 uniswap_failed_query_pair_trade_volume_epochs_redis_q_f.format(msg_obj.contract),
                 msg_obj.json()
