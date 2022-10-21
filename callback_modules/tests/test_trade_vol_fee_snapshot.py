@@ -36,7 +36,7 @@ async def test_construction_snapshot(
     print(failed_query_epochs)
 
     p = PairTotalReservesProcessor(name='testDummyProcessor')
-    r = await p._construct_pair_reserves_epoch_snapshot_data(
+    r = await p._construct_trade_volume_epoch_snapshot_data(
         cur_epoch,
         past_failed_epochs=failed_query_epochs
     )
@@ -46,8 +46,8 @@ if __name__ == '__main__':
     pair_contract = '0xe1573b9d29e2183b1af0e743dc2754979a40d237'
     init_exchanges_queues()
     asyncio.run(test_construction_snapshot(
-        epoch_end=15798509,
-        epoch_begin=15798500,
+        epoch_end=15798619,
+        epoch_begin=15798610,
         pair_contract=pair_contract
     ))
     # p.run()

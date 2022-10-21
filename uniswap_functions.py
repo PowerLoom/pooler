@@ -1003,44 +1003,45 @@ def extract_trade_volume_log(event_name, log, pair_per_token_metadata, token0_pr
     stop=stop_after_attempt(settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS),
     before_sleep=inject_web3_provider_on_exception
 )
+@provide_async_redis_conn_insta  # useful in test envs
 async def get_pair_trade_volume(
-    ev_loop: asyncio.AbstractEventLoop,
     rate_limit_lua_script_shas: dict,
-    pair_address,
-    from_block,
-    to_block,
+    data_source_contract_address,
+    min_chain_height,
+    max_chain_height,
     redis_conn: aioredis.Redis=None,
     fetch_timestamp=True,
     web3_provider=global_w3_client
 ):
+    ev_loop = asyncio.get_running_loop()
     try:
-        pair_address = Web3.toChecksumAddress(pair_address)
+        data_source_contract_address = Web3.toChecksumAddress(data_source_contract_address)
         block_details_dict = dict()
    
         if fetch_timestamp:
             try:
                 block_details_dict = await get_block_details_in_block_range(
-                    redis_conn=redis_conn, from_block=from_block, 
-                    to_block=to_block, rate_limit_lua_script_shas=rate_limit_lua_script_shas,
+                    redis_conn=redis_conn, from_block=min_chain_height,
+                    to_block=max_chain_height, rate_limit_lua_script_shas=rate_limit_lua_script_shas,
                     web3_provider=web3_provider
                 )
             except Exception as err:
-                logger.error('Error attempting to get block details of to_block %s: %s, retrying again', to_block, err, exc_info=True)
+                logger.error('Error attempting to get block details of to_block %s: %s, retrying again', max_chain_height, err, exc_info=True)
                 raise err
 
         pair_per_token_metadata = await get_pair_metadata(
-            pair_address=pair_address,
+            pair_address=data_source_contract_address,
             loop=ev_loop,
             redis_conn=redis_conn,
             rate_limit_lua_script_shas=rate_limit_lua_script_shas
         )
         token0_price_map, token1_price_map = await asyncio.gather(
             get_token_price_in_block_range(
-                token_metadata=pair_per_token_metadata['token0'], from_block=from_block, to_block=to_block, web3_provider=web3_provider,
+                token_metadata=pair_per_token_metadata['token0'], from_block=min_chain_height, to_block=max_chain_height, web3_provider=web3_provider,
                 loop=ev_loop, redis_conn=redis_conn, rate_limit_lua_script_shas=rate_limit_lua_script_shas, debug_log=False
             ),
             get_token_price_in_block_range(
-                token_metadata=pair_per_token_metadata['token1'], from_block=from_block, to_block=to_block, web3_provider=web3_provider,
+                token_metadata=pair_per_token_metadata['token1'], from_block=min_chain_height, to_block=max_chain_height, web3_provider=web3_provider,
                 loop=ev_loop, redis_conn=redis_conn, rate_limit_lua_script_shas=rate_limit_lua_script_shas, debug_log=False
             )
         )
@@ -1050,16 +1051,16 @@ async def get_pair_trade_volume(
         pfunc_get_event_logs = partial(
             get_events_logs, **{
                 'web3Provider': web3_provider['web3_client'].w3,
-                'contract_address': pair_address,
-                'toBlock': to_block,
-                'fromBlock': from_block,
+                'contract_address': data_source_contract_address,
+                'toBlock': max_chain_height,
+                'fromBlock': min_chain_height,
                 'topics': [event_sig],
                 'event_abi': event_abi
             }
         )
         await check_rpc_rate_limit(
             parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], redis_conn=redis_conn, 
-            request_payload={"contract": pair_address, "to_block": to_block, "from_block": from_block},
+            request_payload={"contract": data_source_contract_address, "to_block": max_chain_height, "from_block": min_chain_height},
             error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get async trade volume"},
             logger=logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
         )
@@ -1163,15 +1164,15 @@ async def get_pair_trade_volume(
             epoch_results.Trades += abs(tx_hash_trades)
 
         epoch_trade_logs = epoch_results.dict()
-        max_block_details = block_details_dict.get(to_block, {})
+        max_block_details = block_details_dict.get(max_chain_height, {})
         max_block_timestamp = max_block_details.get('timestamp', None)
         epoch_trade_logs.update({'timestamp': max_block_timestamp})            
         return epoch_trade_logs
     except Exception as exc:
         logger.error("error at get_pair_trade_volume fn: %s", exc, exc_info=True)
-        raise RPCException(request={"contract": pair_address, "fromBlock": from_block, "toBlock": to_block},
-            response={}, underlying_exception=None,
-            extra_info={'msg': f"error: get_pair_trade_volume, error_msg: {str(exc)}"}) from exc
+        raise RPCException(request={"contract": data_source_contract_address, "fromBlock": min_chain_height, "toBlock": max_chain_height},
+                           response={}, underlying_exception=None,
+                           extra_info={'msg': f"error: get_pair_trade_volume, error_msg: {str(exc)}"}) from exc
 
 
 async def warm_up_cache_for_snapshot_constructors(

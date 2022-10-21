@@ -109,7 +109,6 @@ def provide_async_redis_conn_insta(fn):
     async def wrapped(*args, **kwargs):
         arg_conn = 'redis_conn'
         if kwargs.get(arg_conn):
-            print('aioredis conn already supplied')
             return await fn(*args, **kwargs)
         else:
             # RedisPoolCache.append_ssl_connection_params(REDIS_CONN_CONF, settings_conf['redis'])
@@ -128,7 +127,7 @@ def provide_async_redis_conn_insta(fn):
                 # )
                 pass
             else:
-                logging.debug('Creating single connection via high level aioredis interface')
+                # logging.debug('Creating single connection via high level aioredis interface')
                 connection = await aioredis.Redis(
                     host=REDIS_CONN_CONF['host'],
                     port=REDIS_CONN_CONF['port'],
