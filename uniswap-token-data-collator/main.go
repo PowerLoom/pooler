@@ -168,54 +168,30 @@ func RegisterAggregatorCallbackKey() {
 		"callbackURL": fmt.Sprintf("http://localhost:%d/block_height_confirm_callback", settingsObj.Development.TokenDataAggregator.Port),
 	})
 
-	token_summary_url := fmt.Sprintf("%s/%s/confirmations/callback", settingsObj.Development.AuditProtocolEngine.URL, tokenSummaryProjectId)
-	for retryCount := 0; retryCount < 3; retryCount++ {
-		tokenResp, err := apHttpClient.Post(token_summary_url, "application/json", bytes.NewBuffer(body))
-		if err != nil {
-			log.Errorf("Failed to register token summary callback due error %+v", err.Error())
-			time.Sleep(5 * time.Second)
-			continue
-		}
-		log.Debugf("Registered callback keys for tokenSummary aggregator: %s", tokenResp)
+	tokenSummaryUrl := fmt.Sprintf("%s/%s/confirmations/callback", settingsObj.Development.AuditProtocolEngine.URL, tokenSummaryProjectId)
+	pairSummaryUrl := fmt.Sprintf("%s/%s/confirmations/callback", settingsObj.Development.AuditProtocolEngine.URL, pairSummaryProjectId)
+	dailyStatsUrl := fmt.Sprintf("%s/%s/confirmations/callback", settingsObj.Development.AuditProtocolEngine.URL, dailyStatsSummaryProjectId)
 
-		// add projectId to callback lock
-		var token_summary_lock sync.Mutex
-		snapshotCallbackProjectLocks[tokenSummaryProjectId] = &token_summary_lock
-		log.Debugf("Created lock for token summary callbacks", tokenSummaryProjectId)
-		break
-	}
+	SetCallbackKeyInRedis(tokenSummaryUrl, tokenSummaryProjectId, body)
+	SetCallbackKeyInRedis(pairSummaryUrl, pairSummaryProjectId, body)
+	SetCallbackKeyInRedis(dailyStatsUrl, dailyStatsSummaryProjectId, body)
+}
 
-	pair_summary_url := fmt.Sprintf("%s/%s/confirmations/callback", settingsObj.Development.AuditProtocolEngine.URL, pairSummaryProjectId)
+func SetCallbackKeyInRedis(callbackUrl string, projectId string, payload []byte) {
+
 	for retryCount := 0; retryCount < 3; retryCount++ {
-		pairResp, err := apHttpClient.Post(pair_summary_url, "application/json", bytes.NewBuffer(body))
+		resp, err := apHttpClient.Post(callbackUrl, "application/json", bytes.NewBuffer(payload))
 		if err != nil {
-			log.Errorf("Failed to register pair summary callback due error %+v", err.Error())
+			log.Errorf("Failed to register callback url due to error %+v | url:%s", err.Error(), callbackUrl)
 			time.Sleep(3 * time.Second)
 			continue
 		}
-		log.Debugf("Registered callback keys for pairSummary aggregator: %s", pairResp)
+		log.Debugf("Registered callback response: %s | url:%s", resp, callbackUrl)
 
 		// add projectId to callback lock
-		var pair_summary_lock sync.Mutex
-		snapshotCallbackProjectLocks[pairSummaryProjectId] = &pair_summary_lock
-		log.Debugf("Created lock for pair summary callbacks", pairSummaryProjectId)
-		break
-	}
-
-	daily_stats_url := fmt.Sprintf("%s/%s/confirmations/callback", settingsObj.Development.AuditProtocolEngine.URL, dailyStatsSummaryProjectId)
-	for retryCount := 0; retryCount < 3; retryCount++ {
-		dailyResp, err := apHttpClient.Post(daily_stats_url, "application/json", bytes.NewBuffer(body))
-		if err != nil {
-			log.Errorf("Failed to register daily stats summary callback due error %+v", err.Error())
-			time.Sleep(3 * time.Second)
-			continue
-		}
-		log.Debugf("Registered callback keys for dailySummary aggregator: %s", dailyResp)
-
-		// add projectId to callback lock
-		var daily_stats_lock sync.Mutex
-		snapshotCallbackProjectLocks[dailyStatsSummaryProjectId] = &daily_stats_lock
-		log.Debugf("Created lock for daily stats callbacks", dailyStatsSummaryProjectId)
+		var projecIdLock sync.Mutex
+		snapshotCallbackProjectLocks[projectId] = &projecIdLock
+		log.Debugf("Created lock for callbacks %s", projectId)
 		break
 	}
 }
