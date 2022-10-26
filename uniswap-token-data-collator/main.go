@@ -434,16 +434,14 @@ func FetchAndUpdateStatusOfOlderSnapshots(projectId string) error {
 			continue
 		}
 		if snapshotMeta.TxStatus <= TX_CONFIRMATION_PENDING {
-			res := redisClient.ZRem(key, snapshot)
-			if res.Err() != nil {
-				log.Errorf("Failed to remove snapshotsZset entry due to error %+v", res.Err())
-				continue
-			}
+
 			//Fetch updated status.
 			snapshotMetaNew, err := WaitAndFetchBlockHeightStatus(projectId, int64(snapshotMeta.DAGHeight), 3)
 			if err != nil {
 				log.Infof("Could not get blockheight status for TokensSummary at height %d", snapshotMeta.DAGHeight)
+				continue
 			}
+
 			if snapshotMeta.TxHash != snapshotMetaNew.TxHash {
 				snapshotMeta.PrevTxHash = snapshotMeta.TxHash
 				snapshotMeta.TxHash = snapshotMetaNew.TxHash
@@ -452,6 +450,14 @@ func FetchAndUpdateStatusOfOlderSnapshots(projectId string) error {
 			snapshotNew, err := json.Marshal(snapshotMeta)
 			if err != nil {
 				log.Errorf("CRITICAL! Json marshal failed for snapshotMeta %+v with error %+v", snapshotMetaNew, err)
+				continue
+			}
+
+			// once new snapshot is prepared then only delete the Zset Entry
+			res := redisClient.ZRem(key, snapshot)
+			if res.Err() != nil {
+				log.Errorf("Failed to remove snapshotsZset entry due to error %+v", res.Err())
+				continue
 			}
 
 			for j := 0; j < 3; j++ {
