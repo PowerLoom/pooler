@@ -810,7 +810,7 @@ func WaitAndFetchBlockHeightStatus(projectID string, blockHeight int64, retries 
 			continue
 		}
 		log.Debugf("Got CID %s, txHash %s at Block Height %d for projectID %s", apResp.PayloadCid, apResp.TxHash, blockHeight, projectID)
-		tokenSummarySnapshotMeta := TokenSummarySnapshotMeta{apResp.PayloadCid, apResp.TxHash, apResp.Status, "", apResp.BlockHeight, 0, 0}
+		tokenSummarySnapshotMeta := TokenSummarySnapshotMeta{apResp.PayloadCid, apResp.TxHash, apResp.Status, "", apResp.BlockHeight, 0, 0, 0, 0}
 		return &tokenSummarySnapshotMeta, nil
 	}
 
