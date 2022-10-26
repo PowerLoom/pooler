@@ -8,8 +8,10 @@ type TokenSummarySnapshotMeta struct {
 	TxStatus                     int     `json:"txStatus"`
 	PrevTxHash                   string  `json:"prevTxHash,omitempty"`
 	DAGHeight                    int     `json:"dagHeight"`
-	BeginBlockHeight24h          int64   `json:"beginBlockHeight24h"`
-	BeginBlockheightTimeStamp24h float64 `json:"beginBlockheightTimeStamp24h"`
+	BeginBlockHeight24h          int64   `json:"begin_block_height_24h"`
+	BeginBlockheightTimeStamp24h float64 `json:"begin_block_timestamp_24h"`
+	BeginBlockHeight7d           int64   `json:"begin_block_height_7d"`
+	BeginBlockheightTimeStamp7d  float64 `json:"begin_block_timestamp_7d"`
 }
 
 type AuditProtocolErrorResp struct {

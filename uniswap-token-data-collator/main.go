@@ -28,6 +28,7 @@ var apHttpClient http.Client
 var lastSnapshotBlockHeight int64
 
 var tokenPairTokenMapping map[string]TokenDataRefs
+var snapshotCallbackProjectLocks map[string]*sync.Mutex
 
 type TokenDataRefs struct {
 	token0Ref *TokenData
@@ -52,6 +53,7 @@ func main() {
 	ReadSettings()
 
 	var pairContractAddressesFile string
+	snapshotCallbackProjectLocks = make(map[string]*sync.Mutex)
 
 	http.HandleFunc("/block_height_confirm_callback", blockHeightConfirmCallback)
 	port := settingsObj.Development.TokenDataAggregator.Port
@@ -166,39 +168,30 @@ func RegisterAggregatorCallbackKey() {
 		"callbackURL": fmt.Sprintf("http://localhost:%d/block_height_confirm_callback", settingsObj.Development.TokenDataAggregator.Port),
 	})
 
-	token_summary_url := fmt.Sprintf("%s/%s/confirmations/callback", settingsObj.Development.AuditProtocolEngine.URL, tokenSummaryProjectId)
-	for retryCount := 0; retryCount < 3; retryCount++ {
-		tokenResp, err := apHttpClient.Post(token_summary_url, "application/json", bytes.NewBuffer(body))
-		if err != nil {
-			log.Errorf("Failed to register token summary callback due error %+v", err.Error())
-			time.Sleep(5 * time.Second)
-			continue
-		}
-		log.Debugf("Registered callback keys for tokenSummary aggregator: %s", tokenResp)
-		break
-	}
+	tokenSummaryUrl := fmt.Sprintf("%s/%s/confirmations/callback", settingsObj.Development.AuditProtocolEngine.URL, tokenSummaryProjectId)
+	pairSummaryUrl := fmt.Sprintf("%s/%s/confirmations/callback", settingsObj.Development.AuditProtocolEngine.URL, pairSummaryProjectId)
+	dailyStatsUrl := fmt.Sprintf("%s/%s/confirmations/callback", settingsObj.Development.AuditProtocolEngine.URL, dailyStatsSummaryProjectId)
 
-	pair_summary_url := fmt.Sprintf("%s/%s/confirmations/callback", settingsObj.Development.AuditProtocolEngine.URL, pairSummaryProjectId)
+	SetCallbackKeyInRedis(tokenSummaryUrl, tokenSummaryProjectId, body)
+	SetCallbackKeyInRedis(pairSummaryUrl, pairSummaryProjectId, body)
+	SetCallbackKeyInRedis(dailyStatsUrl, dailyStatsSummaryProjectId, body)
+}
+
+func SetCallbackKeyInRedis(callbackUrl string, projectId string, payload []byte) {
+
 	for retryCount := 0; retryCount < 3; retryCount++ {
-		pairResp, err := apHttpClient.Post(pair_summary_url, "application/json", bytes.NewBuffer(body))
+		resp, err := apHttpClient.Post(callbackUrl, "application/json", bytes.NewBuffer(payload))
 		if err != nil {
-			log.Errorf("Failed to register pair summary callback due error %+v", err.Error())
+			log.Errorf("Failed to register callback url due to error %+v | url:%s", err.Error(), callbackUrl)
 			time.Sleep(3 * time.Second)
 			continue
 		}
-		log.Debugf("Registered callback keys for pairSummary aggregator: %s", pairResp)
-		break
-	}
+		log.Debugf("Registered callback response: %s | url:%s", resp, callbackUrl)
 
-	daily_stats_url := fmt.Sprintf("%s/%s/confirmations/callback", settingsObj.Development.AuditProtocolEngine.URL, dailyStatsSummaryProjectId)
-	for retryCount := 0; retryCount < 3; retryCount++ {
-		dailyResp, err := apHttpClient.Post(daily_stats_url, "application/json", bytes.NewBuffer(body))
-		if err != nil {
-			log.Errorf("Failed to register daily stats summary callback due error %+v", err.Error())
-			time.Sleep(3 * time.Second)
-			continue
-		}
-		log.Debugf("Registered callback keys for dailySummary aggregator: %s", dailyResp)
+		// add projectId to callback lock
+		var projecIdLock sync.Mutex
+		snapshotCallbackProjectLocks[projectId] = &projecIdLock
+		log.Debugf("Created lock for callbacks %s", projectId)
 		break
 	}
 }
@@ -395,6 +388,11 @@ func FetchAndUpdateStatusOfOlderSnapshots(projectId string) error {
 	//Any entry that has a txStatus as TX_CONFIRM_PENDING, query its updated status and update ZSet
 	//If txHash changes, store old one in prevTxhash and update the new one in txHash
 
+	projectLock := snapshotCallbackProjectLocks[projectId]
+
+	projectLock.Lock()
+	defer projectLock.Unlock()
+
 	var redisAggregatorProjectId string
 	switch projectId {
 	case fmt.Sprintf(TOKENSUMMARY_PROJECTID, settingsObj.Development.Namespace):
@@ -436,16 +434,14 @@ func FetchAndUpdateStatusOfOlderSnapshots(projectId string) error {
 			continue
 		}
 		if snapshotMeta.TxStatus <= TX_CONFIRMATION_PENDING {
-			res := redisClient.ZRem(key, snapshot)
-			if res.Err() != nil {
-				log.Errorf("Failed to remove snapshotsZset entry due to error %+v", res.Err())
-				continue
-			}
+
 			//Fetch updated status.
 			snapshotMetaNew, err := WaitAndFetchBlockHeightStatus(projectId, int64(snapshotMeta.DAGHeight), 3)
 			if err != nil {
 				log.Infof("Could not get blockheight status for TokensSummary at height %d", snapshotMeta.DAGHeight)
+				continue
 			}
+
 			if snapshotMeta.TxHash != snapshotMetaNew.TxHash {
 				snapshotMeta.PrevTxHash = snapshotMeta.TxHash
 				snapshotMeta.TxHash = snapshotMetaNew.TxHash
@@ -454,6 +450,14 @@ func FetchAndUpdateStatusOfOlderSnapshots(projectId string) error {
 			snapshotNew, err := json.Marshal(snapshotMeta)
 			if err != nil {
 				log.Errorf("CRITICAL! Json marshal failed for snapshotMeta %+v with error %+v", snapshotMetaNew, err)
+				continue
+			}
+
+			// once new snapshot is prepared then only delete the Zset Entry
+			res := redisClient.ZRem(key, snapshot)
+			if res.Err() != nil {
+				log.Errorf("Failed to remove snapshotsZset entry due to error %+v", res.Err())
+				continue
 			}
 
 			for j := 0; j < 3; j++ {
@@ -812,7 +816,7 @@ func WaitAndFetchBlockHeightStatus(projectID string, blockHeight int64, retries 
 			continue
 		}
 		log.Debugf("Got CID %s, txHash %s at Block Height %d for projectID %s", apResp.PayloadCid, apResp.TxHash, blockHeight, projectID)
-		tokenSummarySnapshotMeta := TokenSummarySnapshotMeta{apResp.PayloadCid, apResp.TxHash, apResp.Status, "", apResp.BlockHeight, 0, 0}
+		tokenSummarySnapshotMeta := TokenSummarySnapshotMeta{apResp.PayloadCid, apResp.TxHash, apResp.Status, "", apResp.BlockHeight, 0, 0, 0, 0}
 		return &tokenSummarySnapshotMeta, nil
 	}
 
