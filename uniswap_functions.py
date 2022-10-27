@@ -486,7 +486,7 @@ async def get_eth_price_usd(
         raise err
 
 async def get_token_pair_price_and_white_token_reserves(
-    pair_address, from_block, to_block, 
+    pair_address, from_block, to_block,
     pair_metadata, white_token, redis_conn,
     rate_limit_lua_script_shas, web3_provider=global_w3_client
 ):
@@ -555,7 +555,7 @@ async def get_token_derived_eth(
         # set derived eth as 1 if token is weth
         for block_num in range(from_block, to_block + 1):
             token_derived_eth_dict[block_num] = 1
-        
+
         return token_derived_eth_dict
 
     await check_rpc_rate_limit(
@@ -1037,7 +1037,7 @@ async def get_pair_trade_volume(
     try:
         data_source_contract_address = Web3.toChecksumAddress(data_source_contract_address)
         block_details_dict = dict()
-   
+
         if fetch_timestamp:
             try:
                 block_details_dict = await get_block_details_in_block_range(
@@ -1079,7 +1079,7 @@ async def get_pair_trade_volume(
             }
         )
         await check_rpc_rate_limit(
-            parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], redis_conn=redis_conn, 
+            parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], redis_conn=redis_conn,
             request_payload={"contract": data_source_contract_address, "to_block": max_chain_height, "from_block": min_chain_height},
             error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get async trade volume"},
             logger=logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
@@ -1172,7 +1172,7 @@ async def get_pair_trade_volume(
                 elif log.event == "Burn":
                     epoch_results.Burn.logs.append(processed_log)
                     epoch_results.Burn.trades += trades_result
-                    
+
                     # Check if enough Mint amount exist that we can "substract" Burn events, else "add" the Burn events in a identical txHash
                     if epoch_results.Mint.trades.totalTradesUSD >= math.ceil(trades_result.totalTradesUSD):
                         tx_hash_trades -= trades_result
@@ -1203,7 +1203,7 @@ async def warm_up_cache_for_snapshot_constructors(
     """
     This function warm-up cache for uniswap helper functions. Generated cache will be used across
     snapshot constructors or in multiple pair-contract calculations.
-    : cache block details for epoch 
+    : cache block details for epoch
     : cache ETH USD price for epoch
     """
     await asyncio.gather(
