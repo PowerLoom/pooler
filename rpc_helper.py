@@ -16,6 +16,7 @@ from eth_abi.codec import ABICodec
 import json
 from async_limits import parse_many as limit_parse_many
 from gnosis.eth import EthereumClient
+#from callback_modules.uniswap.constants import GLOBAL_WEB3_PROVIDER
 
 
 formatter = logging.Formatter('%(levelname)-8s %(name)-4s %(asctime)s,%(msecs)d %(module)s-%(funcName)s: %(message)s')
@@ -233,6 +234,75 @@ def load_web3_providers_and_rate_limits(full_nodes, archive_nodes):
 
     return web3_providers
 
+GLOBAL_WEB3_PROVIDER = load_web3_providers_and_rate_limits(
+    full_nodes=settings.RPC.FULL_NODES, 
+    archive_nodes=settings.RPC.ARCHIVE_NODES
+)
+
+def inject_web3_provider_first_run(fn):
+    """
+    Decorator to inject web3 provider config based on first run. 
+    Here we consume web3 provider flags given to 'this' function. 
+    """
+    @wraps(fn)
+    async def wrapped(*args, **kwargs):
+        # if web3_provider was not given then just use first full node
+        if not kwargs.get('web3_provider', False):
+            kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["full_nodes"][0]
+        # if force_archive flag is passed then use last archive node
+        elif kwargs["web3_provider"].get('force_archive', False):
+            kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["archive_nodes"][0]
+            rpc_logger.warning(f"Got force_archive flag, injected archive_node | from_block:{kwargs.get('from_block')} | to_block:{kwargs.get('to_block')} | pair_address:{kwargs.get('pair_address')}")
+        else:
+            # there is no preset flag then use first full node web3 obj
+            kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["full_nodes"][0]
+
+        try:
+            return await fn(*args, **kwargs)
+        except Exception:
+            raise
+
+    return wrapped
+
+def inject_web3_provider_on_exception(retry_state):
+    """
+    Tenacity retry before_sleep exception handler: to inject web3 provider config 
+    based on exceptions type or error messages.
+    """
+
+    # if there was an error then set web3 object depending on exception Type
+    if retry_state.outcome and isinstance(retry_state.outcome.exception(), Exception):
+        
+        if any(error_string in retry_state.outcome.exception().extra_info.get('msg') for error_string in [
+            "header not found", 
+            "missing trie node"
+        ]) or retry_state.kwargs["web3_provider"] in GLOBAL_WEB3_PROVIDER["archive_nodes"]:
+
+            # if current web3 provider is an archive node AND we have another archive node, then use next one
+            current_provider_index = retry_state.kwargs["web3_provider"]['index']
+            if retry_state.kwargs["web3_provider"] in GLOBAL_WEB3_PROVIDER["archive_nodes"] and \
+                current_provider_index+1 < len(GLOBAL_WEB3_PROVIDER["archive_nodes"]):
+                retry_state.kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["archive_nodes"][current_provider_index+1]
+            # else use first archive node
+            else:
+                retry_state.kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["archive_nodes"][0]
+
+            rpc_logger.warning(f"Found exception injected archive node | exception: {retry_state.outcome.exception().extra_info.get('msg')} | function:{retry_state.fn}")
+
+        else:
+            # if available use next full_node provider
+            current_provider_index = retry_state.kwargs["web3_provider"]['index']
+            if current_provider_index+1 < len(GLOBAL_WEB3_PROVIDER["full_nodes"]):
+                retry_state.kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["full_nodes"][current_provider_index+1]
+            # use first full_node provider
+            else:
+                retry_state.kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["full_nodes"][0]
+
+            rpc_logger.warning(f"Found exception injected next full_node | exception: {retry_state.outcome.exception().extra_info.get('msg')} | function:{retry_state.fn}")
+
+    else:
+        # if there was no error or any flag then use first full node web3 obj
+        retry_state.kwargs["web3_provider"] = GLOBAL_WEB3_PROVIDER["full_nodes"][0]
 
 
 def contract_abi_dict(abi):

@@ -1,10 +1,11 @@
 from typing import Optional, List, Awaitable, Callable
 from httpx import AsyncClient
 from setproctitle import setproctitle
-from uniswap_functions import (
-    load_rate_limiter_scripts, get_pair_trade_volume, get_pair_reserves,
+from callback_modules.uniswap.core import (
+    get_pair_reserves, get_pair_trade_volume,
     warm_up_cache_for_snapshot_constructors
 )
+from rate_limiter import load_rate_limiter_scripts
 from eth_utils import keccak
 from uuid import uuid4
 from signal import SIGINT, SIGTERM, SIGQUIT
@@ -16,7 +17,6 @@ from dynaconf import settings
 from callback_modules.helpers import AuditProtocolCommandsHelper, CallbackAsyncWorker
 from redis_conn import create_redis_conn, REDIS_CONN_CONF
 from redis_keys import (
-    uniswap_pair_total_reserves_processing_status, uniswap_pair_total_reserves_last_snapshot,
     uniswap_discarded_query_pair_total_reserves_epochs_redis_q_f,
     uniswap_discarded_query_pair_trade_volume_epochs_redis_q_f,
     uniswap_cb_broadcast_processing_logs_zset, uniswap_failed_query_pair_total_reserves_epochs_redis_q_f,
@@ -347,8 +347,10 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                            msg_obj)
 
         # TODO: refactor to accommodate multiple snapshots being generated from queued epochs
-        pair_total_reserves_epoch_snapshot = await self._construct_pair_reserves_epoch_snapshot_data(msg_obj=msg_obj,
-                                                                                                     enqueue_on_failure=True)
+        pair_total_reserves_epoch_snapshot = await self._construct_pair_reserves_epoch_snapshot_data(
+            msg_obj=msg_obj, enqueue_on_failure=True, past_failed_epochs=[]
+        )
+
         if not pair_total_reserves_epoch_snapshot:
             self._logger.error('No epoch snapshot to commit. Construction of snapshot failed for %s', msg_obj)
             update_log = {
@@ -460,7 +462,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
 
         # prepare trade volume snapshot
         trade_vol_epoch_snapshot = await self._construct_trade_volume_epoch_snapshot_data(
-            msg_obj=msg_obj, enqueue_on_failure=True
+            msg_obj=msg_obj, enqueue_on_failure=True, past_failed_epochs=[]
         )
         if not trade_vol_epoch_snapshot:
             self._logger.error('No epoch snapshot to commit for trade volume. Construction of snapshot failed for %s',
