@@ -25,6 +25,9 @@ import aio_pika
 from tenacity import AsyncRetrying, stop_after_attempt, wait_random_exponential
 
 
+# TODO: remove polymarket specific helpers
+
+
 async def get_rabbitmq_connection():
     return await aio_pika.connect_robust(
         host=settings.RABBITMQ.HOST,
@@ -191,6 +194,11 @@ class AuditProtocolCommandsHelper:
                 response_obj = await session.post(
                         url=urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, 'commit_payload'),
                         json=report_payload.dict()
+                        json={
+                                'payload': report_payload,
+                                'projectId': project_id,
+                                'skipAnchorProof': settings.get('AUDIT_PROTOCOL_ENGINE.SKIP_ANCHOR_PROOF',True)
+                            }
                 )
                 response_status_code = response_obj.status_code
                 response = response_obj.json() or {}

@@ -488,6 +488,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         setproctitle(self.name)
         # setup_loguru_intercept()
         self._aiohttp_session_interface = AsyncHTTPSessionCache()
+        await self._ipfs_client.init_sessions()
         # TODO: initialize web3 object here
         # self._logger.debug('Launching epochs summation actor for total reserves of pairs...')
         super(PairTotalReservesProcessor, self).run()
