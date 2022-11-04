@@ -6,10 +6,9 @@ from setproctitle import setproctitle
 from functools import partial
 from loguru import logger
 from uuid import uuid4
-from redis_conn import RedisPoolCache, REDIS_CONN_CONF
-from aio_pika import ExchangeType, IncomingMessage
+from redis_conn import RedisPoolCache
+from aio_pika import IncomingMessage
 from aio_pika.pool import Pool
-from functools import reduce
 from typing import Union, Dict
 import sys
 import resource
@@ -22,11 +21,7 @@ import multiprocessing
 import asyncio
 import signal
 import aio_pika
-import aiohttp
 from tenacity import AsyncRetrying, stop_after_attempt, wait_random_exponential
-
-
-# TODO: remove polymarket specific helpers
 
 
 async def get_rabbitmq_connection():
@@ -186,9 +181,8 @@ class AuditProtocolCommandsHelper:
 
     @classmethod
     async def commit_payload(cls, pair_contract_address, stream, report_payload, session: AsyncClient):
-        # retry below call given at settings.AUDIT_PROTOCOL_ENGINE.RETRY
         async for attempt in AsyncRetrying(
-                reraise=True,
+                reraise=False,
                 stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY),
                 wait=wait_random_exponential(multiplier=2, max=10)
         ):
@@ -199,22 +193,26 @@ class AuditProtocolCommandsHelper:
                         json={
                                 'payload': report_payload,
                                 'projectId': project_id,
-                                'skipAnchorProof':settings.get('AUDIT_PROTOCOL_ENGINE.SKIP_ANCHOR_PROOF',True)
+                                'skipAnchorProof': settings.get('AUDIT_PROTOCOL_ENGINE.SKIP_ANCHOR_PROOF',True)
                             }
                 )
                 response_status_code = response_obj.status_code
                 response = response_obj.json() or {}
                 if response_status_code in range(200, 300):
                     return response
-                elif response_status_code == 500 or response_status_code == 502:
-                    return {
-                        "message": f"failed with status code: {response_status_code}", "response": response
-                    }  # ignore 500 and 502 errors
+                elif attempt.retry_state.attempt_number == settings.AUDIT_PROTOCOL_ENGINE.RETRY:
+                    if attempt.retry_state.outcome.exception():
+                        raise attempt.retry_state.outcome.exception()
+                    else:
+                        raise Exception(
+                            'Failed audit protocol engine call with status code: %s and response: %s',
+                            response_status_code, response
+                        )
                 else:
                     raise Exception(
-                        'Failed audit protocol engine call with status code: {} and response: {}'.format(
-                            response_status_code, response))
-
+                        'Failed audit protocol engine call with status code: %s and response: %s',
+                        response_status_code, response
+                    )
 
 
 class CallbackAsyncWorker(multiprocessing.Process):

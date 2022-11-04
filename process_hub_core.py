@@ -195,7 +195,7 @@ class ProcessHubCore(Process):
         stderr_handler.setLevel(logging.ERROR)
         self._logger.handlers = [
             logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST','localhost'),
-            port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT)),
+            port=settings.get('LOGGING_SERVER.PORT', logging.handlers.DEFAULT_TCP_LOGGING_PORT)),
             stdout_handler, stderr_handler
         ]
 

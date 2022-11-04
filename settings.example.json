@@ -2,6 +2,7 @@
     "development": {
         "namespace": "staging",
         "instance_id": "generated-uuid",
+        "chain_id": 5,
         "uniswap_contract_abis":{
             "factory":"./abis/IUniswapV2Factory.json",
             "router":"./abis/UniswapV2Router.json",
@@ -135,6 +136,7 @@
         "port": 9002,
         "audit_protocol_engine": {
             "url": "http://localhost:9000",
+            "consensus_url": "http://localhost:9099",
             "retry": 5,
             "skip_anchor_proof":true
         },
