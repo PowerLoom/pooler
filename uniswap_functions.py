@@ -967,11 +967,18 @@ def extract_trade_volume_log(event_name, log, pair_per_token_metadata, token0_pr
     # if event is 'Swap' then only add single token in total volume calculation
     if event_name == 'Swap':
 
-        # set one side token value in swap case
-        if token1_amount_usd and token0_amount_usd:
-            trade_volume_usd = token1_amount_usd if token1_amount_usd > token0_amount_usd else token0_amount_usd
-        else:
-            trade_volume_usd = token1_amount_usd if token1_amount_usd else token0_amount_usd
+        trade_volume_usd = swap_trade_volume(
+            pair_per_token_metadata['token0']["address"],
+            pair_per_token_metadata['token1']["address"],
+            token0_amount_usd,
+            token1_amount_usd
+        )
+
+        # # set one side token value in swap case
+        # if token1_amount_usd and token0_amount_usd:
+        #     trade_volume_usd = token1_amount_usd if token1_amount_usd > token0_amount_usd else token0_amount_usd
+        # else:
+        #     trade_volume_usd = token1_amount_usd if token1_amount_usd else token0_amount_usd
 
         # calculate uniswap LP fee
         trade_fee_usd = token1_amount_usd  * 0.003 if token1_amount_usd else token0_amount_usd * 0.003 # uniswap LP fee rate
@@ -1002,6 +1009,22 @@ def extract_trade_volume_log(event_name, log, pair_per_token_metadata, token0_pr
         token0TradeVolumeUSD=token0_amount_usd,
         token1TradeVolumeUSD=token1_amount_usd
     ), log
+
+def swap_trade_volume(token0, token1, token0_amount_usd, token1_amount_usd):
+    whitelist = [Web3.toChecksumAddress(token) for token in settings.UNISWAP_V2_WHITELIST]
+    token0 = Web3.toChecksumAddress(token0)
+    token1 = Web3.toChecksumAddress(token1)
+
+    if token0 in whitelist and token1 in whitelist:
+        return (token0_amount_usd + token1_amount_usd)/2
+    elif token0 in whitelist:
+        return token0_amount_usd
+    elif token1 in whitelist:
+        return token1_amount_usd
+    else: 
+        return 0
+
+
 
 # asynchronously get trades on a pair contract
 @inject_web3_provider_first_run
