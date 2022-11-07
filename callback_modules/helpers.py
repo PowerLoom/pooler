@@ -1,4 +1,5 @@
 from httpx import AsyncClient
+from callback_modules.data_models import PayloadCommitAPIRequest
 from urllib.parse import urljoin
 from dynaconf import settings
 from eth_utils import keccak
@@ -180,21 +181,16 @@ class AuditProtocolCommandsHelper:
                 redis_conn.sadd(f'uniswap:{settings.NAMESPACE}:callbackURLSetFor', project_id)
 
     @classmethod
-    async def commit_payload(cls, pair_contract_address, stream, report_payload, session: AsyncClient):
+    async def commit_payload(cls, report_payload: PayloadCommitAPIRequest, session: AsyncClient):
         async for attempt in AsyncRetrying(
                 reraise=False,
                 stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY),
                 wait=wait_random_exponential(multiplier=2, max=10)
         ):
             with attempt:
-                project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
                 response_obj = await session.post(
                         url=urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, 'commit_payload'),
-                        json={
-                                'payload': report_payload,
-                                'projectId': project_id,
-                                'skipAnchorProof': settings.get('AUDIT_PROTOCOL_ENGINE.SKIP_ANCHOR_PROOF',True)
-                            }
+                        json=report_payload.dict()
                 )
                 response_status_code = response_obj.status_code
                 response = response_obj.json() or {}

@@ -18,16 +18,11 @@ class SourceChainDetails(BaseModel):
     epochEndHeight: int
 
 
-class PayloadCommit(BaseModel):
+class PayloadCommitAPIRequest(BaseModel):
     projectId: str
-    commitId: str
-    payload: Optional[dict] = None
-    # following two can be used to substitute for not supplying the payload but the CID and hash itself
-    snapshotCID: Optional[str] = None
-    apiKeyHash: Optional[str] = None
-    tentativeBlockHeight: int = 0
-    resubmitted: bool = False
-    resubmissionBlock: int = 0  # corresponds to lastTouchedBlock in PendingTransaction model
+    payload: dict
     web3Storage: bool = False
+    # skip anchor tx by default, unless passed
     skipAnchorProof: bool = True
-    sourceChainDetails: Optional[SourceChainDetails]
+    sourceChainDetails: SourceChainDetails
+
