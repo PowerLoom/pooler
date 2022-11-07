@@ -26,16 +26,3 @@ class PayloadCommitAPIRequest(BaseModel):
     skipAnchorProof: bool = True
     sourceChainDetails: SourceChainDetails
 
-class PayloadCommit(BaseModel):
-    projectId: str
-    commitId: str
-    payload: Optional[dict] = None
-    # following two can be used to substitute for not supplying the payload but the CID and hash itself
-    snapshotCID: Optional[str] = None
-    apiKeyHash: Optional[str] = None
-    tentativeBlockHeight: int = 0
-    resubmitted: bool = False
-    resubmissionBlock: int = 0  # corresponds to lastTouchedBlock in PendingTransaction model
-    web3Storage: bool = False
-    skipAnchorProof: bool = True
-    sourceChainDetails: Optional[SourceChainDetails]

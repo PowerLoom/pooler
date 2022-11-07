@@ -456,6 +456,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             self._rate_limiting_lua_scripts = await load_rate_limiter_scripts(self._redis_conn)
         self._logger.debug('Got epoch to process for calculating total reserves for pair: %s', msg_obj)
 
+        self._httpx_session_client: AsyncClient = await self._async_httpx_session_singleton.get_httpx_session_client
         self._logger.debug('Got aiohttp session cache. Attempting to snapshot total reserves data in epoch %s...',
                            msg_obj)
 
@@ -487,8 +488,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
     def run(self):
         setproctitle(self.name)
         # setup_loguru_intercept()
-        self._aiohttp_session_interface = AsyncHTTPSessionCache()
-        await self._ipfs_client.init_sessions()
+        self._async_httpx_session_singleton = AsyncHTTPSessionCache()
         # TODO: initialize web3 object here
         # self._logger.debug('Launching epochs summation actor for total reserves of pairs...')
         super(PairTotalReservesProcessor, self).run()
