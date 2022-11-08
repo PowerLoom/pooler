@@ -358,7 +358,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                     mapping={json.dumps(update_log): int(time.time())}
                 )
                 source_chain_details = SourceChainDetails(
-                    chainID=settings.chain_id,
+                    chainID=settings.CHAIN_ID,
                     epochStartHeight=each_epoch[0],
                     epochEndHeight=each_epoch[1]
                 )
