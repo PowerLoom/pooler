@@ -316,7 +316,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             epoch_snapshot_map: Dict[Tuple[int, int], Union[UniswapPairTotalReservesSnapshot, UniswapTradesSnapshot, None]]
     ):
 
-        for each_epoch, epoch_snapshot in epoch_snapshot_map.values():
+        for each_epoch, epoch_snapshot in epoch_snapshot_map.items():
             if not epoch_snapshot:
                 self._logger.error(
                     'No epoch snapshot to commit. Construction of snapshot failed for %s against epoch %s',
