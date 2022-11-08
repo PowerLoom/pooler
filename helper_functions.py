@@ -1,7 +1,7 @@
 from web3 import Web3, WebsocketProvider, HTTPProvider
 from exceptions import SelfExitException
 from cached_property import cached_property as cached_property_async
-from httpx import AsyncClient, Limits, Timeout
+from httpx import AsyncClient, Limits, Timeout, AsyncHTTPTransport
 from typing import Union
 from eth_account.messages import encode_defunct
 from eth_account.account import Account
@@ -57,14 +57,13 @@ class FailedRequestToMaticVigil(Exception):
 class AsyncHTTPSessionCache:
     @cached_property_async
     async def get_httpx_session_client(self) -> AsyncClient:
+        async_transport = AsyncHTTPTransport(
+            limits=Limits(max_connections=100, max_keepalive_connections=50, keepalive_expiry=None)
+        )
         async_httpx_client = AsyncClient(
             timeout=Timeout(timeout=5.0),
             follow_redirects=False,
-            limits=Limits(
-                max_connections=settings['rlimit']['file_descriptors'], 
-                max_keepalive_connections=50, 
-                keepalive_expiry=600
-            )
+            transport=async_transport
         )
         return async_httpx_client
 
