@@ -382,7 +382,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 try:
                     r = await AuditProtocolCommandsHelper.commit_payload(
                         report_payload=commit_payload,
-                        session=self._client
+                        session=await self._async_httpx_session_singleton.get_httpx_session_client()
                     )
                 except Exception as e:
                     self._logger.error('Exception committing snapshot to audit protocol: %s | dump: %s',
