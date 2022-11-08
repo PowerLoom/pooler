@@ -1,5 +1,5 @@
 from typing import Optional, List, Awaitable, Callable, Dict, Tuple, Union
-from httpx import AsyncClient
+from httpx import AsyncClient, AsyncHTTPTransport, Timeout, Limits
 from setproctitle import setproctitle
 from callback_modules.uniswap.core import (
     get_pair_reserves, get_pair_trade_volume,
@@ -24,7 +24,6 @@ from redis_keys import (
 )
 from pydantic import ValidationError, BaseModel as CustomDataModel
 from .data_models import PayloadCommitAPIRequest, SourceChainDetails
-from helper_functions import AsyncHTTPSessionCache
 from aio_pika import ExchangeType, IncomingMessage, Message, DeliveryMode
 from rabbitmq_helpers import RabbitmqSelectLoopInteractor
 import queue
@@ -49,6 +48,15 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             **kwargs
         )
         self._rate_limiting_lua_scripts = dict()
+        self._async_transport = AsyncHTTPTransport(
+            limits=Limits(max_connections=100, max_keepalive_connections=50, keepalive_expiry=None)
+        )
+        self._client = AsyncClient(
+            # base_url=self._base_url,
+            timeout=Timeout(timeout=5.0),
+            follow_redirects=False,
+            transport=self._async_transport
+        )
 
     async def _fetch_token_reserves_on_chain(
             self,
@@ -374,7 +382,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 try:
                     r = await AuditProtocolCommandsHelper.commit_payload(
                         report_payload=commit_payload,
-                        session=await self._async_httpx_session_singleton.get_httpx_session_client()
+                        session=self._client
                     )
                 except Exception as e:
                     self._logger.error('Exception committing snapshot to audit protocol: %s | dump: %s',
@@ -448,7 +456,6 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             self._rate_limiting_lua_scripts = await load_rate_limiter_scripts(self._redis_conn)
         self._logger.debug('Got epoch to process for calculating total reserves for pair: %s', msg_obj)
 
-        self._httpx_session_client: AsyncClient = await self._async_httpx_session_singleton.get_httpx_session_client
         self._logger.debug('Got aiohttp session cache. Attempting to snapshot total reserves data in epoch %s...',
                            msg_obj)
 
@@ -480,7 +487,6 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
     def run(self):
         setproctitle(self.name)
         # setup_loguru_intercept()
-        self._async_httpx_session_singleton = AsyncHTTPSessionCache()
         # TODO: initialize web3 object here
         # self._logger.debug('Launching epochs summation actor for total reserves of pairs...')
         super(PairTotalReservesProcessor, self).run()

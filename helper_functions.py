@@ -54,20 +54,6 @@ class FailedRequestToMaticVigil(Exception):
     pass
 
 
-class AsyncHTTPSessionCache:
-    @cached_property_async
-    async def get_httpx_session_client(self) -> AsyncClient:
-        async_transport = AsyncHTTPTransport(
-            limits=Limits(max_connections=100, max_keepalive_connections=50, keepalive_expiry=None)
-        )
-        async_httpx_client = AsyncClient(
-            timeout=Timeout(timeout=5.0),
-            follow_redirects=False,
-            transport=async_transport
-        )
-        return async_httpx_client
-
-
 def make_post_call(url: str, params: dict):
     try:
         logging.debug('Making post call to %s: %s', url, params)
