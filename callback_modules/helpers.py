@@ -197,7 +197,7 @@ class AuditProtocolCommandsHelper:
                 if response_status_code in range(200, 300):
                     return response
                 elif attempt.retry_state.attempt_number == settings.AUDIT_PROTOCOL_ENGINE.RETRY:
-                    if attempt.retry_state.outcome.exception():
+                    if attempt.retry_state.outcome and attempt.retry_state.outcome.exception():
                         raise attempt.retry_state.outcome.exception()
                     else:
                         raise Exception(
