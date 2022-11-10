@@ -99,124 +99,43 @@ type PairSummarySnapshot struct {
 	Data []TokenPairLiquidityProcessedData `json:"data"`
 }
 
+type DAGBlockRange struct {
+	HeadBlockCid string `json:"head_block_cid"`
+	TailBlockCid string `json:"tail_block_cid"`
+}
+
 type TokenPairLiquidityProcessedData struct {
-	ContractAddress          string  `json:"contractAddress"`
-	Name                     string  `json:"name"`
-	Liquidity                string  `json:"liquidity"`
-	Volume_24h               string  `json:"volume_24h"`
-	Volume_7d                string  `json:"volume_7d"`
-	Cid_volume_24h           string  `json:"cid_volume_24h"`
-	Cid_volume_7d            string  `json:"cid_volume_7d"`
-	Fees_24h                 string  `json:"fees_24h"`
-	Block_height             int     `json:"block_height"`
-	Block_timestamp          int     `json:"block_timestamp"`
-	DeltaToken0Reserves      float64 `json:"deltaToken0Reserves"`
-	DeltaToken1Reserves      float64 `json:"deltaToken1Reserves"`
-	DeltaTime                float64 `json:"deltaTime"`
-	LatestTimestamp          float64 `json:"latestTimestamp"`
-	EarliestTimestamp        float64 `json:"earliestTimestamp"`
-	Token0Liquidity          float64 `json:"token0Liquidity"`
-	Token1Liquidity          float64 `json:"token1Liquidity"`
-	Token0LiquidityUSD       float64 `json:"token0LiquidityUSD"`
-	Token1LiquidityUSD       float64 `json:"token1LiquidityUSD"`
-	Token0TradeVolume_24h    float64 `json:"token0TradeVolume_24h"`
-	Token1TradeVolume_24h    float64 `json:"token1TradeVolume_24h"`
-	Token0TradeVolumeUSD_24h float64 `json:"token0TradeVolumeUSD_24h"`
-	Token1TradeVolumeUSD_24h float64 `json:"token1TradeVolumeUSD_24h"`
-	Token0TradeVolume_7d     float64 `json:"token0TradeVolume_7d"`
-	Token1TradeVolume_7d     float64 `json:"token1TradeVolume_7d"`
-	Token0TradeVolumeUSD_7d  float64 `json:"token0TradeVolumeUSD_7d"`
-	Token1TradeVolumeUSD_7d  float64 `json:"token1TradeVolumeUSD_7d"`
+	ContractAddress          string        `json:"contractAddress"`
+	Name                     string        `json:"name"`
+	Liquidity                string        `json:"liquidity"`
+	Volume_24h               string        `json:"volume_24h"`
+	Volume_7d                string        `json:"volume_7d"`
+	Cid_volume_24h           DAGBlockRange `json:"cid_volume_24h"`
+	Cid_volume_7d            DAGBlockRange `json:"cid_volume_7d"`
+	Fees_24h                 string        `json:"fees_24h"`
+	Block_height             int           `json:"block_height"`
+	Block_timestamp          int           `json:"block_timestamp"`
+	DeltaToken0Reserves      float64       `json:"deltaToken0Reserves"`
+	DeltaToken1Reserves      float64       `json:"deltaToken1Reserves"`
+	DeltaTime                float64       `json:"deltaTime"`
+	LatestTimestamp          float64       `json:"latestTimestamp"`
+	EarliestTimestamp        float64       `json:"earliestTimestamp"`
+	Token0Liquidity          float64       `json:"token0Liquidity"`
+	Token1Liquidity          float64       `json:"token1Liquidity"`
+	Token0LiquidityUSD       float64       `json:"token0LiquidityUSD"`
+	Token1LiquidityUSD       float64       `json:"token1LiquidityUSD"`
+	Token0TradeVolume_24h    float64       `json:"token0TradeVolume_24h"`
+	Token1TradeVolume_24h    float64       `json:"token1TradeVolume_24h"`
+	Token0TradeVolumeUSD_24h float64       `json:"token0TradeVolumeUSD_24h"`
+	Token1TradeVolumeUSD_24h float64       `json:"token1TradeVolumeUSD_24h"`
+	Token0TradeVolume_7d     float64       `json:"token0TradeVolume_7d"`
+	Token1TradeVolume_7d     float64       `json:"token1TradeVolume_7d"`
+	Token0TradeVolumeUSD_7d  float64       `json:"token0TradeVolumeUSD_7d"`
+	Token1TradeVolumeUSD_7d  float64       `json:"token1TradeVolumeUSD_7d"`
 }
 
 // Struct auto-generated from https://mholt.github.io/json-to-go/ by pasting sample json
-//Had to modify places where maps are required.
-
-/*type TokenPairReserves struct {
-	DagCid string `json:"dagCid"`
-	Data   struct {
-		Cid     string `json:"cid"`
-		Type    string `json:"type"`
-		Payload struct {
-			Contract         string             `json:"contract"`
-			Token0Reserves   map[string]float64 `json:"token0Reserves"`
-			Token1Reserves   map[string]float64 `json:"token1Reserves"`
-			ChainHeightRange struct {
-				Begin int64 `json:"begin"`
-				End   int64 `json:"end"`
-			} `json:"chainHeightRange"`
-			BroadcastID string  `json:"broadcast_id"`
-			Timestamp   float64 `json:"timestamp"`
-		} `json:"payload"`
-	} `json:"data"`
-	Height         int64  `json:"height"`
-	Timestamp      int64  `json:"timestamp"`
-	TxHash         string `json:"txHash"`
-	PrevDagCid     string `json:"prevDagCid"`
-	PayloadChanged bool   `json:"payloadChanged"`
-	Diff           struct {
-		Token0Reserves struct {
-			Old map[string]float64 `json:"old"`
-			New map[string]float64 `json:"new"`
-		} `json:"token0Reserves"`
-		Token1Reserves struct {
-			Old map[string]float64 `json:"old"`
-			New map[string]float64 `json:"new"`
-		} `json:"token1Reserves"`
-	} `json:"diff"`
-}*/
-
-// Struct auto-generated from https://mholt.github.io/json-to-go/ by pasting sample json
-//TODO: Refer to uniswap contract and change all fields which are uint256 to bigInt.
-/*type TokenPairTradeVolumeData struct {
-	DagCid string `json:"dagCid"`
-	Data   struct {
-		Cid     string `json:"cid"`
-		Type    string `json:"type"`
-		Payload struct {
-			Contract          string  `json:"contract"`
-			TotalTrade        float64 `json:"totalTrade"`
-			Token0TradeVolume float64 `json:"token0TradeVolume"`
-			Token1TradeVolume float64 `json:"token1TradeVolume"`
-			Events            []struct {
-				Sender string `json:"sender"`
-				To     string `json:"to"`
-				Commenting these for now as there are samples which go beyond int64.
-				Need to handle it via some bigInt if required.
-				Amount0In  int64 `json:"amount0In"`
-				Amount1In  int64   `json:"amount1In"`
-				Amount0Out int64   `json:"amount0Out"`
-				Amount1Out int64   `json:"amount1Out"`
-			} `json:"events"`
-			ChainHeightRange struct {
-				Begin int64 `json:"begin"`
-				End   int64 `json:"end"`
-			} `json:"chainHeightRange"`
-			BroadcastID string  `json:"broadcast_id"`
-			Timestamp   float64 `json:"timestamp"`
-		} `json:"payload"`
-	} `json:"data"`
-	Height         int64  `json:"height"`
-	Timestamp      int64  `json:"timestamp"`
-	TxHash         string `json:"txHash"`
-	PrevDagCid     string `json:"prevDagCid"`
-	PayloadChanged bool   `json:"payloadChanged"`
-	Diff           struct {
-		TotalTrade struct {
-			Old float64 `json:"old"`
-			New float64 `json:"new"`
-		} `json:"totalTrade"`
-		Token0TradeVolume struct {
-			Old float64 `json:"old"`
-			New float64 `json:"new"`
-		} `json:"token0TradeVolume"`
-		Token1TradeVolume struct {
-			Old float64 `json:"old"`
-			New float64 `json:"new"`
-		} `json:"token1TradeVolume"`
-	} `json:"diff"`
-}*/
-
+// Had to modify places where maps are required.
 type ProjectSettings struct {
 	Development struct {
 		ContractAddresses struct {
