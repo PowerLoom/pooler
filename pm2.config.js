@@ -3,20 +3,12 @@
 const MAX_RESTART = 10;
 const MIN_UPTIME = 60000; 
 const NODE_ENV = "production" // process.env.NODE_ENV || 'development';
+const CWD = "<>"
 
 module.exports = {
   apps : [
     {
-      name   : "uniswap-pooler-metadata-cacher",
-      script : "python3 ./pair_meta_rel_data_cacher.py",
-      max_restarts: MAX_RESTART,
-      min_uptime: MIN_UPTIME,
-      env: {
-        NODE_ENV: NODE_ENV,
-      },
-    },
-    {
-      name   : "uniswap-pooler-core-api",
+      name   : "pooler-core-api",
       script : "python3 ./gunicorn_core_launcher.py",
       max_restarts: MAX_RESTART,
       min_uptime: MIN_UPTIME,
@@ -34,8 +26,9 @@ module.exports = {
       }
     },
     {
-      name   : "uniswap-token-data-collator",
-      script : "./uniswap-token-data-collator/uniswapTokenData",
+      name   : "token-data-collator",
+      script : "./uniswapTokenData",
+      cwd : CWD+"uniswap-token-data-collator"
       max_restarts: MAX_RESTART,
       env: {
         NODE_ENV: NODE_ENV,
