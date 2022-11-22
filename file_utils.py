@@ -6,9 +6,9 @@ def read_json_file(file_path: str, logger):
     """Read given json file and return its content as a dictionary."""
     try:
         f_ = open(file_path, 'r')
-    except Exception as e:
+    except Exception as exc:
         logger.warning(f"Unable to open the {file_path} file")
-        logger.error(e, exc_info=True)
+        logger.error(exc, exc_info=True)
         raise e
     else:
         json_data = json.loads(f_.read())

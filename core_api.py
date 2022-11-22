@@ -1,35 +1,33 @@
-from typing import Optional, Union
+from typing import Optional
+from urllib.parse import urljoin
+import logging
+import sys
+import json
+import os
+
 from fastapi import Depends, FastAPI, Request, Response, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from urllib.parse import urlencode, urljoin
 from dynaconf import settings
-import logging
-import sys
 import coloredlogs
 from redis import asyncio as aioredis
 import aiohttp
-import json
-import os
-import time
-from math import floor
-from pydantic import NoneStr
+from web3 import Web3
+
 import redis_keys
 from redis_conn import RedisPoolCache
-from functools import reduce
 from uniswap_functions import read_json_file
 from redis_keys import (
-    uniswap_pair_contract_V2_pair_data, uniswap_pair_cached_recent_logs, uniswap_token_info_cached_data,
-    uniswap_pair_cache_daily_stats, uniswap_V2_summarized_snapshots_zset, uniswap_V2_snapshot_at_blockheight,
-    uniswap_v2_daily_stats_snapshot_zset, uniswap_V2_daily_stats_at_blockheight, uniswap_v2_tokens_snapshot_zset,
-    uniswap_V2_tokens_at_blockheight, uniswap_pair_contract_tokens_addresses
+    uniswap_pair_cached_recent_logs,uniswap_pair_contract_tokens_addresses,
+    uniswap_V2_summarized_snapshots_zset, uniswap_V2_snapshot_at_blockheight,
+    uniswap_v2_daily_stats_snapshot_zset, uniswap_V2_daily_stats_at_blockheight,
+    uniswap_v2_tokens_snapshot_zset,uniswap_V2_tokens_at_blockheight
+
 )
 from utility_functions import (
-    v2_pair_data_unpack, 
     number_to_abbreviated_string,
     retrieve_payload_data
 )
-from web3 import Web3
 
 REDIS_CONN_CONF = {
     "host": settings['redis']['host'],
@@ -111,10 +109,10 @@ async def get_market_address(market_id: str, redis_conn: aioredis.Redis):
     else:
         # Fetch the contract address from the file
         try:
-            f_ = open(f"static/cached_markets.json", 'r')
-        except Exception as e:
+            f_ = open("static/cached_markets.json", 'r')
+        except Exception as exc:
             rest_logger.warning("Unable to open the cached_markets.json file")
-            rest_logger.error(e, exc_info=True)
+            rest_logger.error(exc, exc_info=True)
         else:
             rest_logger.debug("Found cached_markets.json file")
             json_data = json.loads(f_.read())
@@ -274,9 +272,9 @@ async def get_v2_pairs_data(
     latest_payload, latest_block_height = latest_v2_summary_snapshot[0]
     latest_payload = json.loads(latest_payload.decode('utf-8'))
     latest_payload_cid = latest_payload.get("cid")
-    txHash = latest_payload.get("txHash")
-    txStatus = latest_payload.get("txStatus")
-    prevTxHash = latest_payload.get("prevTxHash")
+    tx_hash = latest_payload.get("txHash")
+    tx_status = latest_payload.get("txStatus")
+    prev_tx_hash = latest_payload.get("prevTxHash")
     begin_block_height_24h = latest_payload.get("begin_block_height_24h")
     begin_block_timestamp_24h = latest_payload.get("begin_block_timestamp_24h")
     begin_block_height_7d = latest_payload.get("begin_block_height_7d")
@@ -293,14 +291,14 @@ async def get_v2_pairs_data(
     #even ipfs doesn't have the data, return empty
     if not snapshot_data:
         return {'data': None}
-    
+
     data = json.loads(snapshot_data)["data"]
     data.sort(key=get_tokens_liquidity_for_sort, reverse=True)
 
     if "/v1/api" in request.url._url:
         return {
-            "data": data, "txHash": txHash, "cid": latest_payload_cid,
-            "txStatus": SNAPSHOT_STATUS_MAP[txStatus], "prevTxHash": prevTxHash,
+            "data": data, "txHash": tx_hash, "cid": latest_payload_cid,
+            "txStatus": SNAPSHOT_STATUS_MAP[tx_status], "prevTxHash": prev_tx_hash,
             "block_height": data[0].get("block_height", None), "block_timestamp": data[0].get("block_timestamp", None),
             "begin_block_height_24h": begin_block_height_24h, "begin_block_timestamp_24h": begin_block_timestamp_24h,
             "begin_block_height_7d": begin_block_height_7d, "begin_block_timestamp_7d": begin_block_timestamp_7d
@@ -310,7 +308,7 @@ async def get_v2_pairs_data(
 
 @app.get('/v1/api/v2-pairs/snapshots')
 @app.get('/v2-pairs/snapshots')
-async def get_v2_pairs_data(
+async def get_v2_pairs_snapshots(
     request: Request,
     response: Response
 ):
@@ -330,7 +328,7 @@ async def get_v2_pairs_data(
 
 @app.get('/v1/api/v2-pairs/{block_height:int}')
 @app.get('/v2-pairs/{block_height:int}')
-async def get_v2_pairs_data(
+async def get_v2_pairs_at_block_height(
     request: Request,
     response: Response,
     block_height: int
@@ -353,9 +351,9 @@ async def get_v2_pairs_data(
 
     latest_payload = json.loads(latest_payload[0].decode('utf-8'))
     payload_cid = latest_payload.get("cid")
-    txHash = latest_payload.get("txHash")
-    txStatus = latest_payload.get("txStatus")
-    prevTxHash = latest_payload.get("prevTxHash")
+    tx_hash = latest_payload.get("txHash")
+    tx_status = latest_payload.get("txStatus")
+    prev_tx_hash = latest_payload.get("prevTxHash")
     begin_block_height_24h = latest_payload.get("begin_block_height_24h")
     begin_block_timestamp_24h = latest_payload.get("begin_block_timestamp_24h")
     begin_block_height_7d = latest_payload.get("begin_block_height_7d")
@@ -367,34 +365,34 @@ async def get_v2_pairs_data(
         data.sort(key=get_tokens_liquidity_for_sort, reverse=True)
         if "/v1/api" in request.url._url:
             return {
-                "data": data, "txHash": txHash, "cid": payload_cid, 
-                "txStatus": SNAPSHOT_STATUS_MAP[txStatus], "prevTxHash": prevTxHash,
+                "data": data, "txHash": tx_hash, "cid": payload_cid,
+                "txStatus": SNAPSHOT_STATUS_MAP[tx_status], "prevTxHash": prev_tx_hash,
                 "block_height": block_height, "block_timestamp": data[0].get("block_timestamp", None),
                 "begin_block_height_24h": begin_block_height_24h, "begin_block_timestamp_24h": begin_block_timestamp_24h,
                 "begin_block_height_7d": begin_block_height_7d, "begin_block_timestamp_7d": begin_block_timestamp_7d
             }
         else:
             return data
-    
+
     # fetch from ipfs
     payload_data = await retrieve_payload_data(payload_cid, redis_conn)
-    
+
     if not payload_data:
         payload_data = {"data": None}
-    
+
     payload_data = json.loads(payload_data)['data']
     payload_data.sort(key=get_tokens_liquidity_for_sort, reverse=True)
 
     if "/v1/api" in request.url._url:
         return {
-            "data": payload_data, "txHash": txHash, "cid": payload_cid,
+            "data": payload_data, "txHash": tx_hash, "cid": payload_cid,
             "block_height": block_height, "block_timestamp": payload_data[0].get("block_timestamp", None),
             "begin_block_height_24h": begin_block_height_24h, "begin_block_timestamp_24h": begin_block_timestamp_24h,
             "begin_block_height_7d": begin_block_height_7d, "begin_block_timestamp_7d": begin_block_timestamp_7d
         }
     else:
         return payload_data
-        
+
 
 @app.get('/v1/api/v2-daily-stats/snapshots')
 @app.get('/v2-daily-stats/snapshots')
@@ -435,9 +433,9 @@ async def get_v2_daily_stats_by_block(
 
     latest_payload = json.loads(latest_payload[0].decode('utf-8'))
     payload_cid = latest_payload.get("cid")
-    txHash = latest_payload.get("txHash")
-    txStatus = latest_payload.get("txStatus")
-    prevTxHash = latest_payload.get("prevTxHash")
+    tx_hash = latest_payload.get("txHash")
+    tx_status = latest_payload.get("txStatus")
+    prev_tx_hash = latest_payload.get("prevTxHash")
 
 
     try:
@@ -465,18 +463,18 @@ async def get_v2_daily_stats_by_block(
                 # aggregate trade volume and liquidity across all pairs
                 daily_stats["volume24"]["currentValue"] += contract_obj["volume24"]["currentValue"]
                 daily_stats["volume24"]["previousValue"] += contract_obj["volume24"]["previousValue"]
-                
+
                 daily_stats["tvl"]["currentValue"] += contract_obj["tvl"]["currentValue"]
                 daily_stats["tvl"]["previousValue"] += contract_obj["tvl"]["previousValue"]
-                
+
                 daily_stats["fees24"]["currentValue"] += contract_obj["fees24"]["currentValue"]
                 daily_stats["fees24"]["previousValue"] += contract_obj["fees24"]["previousValue"]
-        
+
         # calculate percentage change
-        if daily_stats["volume24"]["previousValue"] != 0: 
+        if daily_stats["volume24"]["previousValue"] != 0:
             daily_stats["volume24"]["change"] = daily_stats["volume24"]["currentValue"] - daily_stats["volume24"]["previousValue"]
             daily_stats["volume24"]["change"] = daily_stats["volume24"]["change"] / daily_stats["volume24"]["previousValue"] * 100
-        
+
         if daily_stats["tvl"]["previousValue"] != 0:
             daily_stats["tvl"]["change"] = daily_stats["tvl"]["currentValue"] - daily_stats["tvl"]["previousValue"]
             daily_stats["tvl"]["change"] = daily_stats["tvl"]["change"] / daily_stats["tvl"]["previousValue"] * 100
@@ -501,13 +499,13 @@ async def get_v2_daily_stats_by_block(
 
         if "/v1/api" in request.url._url:
             return {
-                "data": daily_stats, "txHash": txHash, "cid": payload_cid,
-                "txStatus": SNAPSHOT_STATUS_MAP[txStatus], "prevTxHash": prevTxHash,
+                "data": daily_stats, "txHash": tx_hash, "cid": payload_cid,
+                "txStatus": SNAPSHOT_STATUS_MAP[tx_status], "prevTxHash": prev_tx_hash,
                 "block_height": snapshot_data[0].get("block_height", None), "block_timestamp": snapshot_data[0].get("block_timestamp", None)
             }
         else:
             return daily_stats
-    
+
     except Exception as err:
         print(f"Error in daily stats by block height err: {str(err)} ")
         return {
@@ -528,7 +526,7 @@ async def get_v2_pairs_recent_logs(
         data = json.loads(data)
     else:
         data = {"error": "No data found"}
-    
+
     return data
 
 @app.get('/v2-tokens-recent-logs')
@@ -538,7 +536,7 @@ async def get_v2_tokens_recent_logs(
     token_contract: str
 ):
     pair_tokens_addresses = {}
-    all_pair_contracts = read_json_file('static/cached_pair_addresses.json')
+    all_pair_contracts = read_json_file('static/cached_pair_addresses.json',rest_logger)
     redis_conn = await request.app.redis_pool
 
     # get pair's token addresses ( pair -> token0, token1)
@@ -548,7 +546,7 @@ async def get_v2_tokens_recent_logs(
         redis_pipe.hgetall(uniswap_pair_contract_tokens_addresses.format(Web3.toChecksumAddress(pair)))
         pair_logs_keys.append(uniswap_pair_cached_recent_logs.format(Web3.toChecksumAddress(pair)))
     tokens_address = await redis_pipe.execute()
-    
+
     # map pair to token adresses
     for i in range(len(tokens_address)):
         pair_tokens_addresses[pair_logs_keys[i]] = tokens_address[i]
@@ -563,7 +561,7 @@ async def get_v2_tokens_recent_logs(
 
     # filter by token address
     pair_tokens_addresses = {k:v for (k,v) in pair_tokens_addresses.items() if filter_token(v)}
-    
+
     # get recent logs of filtered pairs
     pairs_log = await redis_conn.mget(*pair_tokens_addresses.keys())
 
@@ -577,12 +575,12 @@ async def get_v2_tokens_recent_logs(
 
     return pairs_log
 
-def get_pair_liquidity_for_sort(tokenData):
+def sort_on_liquidity(tokenData):
     return tokenData["liquidityUSD"]
 
 @app.get('/v1/api/v2-tokens')
 @app.get('/v2-tokens')
-async def get_v2_pairs_recent_logs(
+async def get_v2_tokens(
     request: Request,
     response: Response
 ):
@@ -601,9 +599,9 @@ async def get_v2_pairs_recent_logs(
     latest_payload, latest_block_height = latest_daily_stats_snapshot[0]
     latest_payload = json.loads(latest_payload.decode('utf-8'))
     latest_payload_cid = latest_payload.get("cid")
-    txHash = latest_payload.get("txHash")
-    txStatus = latest_payload.get("txStatus")
-    prevTxHash = latest_payload.get("prevTxHash")
+    tx_hash = latest_payload.get("txHash")
+    tx_status = latest_payload.get("txStatus")
+    prev_tx_hash = latest_payload.get("prevTxHash")
 
     snapshot_data = await redis_conn.get(
         name=uniswap_V2_tokens_at_blockheight.format(int(latest_block_height))
@@ -612,7 +610,7 @@ async def get_v2_pairs_recent_logs(
         # fetch from ipfs
         latest_payload_cid = latest_payload_cid.decode('utf-8') if type(latest_payload_cid) == bytes else latest_payload_cid
         snapshot_data = await retrieve_payload_data(latest_payload_cid, redis_conn)
-        
+
         # even ipfs doesn't have data, return empty
         if not snapshot_data:
             return {'data': None}
@@ -621,31 +619,36 @@ async def get_v2_pairs_recent_logs(
     else:
         data = json.loads(snapshot_data)
 
-    data.sort(key=get_pair_liquidity_for_sort, reverse=True)
-    temp = []
-    for i in range(len(data)):
-        temp.append({
-            "index": i+1,
-            "name": data[i]["name"],
-            "symbol": data[i]["symbol"],
-            "liquidity": f"US${round(abs(data[i]['liquidityUSD'])):,}",
-            "volume_24h": f"US${round(abs(data[i]['tradeVolumeUSD_24h'])):,}",
-            "price": f"US${round(abs(data[i]['price']), 5):,}",
-            "price_change_24h": f"{round(data[i]['priceChangePercent_24h'], 2)}%",
-            "block_height": int(data[i]["block_height"]),
-            "block_timestamp": int(data[i]["block_timestamp"])
-        })
-    data = temp
-    
+    data = create_v2_token_snapshot(data)
+
     if "/v1/api" in request.url._url:
         return {
-            "data": data, "txHash": txHash, "cid": latest_payload_cid,
-            "txStatus": SNAPSHOT_STATUS_MAP[txStatus], "prevTxHash": prevTxHash,
+            "data": data, "txHash": tx_hash, "cid": latest_payload_cid,
+            "txStatus": SNAPSHOT_STATUS_MAP[tx_status], "prevTxHash": prev_tx_hash,
             "block_height": data[0].get("block_height", None), "block_timestamp": data[0].get("block_timestamp", None)
         }
     else:
         return data
 
+
+def create_v2_token_snapshot(data):
+    data.sort(key=sort_on_liquidity, reverse=True)
+    temp = []
+    for i in range(len(data)):
+        temp.append({
+            "index": i+1,
+            "contract_address":data[i]["contractAddress"],
+            "name": data[i]["name"],
+            "symbol": data[i]["symbol"],
+            "liquidity": f"US${round(abs(data[i]['liquidityUSD'])):,}",
+            "volume_24h": f"US${round(abs(data[i]['tradeVolumeUSD_24h'])):,}",
+            "volume_7d":f"US${round(abs(data[i]['tradeVolumeUSD_7d']))}",
+            "price": f"US${round(abs(data[i]['price']), 5):,}",
+            "price_change_24h": f"{round(data[i]['priceChangePercent_24h'], 2)}%",
+            "block_height": int(data[i]["block_height"]),
+            "block_timestamp": int(data[i]["block_timestamp"])
+        })
+    return temp
 
 @app.get('/v1/api/v2-tokens/snapshots')
 @app.get('/v2-tokens/snapshots')
@@ -666,7 +669,6 @@ async def get_v2_tokens_snapshots(
         ))
     }
 
-
 @app.get('/v1/api/v2-tokens/{block_height:int}')
 @app.get('/v2-tokens/{block_height:int}')
 async def get_v2_tokens_data_by_block(
@@ -684,7 +686,7 @@ async def get_v2_tokens_data_by_block(
 
     if len(latest_payload) < 1:
         return {'data': None}
-    
+
     latest_payload = json.loads(latest_payload[0].decode('utf-8'))
     payload_cid = latest_payload.get("cid")
     txHash = latest_payload.get("txHash")
@@ -697,7 +699,7 @@ async def get_v2_tokens_data_by_block(
     if not snapshot_data:
         # fetch from ipfs
         snapshot_data = await retrieve_payload_data(payload_cid, redis_conn)
-        
+
         # even ipfs doesn't have data, return empty
         if not snapshot_data:
             return {'data': None}
@@ -706,23 +708,9 @@ async def get_v2_tokens_data_by_block(
     else:
         snapshot_data = snapshot_data.decode('utf-8')
         snapshot_data = json.loads(snapshot_data)
-    
-    snapshot_data.sort(key=get_pair_liquidity_for_sort, reverse=True)
-    temp = []
-    for i in range(len(snapshot_data)):
-        temp.append({
-            "index": i+1,
-            "name": snapshot_data[i]["name"],
-            "symbol": snapshot_data[i]["symbol"],
-            "liquidity": f"US${round(abs(snapshot_data[i]['liquidityUSD'])):,}",
-            "volume_24h": f"US${round(abs(snapshot_data[i]['tradeVolumeUSD_24h'])):,}",
-            "price": f"US${round(abs(snapshot_data[i]['price']), 5):,}",
-            "price_change_24h": f"{round(snapshot_data[i]['priceChangePercent_24h'], 2)}%",
-            "block_height": int(snapshot_data[i]["block_height"]),
-            "block_timestamp": int(snapshot_data[i]["block_timestamp"])
-        })
-    snapshot_data = temp
-    
+
+    snapshot_data = create_v2_token_snapshot(snapshot_data)
+
     if "/v1/api" in request.url._url:
         return {
             "data": snapshot_data, "txHash": txHash, "cid": payload_cid,
@@ -771,7 +759,7 @@ async def get_v2_pairs_daily_stats(
         # even ipfs doesn't have payload then exit
         if not snapshot_data:
             return {'data': None}
-        
+
         snapshot_data = json.loads(snapshot_data)["data"]
 
         daily_stats = {
@@ -784,18 +772,18 @@ async def get_v2_pairs_daily_stats(
                 # aggregate trade volume and liquidity across all pairs
                 daily_stats["volume24"]["currentValue"] += contract_obj["volume24"]["currentValue"]
                 daily_stats["volume24"]["previousValue"] += contract_obj["volume24"]["previousValue"]
-                
+
                 daily_stats["tvl"]["currentValue"] += contract_obj["tvl"]["currentValue"]
                 daily_stats["tvl"]["previousValue"] += contract_obj["tvl"]["previousValue"]
-                
+
                 daily_stats["fees24"]["currentValue"] += contract_obj["fees24"]["currentValue"]
                 daily_stats["fees24"]["previousValue"] += contract_obj["fees24"]["previousValue"]
-        
+
         # calculate percentage change
-        if daily_stats["volume24"]["previousValue"] != 0: 
+        if daily_stats["volume24"]["previousValue"] != 0:
             daily_stats["volume24"]["change"] = daily_stats["volume24"]["currentValue"] - daily_stats["volume24"]["previousValue"]
             daily_stats["volume24"]["change"] = daily_stats["volume24"]["change"] / daily_stats["volume24"]["previousValue"] * 100
-        
+
         if daily_stats["tvl"]["previousValue"] != 0:
             daily_stats["tvl"]["change"] = daily_stats["tvl"]["currentValue"] - daily_stats["tvl"]["previousValue"]
             daily_stats["tvl"]["change"] = daily_stats["tvl"]["change"] / daily_stats["tvl"]["previousValue"] * 100
