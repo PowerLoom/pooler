@@ -1,9 +1,8 @@
 
 // this means if app restart {MAX_RESTART} times in 1 min then it stops
 const MAX_RESTART = 10;
-const MIN_UPTIME = 60000; 
+const MIN_UPTIME = 60000;
 const NODE_ENV = "production" // process.env.NODE_ENV || 'development';
-const CWD = "<>"
 
 module.exports = {
   apps : [
@@ -24,16 +23,6 @@ module.exports = {
       env: {
         NODE_ENV: NODE_ENV,
       }
-    },
-    {
-      name   : "token-data-collator",
-      script : "./uniswapTokenData",
-      cwd : CWD+"uniswap-token-data-collator"
-      max_restarts: MAX_RESTART,
-      env: {
-        NODE_ENV: NODE_ENV,
-      },
-      args: "5"
-    },
+    }
   ]
 }
