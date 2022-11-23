@@ -81,16 +81,6 @@ async def startup_boilerplate():
     await app.aioredis_pool.populate()
     app.redis_pool = app.aioredis_pool._aioredis_pool
 
-
-def check_onchain_param(onChain):
-    on_chain = False
-    if onChain.lower() == 'false':
-        on_chain = False
-    elif onChain.lower() == 'true':
-        on_chain = True
-    return on_chain
-
-
 def project_namespace_inject(request: Request, stream: str = Query(default='pair_total_reserves')):
     """
         This dependency injection is meant to support multiple 'streams' of snapshots submitted to Audit Protocol core.
@@ -99,9 +89,6 @@ def project_namespace_inject(request: Request, stream: str = Query(default='pair
     pair_contract_address = request.path_params['pair_contract_address']
     audit_project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
     return audit_project_id
-
-
-async def get_market_address(market_id: str, redis_conn: aioredis.Redis):
     market_id_key = f"marketId:{market_id}:contractAddress"
     out = await redis_conn.get(market_id_key)
     if out:
@@ -123,46 +110,6 @@ async def get_market_address(market_id: str, redis_conn: aioredis.Redis):
                     rest_logger.debug({"marketId": market_id, "contract_address": market['marketMakerAddress'].lower()})
                     return market['marketMakerAddress'].lower()
     return -1
-
-
-def on_chain_param_check(onChain: str = Query(default='false')):
-    return check_onchain_param(onChain)
-
-
-@app.get('/stats')
-async def get_stats(
-        request: Request,
-        response: Response
-):
-    redis_conn = await request.app.redis_pool
-    c = await redis_conn.get('polymarket:markets:stats')
-    if not c:
-        return {
-            'totalMarkets': 0,
-            'totalSnapshots': {'onChain': 0, 'offChain': 0},
-            'totalDiffs': {'onChain': 0, 'offChain': 0}
-        }
-    else:
-        return json.loads(c)
-
-
-@app.get('/diffs/latest')
-async def get_latest_diffs(
-        request: Request,
-        maxCount: int = Query(default=20),
-        on_chain: bool = Depends(on_chain_param_check)
-):
-    query_params = {'namespace': 'polymarket_onChain_' if on_chain else 'polymarket_offChain_', 'maxCount': maxCount}
-    fetch_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/projects/updates')
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url=fetch_url, params=query_params) as resp:
-            resp_json = await resp.json()
-            for idx, each_market in enumerate(resp_json.copy()):
-                audit_project_id = each_market['projectId']
-                each_market['id'] = audit_project_id.split('_')[2]
-                resp_json[idx] = each_market
-            return resp_json
-
 
 async def save_request_data(
         request: Request,
@@ -186,7 +133,6 @@ async def save_request_data(
     request_info_json = json.dumps(request_info_data)
     _ = await redis_conn.set(request_info_key, request_info_json)
 
-
 async def delete_request_data(
         request: Request,
         request_id: str
@@ -196,7 +142,6 @@ async def delete_request_data(
 
     # Delete the request info data
     _ = await redis_conn.delete(key=request_info_key)
-
 
 @app.get('/snapshots/{pair_contract_address:str}')
 async def get_past_snapshots(
@@ -246,11 +191,8 @@ async def get_past_snapshots(
 
             return resp_json
 
-
-
 def get_tokens_liquidity_for_sort(pairData):
     return pairData["token0LiquidityUSD"] + pairData["token1LiquidityUSD"]
-
 
 @app.get('/v1/api/v2-pairs')
 @app.get('/v2-pairs')
@@ -325,7 +267,6 @@ async def get_v2_pairs_snapshots(
         ))
     }
 
-
 @app.get('/v1/api/v2-pairs/{block_height:int}')
 @app.get('/v2-pairs/{block_height:int}')
 async def get_v2_pairs_at_block_height(
@@ -392,7 +333,6 @@ async def get_v2_pairs_at_block_height(
         }
     else:
         return payload_data
-
 
 @app.get('/v1/api/v2-daily-stats/snapshots')
 @app.get('/v2-daily-stats/snapshots')
@@ -512,7 +452,6 @@ async def get_v2_daily_stats_by_block(
             'data': None
         }
 
-
 @app.get('/v2-pairs-recent-logs')
 async def get_v2_pairs_recent_logs(
     request: Request,
@@ -630,7 +569,6 @@ async def get_v2_tokens(
     else:
         return data
 
-
 def create_v2_token_snapshot(data):
     data.sort(key=sort_on_liquidity, reverse=True)
     temp = []
@@ -719,7 +657,6 @@ async def get_v2_tokens_data_by_block(
         }
     else:
         return snapshot_data
-
 
 @app.get('/v1/api/v2-daily-stats')
 @app.get('/v2-daily-stats')
@@ -817,227 +754,3 @@ async def get_v2_pairs_daily_stats(
     except Exception as e:
         rest_logger.error(f"Error in get_v2_pairs_daily_stats: {str(e)}", exc_info=True)
         return {"error": "No data found"}
-
-@app.get('/request_status/{requestId:str}')
-async def check_request(
-        request: Request,
-        response: Response,
-        requestId: str,
-):
-    request_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/requests/{requestId}')
-
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url=request_url) as resp:
-            resp_json = await resp.json()
-            if 'requestStatus' in resp_json:
-                if resp_json['requestStatus'] == 'Completed':
-                    # Retrieve the request info data from redis
-                    redis_conn = await request.app.redis_pool
-                    request_info_key = f"pendingRequestInfo:{requestId}"
-                    out = await redis_conn.get(request_info_key)
-                    if out:
-                        request_data = json.loads(out.decode('utf-8'))
-                    else:
-                        return {'error': 'Invalid requestId'}
-
-                    # Make a call to payloads to retrieve the data
-                    query_params = {
-                        'from_height': int(request_data['fromHeight']),
-                        'to_height': int(request_data['toHeight']),
-                        'data': request_data['data']
-                    }
-                    range_fetch_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL,
-                                              f"/{request_data['projectId']}/payloads/")
-                    async with aiohttp.ClientSession() as fetch_session:
-                        async with fetch_session.get(url=range_fetch_url, params=query_params) as fetch_resp:
-                            fetch_resp_json = await fetch_resp.json()
-
-                            if isinstance(fetch_resp_json, dict):
-                                if 'requestId' in fetch_resp_json:
-                                    # The old request has been completed but the span data has also been destroyed
-                                    # save this request data and delete the old one
-
-                                    _ = await save_request_data(
-                                        request=request,
-                                        request_id=fetch_resp_json['requestId'],
-                                        max_count=request_data['maxCount'],
-                                        from_height=request_data['fromHeight'],
-                                        to_height=request_data['toHeight'],
-                                        data=request_data['data'],
-                                        project_id=request_data['projectId'],
-                                    )
-
-                            _ = await delete_request_data(request=request, request_id=requestId)
-
-                            return fetch_resp_json
-            return resp_json
-
-@app.get('/snapshot/{marketId:str}')
-async def get_last_snapshot(
-        request: Request,
-        response: Response,
-        marketId: str,
-        cached: Optional[str] = Query("false"),
-        diffs: Optional[str] = Query("false"),
-        audit_project_id: str = Depends(project_namespace_inject)
-):
-    fetch_from_cache = None
-    if not cached:
-        fetch_from_cache = False
-    elif cached.lower() == 'true':
-        fetch_from_cache = True
-    else:
-        fetch_from_cache = False
-    if not diffs:
-        diffs = False
-    elif diffs.lower() == 'true':
-        diffs = True
-    else:
-        diffs = False
-    redis_conn = await request.app.redis_pool
-    last_payload = None
-    # TODO: handle when fetch from cache is set to false
-    if not fetch_from_cache:
-        last_snapshot_key = f'polymarket:market:{audit_project_id}:cachedSnapshot'
-        r = await redis_conn.get(last_snapshot_key)
-        if not r:
-            return {'error': 'NoCachedSnapshot'}
-        else:
-            last_payload = json.loads(r)
-        last_block_height_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{audit_project_id}/payloads/height')
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url=last_block_height_url) as resp:
-                rest_json = await resp.json()
-                market_latest_height = rest_json.get('height')
-        last_to_last_payload = await get_last_to_last_payload(market_latest_height, audit_project_id)
-        diff_map = dict()
-        if last_to_last_payload and diffs:
-            rest_logger.debug('Comparing between last and last to last payloads')
-            rest_logger.debug(last_payload)
-            rest_logger.debug(last_to_last_payload)
-
-            for k, v in last_payload.items():
-                if k not in last_to_last_payload.keys():
-                    rest_logger.info('Ignoring key in older payload as it is not present')
-                    rest_logger.info(k)
-                    continue
-                if v != last_to_last_payload[k]:
-                    diff_map[k] = {'old': last_to_last_payload[k], 'new': v}
-        return {
-            'lastSnapshot': last_payload,
-            'lastToLastSnapshot': last_to_last_payload,
-            'diff': diff_map
-        }
-
-
-@app.get('/trade/{marketIdentity}')
-async def get_trade_vol_value(
-        request: Request,
-        response: Response,
-        marketIdentity: str
-):
-    redis_conn: aioredis.Redis = request.app.redis_pool
-    if marketIdentity[:2] != "0x":
-        contract_address = await get_market_address(market_id=marketIdentity, redis_conn=redis_conn)
-        if contract_address == -1:
-            return {'error': 'Unknown marketId'}
-    else:
-        contract_address = marketIdentity.lower()
-
-    cached_trade_vol_key = f"cachedTradeVolume:{contract_address}"
-    trade_vol_data = await redis_conn.get(cached_trade_vol_key)
-    if trade_vol_data:
-        json_trade_vol_data = json.loads(trade_vol_data.decode('utf-8'))
-        rest_logger.debug("Got the trade volume for given market: ")
-        rest_logger.debug({'trade_json': json_trade_vol_data, 'marketIdentity': marketIdentity})
-        return json_trade_vol_data
-    else:
-        return {'error': "Trade volume not available for this market."
-                         "Please recheck the marketId/marketMakerAddress"}
-
-
-@app.get('/liquidity/{marketIdentity}')
-async def get_liquidity(
-        request: Request,
-        response: Response,
-        marketIdentity: str
-):
-    redis_conn: aioredis.Redis = request.app.redis_pool
-    if marketIdentity[:2] != "0x":
-        contract_address = await get_market_address(market_id=marketIdentity, redis_conn=redis_conn)
-        if contract_address == -1:
-            return {'error': 'Unknown marketId'}
-    else:
-        contract_address = marketIdentity.lower()
-
-    cached_liquidity_key = f"cachedLiquidity:{contract_address}"
-    liquidity = await redis_conn.get(cached_liquidity_key)
-    if liquidity:
-        liquidity = json.loads(liquidity.decode('utf-8'))
-    else:
-        return {'error': "Liquidity not available for this market."
-                         "Please recheck the marketId/marketMakerAddress"}
-    rest_logger.debug("Got the liquidity for given market: ")
-    rest_logger.debug({'liquidity': liquidity, 'marketIdentity': marketIdentity})
-    return liquidity
-
-
-@app.get('/outcomePrices/{marketIdentity}')
-async def get_outcome_prices(
-        request: Request,
-        response: Response,
-        marketIdentity:  str
-):
-    redis_conn: aioredis.Redis = request.app.redis_pool
-    if marketIdentity[:2] != "0x":
-        contract_address = await get_market_address(market_id=marketIdentity, redis_conn=redis_conn)
-        if contract_address == -1:
-            return {'error': 'Unknown marketId'}
-    else:
-        contract_address = marketIdentity.lower()
-
-    cached_outcome_prices_key = f"cachedOutcomePrices:{contract_address}"
-    outcome_prices = await redis_conn.get(cached_outcome_prices_key)
-    rest_logger.debug({"Outcome Prices": outcome_prices, "marketIdentity": marketIdentity})
-    if outcome_prices:
-        outcome_prices = outcome_prices.decode('utf-8')
-        try:
-            outcome_prices = json.loads(outcome_prices)
-            return outcome_prices
-        except json.JSONDecodeError as jerr:
-            rest_logger.debug("Failed to load outcome prices")
-            rest_logger.error(jerr, exc_info=True)
-    return {'error': "Outcome prices unavailable"}
-
-
-@app.get('/diffs/{marketId}')
-async def get_state(
-        request: Request,
-        marketId: str,
-        maxCount: int = Query(default=10),
-        audit_project_id: str = Depends(project_namespace_inject)
-):
-    if not maxCount:
-        maxCount = 1
-    query_params = {'maxCount': maxCount}
-    range_fetch_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{audit_project_id}/payloads/cachedDiffs')
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url=range_fetch_url, params=query_params) as resp:
-            resp_json = await resp.json()
-            return resp_json
-    # return {'status': 'OK'}
-
-
-async def get_last_to_last_payload(market_latest_height, market_id):
-    query_params = {'from_height': market_latest_height - 1, 'to_height': market_latest_height - 1, 'data': 'true'}
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url=urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{market_id}/payloads'),
-                               params=query_params) as resp:
-            resp_json = await resp.json()
-            try:
-                data = json.loads(resp_json[0]['Data']['payload'])
-            except:
-                data = None
-            return data
-
-
