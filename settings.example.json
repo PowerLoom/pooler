@@ -1,6 +1,7 @@
 {
     "development": {
         "namespace": "UNISWAPV2-stg-1",
+        "chain_id": 1,
         "uniswap_contract_abis":{
             "factory":"./abis/IUniswapV2Factory.json",
             "router":"./abis/UniswapV2Router.json",
@@ -52,9 +53,6 @@
             "retrial_attempts": 5
         },
         "rpc": {
-            "matic": [
-                "https://rpc-mainnet.maticvigil.com/v1/"
-            ],
             "full_nodes": [
                 {
                   "url": "https://rpc-public-bck.maticvigil.com/v1/****",
