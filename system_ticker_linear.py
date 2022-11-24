@@ -1,19 +1,21 @@
 from signal import SIGINT, SIGTERM, SIGQUIT, signal
-from exceptions import GenericExitOnSignal
-from rpc_helper import ConstructRPC
-from message_models import RPCNodesObject, EpochConsensusReport
-from dynaconf import settings
-from time import sleep
-from multiprocessing import Process
-from setproctitle import setproctitle
-from functools import wraps
-from rabbitmq_helpers import RabbitmqThreadedSelectLoopInteractor
 import time
 import queue
 import threading
 import logging
-import signal
 import sys
+from functools import wraps
+from time import sleep
+from multiprocessing import Process
+
+from dynaconf import settings
+from setproctitle import setproctitle
+
+from exceptions import GenericExitOnSignal
+from rpc_helper import ConstructRPC
+from message_models import RPCNodesObject, EpochConsensusReport
+from rabbitmq_helpers import RabbitmqThreadedSelectLoopInteractor
+
 
 
 def chunks(start_idx, stop_idx, n):
@@ -89,18 +91,22 @@ class LinearTickerProcess(Process):
         begin_block_epoch = self._begin
         end_block_epoch = self._end
         sleep_secs_between_chunks = 60
-        rpc_obj = ConstructRPC(network_id=137)
+        rpc_obj = ConstructRPC(network_id=settings.CHAIN_ID)
+        rpc_urls = []
+        for node in settings.RPC.FULL_NODES:
+            self._logger.debug("node %s",node.url)
+            rpc_urls.append(node.url)
         rpc_nodes_obj = RPCNodesObject(
-            NODES=settings.RPC.MATIC,
+            NODES=rpc_urls,
             RETRY_LIMIT=settings.RPC.RETRY
         )
         self._logger.debug('Starting %s', Process.name)
         while True:
             try:
                 cur_block = rpc_obj.rpc_eth_blocknumber(rpc_nodes=rpc_nodes_obj)
-            except Exception as e:
+            except Exception as exc:
                 self._logger.error(
-                    f"Unable to fetch latest block number due to RPC failure {e}. Retrying after {settings.EPOCH.BLOCK_TIME} seconds.")
+                    "Unable to fetch latest block number due to RPC failure %s. Retrying after %s seconds.",exc,settings.EPOCH.BLOCK_TIME)
                 sleep(settings.EPOCH.BLOCK_TIME)
                 continue
             else:
