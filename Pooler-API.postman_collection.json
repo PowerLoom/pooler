@@ -1,7 +1,7 @@
 {
 	"info": {
-		"_postman_id": "9bf39dbf-c31a-4c03-b4be-da37a2e5c5d7",
-		"name": "Uniswap Pooler API",
+		"_postman_id": "9bbf48d6-e2be-43ad-ac64-bc8aa3dd4c09",
+		"name": "Pooler API",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		"_exporter_id": "19657769"
 	},
@@ -12,7 +12,7 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "{{base_url}}/snapshots/{{pair_contract_address}}?maxCount=3&data=true",
+					"raw": "{{base_url}}/snapshots/{{pair_contract_address}}?maxCount=3&stream=trade_volume&data=true",
 					"host": [
 						"{{base_url}}"
 					],
@@ -23,14 +23,22 @@
 					"query": [
 						{
 							"key": "maxCount",
-							"value": "3"
+							"value": "3",
+							"description": "Number of snapshots to fetch"
+						},
+						{
+							"key": "stream",
+							"value": "trade_volume",
+							"description": "Specifies the stream from which snapshots have to be returned, currently only trade_volume or pair_total_reserves are supported."
 						},
 						{
 							"key": "data",
-							"value": "true"
+							"value": "true",
+							"description": "If set to true returns snapshot(s) data,  otherwise only the IPFS CID of the snapshot(s) is returned"
 						}
 					]
-				}
+				},
+				"description": "This API provides an option to fetch last `n` snapshots for a token pair. It supports fetching the `tradeVolume` or the `pairTotalReserves` snapshots.\n\n## Response Details\n\nReturns an array of snapshots for the token pair. data.payload is returned only if data flag is passed as true. Otherwise only the snapshot CID stored in IPFS is returned.\n\n### Pair Total Reserves Response\n\nResponse payload is stored in data.payload which contains TokenReserves and TokenReserves in USD for both tokens in the pair. Reserves are returned for each blockHeight in the snapshot. It also has a data.cid field which has the CID of the snapshot stored on IPFS.\n\n### TradeVolume Response\n\nResponse payload is stored in data.payload or the blockHeights in between which this snapshot is generated. Payload contains the following:\n\n- raw categorized transaction logs(Swap. Mint and Burn) of the token pair\n- computed TradeVolume (both in native token value and USD) for each token categorized by Swap, Mint and Burn\n- computed overall TradeVolume\n- Total fees"
 			},
 			"response": []
 		},
@@ -53,7 +61,8 @@
 							"value": "{{pair_contract_address}}"
 						}
 					]
-				}
+				},
+				"description": "Get the most recent `upto 75` transaction logs for any token pair.\n\n#### Response Details\n\nResponse is an array of transaction logs enriched with additional information such as Trade Amount in USD, token amounts etc."
 			},
 			"response": []
 		},
@@ -70,7 +79,8 @@
 					"path": [
 						"v2-pairs"
 					]
-				}
+				},
+				"description": "This API provides the latest aggregated data for the tracked token-pairs such as trade volume for the last 24-hour, trade volume for last 7-days.\n\n#### Response Details\n\nReturns an array of list of token pairs sorted based on liquidity with following information for each pair\n\n- 24-hour trade volume USD\n- 7-days trade volume USD\n- Head and tail CIDs of DAG Chain used to arrive at 24-hour and 7d volume\n- 24-hour fees\n- Liquidity,TradeVolume(s) of each Token"
 			},
 			"response": []
 		},
@@ -88,7 +98,8 @@
 						"v2-pairs",
 						"snapshots"
 					]
-				}
+				},
+				"description": "This API returns the last 20 block heights at which aggregated data snapshots for all the tracked token pairs are available.\n\nResponse is an array of blockHeights."
 			},
 			"response": []
 		},
@@ -106,7 +117,8 @@
 						"v2-pairs",
 						"{{block_height}}"
 					]
-				}
+				},
+				"description": "This API returns aggregated data snapshot for all the tracked token pairs at specified blockHeight (which can be retrieved from snapshots list API).\n\nResponse structure is same as explained in token pairs aggregated data API."
 			},
 			"response": []
 		},
@@ -123,7 +135,8 @@
 					"path": [
 						"v2-tokens"
 					]
-				}
+				},
+				"description": "This API provides aggregated data for all tracked tokens such as trade volume for the last 24-hour, trade volume for last 7-days snapshotted at a specific block height.\n\n#### Response Details\n\nReturns an array of list of tokens sorted based on liquidity with following information for each token\n\n- 24-hour trade volume USD\n- 7-days trade volume USD\n- Liquidity\n- Price of the token in USD at that height\n- 24-hour percentage Price change for the token"
 			},
 			"response": []
 		},
@@ -141,7 +154,8 @@
 						"v2-tokens",
 						"snapshots"
 					]
-				}
+				},
+				"description": "This API returns the last 20 block heights at which aggregated data snapshots for all the tracked tokens are available.\n\nResponse is an array of blockHeights."
 			},
 			"response": []
 		},
@@ -159,7 +173,8 @@
 						"v2-tokens",
 						"{{block_height}}"
 					]
-				}
+				},
+				"description": "This API returns aggregated data snapshot for all the tracked tokens at specified blockHeight (which can be retrieved from snapshots list API).\n\nResponse structure is same as explained in token aggregated data API."
 			},
 			"response": []
 		},
@@ -182,7 +197,8 @@
 							"value": "{{token_contract_address}}"
 						}
 					]
-				}
+				},
+				"description": "Get the most recent `upto 75` transaction logs for any token.\n\n#### Response Details\n\nResponse is an array of transaction logs enriched with additional information such as Trade Amount in USD, token amounts etc."
 			},
 			"response": []
 		},
@@ -199,7 +215,8 @@
 					"path": [
 						"v2-daily-stats"
 					]
-				}
+				},
+				"description": "This API returns the latest snapshot for the dailyStats which includes the following information:\n\n- 24-hour volume and 24-hour percentage change\n- TVL and its 24-hour percentage change\n- 24-hour Fees and its percentage change"
 			},
 			"response": []
 		},
@@ -217,7 +234,8 @@
 						"v2-daily-stats",
 						"snapshots"
 					]
-				}
+				},
+				"description": "This API returns the last 20 block heights at which snapshots for dailyStats are available.\n\nResponse is an array of blockHeights."
 			},
 			"response": []
 		},
@@ -235,7 +253,8 @@
 						"v2-daily-stats",
 						"{{block_height}}"
 					]
-				}
+				},
+				"description": "This API returns aggregated data snapshot for daily stats at specified blockHeight (which can be retrieved from snapshots list API).\n\nResponse structure is same as explained in overall daily Stats API."
 			},
 			"response": []
 		}
