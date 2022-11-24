@@ -1,8 +1,5 @@
 from message_models import ProcessHubCommand
 from init_rabbitmq import create_rabbitmq_conn, processhub_command_publish
-import pika
-import json
-import logging
 
 
 def main():
