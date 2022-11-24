@@ -75,9 +75,7 @@
                 "retry": 2,
                 "timeout": 10
             },
-            "eth_mainnet": "",
-            "retry": 1,
-            "rate_limit": "10000000/day;1000/minute;100/second"
+            "retry": 1
         },
         "rlimit": {
             "file_descriptors": 2048
@@ -143,7 +141,7 @@
         "webhook_listener": {
             "host": "127.0.0.1",
             "port": 9090,
-            "root": "https://anstripe.blocksapi.com",
+            "root": "https://pooler-callback.com",
             "commit_confirmation_callback_path": "commit_confirm"
         },
         "logging_server":{
@@ -197,9 +195,6 @@
             "retrial_attempts": 5
         },
         "rpc": {
-            "matic": [
-                "https://rpc-mainnet.maticvigil.com/v1/"
-            ],
             "full_nodes": [
                 {
                   "url": "https://rpc-public-bck.maticvigil.com/v1/****",
@@ -222,9 +217,7 @@
                 "retry": 2,
                 "timeout": 10
             },
-            "eth_mainnet": "",
-            "retry": 1,
-            "rate_limit": "10000000/day;1000/minute;100/second"
+            "retry": 1
         },
         "rlimit": {
             "file_descriptors": 2048
@@ -290,7 +283,7 @@
         "webhook_listener": {
             "host": "127.0.0.1",
             "port": 9090,
-            "root": "https://anstripe.blocksapi.com",
+            "root": "https://pooler-callback.com",
             "market_event_listener_path": "hooks",
             "commit_confirmation_callback_path": "commit_confirm"
         }
