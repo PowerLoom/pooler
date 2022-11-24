@@ -1,4 +1,5 @@
 from signal import SIGINT, SIGTERM, SIGQUIT, signal
+import signal
 import time
 import queue
 import threading
@@ -104,9 +105,9 @@ class LinearTickerProcess(Process):
         while True:
             try:
                 cur_block = rpc_obj.rpc_eth_blocknumber(rpc_nodes=rpc_nodes_obj)
-            except Exception as exc:
+            except Exception as ex:
                 self._logger.error(
-                    "Unable to fetch latest block number due to RPC failure %s. Retrying after %s seconds.",exc,settings.EPOCH.BLOCK_TIME)
+                    "Unable to fetch latest block number due to RPC failure %s. Retrying after %s seconds.",ex,settings.EPOCH.BLOCK_TIME)
                 sleep(settings.EPOCH.BLOCK_TIME)
                 continue
             else:
