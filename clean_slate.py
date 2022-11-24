@@ -25,6 +25,15 @@ args = parser.parse_args()
 # with open('settings.json', 'w') as f:
 #     json.dump(d, f)
 
+def del_namespace_specific_keys_hash(redis:Redis, key:str):
+    try:
+        hash_set = redis.hgetall(key)
+        hash_keys = list(map(lambda x: x.decode('utf-8'), hash_set.keys()))
+        for k in hash_keys:
+            if fnmatch.fnmatch(k,f'uniswap*{settings.NAMESPACE}*'):
+                redis.hdel(key, k)
+    except:
+        pass
 
 def redis_cleanup_audit_protocol():
     REDIS_AUDIT_PROTOCOL_CONFIG = {
@@ -33,10 +42,17 @@ def redis_cleanup_audit_protocol():
         "password": settings['redis']['password'],
         "db": 13 #TODO: this should be fetched from audit-protocol config
     }
-
     r = Redis(**REDIS_AUDIT_PROTOCOL_CONFIG)
+
+    del_namespace_specific_keys_hash(r,'projects:pruningStatus')
+    del_namespace_specific_keys_hash(r,'projects:pruningVerificationStatus')
     try:
-        c = r.delete('projects:pruningStatus')
+        c = r.delete('pruningRunStatus')
+    except:
+        pass
+
+    try:
+        c = r.delete(*r.keys('pruningProjectDetails:*'))
     except:
         pass
 
@@ -49,7 +65,11 @@ def redis_cleanup_audit_protocol():
         c = r.delete(*r.keys(f'*{settings.NAMESPACE}*Cid*'))
     except:
         pass
-
+    try:
+        r.delete(*r.keys(f'uniswap*{settings.NAMESPACE}:snapshot*'))
+        r.delete(*r.keys(f'uniswap:V2TokensSummarySnapshot:{settings.NAMESPACE}:*'))
+    except:
+        pass
     try:
         r.delete(*r.keys(f'*{settings.NAMESPACE}*lastDagCid*'))
     except:
@@ -91,37 +111,7 @@ def redis_cleanup_audit_protocol():
     except:
         pass
 
-    last_snapshots = r.hgetall('auditprotocol:lastSeenSnapshots')
-    last_snapshots = list(map(lambda x: x.decode('utf-8'), last_snapshots.keys()))
-    for k in last_snapshots:
-        if fnmatch.fnmatch(k,f'uniswap*{settings.NAMESPACE}*'):
-            r.hdel('auditprotocol:lastSeenSnapshots', k)
-
-    # try:
-    #     r.delete(*r.keys('payloadCommit:*'))
-    # except:
-    #     pass
-
-    # try:
-    #     r.delete(*r.keys('eventData:*'))
-    # except:
-    #     pass
-
-    # try:
-    #     r.delete(*r.keys('txHash*inputData'))
-    # except:
-    #     pass
-
-     # try:
-    #     r.delete(*r.keys('pendingPayloadCommits'))
-    # except:
-    #     pass
-
-    # try:
-    #     r.delete(*r.keys('CidDiff*'))
-    # except:
-    #     pass
-
+    del_namespace_specific_keys_hash(r,'auditprotocol:lastSeenSnapshots')
     try:
         c = r.delete(*r.keys('lastPruned*uniswap*'))
         print(c)
