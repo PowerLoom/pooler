@@ -1,16 +1,14 @@
+import time
+
 from redis import asyncio as aioredis
-from dynaconf import settings
 from async_limits import parse_many as limit_parse_many
 from async_limits.strategies import AsyncFixedWindowRateLimiter
 from async_limits.storage import AsyncRedisStorage
 from datetime import datetime, timedelta
 from rpc_helper import RPCException
-import time
 
 
 # Initialize rate limits when program starts
-GLOBAL_RPC_RATE_LIMIT_STR = settings.RPC.rate_limit
-PARSED_LIMITS = limit_parse_many(GLOBAL_RPC_RATE_LIMIT_STR)
 LUA_SCRIPT_SHAS = None
 
 # # # RATE LIMITER LUA SCRIPTS
