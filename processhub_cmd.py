@@ -1,25 +1,24 @@
 from typing import Optional
+import json
+import time
+from datetime import datetime
+
+import redis
+import psutil
+import typer
+import timeago
+from dynaconf import settings
+
 from process_hub_core import PROC_STR_ID_TO_CLASS_MAP
 from init_rabbitmq import create_rabbitmq_conn, processhub_command_publish
 from message_models import ProcessHubCommand
 from redis_conn import REDIS_CONN_CONF
 from redis_keys import (
-    powerloom_broadcast_id_zset, 
+    powerloom_broadcast_id_zset,
     uniswap_cb_broadcast_processing_logs_zset,
-    uniswap_projects_dag_verifier_status,
-    uniswap_pair_tentative_block_height,
-    uniswap_pair_block_height
+    uniswap_projects_dag_verifier_status
 )
-from datetime import datetime
-from dynaconf import settings
-import timeago
-import typer
-import json
-import time
-import redis
-import psutil
-import json
-from web3 import Web3
+
 
 app = typer.Typer()
 
@@ -27,8 +26,8 @@ def read_json_file(file_path: str):
     """Read given json file and return its content as a dictionary."""
     try:
         f_ = open(file_path, 'r')
-    except Exception as e:
-        print(f"Unable to open the {file_path} file, error msg:{str(e)}")
+    except Exception as exc:
+        print(f"Unable to open the {file_path} file, error msg:{str(exc)}")
     else:
         print(f"Reading {file_path} file")
         json_data = json.loads(f_.read())
@@ -36,7 +35,7 @@ def read_json_file(file_path: str):
 
 @app.command()
 def pidStatus(connections: bool = False):
-    
+
     def print_formatted_status(process_name, pid):
         try:
             process = psutil.Process(pid=pid)
@@ -57,13 +56,13 @@ def pidStatus(connections: bool = False):
                 print(f"\t name: {process_name}\n")
             else:
                 print(f"Unknown Error: {str(err)}")
-    
+
     r = redis.Redis(**REDIS_CONN_CONF, single_connection_client=True)
     print("\n")
     for k, v in r.hgetall(name=f'powerloom:uniswap:{settings.NAMESPACE}:Processes').items():
         key = k.decode('utf-8')
         value = v.decode('utf-8')
-        
+
         if(key == 'callback_workers'):
             value = json.loads(value)
             for i, j in value.items():
@@ -90,7 +89,7 @@ def broadcastStatus(elapsed_time: int, verbose: Optional[bool] = False):
         key = k.decode('utf-8')
         value = v
         typer.secho(f"{key} -", fg=typer.colors.YELLOW, bold=True)
-        typer.echo(typer.style(f"\t timestamp: ", fg=typer.colors.MAGENTA, bold=True) + f"{value}\n")
+        typer.echo(typer.style("\t timestamp: ", fg=typer.colors.MAGENTA, bold=True) + f"{value}\n")
         logs = r.zrangebyscore(
             name=uniswap_cb_broadcast_processing_logs_zset.format(f"{key}"),
             min=cur_ts-elapsed_time,
@@ -111,15 +110,14 @@ def broadcastStatus(elapsed_time: int, verbose: Optional[bool] = False):
             "TradeVolume.SnapshotCommit": [],
         }
         if logs:
-            parsed_logs = []
             for i, j in logs:
                 i = i.decode('utf-8')
                 i = json.loads(i)
                 i['timestamp'] = j
                 if i["update"]["action"].lower().find('publish') != -1:
                     contracts_len = len(i["update"]["info"]["msg"]["contracts"])
-                    typer.echo(typer.style(f"\t worker: ", fg=typer.colors.MAGENTA, bold=True) + f"{i['worker']}")
-                    typer.echo(typer.style(f"\t action: ", fg=typer.colors.MAGENTA, bold=True) + f"{i['update']['action']} - {contracts_len} contracts\n")
+                    typer.echo(typer.style("\t worker: ", fg=typer.colors.MAGENTA, bold=True) + f"{i['worker']}")
+                    typer.echo(typer.style("\t action: ", fg=typer.colors.MAGENTA, bold=True) + f"{i['update']['action']} - {contracts_len} contracts\n")
                 elif i["update"]["action"] in sub_actions:
                     if i["update"]["info"]["status"].lower() == "success":
                         sub_actions[i["update"]["action"]]["success"] += 1
@@ -150,7 +148,7 @@ def broadcastStatus(elapsed_time: int, verbose: Optional[bool] = False):
 
 @app.command()
 def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
-    
+
     dag_chain_height = dag_chain_height if dag_chain_height > -1 else '-inf'
 
     r = redis.Redis(**REDIS_CONN_CONF, single_connection_client=True)
@@ -168,10 +166,10 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
     # get highest dag chain height
     project_heights = r.hgetall(uniswap_projects_dag_verifier_status)
     if project_heights:
-        for key, value in project_heights.items():
+        for _, value in project_heights.items():
             if int(value.decode('utf-8')) > total_issue_count["CURRENT_DAG_CHAIN_HEIGHT"]:
                 total_issue_count["CURRENT_DAG_CHAIN_HEIGHT"] = int(value.decode('utf-8'))
-    
+
     def get_zset_data(key, min, max, pair_address):
         res = r.zrangebyscore(
             name=key.format(pair_address, "dagChainGaps"),
@@ -200,13 +198,13 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
         key_based_issue_stats["CURRENT_LAG_IN_DAG_CHAIN_HEIGHT"] = tentative_block_height - block_height if tentative_block_height and block_height else None
         if key_based_issue_stats["CURRENT_LAG_IN_DAG_CHAIN_HEIGHT"] != None:
             total_issue_count["LAG_EXIST_IN_DAG_CHAIN"] = key_based_issue_stats["CURRENT_LAG_IN_DAG_CHAIN_HEIGHT"] if key_based_issue_stats["CURRENT_LAG_IN_DAG_CHAIN_HEIGHT"] > total_issue_count["LAG_EXIST_IN_DAG_CHAIN"] else total_issue_count["LAG_EXIST_IN_DAG_CHAIN"]
-        
+
         if res:
             # parse zset entry
             parsed_res = []
             for entry in res:
                 entry = json.loads(entry)
-                
+
                 # create/add issue entry in overall issue structure
                 if not entry["issueType"] + "_ISSUE_COUNT" in total_issue_count:
                     total_issue_count[entry["issueType"] + "_ISSUE_COUNT" ] = 0
@@ -218,8 +216,8 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
                     key_based_issue_stats[entry["issueType"] + "_ISSUE_COUNT" ] = 0
                 if not entry["issueType"] + "_BLOCKS" in key_based_issue_stats:
                     key_based_issue_stats[entry["issueType"] + "_BLOCKS" ] = 0
-                
-                    
+
+
                 # gather overall issue stats
                 total_issue_count[entry["issueType"] + "_ISSUE_COUNT" ] += 1
                 key_based_issue_stats[entry["issueType"] + "_ISSUE_COUNT" ] +=  1
@@ -230,7 +228,7 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
                 else:
                     total_issue_count[entry["issueType"] + "_BLOCKS" ] +=  entry["missingBlockHeightEnd"] - entry["missingBlockHeightStart"] + 1
                     key_based_issue_stats[entry["issueType"] + "_BLOCKS" ] +=  entry["missingBlockHeightEnd"] - entry["missingBlockHeightStart"] + 1
-                    
+
                 # store latest dag block height for projectId
                 if entry["dagBlockHeight"] > key_based_issue_stats["CURRENT_DAG_CHAIN_HEIGHT"]:
                     key_based_issue_stats["CURRENT_DAG_CHAIN_HEIGHT"] = entry["dagBlockHeight"]
@@ -250,27 +248,27 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
                 print(f"\t {k} : {v}")
             res = []
         return res
-    
+
     def gather_all_zset(contracts, projects):
         for project in projects:
             for addr in contracts:
                 zset_key = project.format(addr, "dagChainGaps")
                 total_zsets[zset_key] = get_zset_data(project, dag_chain_height, '+inf', addr)
-    
+
     gather_all_zset(pair_contracts, pair_projects)
 
     if total_issue_count["LAG_EXIST_IN_DAG_CHAIN"] > 3:
         total_issue_count["LAG_EXIST_IN_DAG_CHAIN"] = f"THERE IS A LAG WHILE PROCESSING CHAIN, BIGGEST LAG: {total_issue_count['LAG_EXIST_IN_DAG_CHAIN']}"
     else:
         total_issue_count["LAG_EXIST_IN_DAG_CHAIN"] = "NO LAG"
-        
 
-    print(f"\n======================================> OVERALL ISSUE STATS: \n")
+
+    print("\n======================================> OVERALL ISSUE STATS: \n")
     for k, v in total_issue_count.items():
         print(f"\t {k} : {v}")
 
     if len(total_issue_count) < 2:
-        print(f"\n##################### NO GAPS FOUND IN CHAIN #####################\n")
+        print("\n##################### NO GAPS FOUND IN CHAIN #####################\n")
 
     print("\n")
 
