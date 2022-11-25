@@ -1,7 +1,6 @@
 from redis import Redis
 from redis_conn import REDIS_CONN_CONF
 from dynaconf import settings
-import json
 import fnmatch
 from IPFS_API import ipfshttpclient
 import argparse
@@ -14,16 +13,6 @@ parser.add_argument(
     default=False, help='cleanup ipfs keys'
 )
 args = parser.parse_args()
-
-# with open('settings.json', 'r') as f:
-#     d = json.load(f)
-#
-# d['development']['force_seed_trade_volume'] = True
-# d['development']['force_seed_liquidity'] = True
-# d['development']['force_seed_outcome_prices'] = True
-#
-# with open('settings.json', 'w') as f:
-#     json.dump(d, f)
 
 def del_namespace_specific_keys_hash(redis:Redis, key:str):
     try:
@@ -255,9 +244,6 @@ def cleanup_ipfs():
     #TODO: we need to enforce gc here but it might timeout if there are too many cids
     #      default gc is set to 1hour, any objects which are not pinned and not queried
     #      should get gc’d in an hour.
-
-
-
 
 
 if __name__ == '__main__':

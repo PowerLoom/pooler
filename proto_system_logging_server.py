@@ -19,10 +19,10 @@ class InterceptHandler(logging.Handler):
         # print(record.__dict__)
         # Find caller from where originated the logged message
         # For calls coming in from libraries, check the process name and adjust accordingly
-        if not ('PowerLoom' in record.__dict__['name'] or 'Polymarket' in record.__dict__['name'] or
+        if not ('PowerLoom' in record.__dict__['name'] or
                 (
                         record.__dict__['name'] == 'root' and
-                        ('PowerLoom' in record.__dict__['processName'] or 'Polymarket' in record.__dict__['processName'])
+                        ('PowerLoom' in record.__dict__['processName'] )
                 )
         ):
             return
