@@ -1,32 +1,40 @@
-from web3 import Web3
-from dynaconf import settings
 import asyncio
 from functools import partial
 import json
-from uniswap_functions import get_pair_per_token_metadata, provide_async_redis_conn_insta
+
+from web3 import Web3
+from dynaconf import settings
 from redis import asyncio as aioredis
 
+from uniswap_functions import (get_pair_metadata,
+                                provide_async_redis_conn_insta,
+                                load_rate_limiter_scripts)
 
-w3 = Web3(Web3.HTTPProvider(settings.RPC.MATIC[0]))
+
+w3 = Web3(Web3.HTTPProvider(settings.RPC.FULL_NODES[0].url))
 pair_address= Web3.toChecksumAddress("0x97c4adc5d28a86f9470c70dd91dc6cc2f20d2d4d")
 
 def read_json_file(file_path: str):
     """Read given json file and return its content as a dictionary."""
     try:
-        f_ = open(file_path, 'r')
-    except Exception as e:
+        f_ = open(file_path, 'r', encoding="utf-8")
+    except Exception as exc:
         print(f"Unable to open the {file_path} file")
-        print(e, exc_info=True)
-        raise e
+        print(exc, exc_info=True)
+        raise exc
     else:
         json_data = json.loads(f_.read())
     return json_data
 
 router_contract_abi = read_json_file(settings.UNISWAP_CONTRACT_ABIS.ROUTER)
 pair_contract_abi = read_json_file(settings.UNISWAP_CONTRACT_ABIS.PAIR_CONTRACT)
-all_contracts = read_json_file(f"static/cached_pair_addresses.json")
+all_contracts = read_json_file("static/cached_pair_addresses.json")
 
-async def get_token_price_at_block_height(token_contract_obj, token_metadata, block_height, loop: asyncio.AbstractEventLoop, redis_conn=None, debug_log=True):
+async def get_token_price_at_block_height(
+        token_contract_obj,
+        token_metadata, block_height,
+        loop: asyncio.AbstractEventLoop, redis_conn=None,
+        debug_log=True):
     """
         returns the price of a token at a given block height
     """
@@ -44,7 +52,7 @@ async def get_token_price_at_block_height(token_contract_obj, token_metadata, bl
             "DAI": 18,
             "USDC": 6
         }
-        nonStable_coins_addresses = {
+        non_stable_coins_addresses = {
             Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.agEUR): {
                 "token0": Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.agEUR),
                 "token1": Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.FEI),
@@ -67,9 +75,9 @@ async def get_token_price_at_block_height(token_contract_obj, token_metadata, bl
                     print(f"## {token_metadata['symbol']}: ignored stablecoin calculation for token0: {token_metadata['symbol']} - WETH - USDT conversion: {token_price}")
 
         # check if token has no pair with stablecoin and weth if so then use hardcoded path
-        elif nonStable_coins_addresses.get(Web3.toChecksumAddress(token_metadata['address'])):
-            contract_metadata = nonStable_coins_addresses.get(Web3.toChecksumAddress(token_metadata['address']))
-            priceFunction_token0 = partial(token_contract_obj.functions.getAmountsOut(
+        elif non_stable_coins_addresses.get(Web3.toChecksumAddress(token_metadata['address'])):
+            contract_metadata = non_stable_coins_addresses.get(Web3.toChecksumAddress(token_metadata['address']))
+            price_function_token0 = partial(token_contract_obj.functions.getAmountsOut(
                 10 ** int(contract_metadata['decimals']),
                 [
                     contract_metadata['token0'],
@@ -77,7 +85,7 @@ async def get_token_price_at_block_height(token_contract_obj, token_metadata, bl
                     Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDC)
                 ]
             ).call, block_identifier=block_height)
-            temp_token_price = await loop.run_in_executor(func=priceFunction_token0, executor=None)
+            temp_token_price = await loop.run_in_executor(func=price_function_token0, executor=None)
             if temp_token_price:
                 temp_token_price = temp_token_price[2]/10**stable_coins_decimals['USDC'] if temp_token_price[2] !=0 else 0  #USDC decimals
                 token_price = temp_token_price if token_price < temp_token_price else token_price
@@ -92,14 +100,14 @@ async def get_token_price_at_block_height(token_contract_obj, token_metadata, bl
             stable_coins_len = len(stable_coins_addresses)
             for key, value in stable_coins_addresses.items():
                 try:
-                    priceFunction_token0 = partial(token_contract_obj.functions.getAmountsOut(
+                    price_function_token0 = partial(token_contract_obj.functions.getAmountsOut(
                         10 ** int(token_metadata['decimals']),
                         [
                             Web3.toChecksumAddress(token_metadata['address']),
                             value
                         ]
                     ).call, block_identifier=block_height)
-                    temp_token_price = await loop.run_in_executor(func=priceFunction_token0, executor=None)
+                    temp_token_price = await loop.run_in_executor(func=price_function_token0, executor=None)
                     if temp_token_price:
                         temp_token_price = temp_token_price[1]/10**stable_coins_decimals[key] if temp_token_price[1] !=0 else 0  #USDT decimals
 
@@ -114,14 +122,14 @@ async def get_token_price_at_block_height(token_contract_obj, token_metadata, bl
                 else:
                     # if there was no exception and price is still 0 then increase token amount in path (token->stablecoin)
                     if temp_token_price == 0:
-                        priceFunction_token0 = partial(token_contract_obj.functions.getAmountsOut(
+                        price_function_token0 = partial(token_contract_obj.functions.getAmountsOut(
                             10 ** int(token_metadata['decimals']) * token_amount_multiplier,
                             [
                                 Web3.toChecksumAddress(token_metadata['address']),
                                 value
                             ]
                         ).call, block_identifier=block_height)
-                        temp_token_price = await loop.run_in_executor(func=priceFunction_token0, executor=None)
+                        temp_token_price = await loop.run_in_executor(func=price_function_token0, executor=None)
                         if temp_token_price:
                             temp_token_price = temp_token_price[1]/10**stable_coins_decimals[key] if temp_token_price[1] !=0 else 0  #USDT decimals
                             temp_token_price = temp_token_price/token_amount_multiplier
@@ -139,7 +147,7 @@ async def get_token_price_at_block_height(token_contract_obj, token_metadata, bl
             # After iterating over all stable coin, check if path conversion by token->weth->usdt give a higher price of token
             # if so then replace it, as for some tokens we get accurate price by token->weth->usdt path only
             try:
-                priceFunction_token0 = partial(token_contract_obj.functions.getAmountsOut(
+                price_function_token0 = partial(token_contract_obj.functions.getAmountsOut(
                     10 ** int(token_metadata['decimals']),
                     [
                         Web3.toChecksumAddress(token_metadata['address']),
@@ -147,19 +155,19 @@ async def get_token_price_at_block_height(token_contract_obj, token_metadata, bl
                         Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDT)
                     ]
                 ).call, block_identifier=block_height)
-                temp_token_price = await loop.run_in_executor(func=priceFunction_token0, executor=None)
+                temp_token_price = await loop.run_in_executor(func=price_function_token0, executor=None)
                 if temp_token_price:
                     temp_token_price = temp_token_price[2]/10**stable_coins_decimals["USDT"] if temp_token_price[2] !=0 else 0  #USDT decimals
                     print(f"## {token_metadata['symbol']}: token price after weth->stablecoin: {temp_token_price}")
                     token_price = temp_token_price if token_price < temp_token_price else token_price
-            except Exception as error:
+            except Exception:
                 # there might be INSUFFICIENT_INPUT_AMOUNT/execution_reverted error which can break program flow, so pass it
                 pass
 
             # after going through all stablecoins and weth conversion if price is still 0
             # then increase token amount in path (token->weth-usdt)
             if token_price == 0:
-                priceFunction_token0 = partial(token_contract_obj.functions.getAmountsOut(
+                price_function_token0 = partial(token_contract_obj.functions.getAmountsOut(
                     10 ** int(token_metadata['decimals']) * token_amount_multiplier,
                     [
                         Web3.toChecksumAddress(token_metadata['address']),
@@ -167,7 +175,7 @@ async def get_token_price_at_block_height(token_contract_obj, token_metadata, bl
                         Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDT)
                     ]
                 ).call, block_identifier=block_height)
-                temp_token_price = await loop.run_in_executor(func=priceFunction_token0, executor=None)
+                temp_token_price = await loop.run_in_executor(func=price_function_token0, executor=None)
 
                 if temp_token_price:
                     temp_token_price = temp_token_price[2]/10**stable_coins_decimals["USDT"] if temp_token_price[2] !=0 else 0  #USDT decimals
@@ -180,12 +188,12 @@ async def get_token_price_at_block_height(token_contract_obj, token_metadata, bl
 
         # if token is weth then directly check its price against stable coin
         else:
-            priceFunction_token0 = partial(token_contract_obj.functions.getAmountsOut(
+            price_function_token0 = partial(token_contract_obj.functions.getAmountsOut(
                 10 ** int(token_metadata['decimals']), [
                     Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH),
                     Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDT)]
             ).call, block_identifier=block_height)
-            token_price = await loop.run_in_executor(func=priceFunction_token0, executor=None)
+            token_price = await loop.run_in_executor(func=price_function_token0, executor=None)
             token_price = token_price[1]/10**stable_coins_decimals["USDT"] #USDT decimals
             if debug_log:
                 print(f"## {token_metadata['symbol']}: final prices: {token_price}")
@@ -200,14 +208,11 @@ async def get_all_pairs_token_price(loop, redis_conn: aioredis.Redis = None):
         address=Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.IUNISWAP_V2_ROUTER),
         abi=router_contract_abi
     )
-    for contract in all_contracts:
-        pair_contract_obj = w3.eth.contract(
-            address=Web3.toChecksumAddress(contract),
-            abi=pair_contract_abi
-        )
+    rate_limiting_lua_scripts = await load_rate_limiter_scripts(redis_conn)
 
-        pair_per_token_metadata = await get_pair_per_token_metadata(
-            pair_contract_obj=pair_contract_obj,
+    for contract in all_contracts:
+        pair_per_token_metadata = await get_pair_metadata(
+            rate_limit_lua_script_shas=rate_limiting_lua_scripts,
             pair_address=contract,
             loop=loop,
             redis_conn=redis_conn
@@ -232,13 +237,9 @@ async def get_pair_tokens_price(pair, loop, redis_conn: aioredis.Redis = None):
     )
 
     pair_address = Web3.toChecksumAddress(pair)
-    pair_contract_obj = w3.eth.contract(
-        address=pair_address,
-        abi=pair_contract_abi
-    )
-
-    pair_per_token_metadata = await get_pair_per_token_metadata(
-        pair_contract_obj=pair_contract_obj,
+    rate_limiting_lua_scripts = await load_rate_limiter_scripts(redis_conn)
+    pair_per_token_metadata = await get_pair_metadata(
+        rate_limit_lua_script_shas=rate_limiting_lua_scripts,
         pair_address=pair_address,
         loop=loop,
         redis_conn=redis_conn
