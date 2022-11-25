@@ -25,14 +25,6 @@ import json
 import time
 import requests
 
-""" Initialize the loggers """
-# logging = logging.getLogger('PowerLoom|Helpers')
-# logging.addHandler(logging.handlers.SocketHandler(**{
-#     'host': 'localhost', 'port': logging.handlers.DEFAULT_TCP_LOGGING_PORT
-# }))
-# logging.setLevel(logging.DEBUG)
-# logging.debug('Got powerloom helpers library logger')
-
 
 def construct_kazoo_url(
         user=settings.ZOOKEEPER['user'],
@@ -62,8 +54,8 @@ class AsyncHTTPSessionCache:
             timeout=Timeout(timeout=5.0),
             follow_redirects=False,
             limits=Limits(
-                max_connections=settings['rlimit']['file_descriptors'], 
-                max_keepalive_connections=50, 
+                max_connections=settings['rlimit']['file_descriptors'],
+                max_keepalive_connections=50,
                 keepalive_expiry=600
             )
         )
