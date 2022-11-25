@@ -1,5 +1,4 @@
 from dynaconf import settings
-# TODO: clean up polymarket specific keys as we develop the callback workers
 uniswap_failed_query_pair_total_reserves_epochs_redis_q_f = 'uniswap:pairContract:' + settings.NAMESPACE + ':{}:failedQueryPairTotalReservesEpochs'
 uniswap_discarded_query_pair_total_reserves_epochs_redis_q_f = 'uniswap:pairContract:' + settings.NAMESPACE + ':{}:discardedQueryPairTotalReservesEpochs'
 uniswap_failed_query_pair_trade_volume_epochs_redis_q_f = 'uniswap:pairContract:' + settings.NAMESPACE + ':{}:failedQueryPairTradeVolumeEpochs'

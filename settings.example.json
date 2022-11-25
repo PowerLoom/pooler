@@ -274,7 +274,6 @@
             "host": "127.0.0.1",
             "port": 9090,
             "root": "https://pooler-callback.com",
-            "market_event_listener_path": "hooks",
             "commit_confirmation_callback_path": "commit_confirm"
         }
     }
