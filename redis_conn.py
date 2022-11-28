@@ -85,23 +85,6 @@ def provide_redis_conn(fn):
                 return fn(*args, **kwargs)
     return wrapper
 
-
-def provide_async_redis_conn(fn):
-    @wraps(fn)
-    async def async_redis_conn_wrapper(*args, **kwargs):
-        redis_conn_raw = await kwargs['request'].app.redis_pool.acquire()
-        redis_conn = aioredis.Redis(redis_conn_raw)
-        kwargs['redis_conn'] = redis_conn
-        try:
-            return await fn(*args, **kwargs)
-        except Exception as e:
-            logger.error(e, exc_info=True)
-            return {'error': 'Internal Server Error'}
-        finally:
-            kwargs['request'].app.redis_pool.release(redis_conn_raw)
-    return async_redis_conn_wrapper
-
-
 # TODO: check wherever this is used and instead
 #       attempt to supply the aioredis.Redis object from an instantiated connection pool
 def provide_async_redis_conn_insta(fn):
