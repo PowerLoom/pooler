@@ -260,12 +260,12 @@ def get_encoded_function_signature(abi_dict, function_name, params: list):
     """
     function_signature = abi_dict.get(function_name)['signature']
     encoded_signature = '0x' + keccak(text=function_signature).hex()[:8]
-    if len(params) > 0:
+    if params:
         encoded_signature += eth_abi.encode_abi(abi_dict.get(function_name)['input'], params).hex()
     return encoded_signature
 
 
-def batch_eth_call_on_block_range(rpc_endpoint, abi_dict, function_name, contract_address, from_block, to_block, params:list, from_address=None):
+def batch_eth_call_on_block_range(rpc_endpoint, abi_dict, function_name, contract_address, from_block, to_block, params:list=None, from_address=None):
     """
     Batch call "single-function" on a contract for given block-range
 
