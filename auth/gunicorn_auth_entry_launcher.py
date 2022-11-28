@@ -1,8 +1,8 @@
-from .conf import auth_settings
+from auth.conf import auth_settings
 from gunicorn.app.base import BaseApplication
 from gunicorn.glogging import Logger
 from loguru import logger
-from .server_entry import app
+from auth.server_entry import app
 import os
 import logging
 import sys
