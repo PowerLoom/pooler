@@ -368,7 +368,7 @@ async def get_pair(
 async def get_eth_price_usd(
     loop, from_block, to_block,
     redis_conn: aioredis.Redis=None,
-    rate_limit_lua_script_shas={},
+    rate_limit_lua_script_shas=None,
     web3_provider=global_w3_client
 ):
     """
@@ -691,7 +691,6 @@ async def get_token_price_in_block_range(
             else:
                 for block_num in range(from_block, to_block + 1):
                     token_price_dict[block_num] = 0
-
 
             if debug_log:
                 logger.debug(f"{token_metadata['symbol']}: price is {token_price_dict} | its eth price is {token_eth_price_dict}")

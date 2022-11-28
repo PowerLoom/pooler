@@ -70,7 +70,8 @@
                 }
             ],
             "force_archive_blocks": 100,
-            "retry": 1
+            "retry": 1,
+            "request_time_out": 5
         },
         "rlimit": {
             "file_descriptors": 2048

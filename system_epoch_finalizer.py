@@ -87,7 +87,7 @@ class EpochFinalizerProcess(multiprocessing.Process):
             port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT)),
             stdout_handler, stderr_handler
         ]
-        setproctitle(f'PowerLoom|EpochFinalizer')
+        setproctitle('PowerLoom|EpochFinalizer')
         member_id = f'powerloom:epoch:finalizer:{settings.NAMESPACE}'
         self._tooz_coordinator = coordination.get_coordinator(f'kazoo://{construct_kazoo_url()}', member_id)
         self._tooz_coordinator.start(start_heart=True)

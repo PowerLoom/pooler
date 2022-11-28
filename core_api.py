@@ -16,7 +16,7 @@ from web3 import Web3
 
 import redis_keys
 from redis_conn import RedisPoolCache
-from uniswap_functions import read_json_file
+from file_utils import read_json_file
 from redis_keys import (
     uniswap_pair_cached_recent_logs,uniswap_pair_contract_tokens_addresses,
     uniswap_V2_summarized_snapshots_zset, uniswap_V2_snapshot_at_blockheight,
@@ -571,22 +571,23 @@ async def get_v2_tokens(
 
 def create_v2_token_snapshot(data):
     data.sort(key=sort_on_liquidity, reverse=True)
-    temp = []
-    for i in range(len(data)):
-        temp.append({
+    tokens_snapshot = []
+    #for i in range(len(data)):
+    for i,token_data in enumerate(data):
+        tokens_snapshot.append({
             "index": i+1,
-            "contract_address":data[i]["contractAddress"],
-            "name": data[i]["name"],
-            "symbol": data[i]["symbol"],
-            "liquidity": f"US${round(abs(data[i]['liquidityUSD'])):,}",
-            "volume_24h": f"US${round(abs(data[i]['tradeVolumeUSD_24h'])):,}",
-            "volume_7d":f"US${round(abs(data[i]['tradeVolumeUSD_7d']))}",
-            "price": f"US${round(abs(data[i]['price']), 5):,}",
-            "price_change_24h": f"{round(data[i]['priceChangePercent_24h'], 2)}%",
-            "block_height": int(data[i]["block_height"]),
-            "block_timestamp": int(data[i]["block_timestamp"])
+            "contract_address":token_data["contractAddress"],
+            "name": token_data["name"],
+            "symbol": token_data["symbol"],
+            "liquidity": f"US${round(abs(token_data['liquidityUSD'])):,}",
+            "volume_24h": f"US${round(abs(token_data['tradeVolumeUSD_24h'])):,}",
+            "volume_7d":f"US${round(abs(token_data['tradeVolumeUSD_7d']))}",
+            "price": f"US${round(abs(token_data['price']), 5):,}",
+            "price_change_24h": f"{round(token_data['priceChangePercent_24h'], 2)}%",
+            "block_height": int(token_data["block_height"]),
+            "block_timestamp": int(token_data["block_timestamp"])
         })
-    return temp
+    return tokens_snapshot
 
 @app.get('/v1/api/v2-tokens/snapshots')
 @app.get('/v2-tokens/snapshots')
@@ -751,6 +752,6 @@ async def get_v2_pairs_daily_stats(
             }
         else:
             return daily_stats
-    except Exception as e:
-        rest_logger.error(f"Error in get_v2_pairs_daily_stats: {str(e)}", exc_info=True)
+    except Exception as exc:
+        rest_logger.error(f"Error in get_v2_pairs_daily_stats: {str(exc)}", exc_info=True)
         return {"error": "No data found"}
