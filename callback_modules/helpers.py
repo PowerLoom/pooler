@@ -26,9 +26,6 @@ import aiohttp
 from tenacity import AsyncRetrying, stop_after_attempt, wait_random_exponential
 
 
-# TODO: remove polymarket specific helpers
-
-
 async def get_rabbitmq_connection():
     return await aio_pika.connect_robust(
         host=settings.RABBITMQ.HOST,
@@ -52,7 +49,7 @@ class AuditProtocolCommandsHelper:
     ):
         project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
         if not await redis_conn.sismember(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id):
-            """ Setup diffRules for this market"""
+            """ Setup diffRules"""
             # retry below call given at settings.AUDIT_PROTOCOL_ENGINE.RETRY
             async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY)):
                 with attempt:
@@ -118,7 +115,7 @@ class AuditProtocolCommandsHelper:
     ):
         project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
         if not await redis_conn.sismember(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id):
-            """ Setup diffRules for this market"""
+            """ Setup diffRules """
             # retry below call given at settings.AUDIT_PROTOCOL_ENGINE.RETRY
             async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY)):
                 with attempt:
@@ -258,15 +255,15 @@ class CallbackAsyncWorker(multiprocessing.Process):
                         'Still running.',
                         t.get_name()
                     )
-                except Exception as e:
+                except Exception as exc:
                     self._logger.info(
                         'Shutdown handler: aio_pika consumer callback task %s raised Exception. '
                         '%s',
-                        t.get_name(), e
+                        t.get_name(), exc
                     )
                 else:
                     self._logger.info(
-                        'Shutdown handler: aio_pika consumer callback task returned with result %s',
+                        'Shutdown handler: aio_pika consumer callback task %s returned with result %s',
                         t.get_name(),
                         task_result
                     )

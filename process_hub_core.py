@@ -1,14 +1,12 @@
 import threading
 import uuid
-from exceptions import SelfExitException, GenericExitOnSignal
+from exceptions import SelfExitException
 from redis_conn import provide_redis_conn
 from threading import Thread
-from multiprocessing import Process, log_to_stderr
+from multiprocessing import Process
 from typing import Dict, Union
-from init_rabbitmq import create_rabbitmq_conn
 from dynaconf import settings
 from message_models import ProcessHubCommand
-from proto_system_logging import config_logger_with_namespace
 from helper_functions import cleanup_children_procs
 from system_ticker_linear import LinearTickerProcess
 from system_epoch_collator import EpochCollatorProcess
@@ -21,9 +19,8 @@ import logging
 import logging.handlers
 import importlib
 import json
-import time
 from setproctitle import setproctitle
-from signal import signal, pause, SIGINT, SIGTERM, SIGQUIT, SIGCHLD, SIG_DFL
+from signal import signal, SIGINT, SIGTERM, SIGQUIT, SIGCHLD
 import os
 import sys
 from rabbitmq_helpers import RabbitmqSelectLoopInteractor
@@ -49,15 +46,10 @@ PROC_STR_ID_TO_CLASS_MAP = {
         'class': EpochCallbackManager,
         'name': 'PowerLoom|EpochCallbackManager',
         'target': None
-    },
-    # 'SmartContractsEventsListener': {
-    #     'name': 'PowerLoom|ContractEventsListener',
-    #     'class': None,
-    #     'target': contract_event_listener_main
-    # }
+    }
 }
 
-with open('callback_modules/module_queues_config.json', 'r') as f:
+with open('callback_modules/module_queues_config.json', 'r',encoding='utf-8') as f:
     contents = json.load(f)
 
 CALLBACK_WORKERS_MAP = contents['callback_workers']
@@ -211,9 +203,9 @@ class ProcessHubCore(Process):
                 worker_count = None
 
                 # check if there is settings-config for workers
-                if each_worker.get('class', '') == 'PairTotalReservesProcessor': 
+                if each_worker.get('class', '') == 'PairTotalReservesProcessor':
                     worker_count = settings.get('MODULE_QUEUES_CONFIG.PAIR_TOTAL_RESERVES.NUM_INSTANCES', None)
-                
+
                 # else if settings-config doesn't exist then use module_queues_config
                 if not worker_count:
                     worker_count = each_worker.get('num_instances', 1)

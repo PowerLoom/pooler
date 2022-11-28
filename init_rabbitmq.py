@@ -88,30 +88,6 @@ def init_callback_queue(ch: pika.adapters.blocking_connection.BlockingChannel):
             init_queue(ch, queue_name, sub_topic_routing_key, sub_topic_exchange_name)
 
 
-async def init_rmq_exchange_queue_async():
-    rmq_connection_pool = Pool(get_rabbitmq_connection_async, max_size=5)
-    rmq_channel_pool = Pool(partial(get_rabbitmq_channel_async, rmq_connection_pool), max_size=20)
-    async with rmq_channel_pool.acquire() as channel:
-        await channel.set_qos(10)
-
-        #for new eth logs worker
-        eth_log_exchange_name = f'{settings.RABBITMQ.SETUP.CALLBACKS.EXCHANGE}.subtopics.ethlogs:{settings.NAMESPACE}'
-        eth_logs_exchange = await channel.declare_exchange(
-            eth_log_exchange_name, aio_pika.ExchangeType.DIRECT
-        )
-
-        # Declaring log request receiver queue and bind to exchange
-        receiverQueue_name = f'{settings.ETH_LOG_WORKER.RECEIVER_QUEUE_NAME}'
-        receiverQueue = await channel.declare_queue(name=receiverQueue_name, durable=True, auto_delete=False)
-        await receiverQueue.bind(eth_logs_exchange, routing_key=receiverQueue_name)
-
-        # Declaring log result sender queue and bind to exchange
-        senderQueue_name = f'{settings.ETH_LOG_WORKER.SENDER_QUEUE_NAME}'
-        senderQueue = await channel.declare_queue(name=senderQueue_name, durable=True, auto_delete=False)
-        await senderQueue.bind(eth_logs_exchange, routing_key=senderQueue_name)
-        return eth_logs_exchange, receiverQueue, senderQueue
-
-
 def init_queue(ch: pika.adapters.blocking_connection.BlockingChannel, queue_name, routing_key, exchange_name):
     ch.queue_declare(queue_name)
     ch.queue_bind(exchange=exchange_name, queue=queue_name, routing_key=routing_key)

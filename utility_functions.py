@@ -1,5 +1,4 @@
 from math import floor
-import json
 from ipfs_async import client as ipfs_client
 from redis_keys import uniswap_pair_hits_payload_data_key
 
@@ -9,13 +8,13 @@ def v2_pair_data_unpack(prop):
     return int(prop)
 
 def number_to_abbreviated_string(num):
-    magnitudeDict={0:'', 1:'K', 2:'m', 3:'b', 4:'T', 5:'quad', 6:'quin', 7:'sext', 8:'sept', 9:'o', 10:'n', 11:'d'}
+    magnitude_dict={0:'', 1:'K', 2:'m', 3:'b', 4:'T', 5:'quad', 6:'quin', 7:'sext', 8:'sept', 9:'o', 10:'n', 11:'d'}
     num=floor(num)
     magnitude=0
     while num>=1000.0:
         magnitude+=1
         num=num/1000.0
-    return(f'{floor(num*100.0)/100.0}{magnitudeDict[magnitude]}')
+    return(f'{floor(num*100.0)/100.0}{magnitude_dict[magnitude]}')
 
 async def retrieve_payload_data(payload_cid,  writer_redis_conn=None, logger=None):
     """
@@ -28,6 +27,7 @@ async def retrieve_payload_data(payload_cid,  writer_redis_conn=None, logger=Non
             logger.debug(payload_cid)
 
     """ Get the payload Data from ipfs """
-    _payload_data = await ipfs_client.cat(payload_cid)
-    payload_data = _payload_data.decode('utf-8')
+    payload_data = await ipfs_client.cat(payload_cid)
+    if payload_data is not None:
+        payload_data = payload_data.decode('utf-8')
     return payload_data

@@ -1,5 +1,4 @@
 from dynaconf import settings
-# TODO: clean up polymarket specific keys as we develop the callback workers
 uniswap_failed_query_pair_total_reserves_epochs_redis_q_f = 'uniswap:pairContract:' + settings.NAMESPACE + ':{}:failedQueryPairTotalReservesEpochs'
 uniswap_discarded_query_pair_total_reserves_epochs_redis_q_f = 'uniswap:pairContract:' + settings.NAMESPACE + ':{}:discardedQueryPairTotalReservesEpochs'
 uniswap_failed_query_pair_trade_volume_epochs_redis_q_f = 'uniswap:pairContract:' + settings.NAMESPACE + ':{}:failedQueryPairTradeVolumeEpochs'
@@ -19,10 +18,7 @@ uniswap_V2_daily_stats_at_blockheight = 'uniswap:V2DailyStatsSnapshot:'+settings
 uniswap_v2_tokens_snapshot_zset = 'uniswap:V2TokensSummarySnapshot:'+settings.NAMESPACE+':snapshotsZset'
 uniswap_V2_tokens_at_blockheight = 'uniswap:V2TokensSummarySnapshot:'+settings.NAMESPACE+':{}'  # block_height
 uniswap_cb_broadcast_processing_logs_zset = 'uniswap:broadcastID:' + settings.NAMESPACE + ':{}:processLogs'
-uniswap_cb_broadcast_payload_commit_ids_zset = 'uniswap:broadcastID:'+ settings.NAMESPACE + ':{}:payloadCommitIDs'
 uniswap_pair_cached_recent_logs = 'uniswap:pairContract:'+settings.NAMESPACE+':{}:recentLogs'
-uniswap_token_info_cached_data = "uniswap:tokenInfo:" + settings.NAMESPACE + ":{}:cachedData"
-uniswap_pair_cache_daily_stats = 'uniswap:pairContract:'+settings.NAMESPACE+':{}:dailyCache'
 uniswap_projects_dag_verifier_status = "projects:"+settings.NAMESPACE+":dagVerificationStatus"
 uniswap_eth_usd_price_zset = "uniswap:ethBlockHeightPrice:"+settings.NAMESPACE+":ethPriceZset"
 uniswap_tokens_pair_map = "uniswap:pairContract:"+settings.NAMESPACE+":tokensPairMap"
@@ -31,6 +27,4 @@ uniswap_pair_block_height = "projectID:uniswap_pairContract_trade_volume_{}_"+se
 uniswap_pair_cached_block_height_token_price = 'uniswap:pairContract:'+settings.NAMESPACE+':{}:cachedPairBlockHeightTokenPrice'
 cached_block_details_at_height = 'uniswap:blockDetail:'+settings.NAMESPACE+':blockDetailZset'
 uniswap_pair_hits_payload_data_key = 'hitsPayloadData'
-
 powerloom_broadcast_id_zset = 'powerloom:broadcastID:' + settings.NAMESPACE + ':broadcastProcessingStatus'
-eth_log_request_data_f = 'powerloom:ethLogs:'+settings.NAMESPACE+':requestId:{}:results'  # request UUID

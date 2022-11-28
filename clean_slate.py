@@ -1,7 +1,6 @@
 from redis import Redis
 from redis_conn import REDIS_CONN_CONF
 from dynaconf import settings
-import json
 import fnmatch
 from IPFS_API import ipfshttpclient
 import argparse
@@ -15,16 +14,15 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-# with open('settings.json', 'r') as f:
-#     d = json.load(f)
-#
-# d['development']['force_seed_trade_volume'] = True
-# d['development']['force_seed_liquidity'] = True
-# d['development']['force_seed_outcome_prices'] = True
-#
-# with open('settings.json', 'w') as f:
-#     json.dump(d, f)
-
+def del_namespace_specific_keys_hash(redis:Redis, key:str):
+    try:
+        hash_set = redis.hgetall(key)
+        hash_keys = list(map(lambda x: x.decode('utf-8'), hash_set.keys()))
+        for k in hash_keys:
+            if fnmatch.fnmatch(k,f'uniswap*{settings.NAMESPACE}*'):
+                redis.hdel(key, k)
+    except:
+        pass
 
 def redis_cleanup_audit_protocol():
     REDIS_AUDIT_PROTOCOL_CONFIG = {
@@ -33,10 +31,17 @@ def redis_cleanup_audit_protocol():
         "password": settings['redis']['password'],
         "db": 13 #TODO: this should be fetched from audit-protocol config
     }
-
     r = Redis(**REDIS_AUDIT_PROTOCOL_CONFIG)
+
+    del_namespace_specific_keys_hash(r,'projects:pruningStatus')
+    del_namespace_specific_keys_hash(r,'projects:pruningVerificationStatus')
     try:
-        c = r.delete('projects:pruningStatus')
+        c = r.delete('pruningRunStatus')
+    except:
+        pass
+
+    try:
+        c = r.delete(*r.keys('pruningProjectDetails:*'))
     except:
         pass
 
@@ -49,7 +54,11 @@ def redis_cleanup_audit_protocol():
         c = r.delete(*r.keys(f'*{settings.NAMESPACE}*Cid*'))
     except:
         pass
-
+    try:
+        r.delete(*r.keys(f'uniswap*{settings.NAMESPACE}:snapshot*'))
+        r.delete(*r.keys(f'uniswap:V2TokensSummarySnapshot:{settings.NAMESPACE}:*'))
+    except:
+        pass
     try:
         r.delete(*r.keys(f'*{settings.NAMESPACE}*lastDagCid*'))
     except:
@@ -91,37 +100,7 @@ def redis_cleanup_audit_protocol():
     except:
         pass
 
-    last_snapshots = r.hgetall('auditprotocol:lastSeenSnapshots')
-    last_snapshots = list(map(lambda x: x.decode('utf-8'), last_snapshots.keys()))
-    for k in last_snapshots:
-        if fnmatch.fnmatch(k,f'uniswap*{settings.NAMESPACE}*'):
-            r.hdel('auditprotocol:lastSeenSnapshots', k)
-
-    # try:
-    #     r.delete(*r.keys('payloadCommit:*'))
-    # except:
-    #     pass
-
-    # try:
-    #     r.delete(*r.keys('eventData:*'))
-    # except:
-    #     pass
-
-    # try:
-    #     r.delete(*r.keys('txHash*inputData'))
-    # except:
-    #     pass
-
-     # try:
-    #     r.delete(*r.keys('pendingPayloadCommits'))
-    # except:
-    #     pass
-
-    # try:
-    #     r.delete(*r.keys('CidDiff*'))
-    # except:
-    #     pass
-
+    del_namespace_specific_keys_hash(r,'auditprotocol:lastSeenSnapshots')
     try:
         c = r.delete(*r.keys('lastPruned*uniswap*'))
         print(c)
@@ -265,9 +244,6 @@ def cleanup_ipfs():
     #TODO: we need to enforce gc here but it might timeout if there are too many cids
     #      default gc is set to 1hour, any objects which are not pinned and not queried
     #      should get gc’d in an hour.
-
-
-
 
 
 if __name__ == '__main__':

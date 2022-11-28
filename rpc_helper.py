@@ -98,7 +98,7 @@ class ConstructRPC:
             for _url in rpc_urls:
                 try:
                     retry[_url] += 1
-                    r = requests.post(_url, json=q_s, timeout=5)
+                    r = requests.post(_url, json=q_s, timeout=settings.RPC.REQUEST_TIME_OUT)
                     json_response = r.json()
                 except (requests.exceptions.Timeout,
                         requests.exceptions.ConnectionError,
@@ -151,7 +151,7 @@ class ConstructRPC:
                                                params=[tx])
         try:
             tx_receipt = rpc_response["result"]
-        except KeyError as e:
+        except KeyError:
             process_name = multiprocessing.current_process().name
             rpc_logger.debug("{1}: Unexpected JSON RPC response: {0}".format(rpc_response, process_name))
             raise
@@ -165,7 +165,7 @@ class ConstructRPC:
                                                params=[tx])
         try:
             tx_hash = rpc_response["result"]
-        except KeyError as e:
+        except KeyError:
             process_name = multiprocessing.current_process().name
             rpc_logger.debug("{1}: Unexpected JSON RPC response: {0}".format(rpc_response, process_name))
             raise
@@ -208,7 +208,7 @@ class RPCException(Exception):
 
 def load_web3_providers_and_rate_limits(full_nodes, archive_nodes):
     web3_providers = {
-        "full_nodes":  list(),  
+        "full_nodes":  list(),
         "archive_nodes": list()
     }
 
@@ -245,33 +245,33 @@ def contract_abi_dict(abi):
         input_types = [input['type'] for input in abi_obj['inputs']]
         output_types = [output['type'] for output in abi_obj['outputs']]
         abi_dict[name] = {
-            "signature": '{}({})'.format(name,','.join(input_types)), 
-            'output': output_types, 
-            'input': input_types, 
+            "signature": '{}({})'.format(name,','.join(input_types)),
+            'output': output_types,
+            'input': input_types,
             'abi': abi_obj
         }
 
     return abi_dict
 
 
-def get_encoded_function_signature(abi_dict, function_name, params: list = []):
+def get_encoded_function_signature(abi_dict, function_name, params: list):
     """
     get function encoded signature with params
     """
     function_signature = abi_dict.get(function_name)['signature']
     encoded_signature = '0x' + keccak(text=function_signature).hex()[:8]
-    if len(params) > 0:
+    if params:
         encoded_signature += eth_abi.encode_abi(abi_dict.get(function_name)['input'], params).hex()
     return encoded_signature
 
 
-def batch_eth_call_on_block_range(rpc_endpoint, abi_dict, function_name, contract_address, from_block='latest', to_block='latest', params=[], from_address=None):
+def batch_eth_call_on_block_range(rpc_endpoint, abi_dict, function_name, contract_address, from_block, to_block, params:list=None, from_address=None):
     """
     Batch call "single-function" on a contract for given block-range
-    
+
     RPC_BATCH: for_each_block -> call_function_x
     """
-    
+
     from_address = from_address if from_address else Web3.toChecksumAddress('0x0000000000000000000000000000000000000000')
     function_signature = get_encoded_function_signature(abi_dict, function_name, params)
     rpc_query = []
@@ -289,7 +289,7 @@ def batch_eth_call_on_block_range(rpc_endpoint, abi_dict, function_name, contrac
             ],
             "id": "1"
         })
-    else: 
+    else:
         request_id = 1
         for block in range(from_block, to_block+1):
             rpc_query.append({
@@ -308,7 +308,7 @@ def batch_eth_call_on_block_range(rpc_endpoint, abi_dict, function_name, contrac
             request_id+=1
 
     rpc_response = []
-    response = requests.post(url=rpc_endpoint, json=rpc_query)
+    response = requests.post(url=rpc_endpoint, json=rpc_query, timeout=settings.RPC.REQUEST_TIME_OUT)
     response = response.json()
     response_exceptions = list(map(lambda r: r, filter(lambda y: y.get('error', False), response))) if isinstance(response, list) else response
 
@@ -330,10 +330,10 @@ def batch_eth_call_on_block_range(rpc_endpoint, abi_dict, function_name, contrac
 def batch_eth_get_block(rpc_endpoint, from_block, to_block):
     """
     Batch call "eth_getBlockByNumber" in a range of block numbers
-    
+
     RPC_BATCH: for_each_block -> eth_getBlockByNumber
     """
-    
+
     rpc_query = []
 
     request_id = 1
@@ -348,8 +348,8 @@ def batch_eth_get_block(rpc_endpoint, from_block, to_block):
             "id": f'{request_id}'
         })
         request_id+=1
-        
-    response = requests.post(url=rpc_endpoint, json=rpc_query)
+
+    response = requests.post(url=rpc_endpoint, json=rpc_query, timeout=settings.RPC.REQUEST_TIME_OUT)
     response = response.json()
     response_exceptions = list(map(lambda r: r, filter(lambda y: y.get('error', False), response)))
 
@@ -380,7 +380,7 @@ def get_events_logs(web3Provider, contract_address, toBlock, fromBlock, topics, 
     codec: ABICodec = web3Provider.codec
     all_events = []
     for log in event_log:
-        abi = event_abi.get(log.topics[0].hex(), "") 
+        abi = event_abi.get(log.topics[0].hex(), "")
         evt = get_event_data(codec, abi, log)
         all_events.append(evt)
 
