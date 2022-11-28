@@ -89,27 +89,6 @@ def project_namespace_inject(request: Request, stream: str = Query(default='pair
     pair_contract_address = request.path_params['pair_contract_address']
     audit_project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
     return audit_project_id
-    market_id_key = f"marketId:{market_id}:contractAddress"
-    out = await redis_conn.get(market_id_key)
-    if out:
-        return out.decode('utf-8')
-    else:
-        # Fetch the contract address from the file
-        try:
-            f_ = open("static/cached_markets.json", 'r')
-        except Exception as exc:
-            rest_logger.warning("Unable to open the cached_markets.json file")
-            rest_logger.error(exc, exc_info=True)
-        else:
-            rest_logger.debug("Found cached_markets.json file")
-            json_data = json.loads(f_.read())
-            for market in json_data:
-                if int(market['id']) == int(market_id):
-                    out = await redis_conn.set(market_id_key, market['marketMakerAddress'].lower())
-                    rest_logger.debug("Saved the following data to redis")
-                    rest_logger.debug({"marketId": market_id, "contract_address": market['marketMakerAddress'].lower()})
-                    return market['marketMakerAddress'].lower()
-    return -1
 
 async def save_request_data(
         request: Request,
@@ -575,7 +554,7 @@ def create_v2_token_snapshot(data):
     #for i in range(len(data)):
     for i,token_data in enumerate(data):
         tokens_snapshot.append({
-            "index": i+1,
+            "index": i,
             "contract_address":token_data["contractAddress"],
             "name": token_data["name"],
             "symbol": token_data["symbol"],
