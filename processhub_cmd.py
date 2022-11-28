@@ -18,20 +18,9 @@ from redis_keys import (
     uniswap_cb_broadcast_processing_logs_zset,
     uniswap_projects_dag_verifier_status
 )
-
-
+from file_utils import read_json_file
 app = typer.Typer()
 
-def read_json_file(file_path: str):
-    """Read given json file and return its content as a dictionary."""
-    try:
-        f_ = open(file_path, 'r')
-    except Exception as exc:
-        print(f"Unable to open the {file_path} file, error msg:{str(exc)}")
-    else:
-        print(f"Reading {file_path} file")
-        json_data = json.loads(f_.read())
-    return json_data
 
 @app.command()
 def pidStatus(connections: bool = False):

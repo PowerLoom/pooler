@@ -1,10 +1,10 @@
 import time
+from datetime import datetime, timedelta
 
 from redis import asyncio as aioredis
-from async_limits import parse_many as limit_parse_many
+import redis.exceptions
 from async_limits.strategies import AsyncFixedWindowRateLimiter
 from async_limits.storage import AsyncRedisStorage
-from datetime import datetime, timedelta
 from rpc_helper import RPCException
 
 
@@ -67,7 +67,6 @@ async def check_rpc_rate_limit(parsed_limits: list, app_id, redis_conn: aioredis
         rate_limit_lua_script_shas = await load_rate_limiter_scripts(redis_conn)
     redis_storage = AsyncRedisStorage(rate_limit_lua_script_shas, redis_conn)
     custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
-    app_id = app_id
     key_bits = [app_id, 'eth_call']  # TODO: add unique elements that can identify a request
     can_request = False
     retry_after = 1
@@ -87,15 +86,15 @@ async def check_rpc_rate_limit(parsed_limits: list, app_id, redis_conn: aioredis
                 can_request = False
                 break  # make sure to break once false condition is hit
         except (
-                aioredis.exceptions.ConnectionError, aioredis.exceptions.TimeoutError,
-                aioredis.exceptions.ResponseError
-        ) as e:
+                redis.exceptions.ConnectionError, redis.exceptions.TimeoutError,
+                redis.exceptions.ResponseError
+        ) as exc:
             # shit can happen while each limit check call hits Redis, handle appropriately
             logger.debug('Bypassing rate limit check for appID because of Redis exception: ' + str(
-                {'appID': app_id, 'exception': e}))
+                {'appID': app_id, 'exception': exc}))
             raise
-        except Exception as e:
-            logger.error('Caught exception on rate limiter operations: %s', e, exc_info=True)
+        except Exception as exc:
+            logger.error('Caught exception on rate limiter operations: %s', exc, exc_info=True)
             raise
         else:
             can_request = True
