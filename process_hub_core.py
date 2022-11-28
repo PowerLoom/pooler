@@ -49,7 +49,7 @@ PROC_STR_ID_TO_CLASS_MAP = {
     }
 }
 
-with open('callback_modules/module_queues_config.json', 'r') as f:
+with open('callback_modules/module_queues_config.json', 'r',encoding='utf-8') as f:
     contents = json.load(f)
 
 CALLBACK_WORKERS_MAP = contents['callback_workers']

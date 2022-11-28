@@ -180,7 +180,6 @@ def cleanup_children_procs(fn):
             logging.error('Finished waiting for all children...now can exit.')
             self._reporter_thread.join()
             sys.exit(0)
-            #sys.exit(0)
     return wrapper
 
 

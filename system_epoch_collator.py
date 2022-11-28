@@ -139,12 +139,12 @@ class EpochCollatorProcess(Process):
                 broadcast = collate_epoch(consensus_report)
                 self._state_update_q.put(broadcast)
         except Exception as err:
-            self._logger.error(f"Error while passing acknowledgement in EpochCollator error_msg:{str(err)}", exc_info=True)
+            self._logger.error("Error while passing acknowledgement in EpochCollator error_msg: %s", err, exc_info=True)
 
     @rabbitmq_tooz_cleanup
     def run(self):
         # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|EpochCollator'))
-        setproctitle(f'PowerLoom|EpochCollator')
+        setproctitle('PowerLoom|EpochCollator')
         for signame in [SIGINT, SIGTERM, SIGQUIT]:
             signal(signame, self._exit_signal_handler)
         self._logger = logging.getLogger('PowerLoom|EpochCollator')
