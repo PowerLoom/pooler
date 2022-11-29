@@ -78,7 +78,7 @@ async def check_user_details(
         owner_email = owner_email.decode('utf-8')
         owner_details_b = await redis_conn.hgetall(user_details_htable(owner_email))
         owner_details_dec = {k.decode('utf-8'): v.decode('utf-8') for k, v in owner_details_b.items()}
-        getLogger().debug('Retrieved owner details: %s', owner_details_dec)
+        # getLogger().debug('Retrieved owner details: %s', owner_details_dec)
         owner_details = AppOwnerModel(**owner_details_dec)
         return AuthCheck(
             authorized=await redis_conn.sismember(
