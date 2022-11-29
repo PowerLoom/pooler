@@ -1,9 +1,10 @@
 from rate_limiter import load_rate_limiter_scripts
 from fastapi import Depends, FastAPI, Request, Response, Query
 from dynaconf import settings
-from auth.helpers import rate_limit_auth_check, inject_rate_limit_fail_response
+from auth.helpers import rate_limit_auth_check, inject_rate_limit_fail_response, incr_success_calls_count
 from auth.redis_conn import RedisPoolCache as AuthRedisPoolCache
 from auth.data_models import RateLimitAuthCheck, UserStatusEnum
+from auth.redis_keys import user_details_htable
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from redis import asyncio as aioredis
@@ -79,7 +80,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 async def startup_boilerplate():
     app.state.aioredis_pool = RedisPoolCache(pool_size=100)
     await app.state.aioredis_pool.populate()
-    app.redis_pool = app.state.aioredis_pool._aioredis_pool
+    app.state.redis_pool = app.state.aioredis_pool._aioredis_pool
     app.state.auth_aioredis_singleton = AuthRedisPoolCache(pool_size=100)
     await app.state.auth_aioredis_singleton.populate()
     app.state.auth_aioredis_pool = app.state.auth_aioredis_singleton._aioredis_pool
@@ -116,7 +117,7 @@ async def get_v2_pairs_data(
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
 
-    redis_conn = request.app.redis_pool
+    redis_conn = request.app.state.redis_pool
     latest_v2_summary_snapshot = await redis_conn.zrevrange(
         name=uniswap_V2_summarized_snapshots_zset,
         start=0,
@@ -152,6 +153,8 @@ async def get_v2_pairs_data(
     data = json.loads(snapshot_data)["data"]
     data.sort(key=get_tokens_liquidity_for_sort, reverse=True)
 
+    auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
+    await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
     if "/v1/api" in request.url._url:
         return {
             "data": data, "txHash": tx_hash, "cid": latest_payload_cid,
@@ -177,7 +180,10 @@ async def get_v2_pairs_snapshots(
             rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
-    redis_conn: aioredis.Redis = request.app.redis_pool
+    redis_conn: aioredis.Redis = request.app.state.redis_pool
+
+    auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
+    await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
     return {
         'snapshots': list(map(
             lambda x: int(x[1]),
@@ -205,7 +211,7 @@ async def get_v2_pairs_at_block_height(
             rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
-    redis_conn: aioredis.Redis = request.app.redis_pool
+    redis_conn: aioredis.Redis = request.app.state.redis_pool
 
     snapshot_data = await redis_conn.get(
         name=redis_keys.uniswap_V2_snapshot_at_blockheight.format(block_height)
@@ -280,7 +286,7 @@ async def get_v2_daily_stats_snapshot(
             rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
-    redis_conn: aioredis.Redis = request.app.redis_pool
+    redis_conn: aioredis.Redis = request.app.state.redis_pool
     return {
         'snapshots': list(map(
             lambda x: int(x[1]),
@@ -308,7 +314,7 @@ async def get_v2_daily_stats_by_block(
             rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
-    redis_conn: aioredis.Redis = request.app.redis_pool
+    redis_conn: aioredis.Redis = request.app.state.redis_pool
     latest_payload = await redis_conn.zrangebyscore(
         name=uniswap_v2_daily_stats_snapshot_zset,
         min=block_height,
@@ -423,7 +429,7 @@ async def get_v2_pairs_recent_logs(
             rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
-    redis_conn = await request.app.redis_pool
+    redis_conn = await request.app.state.redis_pool
     data = await redis_conn.get(uniswap_pair_cached_recent_logs.format(f"{Web3.toChecksumAddress(pair_contract)}"))
 
     if data:
@@ -449,7 +455,7 @@ async def get_v2_tokens_recent_logs(
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
     pair_tokens_addresses = {}
     all_pair_contracts = read_json_file('static/cached_pair_addresses.json', rest_logger)
-    redis_conn = await request.app.redis_pool
+    redis_conn = await request.app.state.redis_pool
 
     # get pair's token addresses ( pair -> token0, token1)
     redis_pipe = redis_conn.pipeline()
@@ -505,7 +511,7 @@ async def get_v2_tokens(
             rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
-    redis_conn = await request.app.redis_pool
+    redis_conn = await request.app.state.redis_pool
 
     latest_daily_stats_snapshot = await redis_conn.zrevrange(
         name=uniswap_v2_tokens_snapshot_zset,
@@ -587,7 +593,7 @@ async def get_v2_tokens_snapshots(
             rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
-    redis_conn: aioredis.Redis = request.app.redis_pool
+    redis_conn: aioredis.Redis = request.app.state.redis_pool
     return {
         'snapshots': list(map(
             lambda x: int(x[1]),
@@ -615,7 +621,7 @@ async def get_v2_tokens_data_by_block(
             rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
-    redis_conn: aioredis.Redis = request.app.redis_pool
+    redis_conn: aioredis.Redis = request.app.state.redis_pool
     latest_payload = await redis_conn.zrangebyscore(
         name=uniswap_v2_tokens_snapshot_zset,
         min=block_height,
@@ -676,7 +682,7 @@ async def get_v2_pairs_daily_stats(
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
     try:
 
-        redis_conn = await request.app.redis_pool
+        redis_conn = await request.app.state.redis_pool
         latest_daily_stats_snapshot = await redis_conn.zrevrange(
             name=uniswap_v2_daily_stats_snapshot_zset,
             start=0,

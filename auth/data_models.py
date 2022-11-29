@@ -16,6 +16,9 @@ class AppOwnerModel(BaseModel):
     email: str
     rate_limit: str
     active: UserStatusEnum
+    callsCount: int = 0
+    throttledCount: int = 0
+    next_reset_at: int
 
 
 class UserAllDetailsResponse(AppOwnerModel):

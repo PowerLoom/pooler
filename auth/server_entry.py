@@ -1,7 +1,9 @@
 from typing import Optional, Union
 from fastapi import Depends, FastAPI, Request, Response, Query
 from fastapi.middleware.cors import CORSMiddleware
-from auth.redis_keys import (user_details_htable, all_users_set, user_active_api_keys_set, user_revoked_api_keys_set)
+from auth.redis_keys import (
+    user_details_htable, all_users_set, user_active_api_keys_set, user_revoked_api_keys_set, api_key_to_owner_key
+)
 from urllib.parse import urlencode, urljoin
 from dynaconf import settings
 from auth.data_models import AppOwnerModel, AddApiKeyRequest, UserAllDetailsResponse
@@ -62,8 +64,8 @@ async def create_update_user(
             all_users_set(),
             user_cu_request.email
         )
-        user_details = user_cu_request.dict(exclude={'email'})
-        api_logger.debug('User details after popping email: %s', user_details)
+        user_details = user_cu_request.dict()
+        # api_logger.debug('User details after popping email: %s', user_details)
         await redis_conn.hset(
             name=user_details_htable(user_cu_request.email),
             mapping=user_details
@@ -87,14 +89,12 @@ async def add_api_key(
         response.status_code = 400
         return {'success': False}
 
-    _ = await redis_conn.sadd(
-        user_active_api_keys_set(email),
-        api_key_request.api_key
-    )
-    if _:
-        return {'success': True}
-    else:
-        return {'success': False}
+    async with redis_conn.pipeline(transaction=True) as p:
+        await p.sadd(
+            user_active_api_keys_set(email),
+            api_key_request.api_key
+        ).set(api_key_to_owner_key(api_key_request.api_key), email).execute()
+    return {'success': True}
 
 
 @app.delete('/user/{email}/api_key')
