@@ -115,5 +115,5 @@ async def rate_limit_auth_check(
             rate_limit_passed=False,
             retry_after=1,
             violated_limit='',
-            current_limit=auth_check.owner.rate_limit
+            current_limit=''
         )
