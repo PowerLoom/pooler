@@ -7,7 +7,7 @@ from async_limits import parse_many
 from redis import asyncio as aioredis
 
 
-async def inject_rate_limit_fail_response(rate_limit_auth_check_dependency: RateLimitAuthCheck) -> JSONResponse:
+def inject_rate_limit_fail_response(rate_limit_auth_check_dependency: RateLimitAuthCheck) -> JSONResponse:
     if rate_limit_auth_check_dependency.authorized:
         response_body = {
             "error": {
