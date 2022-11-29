@@ -7,6 +7,7 @@ from rate_limiter import generic_rate_limiter
 from async_limits import parse_many
 from redis import asyncio as aioredis
 import time
+from logging import getLogger
 
 
 async def incr_success_calls_count(
@@ -74,12 +75,14 @@ async def check_user_details(
     if not owner_email:
         return AuthCheck(authorized=False, api_key=api_key, reason='bad API key')
     else:
+        owner_email = owner_email.decode('utf-8')
         owner_details_b = await redis_conn.hgetall(user_details_htable(owner_email))
-        owner_details = {k.decode('utf-8'): v.decode('utf-8') for k, v in owner_details_b.items()}
-        owner_details = AppOwnerModel(**owner_details)
+        owner_details_dec = {k.decode('utf-8'): v.decode('utf-8') for k, v in owner_details_b.items()}
+        getLogger().debug('Retrieved owner details: %s', owner_details_dec)
+        owner_details = AppOwnerModel(**owner_details_dec)
         return AuthCheck(
             authorized=await redis_conn.sismember(
-                user_active_api_keys_set(owner_email.decode('utf-8')),
+                user_active_api_keys_set(owner_email),
                 api_key
             ),
             api_key=api_key,

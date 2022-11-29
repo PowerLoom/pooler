@@ -11,7 +11,7 @@ import logging
 import sys
 import coloredlogs
 from redis import asyncio as aioredis
-import os
+import time
 from auth.redis_conn import RedisPoolCache
 
 
@@ -64,6 +64,7 @@ async def create_update_user(
             all_users_set(),
             user_cu_request.email
         )
+        user_cu_request.next_reset_at = int(time.time()) + 86400
         user_details = user_cu_request.dict()
         # api_logger.debug('User details after popping email: %s', user_details)
         await redis_conn.hset(
@@ -124,11 +125,11 @@ async def get_user_details(
         email: str
 ):
     redis_conn: aioredis.Redis = request.app.state.redis_pool
-    if not await redis_conn.sismember(all_users_set(), email):
-        response.status_code = 400
-        return {'success': False}
 
     all_details = await redis_conn.hgetall(name=user_details_htable(email))
+    if not all_details:
+        response.status_code = 400
+        return {'success': False}
     active_api_keys = await redis_conn.smembers(name=user_active_api_keys_set(email))
     revoked_api_keys = await redis_conn.smembers(name=user_revoked_api_keys_set(email))
 
@@ -136,7 +137,6 @@ async def get_user_details(
         'success': True,
         'data':
             UserAllDetailsResponse(
-                email=email,
                 **{k.decode('utf-8'): v.decode('utf-8') for k, v in all_details.items()},
                 active_api_keys=[x.decode('utf-8') for x in active_api_keys],
                 revoked_api_keys=[x.decode('utf-8') for x in revoked_api_keys]
