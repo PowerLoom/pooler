@@ -19,7 +19,8 @@ class AppOwnerModel(BaseModel):
 
 
 class UserAllDetailsResponse(AppOwnerModel):
-    api_keys: List[str]
+    active_api_keys: List[str]
+    revoked_api_keys: List[str]
 
 
 class AuthCheck(BaseModel):
