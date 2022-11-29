@@ -91,7 +91,7 @@ async def generic_rate_limiter(
                 redis.exceptions.ResponseError
         ) as exc:
             raise Exception from exc
-    return True, 0, None
+    return True, 0, ''
 
 
 async def check_rpc_rate_limit(
