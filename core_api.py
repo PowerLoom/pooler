@@ -116,7 +116,7 @@ async def get_v2_pairs_data(
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
 
-    redis_conn = request.app.state.redis_pool
+    redis_conn = request.app.redis_pool
     latest_v2_summary_snapshot = await redis_conn.zrevrange(
         name=uniswap_V2_summarized_snapshots_zset,
         start=0,
@@ -170,7 +170,7 @@ async def get_v2_pairs_snapshots(
         request: Request,
         response: Response
 ):
-    redis_conn: aioredis.Redis = request.app.state.redis_pool
+    redis_conn: aioredis.Redis = request.app.redis_pool
     return {
         'snapshots': list(map(
             lambda x: int(x[1]),
@@ -191,7 +191,7 @@ async def get_v2_pairs_at_block_height(
         response: Response,
         block_height: int
 ):
-    redis_conn: aioredis.Redis = request.app.state.redis_pool
+    redis_conn: aioredis.Redis = request.app.redis_pool
 
     snapshot_data = await redis_conn.get(
         name=redis_keys.uniswap_V2_snapshot_at_blockheight.format(block_height)
@@ -259,7 +259,7 @@ async def get_v2_daily_stats_snapshot(
         request: Request,
         response: Response
 ):
-    redis_conn: aioredis.Redis = request.app.state.redis_pool
+    redis_conn: aioredis.Redis = request.app.redis_pool
     return {
         'snapshots': list(map(
             lambda x: int(x[1]),
@@ -280,7 +280,7 @@ async def get_v2_daily_stats_by_block(
         response: Response,
         block_height: int
 ):
-    redis_conn: aioredis.Redis = request.app.state.redis_pool
+    redis_conn: aioredis.Redis = request.app.redis_pool
     latest_payload = await redis_conn.zrangebyscore(
         name=uniswap_v2_daily_stats_snapshot_zset,
         min=block_height,
@@ -388,7 +388,7 @@ async def get_v2_pairs_recent_logs(
         response: Response,
         pair_contract: str
 ):
-    redis_conn = await request.app.state.redis_pool
+    redis_conn = await request.app.redis_pool
     data = await redis_conn.get(uniswap_pair_cached_recent_logs.format(f"{Web3.toChecksumAddress(pair_contract)}"))
 
     if data:
@@ -407,7 +407,7 @@ async def get_v2_tokens_recent_logs(
 ):
     pair_tokens_addresses = {}
     all_pair_contracts = read_json_file('static/cached_pair_addresses.json', rest_logger)
-    redis_conn = await request.app.state.redis_pool
+    redis_conn = await request.app.redis_pool
 
     # get pair's token addresses ( pair -> token0, token1)
     redis_pipe = redis_conn.pipeline()
@@ -456,7 +456,7 @@ async def get_v2_tokens(
         request: Request,
         response: Response
 ):
-    redis_conn = await request.app.state.redis_pool
+    redis_conn = await request.app.redis_pool
 
     latest_daily_stats_snapshot = await redis_conn.zrevrange(
         name=uniswap_v2_tokens_snapshot_zset,
@@ -531,7 +531,7 @@ async def get_v2_tokens_snapshots(
         request: Request,
         response: Response
 ):
-    redis_conn: aioredis.Redis = request.app.state.redis_pool
+    redis_conn: aioredis.Redis = request.app.redis_pool
     return {
         'snapshots': list(map(
             lambda x: int(x[1]),
@@ -552,7 +552,7 @@ async def get_v2_tokens_data_by_block(
         response: Response,
         block_height: int
 ):
-    redis_conn: aioredis.Redis = request.app.state.redis_pool
+    redis_conn: aioredis.Redis = request.app.redis_pool
     latest_payload = await redis_conn.zrangebyscore(
         name=uniswap_v2_tokens_snapshot_zset,
         min=block_height,
@@ -606,7 +606,7 @@ async def get_v2_pairs_daily_stats(
 ):
     try:
 
-        redis_conn = await request.app.state.redis_pool
+        redis_conn = await request.app.redis_pool
         latest_daily_stats_snapshot = await redis_conn.zrevrange(
             name=uniswap_v2_daily_stats_snapshot_zset,
             start=0,
