@@ -43,7 +43,7 @@ async def startup_boilerplate():
     app.state.aioredis_pool = RedisPoolCache(pool_size=100)
     await app.state.aioredis_pool.populate()
     app.state.redis_pool = app.state.aioredis_pool._aioredis_pool
-
+    app.state.core_settings = settings
 
 @app.post('/user')
 async def create_update_user(
