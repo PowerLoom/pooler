@@ -150,7 +150,8 @@ async def get_past_snapshots(
             rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
-
+    if maxCount > 100:
+        return {"error": "Data being queried is more than 100 snapshots. Querying data for upto last 100 snapshots is supported."}
     last_block_height_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{audit_project_id}/payloads/height')
     async with aiohttp.ClientSession() as session:
         async with session.get(url=last_block_height_url) as resp:
