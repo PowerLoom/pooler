@@ -64,9 +64,9 @@ async def create_update_user(
             all_users_set(),
             user_cu_request.email
         )
-        user_cu_request.next_reset_at = int(time.time()) + 86400
+        if not await redis_conn.sismember(all_users_set(), user_cu_request.email):
+            user_cu_request.next_reset_at = int(time.time()) + 86400
         user_details = user_cu_request.dict()
-        # api_logger.debug('User details after popping email: %s', user_details)
         await redis_conn.hset(
             name=user_details_htable(user_cu_request.email),
             mapping=user_details
@@ -87,8 +87,7 @@ async def add_api_key(
 ):
     redis_conn: aioredis.Redis = request.app.state.redis_pool
     if not await redis_conn.sismember(all_users_set(), email):
-        response.status_code = 400
-        return {'success': False}
+        return {'success': False, 'error': 'User does not exists'}
 
     async with redis_conn.pipeline(transaction=True) as p:
         await p.sadd(
@@ -107,13 +106,12 @@ async def revoke_api_key(
 ):
     redis_conn: aioredis.Redis = request.app.state.redis_pool
     if not await redis_conn.sismember(all_users_set(), email):
-        response.status_code = 401
-        return {'success': False}
+        return {'success': False, 'error': 'User does not exists'}
+
     if not await redis_conn.sismember(user_active_api_keys_set(email), api_key_request.api_key):
-        response.status_code = 401
-        return {'success': False}
+        return {'success': False, 'error': 'API key not active'}
     elif await redis_conn.sismember(user_revoked_api_keys_set(email), api_key_request.api_key):
-        response.status_code = 401
+        return {'success': False, 'error': 'API key already revoked'}
     await redis_conn.smove(user_active_api_keys_set(email), user_revoked_api_keys_set(email), api_key_request.api_key)
     return {'success': True}
 
@@ -128,8 +126,8 @@ async def get_user_details(
 
     all_details = await redis_conn.hgetall(name=user_details_htable(email))
     if not all_details:
-        response.status_code = 400
-        return {'success': False}
+        return {'success': False, 'error': 'User does not exists'}
+
     active_api_keys = await redis_conn.smembers(name=user_active_api_keys_set(email))
     revoked_api_keys = await redis_conn.smembers(name=user_revoked_api_keys_set(email))
 
