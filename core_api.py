@@ -151,15 +151,12 @@ async def get_past_snapshots(
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
     if maxCount > 100:
         return {"error": "Data being queried is more than 100 snapshots. Querying data for upto last 100 snapshots is supported."}
+    max_count = 10 if not maxCount else maxCount
     last_block_height_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{audit_project_id}/payloads/height')
     async with aiohttp.ClientSession() as session:
         async with session.get(url=last_block_height_url) as resp:
             rest_json = await resp.json()
             last_block_height = rest_json.get('height')
-    if not maxCount:
-        max_count = 10
-    else:
-        max_count = maxCount
     to_block = last_block_height
     if to_block < max_count or max_count == -1:
         from_block = 1
@@ -188,7 +185,8 @@ async def get_past_snapshots(
                         project_id=audit_project_id,
                         data=data
                     )
-
+            auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
+            await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
             return resp_json
 
 
@@ -214,7 +212,6 @@ async def get_pair_contract_from_tokens(
 
     redis_conn: aioredis.Redis = request.app.state.redis_pool
     redis_token_hashmap = f'uniswap:pairContract:{settings.NAMESPACE}:tokensPairMap'
-    rest_logger.debug(redis_token_hashmap)
     token0_normalized = to_checksum_address(token0)
     token1_normalized = to_checksum_address(token1)
     pair_return = None
@@ -225,6 +222,8 @@ async def get_pair_contract_from_tokens(
             pair_return = pair2
     else:
         pair_return = pair1
+    auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
+    await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
     return {
         'data': {
             'pairContractAddress': pair_return if not pair_return else pair_return.decode('utf-8')
@@ -265,6 +264,9 @@ async def get_single_v2_pair_data(
     if not v2_pairs_snapshot_data:
         # fetch from ipfs
         v2_pairs_snapshot_data = await retrieve_payload_data(latest_payload_cid, redis_conn)
+
+    auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
+    await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
 
     # even ipfs doesn't have the data, return empty
     if not v2_pairs_snapshot_data:
@@ -441,6 +443,9 @@ async def get_v2_pairs_at_block_height(
     payload_data = json.loads(payload_data)['data']
     payload_data.sort(key=get_tokens_liquidity_for_sort, reverse=True)
 
+    auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
+    await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
+
     if "/v1/api" in request.url._url:
         return {
             "data": payload_data, "txHash": tx_hash, "cid": payload_cid,
@@ -466,6 +471,10 @@ async def get_v2_daily_stats_snapshot(
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
     redis_conn: aioredis.Redis = request.app.state.redis_pool
+
+    auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
+    await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
+
     return {
         'snapshots': list(map(
             lambda x: int(x[1]),
@@ -593,6 +602,9 @@ async def get_v2_daily_stats_by_block(
         return {
             'data': None
         }
+    finally:
+        auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
+        await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
 
 
 @app.get('/v2-pairs-recent-logs')
@@ -615,6 +627,9 @@ async def get_v2_pairs_recent_logs(
         data = json.loads(data)
     else:
         data = {"error": "No data found"}
+
+    auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
+    await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
 
     return data
 
@@ -670,6 +685,9 @@ async def get_v2_tokens_recent_logs(
     if len(pairs_log) > 75:
         pairs_log = pairs_log[:75]
 
+    auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
+    await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
+
     return pairs_log
 
 
@@ -721,6 +739,9 @@ async def get_single_token_aggregate_data(
         data = json.loads(snapshot_data)['data']
     else:
         data = json.loads(snapshot_data)
+
+    auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
+    await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
 
     pair_entry_filter = filter(
         lambda x: x['contractAddress'].lower() == token_addr.lower(),
@@ -785,6 +806,9 @@ async def get_v2_tokens(
 
     data = create_v2_token_snapshot(data)
 
+    auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
+    await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
+
     if "/v1/api" in request.url._url:
         return {
             "data": data, "txHash": tx_hash, "cid": latest_payload_cid,
@@ -830,6 +854,10 @@ async def get_v2_tokens_snapshots(
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
     redis_conn: aioredis.Redis = request.app.state.redis_pool
+
+    auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
+    await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
+
     return {
         'snapshots': list(map(
             lambda x: int(x[1]),
@@ -891,6 +919,9 @@ async def get_v2_tokens_data_by_block(
         snapshot_data = json.loads(snapshot_data)
 
     snapshot_data = create_v2_token_snapshot(snapshot_data)
+
+    auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
+    await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
 
     if "/v1/api" in request.url._url:
         return {
@@ -1015,3 +1046,6 @@ async def get_v2_pairs_daily_stats(
     except Exception as exc:
         rest_logger.error(f"Error in get_v2_pairs_daily_stats: {str(exc)}", exc_info=True)
         return {"error": "No data found"}
+    finally:
+        auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
+        await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
