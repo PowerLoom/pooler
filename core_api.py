@@ -702,7 +702,7 @@ async def get_single_token_aggregate_data(
         data = json.loads(snapshot_data)['data']
     else:
         data = json.loads(snapshot_data)
-        
+
     pair_entry_filter = filter(
         lambda x: x['contractAddress'].lower() == token_addr.lower(),
         data

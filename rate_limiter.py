@@ -1,11 +1,11 @@
-import time
-from datetime import datetime, timedelta
-
+from typing import List
 from redis import asyncio as aioredis
-import redis.exceptions
 from async_limits.strategies import AsyncFixedWindowRateLimiter
 from async_limits.storage import AsyncRedisStorage
+from async_limits import RateLimitItem
 from rpc_helper import RPCException
+import redis.exceptions
+import time
 
 
 # Initialize rate limits when program starts
@@ -59,7 +59,7 @@ async def load_rate_limiter_scripts(redis_conn: aioredis.Redis):
 
 
 async def generic_rate_limiter(
-        parsed_limits: list,
+        parsed_limits: List[RateLimitItem],
         key_bits: list,
         redis_conn: aioredis.Redis,
         rate_limit_lua_script_shas=None,
@@ -84,8 +84,7 @@ async def generic_rate_limiter(
                 reset_in = 1 + window_stats[0]
                 # if you need information on back offs
                 retry_after = reset_in - int(time.time())
-                retry_after = (datetime.now() + timedelta(0, retry_after)).isoformat()
-                return False, retry_after, each_lim
+                return False, retry_after, str(each_lim)
         except (
                 redis.exceptions.ConnectionError, redis.exceptions.TimeoutError,
                 redis.exceptions.ResponseError

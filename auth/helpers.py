@@ -1,4 +1,3 @@
-from auth.conf import auth_settings
 from auth.data_models import RateLimitAuthCheck, AuthCheck, AppOwnerModel, UserStatusEnum
 from auth.redis_keys import api_key_to_owner_key, user_active_api_keys_set, user_details_htable
 from fastapi import Request, Depends
@@ -6,8 +5,8 @@ from fastapi.responses import JSONResponse
 from rate_limiter import generic_rate_limiter
 from async_limits import parse_many
 from redis import asyncio as aioredis
+from datetime import datetime, timedelta
 import time
-from logging import getLogger
 
 
 async def incr_success_calls_count(
@@ -47,7 +46,9 @@ def inject_rate_limit_fail_response(rate_limit_auth_check_dependency: RateLimitA
                 }
             }
         }
-        response_headers = {'Retry-After': rate_limit_auth_check_dependency.retry_after}
+        response_headers = {
+            'Retry-After': (datetime.now() + timedelta(rate_limit_auth_check_dependency.retry_after)).isoformat()
+        }
         response_status = 429
     else:
         response_headers = dict()
