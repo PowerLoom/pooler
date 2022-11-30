@@ -1,24 +1,14 @@
 from typing import Optional
 from urllib.parse import urljoin
-
 from rate_limiter import load_rate_limiter_scripts
 from fastapi import Depends, FastAPI, Request, Response, Query
 from dynaconf import settings
 from auth.helpers import rate_limit_auth_check, inject_rate_limit_fail_response, incr_success_calls_count
 from auth.redis_conn import RedisPoolCache as AuthRedisPoolCache
 from auth.data_models import RateLimitAuthCheck, UserStatusEnum
-from auth.redis_keys import user_details_htable
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from redis import asyncio as aioredis
-import logging
-import sys
-import json
-import os
-import coloredlogs
-import aiohttp
-from web3 import Web3
-import redis_keys
 from redis_conn import RedisPoolCache
 from file_utils import read_json_file
 from redis_keys import (
@@ -32,6 +22,15 @@ from utility_functions import (
     number_to_abbreviated_string,
     retrieve_payload_data
 )
+from web3 import Web3
+from eth_utils import to_checksum_address
+import logging
+import sys
+import json
+import os
+import coloredlogs
+import aiohttp
+import redis_keys
 
 REDIS_CONN_CONF = {
     "host": settings['redis']['host'],
@@ -201,14 +200,34 @@ def get_tokens_liquidity_for_sort(pairData):
 async def get_pair_contract_from_tokens(
         request: Request,
         response: Response,
+        token0: str,
         token1: str,
-        token2: str,
         rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check)
 
 ):
+    if not (
+            rate_limit_auth_dep.rate_limit_passed and
+            rate_limit_auth_dep.authorized and
+            rate_limit_auth_dep.owner.active == UserStatusEnum.active
+    ):
+        return inject_rate_limit_fail_response(rate_limit_auth_dep)
+
+    redis_conn: aioredis.Redis = request.app.state.redis_pool
+    redis_token_hashmap = f'uniswap:pairContract:{settings.NAMESPACE}:tokensPairMap'
+    rest_logger.debug(redis_token_hashmap)
+    token0_normalized = to_checksum_address(token0)
+    token1_normalized = to_checksum_address(token1)
+    pair_return = None
+    pair1 = await redis_conn.hget(redis_token_hashmap, f'{token0_normalized}-{token1_normalized}')
+    if not pair1:
+        pair2 = await redis_conn.hget(redis_token_hashmap, f'{token1_normalized}-{token0_normalized}')
+        if pair2:
+            pair_return = pair2
+    else:
+        pair_return = pair1
     return {
         'data': {
-            'pairContractAddress': '0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8'
+            'pairContractAddress': pair_return if not pair_return else pair_return.decode('utf-8')
         }
     }
 
