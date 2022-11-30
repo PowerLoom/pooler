@@ -1,3 +1,6 @@
+from typing import Optional
+from urllib.parse import urljoin
+
 from rate_limiter import load_rate_limiter_scripts
 from fastapi import Depends, FastAPI, Request, Response, Query
 from dynaconf import settings
@@ -98,6 +101,95 @@ def project_namespace_inject(request: Request, stream: str = Query(default='pair
     audit_project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
     return audit_project_id
 
+#TODO: This will not be required unless we are serving archived data.
+async def save_request_data(
+        request: Request,
+        request_id: str,
+        max_count: int,
+        from_height: int,
+        to_height: int,
+        data,
+        project_id: str,
+):
+    # Acquire redis connection
+    request_info_key = f"pendingRequestInfo:{request_id}"
+    redis_conn = await request.app.redis_pool
+    request_info_data = {
+        'maxCount': max_count,
+        'fromHeight': from_height,
+        'toHeight': to_height,
+        'data': data,
+        'projectId': project_id
+    }
+    request_info_json = json.dumps(request_info_data)
+    _ = await redis_conn.set(request_info_key, request_info_json)
+
+async def delete_request_data(
+        request: Request,
+        request_id: str
+):
+    request_info_key = f"pendingRequestInfo:{request_id}"
+    redis_conn = await request.app.redis_pool
+
+    # Delete the request info data
+    _ = await redis_conn.delete(key=request_info_key)
+
+
+@app.get('/snapshots/{pair_contract_address:str}')
+async def get_past_snapshots(
+        request: Request,
+        response: Response,
+        maxCount: Optional[int] = Query(None),
+        audit_project_id: str = Depends(project_namespace_inject),
+        data: Optional[str] = Query('false'),
+        rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check)
+):
+    if not (
+            rate_limit_auth_dep.rate_limit_passed and
+            rate_limit_auth_dep.authorized and
+            rate_limit_auth_dep.owner.active == UserStatusEnum.active
+    ):
+        return inject_rate_limit_fail_response(rate_limit_auth_dep)
+
+    last_block_height_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{audit_project_id}/payloads/height')
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url=last_block_height_url) as resp:
+            rest_json = await resp.json()
+            last_block_height = rest_json.get('height')
+    if not maxCount:
+        max_count = 10
+    else:
+        max_count = maxCount
+    to_block = last_block_height
+    if to_block < max_count or max_count == -1:
+        from_block = 1
+    else:
+        from_block = to_block - (max_count - 1)
+    if not data:
+        data = 'false'
+    if not (data.lower() == 'true' or data.lower() == 'false'):
+        data = False
+    else:
+        data = data.lower()
+    query_params = {'from_height': from_block, 'to_height': to_block, 'data': data}
+    range_fetch_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{audit_project_id}/payloads')
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url=range_fetch_url, params=query_params) as resp:
+            resp_json = await resp.json()
+            if isinstance(resp_json, dict):
+                if 'requestId' in resp_json.keys():
+                    # Save the data for this requestId
+                    _ = await save_request_data(
+                        request=request,
+                        request_id=resp_json['requestId'],
+                        max_count=max_count,
+                        from_height=from_block,
+                        to_height=to_block,
+                        project_id=audit_project_id,
+                        data=data
+                    )
+
+            return resp_json
 
 def get_tokens_liquidity_for_sort(pairData):
     return pairData["token0LiquidityUSD"] + pairData["token1LiquidityUSD"]
