@@ -78,7 +78,6 @@ async def check_user_details(
         owner_email = owner_email.decode('utf-8')
         owner_details_b = await redis_conn.hgetall(user_details_htable(owner_email))
         owner_details_dec = {k.decode('utf-8'): v.decode('utf-8') for k, v in owner_details_b.items()}
-        # getLogger().debug('Retrieved owner details: %s', owner_details_dec)
         owner_details = AppOwnerModel(**owner_details_dec)
         return AuthCheck(
             authorized=await redis_conn.sismember(
@@ -95,7 +94,10 @@ async def auth_check(
 ) -> AuthCheck:
     core_settings = request.app.state.core_settings['core_api']
     auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
-    if not core_settings['auth']['enabled']:
+    expected_header_key_for_auth = core_settings['auth']['header_key']
+    api_key_in_header = request.headers[expected_header_key_for_auth] \
+        if expected_header_key_for_auth in request.headers else None
+    if not api_key_in_header:
         # public access. create owner based on IP address
         if 'CF-Connecting-IP' in request.headers:
             user_ip = request.headers['CF-Connecting-IP']
@@ -110,7 +112,7 @@ async def auth_check(
             public_owner = AppOwnerModel(
                 email=user_ip,
                 rate_limit=core_settings['public_rate_limit'],
-                active=UserStatusEnum.active,  # we can plug in IP based blacklisting/whitelisting in this flag,
+                active=UserStatusEnum.active,
                 callsCount=0,
                 throttledCount=0,
                 next_reset_at=int(time.time()) + 86400
@@ -125,13 +127,7 @@ async def auth_check(
             api_key='dummy'
         )
     else:
-        expected_header_key_for_auth = core_settings['auth']['header_key']
-        api_key_in_header = request.headers[expected_header_key_for_auth] \
-            if expected_header_key_for_auth in request.headers else None
-        if not api_key_in_header:
-            return AuthCheck(authorized=False, reason='no API key supplied', api_key='dummy')
-        else:
-            return await check_user_details(api_key_in_header, auth_redis_conn)
+        return await check_user_details(api_key_in_header, auth_redis_conn)
 
 
 async def rate_limit_auth_check(
