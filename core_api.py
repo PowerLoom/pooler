@@ -192,8 +192,75 @@ async def get_past_snapshots(
 
             return resp_json
 
+
 def get_tokens_liquidity_for_sort(pairData):
     return pairData["token0LiquidityUSD"] + pairData["token1LiquidityUSD"]
+
+
+@app.get('/pair_address')
+async def get_pair_contract_from_tokens(
+        request: Request,
+        response: Response,
+        token1: str,
+        token2: str,
+        rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check)
+
+):
+    return {
+        'data': {
+            'pairContractAddress': '0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8'
+        }
+    }
+
+
+@app.get('/v2-pair/{pair_contract_address}')
+async def get_single_v2_pair_data(
+        request: Request,
+        response: Response,
+        pair_contract_address: str,
+        rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check)
+):
+    if not (
+            rate_limit_auth_dep.rate_limit_passed and
+            rate_limit_auth_dep.authorized and
+            rate_limit_auth_dep.owner.active == UserStatusEnum.active
+    ):
+        return inject_rate_limit_fail_response(rate_limit_auth_dep)
+    redis_conn = request.app.state.redis_pool
+    latest_v2_summary_snapshot = await redis_conn.zrevrange(
+        name=uniswap_V2_summarized_snapshots_zset,
+        start=0,
+        end=0,
+        withscores=True
+    )
+    if len(latest_v2_summary_snapshot) < 1:
+        return {'data': None}
+
+    latest_snapshot_cid_details, latest_snapshot_blockheight = latest_v2_summary_snapshot[0]
+    latest_payload = json.loads(latest_snapshot_cid_details.decode('utf-8'))
+    latest_payload_cid = latest_payload.get("cid")
+
+    v2_pairs_snapshot_data = await redis_conn.get(
+        name=uniswap_V2_snapshot_at_blockheight.format(int(latest_snapshot_blockheight))
+    )
+    if not v2_pairs_snapshot_data:
+        # fetch from ipfs
+        v2_pairs_snapshot_data = await retrieve_payload_data(latest_payload_cid, redis_conn)
+
+    # even ipfs doesn't have the data, return empty
+    if not v2_pairs_snapshot_data:
+        return {'data': None}
+
+    pair_entry_filter = filter(
+        lambda x: x['contractAddress'].lower() == pair_contract_address.lower(),
+        json.loads(v2_pairs_snapshot_data)['data']
+    )
+    try:
+        pair_snapshot_data = next(pair_entry_filter)
+    except StopIteration:
+        return {'data': None}
+    else:
+        return {'data': pair_snapshot_data}
 
 
 @app.get('/v1/api/v2-pairs')
@@ -589,6 +656,63 @@ async def get_v2_tokens_recent_logs(
 
 def sort_on_liquidity(tokenData):
     return tokenData["liquidityUSD"]
+
+
+@app.get('/v2-token/{token_addr}')
+async def get_single_token_aggregate_data(
+        request: Request,
+        response: Response,
+        token_addr: str,
+        rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check)
+):
+    if not (
+            rate_limit_auth_dep.rate_limit_passed and
+            rate_limit_auth_dep.authorized and
+            rate_limit_auth_dep.owner.active == UserStatusEnum.active
+    ):
+        return inject_rate_limit_fail_response(rate_limit_auth_dep)
+    redis_conn = await request.app.state.redis_pool
+
+    latest_daily_stats_snapshot = await redis_conn.zrevrange(
+        name=uniswap_v2_tokens_snapshot_zset,
+        start=0,
+        end=0,
+        withscores=True
+    )
+
+    if len(latest_daily_stats_snapshot) < 1:
+        return {'data': None}
+
+    latest_payload, latest_block_height = latest_daily_stats_snapshot[0]
+    latest_payload = json.loads(latest_payload)
+    latest_payload_cid = latest_payload.get("cid")
+
+    snapshot_data = await redis_conn.get(
+        name=uniswap_V2_tokens_at_blockheight.format(int(latest_block_height))
+    )
+    if not snapshot_data:
+        # fetch from ipfs
+        latest_payload_cid = latest_payload_cid.decode('utf-8') if type(
+            latest_payload_cid) == bytes else latest_payload_cid
+        snapshot_data = await retrieve_payload_data(latest_payload_cid, redis_conn)
+
+        # even ipfs doesn't have data, return empty
+        if not snapshot_data:
+            return {'data': None}
+        data = json.loads(snapshot_data)['data']
+    else:
+        data = json.loads(snapshot_data)
+        
+    pair_entry_filter = filter(
+        lambda x: x['contractAddress'].lower() == token_addr.lower(),
+        data
+    )
+    try:
+        token_snapshot_data = next(pair_entry_filter)
+    except StopIteration:
+        return {'data': None}
+    else:
+        return {'data': token_snapshot_data}
 
 
 @app.get('/v1/api/v2-tokens')
