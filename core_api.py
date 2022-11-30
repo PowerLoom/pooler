@@ -220,13 +220,13 @@ async def get_pair_contract_from_tokens(
         pair2 = await redis_conn.hget(redis_token_hashmap, f'{token1_normalized}-{token0_normalized}')
         if pair2:
             pair_return = pair2
-    else:
-        pair_return = pair1
+    elif pair1.decode('utf-8') == '0x0000000000000000000000000000000000000000':
+        pass  # do nothing
     auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
     await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
     return {
         'data': {
-            'pairContractAddress': pair_return if not pair_return else pair_return.decode('utf-8')
+            'pairContractAddress': None if not pair_return else pair_return.decode('utf-8')
         }
     }
 
