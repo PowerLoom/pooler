@@ -1,36 +1,73 @@
-# Fpmm-pooler-internal / snapshotter
 
-<!-- TABLE OF CONTENTS -->
 ## Table of Contents
-* [Overview](#mainOverview)
-* [Epoch Generation](#epochGeneration)
-* [Snapshot Building](#snapshotBuilding)
-  * [Token Price in USD](#tokenPriceUSD)
-  * [Pair Metadata](#pairMetadata)
-  * [Liquidity / Pair Reserves](#snapshotBuilding)
-  * [Fetch event logs](#fetchEventLogs)
-  * [Pair trade volume](#pairTradeVolume)
-  * [Rate Limiter](#rateLimiter)
-  * [Batching RPC calls](#batchAndCache)
-</br>
-</br>
 
-## Overview <i id="mainOverview"></i>
-Pooler(snapshotter) repository contains all the components required to:
-1) Track, generate and publish "epochs" of the source chain. 
-2) Snapshot smart-contracts state, transform observed data, submit snapshot to audit-protocol.
+- [Overview](#overview)
+- [Epoch Generation](#epoch-generation)
+- [Snapshot Building](#snapshot-building)
+  - [Token Price in USD](#token-price-in-usd)
+  - [Pair Metadata](#pair-metadata)
+  - [Liquidity / Pair Reserves](#liquidity--pair-reserves)
+  - [Fetch event logs](#fetch-event-logs)
+  - [Pair trade volume](#pair-trade-volume)
+  - [Rate Limiter](#rate-limiter)
+  - [Batching RPC calls](#batching-rpc-calls)
 
-Referencing [Powerloom Protocol Overview document](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#8ad76b8362b341bcaa9b3ae9fe203271), this is an implementation overview of the below sections:
+
+## Overview
+
+Pooler is the component of a fully functional, distributed system that works alongside Audit Protocol and together they are responsible for
+* generating a time series database of changes occuring over smart contract state data and event logs, that live on decentralized storage protocols
+* higher order aggregated information calculated over decentralized indexes maintained atop the database mentioned above
+
+Pooler by itself, performs the following functions:
+
+1. Tracks the blockchain on which the data source smart contract lives
+2. In equally spaced 'epochs'
+	* it snapshots raw smart contract state variables, event logs etc 
+	* transforms the same
+	* and submits these snapshots to audit-protocol
+
+
+This specific implementation is called Pooler since it tracks Uniswap v2 'pools'.
+
+Together with an Audit Protocol instance, they form a recently released PoC whose objectives were 
+
+- to present a fully functional, distributed system comprised of lightweight services that can be deployed over multiple instances on a network or even on a single instance
+- to be able to serve most frequently sought data points on Uniswap v2
+    - Total Value Locked (TVL)
+    - Trade Volume, Liquidity reserves, Fees earned
+        - grouped by
+            - Pair contracts
+            - Individual tokens participating in pair contract
+        - aggregated over time periods
+            - 24 hours
+            - 7 days
+    - Transactions containing `Swap` , `Mint` , `Burn` events
+
+
+
+You can read more about Audit Protocol and the Uniswap v2 PoC in the  [Powerloom Protocol Overview document](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#8ad76b8362b341bcaa9b3ae9fe203271)
+
 ![Screenshot](whitepaper_screenshot.png)
 
 
-## Epoch Generation <i id="epochGeneration"></i>
-[ TBD ]
+## Epoch Generation
 
-</br>
+An epoch denotes a range of block heights on the data source blockchain, Ethereum mainnet in the case of Uniswap v2. This makes it easier to collect state transitions and snapshots of data on equally spaced block height intervals, as well as to support future work on other lightweight anchor proof mechanisms like Merkle proofs, succinct proofs etc. 
+
+The size of an epoch is configurable. Let that be referred to as `size(E)`
+
+- A service keeps track of the head of the chain as it moves ahead, and a marker `h₀` against the max block height from the last released epoch. This makes the beginning of the next epoch, `h₁ = h₀ + 1`
+
+- Once the head of the chain has moved sufficiently ahead so that an epoch can be published, an epoch finalization service takes into account the following factors
+    - chain reorganization reports where the reorganized limits are a subset of the epoch qualified to be published
+    - a configurable ‘offset’ from the bleeding edge of the chain
+
+ and then publishes an epoch `(h₁, h₂)` so that `h₂ - h₁ + 1 == size(E)`. The next epoch therefore is tracked from `h₂ + 1`.
 
 
-## Snapshot Building <i id="snapshotBuilding"></i>
+## Snapshot Building
+
 Overview of broadcasted epoch processing, building snapshot, and submitting it to audit-protocol ([whitepaper-ref](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#8ad76b8362b341bcaa9b3ae9fe203271)):
 
 1. Published/broadcasted epochs are received by `PairTotalReservesProcessorDistributor`, and get distributed to callback workers by publishing messages on respective queues ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/callback_modules/pair_total_reserves.py#L621-L645)).    
@@ -56,14 +93,15 @@ await AuditProtocolCommandsHelper.commit_payload(
     report_payload=payload, ...
 )
 ```
-</br>
 
 
 Implementation breakdown of all <u><b>snapshot data-point operations</b></u> to transform smart-contract data and generate snapshots for each epoch. For more explanation check out the [whitepaper section](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#8ad76b8362b341bcaa9b3ae9fe203271): 
 
 
 
-### Token Price in USD ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L612-L620)) <i id="tokenPriceUSD"></i>  
+### Token Price in USD 
+[[code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L612-L620)]
+
 Token price in USD(stable coins) more details in [whitepaper](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#8bb48365ac444f22b2376433b5cf36f7).
 
 Steps to calculate the token price:
@@ -71,8 +109,9 @@ Steps to calculate the token price:
 ```
 eth_price_dict = await get_eth_price_usd(from_block, to_block, web3_provider, ...)
 ```
-`get_eth_price_usd()` function calculates average eth price using stablecoin pools (USDC, USDT and DAI) ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L376-L381)):    
-[whitepaper-ref](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#10e57df8515d4d77bf9ac97c09e6f5db)
+`get_eth_price_usd()` function calculates average eth price using stablecoin pools (USDC, USDT and DAI) ( [code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L376-L381) ):
+
+[[whitepaper-ref](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#10e57df8515d4d77bf9ac97c09e6f5db)]
 ```
 Eth_Price_Usd = daiWeight * dai_price + usdcWeight * usdc_price + usdtWeight * usdt_price
 ```
@@ -113,16 +152,19 @@ else:
         token_price_dict[block] = token_eth_price[block] * eth_usd_price[block]
 ```
 
-Important formulas to calculate tokens price([whitepaper-ref](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#8bb48365ac444f22b2376433b5cf36f7)):
+Important formulas to calculate tokens price
+
+[whitepaper-ref](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#8bb48365ac444f22b2376433b5cf36f7)
+
 * `EthPriceUSD = StableCoinReserves / EthReserves`
 * `TokenPriceUSD = EthPriceUSD * tokenDerivedEth`
 
 
 
-</br>
+### Pair Metadata 
 
+[code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L202-L205)
 
-### Pair Metadata ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L202-L205)): <i id="pairMetadata"></i>
 Fetch `symbol`, `name` and `decimal` of a given pair from RPC and store them in the cache.
 
 1. check if cache exists, metadata cache is stored as a redis-hashmap ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L249-L255)):
@@ -144,7 +186,8 @@ web3_provider.batch_call([
 3. store cache and return prepared metadata, return metadata ([data-model](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L300-L329)).
 
 
-### Liquidity / Pair Reserves ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L809-L816)):    
+### Liquidity / Pair Reserves 
+[code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L809-L816)
 Reserves of each token in pair contract ([more details in whitepaper](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#e04df592d3034f18aa1fc9502f749ec9)):
 
 Steps to calculate liquidity:
@@ -184,10 +227,10 @@ reserves_array = batch_eth_call_on_block_range(
 
 6. `get_pair_reserve()` return type [data-model](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L890-L896).
 
-</br>
 
 
-### Fetch event logs ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L1081-L1091)) <i id="fetchEventLogs"></i>
+### Fetch event logs 
+[code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L1081-L1091)
 Fetch event logs to calculate trade volume using `eth_getLogs`, more details in [whitepaper](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#b42d180a965d4fb9888fb2a586bdd0de).
 
 
@@ -210,9 +253,8 @@ for -> (event_log):
 `ABICodec` is used to decode the event logs in plain text using `get_event_data` function, check out more details in the [library](https://github.com/ethereum/web3.py/blob/fbaf1ad11b0c7fac09ba34baff2c256cffe0a148/web3/_utils/events.py#L200).
 
 
-</br>
-
-### Pair trade volume ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L1038-L1047)) <i id="pairTradeVolume"></i>
+### Pair trade volume 
+[code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L1038-L1047)
 Calculate The Trade volume of a pair using event logs, more details in [whitepaper](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#be2e5c71701d4491a04572589ac67f1b). 
 
 `Trade Volume = SwapValueUSD = token0Amount * token0PriceUSD = token1Amount * token1PriceUSD`
@@ -258,11 +300,9 @@ for -> (event_logs):
 8. `get_pair_trade_volume()` return type [data-model](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a9214a55922cbdee00f8e260eb9d960620fbcaff/message_models.py#L62)
 
 
-</br>
 
-
-
-### Rate Limiter ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/rate_limiter.py#L64)) <i id="rateLimiter"></i>
+### Rate Limiter 
+[code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/rate_limiter.py#L64)
 All RPC node specified in [settings.json](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/settings.example.json#L60-L75) has a rate limit to them, every RPC calls honor this limit ([more details](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#d9bef53da81449b7b5e39290b25843ac)).
 
 
@@ -279,10 +319,10 @@ rate_limiter:
         4. panic! rate limit exhaust error
 ```
 
-</br>
 
 
-### Batching RPC calls<i id="batchAndCache"></i>
+### Batching RPC calls
+
 Batch RPC calls by sending multiple queries in a single request, details in [Geth docs](https://geth.ethereum.org/docs/rpc/batch).
 ```
 [
