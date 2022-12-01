@@ -211,13 +211,12 @@ async def get_pair_contract_from_tokens(
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
 
     redis_conn: aioredis.Redis = request.app.state.redis_pool
-    redis_token_hashmap = f'uniswap:pairContract:{settings.NAMESPACE}:tokensPairMap'
     token0_normalized = to_checksum_address(token0)
     token1_normalized = to_checksum_address(token1)
     pair_return = None
-    pair1 = await redis_conn.hget(redis_token_hashmap, f'{token0_normalized}-{token1_normalized}')
+    pair1 = await redis_conn.hget(redis_keys.uniswap_tokens_pair_map, f'{token0_normalized}-{token1_normalized}')
     if not pair1:
-        pair2 = await redis_conn.hget(redis_token_hashmap, f'{token1_normalized}-{token0_normalized}')
+        pair2 = await redis_conn.hget(redis_keys.uniswap_tokens_pair_map, f'{token1_normalized}-{token0_normalized}')
         if pair2:
             pair_return = pair2
     elif pair1.decode('utf-8') == '0x0000000000000000000000000000000000000000':
@@ -569,12 +568,6 @@ async def get_v2_daily_stats_by_block(
         if daily_stats["tvl"]["previousValue"] != 0:
             daily_stats["tvl"]["change"] = daily_stats["tvl"]["currentValue"] - daily_stats["tvl"]["previousValue"]
             daily_stats["tvl"]["change"] = daily_stats["tvl"]["change"] / daily_stats["tvl"]["previousValue"] * 100
-
-        if daily_stats["fees24"]["previousValue"] != 0:
-            daily_stats["fees24"]["change"] = daily_stats["fees24"]["currentValue"] - daily_stats["fees24"][
-                "previousValue"]
-            daily_stats["fees24"]["change"] = daily_stats["fees24"]["change"] / daily_stats["fees24"][
-                "previousValue"] * 100
 
         # format output
         daily_stats["volume24"][
