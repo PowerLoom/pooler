@@ -840,27 +840,6 @@ def create_v2_token_snapshot(data):
     return tokens_snapshot
 
 
-def create_v2_token_snapshot(data):
-    data.sort(key=sort_on_liquidity, reverse=True)
-    tokens_snapshot = []
-    # for i in range(len(data)):
-    for i, token_data in enumerate(data):
-        tokens_snapshot.append({
-            "index": i,
-            "contract_address": token_data["contractAddress"],
-            "name": token_data["name"],
-            "symbol": token_data["symbol"],
-            "liquidity": f"US${round(abs(token_data['liquidityUSD'])):,}",
-            "volume_24h": f"US${round(abs(token_data['tradeVolumeUSD_24h'])):,}",
-            "volume_7d": f"US${round(abs(token_data['tradeVolumeUSD_7d']))}",
-            "price": f"US${round(abs(token_data['price']), 5):,}",
-            "price_change_24h": f"{round(token_data['priceChangePercent_24h'], 2)}%",
-            "block_height": int(token_data["block_height"]),
-            "block_timestamp": int(token_data["block_timestamp"])
-        })
-    return tokens_snapshot
-
-
 @app.get('/v1/api/v2-tokens/snapshots')
 @app.get('/v2-tokens/snapshots')
 async def get_v2_tokens_snapshots(
@@ -957,7 +936,7 @@ async def get_v2_tokens_data_by_block(
 
 @app.get('/v1/api/v2-daily-stats')
 @app.get('/v2-daily-stats')
-async def get_v2_pairs_daily_stats(
+async def get_v2_daily_stats(
         request: Request,
         response: Response,
         rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check)
