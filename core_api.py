@@ -1,14 +1,24 @@
 from typing import Optional
 from urllib.parse import urljoin
 from rate_limiter import load_rate_limiter_scripts
+import logging
+import sys
+import json
+import os
 from fastapi import Depends, FastAPI, Request, Response, Query
-from dynaconf import settings
+from eth_utils import to_checksum_address
 from auth.helpers import rate_limit_auth_check, inject_rate_limit_fail_response, incr_success_calls_count
 from auth.redis_conn import RedisPoolCache as AuthRedisPoolCache
 from auth.data_models import RateLimitAuthCheck, UserStatusEnum
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from dynaconf import settings
+import coloredlogs
 from redis import asyncio as aioredis
+import aiohttp
+from web3 import Web3
+
+import redis_keys
 from redis_conn import RedisPoolCache
 from file_utils import read_json_file
 from redis_keys import (
@@ -22,15 +32,6 @@ from utility_functions import (
     number_to_abbreviated_string,
     retrieve_payload_data
 )
-from web3 import Web3
-from eth_utils import to_checksum_address
-import logging
-import sys
-import json
-import os
-import coloredlogs
-import aiohttp
-import redis_keys
 
 REDIS_CONN_CONF = {
     "host": settings['redis']['host'],
@@ -100,7 +101,8 @@ def project_namespace_inject(request: Request, stream: str = Query(default='pair
     audit_project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
     return audit_project_id
 
-#TODO: This will not be required unless we are serving archived data.
+
+# TODO: This will not be required unless we are serving archived data.
 async def save_request_data(
         request: Request,
         request_id: str,
@@ -122,6 +124,7 @@ async def save_request_data(
     }
     request_info_json = json.dumps(request_info_data)
     _ = await redis_conn.set(request_info_key, request_info_json)
+
 
 async def delete_request_data(
         request: Request,
@@ -150,7 +153,8 @@ async def get_past_snapshots(
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
     if maxCount > 100:
-        return {"error": "Data being queried is more than 100 snapshots. Querying data for upto last 100 snapshots is supported."}
+        return {
+            "error": "Data being queried is more than 100 snapshots. Querying data for upto last 100 snapshots is supported."}
     max_count = 10 if not maxCount else maxCount
     last_block_height_url = urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{audit_project_id}/payloads/height')
     async with aiohttp.ClientSession() as session:
@@ -188,10 +192,6 @@ async def get_past_snapshots(
             auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
             await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
             return resp_json
-
-
-def get_tokens_liquidity_for_sort(pairData):
-    return pairData["token0LiquidityUSD"] + pairData["token1LiquidityUSD"]
 
 
 @app.get('/pair_address')
@@ -282,6 +282,10 @@ async def get_single_v2_pair_data(
         return {'data': None}
     else:
         return {'data': pair_snapshot_data}
+
+
+def get_tokens_liquidity_for_sort(pairData):
+    return pairData["token0LiquidityUSD"] + pairData["token1LiquidityUSD"]
 
 
 @app.get('/v1/api/v2-pairs')
@@ -557,6 +561,10 @@ async def get_v2_daily_stats_by_block(
                 "previousValue"]
             daily_stats["volume24"]["change"] = daily_stats["volume24"]["change"] / daily_stats["volume24"][
                 "previousValue"] * 100
+            daily_stats["volume24"]["change"] = daily_stats["volume24"]["currentValue"] - daily_stats["volume24"][
+                "previousValue"]
+            daily_stats["volume24"]["change"] = daily_stats["volume24"]["change"] / daily_stats["volume24"][
+                "previousValue"] * 100
 
         if daily_stats["tvl"]["previousValue"] != 0:
             daily_stats["tvl"]["change"] = daily_stats["tvl"]["currentValue"] - daily_stats["tvl"]["previousValue"]
@@ -805,7 +813,6 @@ async def get_v2_tokens(
         data = json.loads(snapshot_data)
 
     data = create_v2_token_snapshot(data)
-
     auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
     await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
 
@@ -817,6 +824,27 @@ async def get_v2_tokens(
         }
     else:
         return data
+
+
+def create_v2_token_snapshot(data):
+    data.sort(key=sort_on_liquidity, reverse=True)
+    tokens_snapshot = []
+    # for i in range(len(data)):
+    for i, token_data in enumerate(data):
+        tokens_snapshot.append({
+            "index": i,
+            "contract_address": token_data["contractAddress"],
+            "name": token_data["name"],
+            "symbol": token_data["symbol"],
+            "liquidity": f"US${round(abs(token_data['liquidityUSD'])):,}",
+            "volume_24h": f"US${round(abs(token_data['tradeVolumeUSD_24h'])):,}",
+            "volume_7d": f"US${round(abs(token_data['tradeVolumeUSD_7d']))}",
+            "price": f"US${round(abs(token_data['price']), 5):,}",
+            "price_change_24h": f"{round(token_data['priceChangePercent_24h'], 2)}%",
+            "block_height": int(token_data["block_height"]),
+            "block_timestamp": int(token_data["block_timestamp"])
+        })
+    return tokens_snapshot
 
 
 def create_v2_token_snapshot(data):
@@ -1049,3 +1077,4 @@ async def get_v2_pairs_daily_stats(
     finally:
         auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
         await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
+
