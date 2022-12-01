@@ -1,11 +1,11 @@
-import time
-from datetime import datetime, timedelta
-
+from typing import List
 from redis import asyncio as aioredis
-import redis.exceptions
 from async_limits.strategies import AsyncFixedWindowRateLimiter
 from async_limits.storage import AsyncRedisStorage
+from async_limits import RateLimitItem
 from rpc_helper import RPCException
+import redis.exceptions
+import time
 
 
 # Initialize rate limits when program starts
@@ -58,18 +58,20 @@ async def load_rate_limiter_scripts(redis_conn: aioredis.Redis):
     }
 
 
-
-async def check_rpc_rate_limit(parsed_limits: list, app_id, redis_conn: aioredis.Redis, request_payload, error_msg, logger, rate_limit_lua_script_shas=None, limit_incr_by=1):
+async def generic_rate_limiter(
+        parsed_limits: List[RateLimitItem],
+        key_bits: list,
+        redis_conn: aioredis.Redis,
+        rate_limit_lua_script_shas=None,
+        limit_incr_by=1
+):
     """
-        rate limiter for rpc calls
+    return: tuple of (can_request, retry_after in case of false can_request, violated rate limit string if applicable)
     """
     if not rate_limit_lua_script_shas:
         rate_limit_lua_script_shas = await load_rate_limiter_scripts(redis_conn)
     redis_storage = AsyncRedisStorage(rate_limit_lua_script_shas, redis_conn)
     custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
-    key_bits = [app_id, 'eth_call']  # TODO: add unique elements that can identify a request
-    can_request = False
-    retry_after = 1
     for each_lim in parsed_limits:
         # window_stats = custom_limiter.get_window_stats(each_lim, key_bits)
         # local_app_cacher_logger.debug(window_stats)
@@ -82,22 +84,41 @@ async def check_rpc_rate_limit(parsed_limits: list, app_id, redis_conn: aioredis
                 reset_in = 1 + window_stats[0]
                 # if you need information on back offs
                 retry_after = reset_in - int(time.time())
-                retry_after = (datetime.now() + timedelta(0, retry_after)).isoformat()
-                can_request = False
-                break  # make sure to break once false condition is hit
+                return False, retry_after, str(each_lim)
         except (
                 redis.exceptions.ConnectionError, redis.exceptions.TimeoutError,
                 redis.exceptions.ResponseError
         ) as exc:
-            # shit can happen while each limit check call hits Redis, handle appropriately
-            logger.debug('Bypassing rate limit check for appID because of Redis exception: ' + str(
-                {'appID': app_id, 'exception': exc}))
-            raise
-        except Exception as exc:
-            logger.error('Caught exception on rate limiter operations: %s', exc, exc_info=True)
-            raise
-        else:
-            can_request = True
+            raise Exception from exc
+    return True, 0, ''
+
+
+async def check_rpc_rate_limit(
+        parsed_limits: list,
+        app_id,
+        redis_conn: aioredis.Redis,
+        request_payload,
+        error_msg,
+        logger,
+        rate_limit_lua_script_shas=None,
+        limit_incr_by=1
+):
+    """
+        rate limiter for rpc calls
+    """
+    key_bits = [app_id, 'eth_call']  # TODO: add unique elements that can identify a request
+    try:
+        can_request, retry_after, violated_limit = await generic_rate_limiter(
+            parsed_limits,
+            key_bits,
+            redis_conn,
+            rate_limit_lua_script_shas
+        )
+    except Exception as exc:
+        logger.error(
+            'Caught exception on rate limiter operations: %s | Bypassing rate limit check ', exc, exc_info=True
+        )
+        raise
 
     if not can_request:
         raise RPCException(

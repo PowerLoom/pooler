@@ -1,6 +1,13 @@
 {
     "development": {
         "namespace": "UNISWAPV2-stg-1",
+        "core_api": {
+            "auth": {
+                "enabled": true,
+                "header_key": "X-API-KEY"
+            },
+            "public_rate_limit": "100000000/day;20000/minute;2500/second"
+        },
         "chain_id": 1,
         "uniswap_contract_abis":{
             "factory":"./abis/IUniswapV2Factory.json",
