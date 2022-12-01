@@ -24,30 +24,22 @@ from datetime import datetime
 
 
 from redis_keys import (
-    uniswap_pair_contract_tokens_addresses, uniswap_pair_contract_tokens_data, uniswap_pair_cached_token_price,
-    uniswap_pair_contract_V2_pair_data, uniswap_pair_cached_block_height_token_price,uniswap_eth_usd_price_zset,
+    uniswap_pair_contract_tokens_addresses, uniswap_pair_contract_tokens_data,
+    uniswap_pair_cached_block_height_token_price,uniswap_eth_usd_price_zset,
     uniswap_tokens_pair_map, cached_block_details_at_height
 )
 
 
-# RPC_URL = settings.RPC.MATIC[0]
-# ethereum_client = EthereumClient(RPC_URL)
-# w3 = Web3(Web3.HTTPProvider(RPC_URL))
-# w3.middleware_onion.inject(geth_poa_middleware, layer=0, name="web3py_middleware")
-# ethereum_client.w3.middleware_onion.inject(geth_poa_middleware, layer=0, name="ethsafepy_middleware")
-GLOBAL_WEB3_PROVIDER = load_web3_providers_and_rate_limits(full_nodes=settings.RPC.FULL_NODES, archive_nodes=settings.RPC.ARCHIVE_NODES)
+GLOBAL_WEB3_PROVIDER = load_web3_providers_and_rate_limits(full_nodes=settings.RPC.FULL_NODES,
+                        archive_nodes=settings.RPC.ARCHIVE_NODES)
 
-# Initialize rate limits when module is loaded
-GLOBAL_RPC_RATE_LIMIT_STR = settings.RPC.rate_limit
-# PARSED_LIMITS = limit_parse_many(GLOBAL_RPC_RATE_LIMIT_STR)
-# rate_limiter_app_id = RPC_URL.split('/')[-1]
 ###########################################
 
 
 ###### Init Logger #####
 logger = logging.getLogger('PowerLoom|UniswapHelpers')
 logger.setLevel(logging.DEBUG)
-logger.handlers = [logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST','localhost'), 
+logger.handlers = [logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST','localhost'),
     port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT))]
 ########################
 
@@ -109,8 +101,8 @@ tokens_decimals = {
 
 def inject_web3_provider_first_run(fn):
     """
-    Decorator to inject web3 provider config based on first run. 
-    Here we consume web3 provider flags given to 'this' function. 
+    Decorator to inject web3 provider config based on first run.
+    Here we consume web3 provider flags given to 'this' function.
     """
     @wraps(fn)
     async def wrapped(*args, **kwargs):
@@ -134,15 +126,15 @@ def inject_web3_provider_first_run(fn):
 
 def inject_web3_provider_on_exception(retry_state):
     """
-    Tenacity retry before_sleep exception handler: to inject web3 provider config 
+    Tenacity retry before_sleep exception handler: to inject web3 provider config
     based on exceptions type or error messages.
     """
 
     # if there was an error then set web3 object depending on exception Type
     if retry_state.outcome and isinstance(retry_state.outcome.exception(), Exception):
-        
+
         if any(error_string in retry_state.outcome.exception().extra_info.get('msg') for error_string in [
-            "header not found", 
+            "header not found",
             "missing trie node"
         ]) or retry_state.kwargs["web3_provider"] in GLOBAL_WEB3_PROVIDER["archive_nodes"]:
 
@@ -216,7 +208,7 @@ async def get_pair_metadata(
                 abi=pair_contract_abi
             )
             await check_rpc_rate_limit(
-                parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url', '').split('/')[-1], 
+                parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url', '').split('/')[-1],
                 redis_conn=redis_conn, request_payload={"pair_address": pair_address},
                 error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get_pair_metadata fn"},
                 logger=logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
@@ -279,7 +271,7 @@ async def get_pair_metadata(
             tasks.append(token1.functions.decimals())
 
             await check_rpc_rate_limit(
-                parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url', '').split('/')[-1], redis_conn=redis_conn, 
+                parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url', '').split('/')[-1], redis_conn=redis_conn,
                 request_payload={"pair_address": pair_address},
                 error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get_pair_metadata fn"},
                 logger=logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
@@ -356,7 +348,7 @@ async def get_pair(
         Web3.toChecksumAddress(token1)
     ).call)
     await check_rpc_rate_limit(
-        parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], redis_conn=redis_conn, 
+        parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], redis_conn=redis_conn,
         request_payload={"token0": token0, "token1": token1},
         error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get_pair fn"},
         logger=logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
@@ -374,9 +366,9 @@ async def get_pair(
 
 @provide_async_redis_conn_insta
 async def get_eth_price_usd(
-    loop, from_block, to_block, 
-    redis_conn: aioredis.Redis=None, 
-    rate_limit_lua_script_shas={}, 
+    loop, from_block, to_block,
+    redis_conn: aioredis.Redis=None,
+    rate_limit_lua_script_shas=None,
     web3_provider=global_w3_client
 ):
     """
@@ -419,7 +411,7 @@ async def get_eth_price_usd(
                 rate_limit_lua_script_shas=rate_limit_lua_script_shas
             )
         )
-        # check if stable it token0 or token1 
+        # check if stable it token0 or token1
         dai_token_order = 0 if Web3.toChecksumAddress(dai_eth_pair_metadata['token0']['address']) == Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.DAI) else 1
         usdc_token_order = 0 if Web3.toChecksumAddress(usdc_eth_pair_metadata['token0']['address']) == Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDC) else 1
         usdt_token_order = 0 if Web3.toChecksumAddress(usdt_eth_pair_metadata['token0']['address']) == Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.USDT) else 1
@@ -427,7 +419,7 @@ async def get_eth_price_usd(
 
         # we are making single batch call here:
         await check_rpc_rate_limit(
-            parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], 
+            parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1],
             redis_conn=redis_conn, request_payload={"from_block": from_block, "to_block": to_block},
             error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get eth usd price fn"},
             logger=logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
@@ -435,18 +427,18 @@ async def get_eth_price_usd(
 
         # create dictionary of ABI {function_name -> {signature, abi, input, output}}
         pair_abi_dict = contract_abi_dict(pair_contract_abi)
-        
+
         ## NOTE: We can further optimize below call by batching them all, but that would be a large batch call for RPC node
         dai_eth_pair_reserves_list = batch_eth_call_on_block_range(
-            rpc_endpoint=web3_provider.get('rpc_url'), abi_dict=pair_abi_dict, function_name='getReserves', 
+            rpc_endpoint=web3_provider.get('rpc_url'), abi_dict=pair_abi_dict, function_name='getReserves',
             contract_address=settings.CONTRACT_ADDRESSES.DAI_WETH_PAIR, from_block=from_block, to_block=to_block
         )
         usdc_eth_pair_reserves_list = batch_eth_call_on_block_range(
-            rpc_endpoint=web3_provider.get('rpc_url'), abi_dict=pair_abi_dict, function_name='getReserves', 
+            rpc_endpoint=web3_provider.get('rpc_url'), abi_dict=pair_abi_dict, function_name='getReserves',
             contract_address=settings.CONTRACT_ADDRESSES.USDC_WETH_PAIR, from_block=from_block, to_block=to_block
         )
         eth_usdt_pair_reserves_list = batch_eth_call_on_block_range(
-            rpc_endpoint=web3_provider.get('rpc_url'), abi_dict=pair_abi_dict, function_name='getReserves', 
+            rpc_endpoint=web3_provider.get('rpc_url'), abi_dict=pair_abi_dict, function_name='getReserves',
             contract_address=settings.CONTRACT_ADDRESSES.USDT_WETH_PAIR, from_block=from_block, to_block=to_block
         )
 
@@ -497,7 +489,7 @@ async def get_eth_price_usd(
         raise err
 
 async def get_token_pair_price_and_white_token_reserves(
-    pair_address, from_block, to_block, 
+    pair_address, from_block, to_block,
     pair_metadata, white_token, redis_conn,
     rate_limit_lua_script_shas, web3_provider=global_w3_client
 ):
@@ -513,7 +505,7 @@ async def get_token_pair_price_and_white_token_reserves(
 
     # we are making single batch call here:
     await check_rpc_rate_limit(
-        parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], redis_conn=redis_conn, 
+        parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], redis_conn=redis_conn,
         request_payload={"from_block": from_block, "to_block": to_block},
         error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get_token_pair_based_price fn"},
         logger=logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
@@ -522,7 +514,7 @@ async def get_token_pair_price_and_white_token_reserves(
     # get white
     pair_abi_dict = contract_abi_dict(pair_contract_abi)
     pair_reserves_list = batch_eth_call_on_block_range(
-        rpc_endpoint=web3_provider.get('rpc_url'), abi_dict=pair_abi_dict, function_name='getReserves', 
+        rpc_endpoint=web3_provider.get('rpc_url'), abi_dict=pair_abi_dict, function_name='getReserves',
         contract_address=pair_address, from_block=from_block, to_block=to_block
     )
 
@@ -554,7 +546,7 @@ async def get_token_pair_price_and_white_token_reserves(
         index += 1
 
     return token_price_dict, white_token_reserves_dict
-    
+
 
 async def get_token_derived_eth(
     from_block, to_block, white_token_metadata, redis_conn,
@@ -566,11 +558,11 @@ async def get_token_derived_eth(
         # set derived eth as 1 if token is weth
         for block_num in range(from_block, to_block + 1):
             token_derived_eth_dict[block_num] = 1
-        
+
         return token_derived_eth_dict
 
     await check_rpc_rate_limit(
-        parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], redis_conn=redis_conn, 
+        parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], redis_conn=redis_conn,
         request_payload={"from_block": from_block, "to_block": to_block},
         error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get_token_derived_eth fn"},
         logger=logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
@@ -579,10 +571,10 @@ async def get_token_derived_eth(
     # get white
     router_abi_dict = contract_abi_dict(router_contract_abi)
     token_derived_eth_list = batch_eth_call_on_block_range(
-        rpc_endpoint=web3_provider.get('rpc_url'), abi_dict=router_abi_dict, function_name='getAmountsOut', 
-        contract_address=settings.CONTRACT_ADDRESSES.IUNISWAP_V2_ROUTER, from_block=from_block, 
+        rpc_endpoint=web3_provider.get('rpc_url'), abi_dict=router_abi_dict, function_name='getAmountsOut',
+        contract_address=settings.CONTRACT_ADDRESSES.IUNISWAP_V2_ROUTER, from_block=from_block,
         to_block=to_block, params=[
-            10 ** int(white_token_metadata['decimals']), 
+            10 ** int(white_token_metadata['decimals']),
             [
                 Web3.toChecksumAddress(white_token_metadata['address']),
                 Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.WETH)
@@ -607,7 +599,7 @@ async def get_token_derived_eth(
         index += 1
 
     return token_derived_eth_dict
-        
+
 
 async def get_token_price_in_block_range(
     token_metadata,
@@ -623,7 +615,7 @@ async def get_token_price_in_block_range(
     """
     try:
         token_price_dict = dict()
-            
+
 
         # check if cahce exist for given epoch
         if from_block != 'latest' and to_block != 'latest':
@@ -647,7 +639,7 @@ async def get_token_price_in_block_range(
             for white_token in settings.UNISWAP_V2_WHITELIST:
                 white_token = Web3.toChecksumAddress(white_token)
                 pairAddress = await get_pair(
-                    factory_contract_obj, white_token, token_metadata['address'], 
+                    factory_contract_obj, white_token, token_metadata['address'],
                     loop, redis_conn, rate_limit_lua_script_shas
                 )
                 if pairAddress != "0x0000000000000000000000000000000000000000":
@@ -658,14 +650,14 @@ async def get_token_price_in_block_range(
                         rate_limit_lua_script_shas=rate_limit_lua_script_shas
                     )
                     white_token_metadata = new_pair_metadata["token0"] if white_token == new_pair_metadata["token0"]["address"] else new_pair_metadata["token1"]
-    
+
                     white_token_price_dict, white_token_reserves_dict = await get_token_pair_price_and_white_token_reserves(
                         pair_address=pairAddress, from_block=from_block, to_block=to_block,
                         pair_metadata=new_pair_metadata, white_token=white_token, redis_conn=redis_conn,
                         rate_limit_lua_script_shas=rate_limit_lua_script_shas, web3_provider=web3_provider
                     )
                     white_token_derived_eth_dict = await get_token_derived_eth(
-                        from_block=from_block, to_block=to_block, white_token_metadata=white_token_metadata, 
+                        from_block=from_block, to_block=to_block, white_token_metadata=white_token_metadata,
                         redis_conn=redis_conn, rate_limit_lua_script_shas=rate_limit_lua_script_shas, web3_provider=web3_provider
                     )
 
@@ -673,12 +665,12 @@ async def get_token_price_in_block_range(
                     for block_num in range(from_block, to_block + 1):
 
                         white_token_reserves = white_token_reserves_dict.get(block_num) * white_token_derived_eth_dict.get(block_num)
-                        
+
                         # ignore if reservers are less than threshold
                         if white_token_reserves < 1:
                             less_than_minimum_liquidity = True
                             break
-                        
+
                         # else store eth price in dictionary
                         token_eth_price_dict[block_num] = white_token_price_dict.get(block_num) * white_token_derived_eth_dict.get(block_num)
 
@@ -686,12 +678,12 @@ async def get_token_price_in_block_range(
                     if less_than_minimum_liquidity:
                         token_eth_price_dict = {}
                         continue
-                    
+
                     break
-            
+
             if len(token_eth_price_dict) > 0:
                 eth_usd_price_dict = await get_eth_price_usd(
-                    loop=loop, from_block=from_block, to_block=to_block, redis_conn=redis_conn, 
+                    loop=loop, from_block=from_block, to_block=to_block, redis_conn=redis_conn,
                     rate_limit_lua_script_shas=rate_limit_lua_script_shas, web3_provider=web3_provider
                 )
                 for block_num in range(from_block, to_block + 1):
@@ -700,14 +692,13 @@ async def get_token_price_in_block_range(
                 for block_num in range(from_block, to_block + 1):
                     token_price_dict[block_num] = 0
 
-
             if debug_log:
                 logger.debug(f"{token_metadata['symbol']}: price is {token_price_dict} | its eth price is {token_eth_price_dict}")
 
         # cache price at height
         if from_block != 'latest' and to_block != 'latest' and len(token_price_dict) > 0:
             redis_cache_mapping = {json.dumps({ 'blockHeight': height, 'price': price }): int(height) for height, price in token_price_dict.items()}
-            
+
             await redis_conn.zadd(
                 name=uniswap_pair_cached_block_height_token_price.format(Web3.toChecksumAddress(token_metadata['address'])),
                 mapping=redis_cache_mapping # timestamp so zset do not ignore same height on multiple heights
@@ -735,14 +726,14 @@ async def get_block_details_in_block_range(
 
     """
     try:
-        
+
         if from_block != 'latest' and to_block != 'latest':
             cached_details = await redis_conn.zrangebyscore(
                 name=cached_block_details_at_height,
                 min=int(from_block),
                 max=int(to_block)
             )
-            
+
             # check if we have cached value for each block number
             if cached_details and len(cached_details) == to_block - (from_block - 1):
                 cached_details = {json.loads(block_detail.decode('utf-8'))['number']: json.loads(block_detail.decode('utf-8')) for block_detail in cached_details}
@@ -750,22 +741,22 @@ async def get_block_details_in_block_range(
 
 
         await check_rpc_rate_limit(
-            parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], redis_conn=redis_conn, 
+            parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], redis_conn=redis_conn,
             request_payload={ "from_block": from_block, "to_block": to_block},
             error_msg={'msg': "exhausted_api_key_rate_limit inside get_block_details_in_block_range"},
             logger=logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas
         )
         rpc_batch_block_details = batch_eth_get_block(rpc_endpoint=web3_provider.get('rpc_url'), from_block=from_block, to_block=to_block)
         rpc_batch_block_details = rpc_batch_block_details if rpc_batch_block_details else []
-                
+
         block_details_dict = dict()
         redis_cache_mapping = dict()
-        
+
         block_num = from_block
         for block_details in rpc_batch_block_details:
             block_details = block_details.get('result')
-            # right now we are just storing timestamp out of all block details, 
-            # edit this if you want to store something else 
+            # right now we are just storing timestamp out of all block details,
+            # edit this if you want to store something else
             block_details = {
                 "timestamp": int(block_details.get('timestamp', None), 16),
                 "number": int(block_details.get('number', None), 16)
@@ -774,7 +765,7 @@ async def get_block_details_in_block_range(
             block_details_dict[block_num] = block_details
             redis_cache_mapping[json.dumps(block_details)] = int(block_num)
             block_num+=1
-    
+
 
         # add new block details and prune all block details older than latest 3 epochs
         if from_block != 'latest' and to_block != 'latest':
@@ -820,7 +811,7 @@ async def get_pair_reserves(
             rate_limit_lua_script_shas = await load_rate_limiter_scripts(redis_conn)
         pair_address = Web3.toChecksumAddress(pair_address)
 
-        
+
         if fetch_timestamp:
             try:
                 block_details_dict = await get_block_details_in_block_range(
@@ -842,11 +833,11 @@ async def get_pair_reserves(
 
         token0_price_map, token1_price_map = await asyncio.gather(
             get_token_price_in_block_range(
-                token_metadata=pair_per_token_metadata['token0'], from_block=from_block, to_block=to_block, loop=loop, 
+                token_metadata=pair_per_token_metadata['token0'], from_block=from_block, to_block=to_block, loop=loop,
                 redis_conn=redis_conn, rate_limit_lua_script_shas=rate_limit_lua_script_shas, debug_log=False, web3_provider=web3_provider
             ),
             get_token_price_in_block_range(
-                token_metadata=pair_per_token_metadata['token1'], from_block=from_block, to_block=to_block, loop=loop, 
+                token_metadata=pair_per_token_metadata['token1'], from_block=from_block, to_block=to_block, loop=loop,
                 redis_conn=redis_conn, rate_limit_lua_script_shas=rate_limit_lua_script_shas, debug_log=False, web3_provider=web3_provider
             )
         )
@@ -857,15 +848,15 @@ async def get_pair_reserves(
         pair_abi_dict = contract_abi_dict(pair_contract_abi)
         # get token price function takes care of its own rate limit
         await check_rpc_rate_limit(
-            parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], redis_conn=redis_conn, 
+            parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], redis_conn=redis_conn,
             request_payload={"contract": pair_address, "from_block": from_block, "to_block": to_block},
             error_msg={'msg': "exhausted_api_key_rate_limit inside get_pair_reserves"},
             logger=logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
         )
         reserves_array = batch_eth_call_on_block_range(
-            rpc_endpoint=web3_provider.get('rpc_url'), abi_dict=pair_abi_dict, function_name='getReserves', 
+            rpc_endpoint=web3_provider.get('rpc_url'), abi_dict=pair_abi_dict, function_name='getReserves',
             contract_address=pair_address, from_block=from_block, to_block=to_block
-        )       
+        )
         if not reserves_array:
             raise RPCException(request={"contract": pair_address, "from_block": from_block, "to_block": to_block},
                 response=reserves_array, underlying_exception=None,
@@ -877,7 +868,7 @@ async def get_pair_reserves(
 
         pair_reserves_arr = dict()
         block_count = 0
-        for block_num in range(from_block, to_block + 1):  
+        for block_num in range(from_block, to_block + 1):
             token0Amount = reserves_array[block_count][0] / 10 ** int(token0_decimals) if reserves_array[block_count][0] else 0
             token1Amount = reserves_array[block_count][1] / 10 ** int(token1_decimals) if reserves_array[block_count][1] else 0
 
@@ -903,7 +894,7 @@ async def get_pair_reserves(
         raise RPCException(request={"contract": pair_address, "from_block": from_block, "to_block": to_block},
             response={}, underlying_exception=None,
             extra_info={'msg': f"Error: get_pair_reserves error_msg: {str(exc)}"}) from exc
-            
+
 
 
 def extract_trade_volume_log(event_name, log, pair_per_token_metadata, token0_price_map, token1_price_map, block_details_dict):
@@ -911,7 +902,7 @@ def extract_trade_volume_log(event_name, log, pair_per_token_metadata, token0_pr
     token1_amount = 0
     token0_amount_usd = 0
     token1_amount_usd = 0
-    
+
     def token_native_and_usd_amount(token, token_type, token_price_map):
         if log.args.get(token_type) <= 0:
             return 0, 0
@@ -921,7 +912,7 @@ def extract_trade_volume_log(event_name, log, pair_per_token_metadata, token0_pr
         return token_amount, token_usd_amount
 
     if event_name == 'Swap':
-        
+
         amount0In, amount0In_usd = token_native_and_usd_amount(
             token='token0', token_type='amount0In', token_price_map=token0_price_map
         )
@@ -934,7 +925,7 @@ def extract_trade_volume_log(event_name, log, pair_per_token_metadata, token0_pr
         amount1Out, amount1Out_usd = token_native_and_usd_amount(
             token='token1', token_type='amount1Out', token_price_map=token1_price_map
         )
-        
+
         token0_amount = abs(amount0Out - amount0In)
         token1_amount = abs(amount1Out - amount1In)
 
@@ -949,12 +940,12 @@ def extract_trade_volume_log(event_name, log, pair_per_token_metadata, token0_pr
         token1_amount, token1_amount_usd = token_native_and_usd_amount(
             token='token1', token_type='amount1', token_price_map=token1_price_map
         )
-        
+
 
     trade_volume_usd = 0
     trade_fee_usd = 0
-    
-    
+
+
     block_details = block_details_dict.get(int(log.get('blockNumber', 0)), {})
     log = json.loads(Web3.toJSON(log))
     log["token0_amount"] = token0_amount
@@ -1021,7 +1012,7 @@ def swap_trade_volume(token0, token1, token0_amount_usd, token1_amount_usd):
         return token0_amount_usd
     elif token1 in whitelist:
         return token1_amount_usd
-    else: 
+    else:
         return 0
 
 
@@ -1048,11 +1039,11 @@ async def get_pair_trade_volume(
     try:
         pair_address = Web3.toChecksumAddress(pair_address)
         block_details_dict = dict()
-   
+
         if fetch_timestamp:
             try:
                 block_details_dict = await get_block_details_in_block_range(
-                    redis_conn=redis_conn, from_block=from_block, 
+                    redis_conn=redis_conn, from_block=from_block,
                     to_block=to_block, rate_limit_lua_script_shas=rate_limit_lua_script_shas,
                     web3_provider=web3_provider
                 )
@@ -1090,7 +1081,7 @@ async def get_pair_trade_volume(
             }
         )
         await check_rpc_rate_limit(
-            parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], redis_conn=redis_conn, 
+            parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], redis_conn=redis_conn,
             request_payload={"contract": pair_address, "to_block": to_block, "from_block": from_block},
             error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get async trade volume"},
             logger=logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
@@ -1100,8 +1091,8 @@ async def get_pair_trade_volume(
         # group logs by txHashs ==> {txHash: [logs], ...}
         grouped_by_tx = dict()
         [grouped_by_tx[log.transactionHash.hex()].append(log) if log.transactionHash.hex() in grouped_by_tx else grouped_by_tx.update({log.transactionHash.hex(): [log]}) for log in events_log]
-        
-        
+
+
         # init data models with empty/0 values
         epoch_results = epoch_event_trade_data(
             Swap=event_trade_data(logs=[], trades=trade_data(
@@ -1175,11 +1166,11 @@ async def get_pair_trade_volume(
                     epoch_results.Swap.logs.append(processed_log)
                     epoch_results.Swap.trades += trades_result
                     tx_hash_trades += trades_result # swap in single txHash should be added
-                
+
                 elif log.event == "Mint":
                     epoch_results.Mint.logs.append(processed_log)
                     epoch_results.Mint.trades += trades_result
-                
+
                 elif log.event == "Burn":
                     epoch_results.Burn.logs.append(processed_log)
                     epoch_results.Burn.trades += trades_result
@@ -1189,7 +1180,7 @@ async def get_pair_trade_volume(
         epoch_trade_logs = epoch_results.dict()
         max_block_details = block_details_dict.get(to_block, {})
         max_block_timestamp = max_block_details.get('timestamp', None)
-        epoch_trade_logs.update({'timestamp': max_block_timestamp})            
+        epoch_trade_logs.update({'timestamp': max_block_timestamp})
         return epoch_trade_logs
     except Exception as exc:
         logger.error("error at get_pair_trade_volume fn: %s", exc, exc_info=True)
@@ -1199,8 +1190,8 @@ async def get_pair_trade_volume(
 
 
 async def warm_up_cache_for_snapshot_constructors(
-    loop: asyncio.AbstractEventLoop, 
-    from_block, to_block, 
+    loop: asyncio.AbstractEventLoop,
+    from_block, to_block,
     rate_limit_lua_script_shas=None,
     redis_conn: aioredis.Redis=None,
     web3_provider=global_w3_client
@@ -1208,14 +1199,14 @@ async def warm_up_cache_for_snapshot_constructors(
     """
     This function warm-up cache for uniswap helper functions. Generated cache will be used across
     snapshot constructors or in multiple pair-contract calculations.
-    : cache block details for epoch 
+    : cache block details for epoch
     : cache ETH USD price for epoch
     """
     await asyncio.gather(
         get_eth_price_usd(
             loop=loop, from_block=from_block, to_block=to_block,
             web3_provider=web3_provider
-        ), 
+        ),
         get_block_details_in_block_range(
             from_block=from_block, to_block=to_block,
             web3_provider=web3_provider
@@ -1227,16 +1218,16 @@ async def warm_up_cache_for_snapshot_constructors(
 
 
 if __name__ == '__main__':
-    toBlock = 32720540 
+    toBlock = 32720540
 
     # loop = asyncio.get_event_loop()
     # rate_limit_lua_script_shas = dict()
     # start_time = datetime.now()
     # data = loop.run_until_complete(
     #     get_pair_reserves(
-    #         loop=loop, 
-    #         rate_limit_lua_script_shas=rate_limit_lua_script_shas, 
-    #         pair_address='0x0e9971ff778b042d549994415fb2774b5a3fe7b6', 
+    #         loop=loop,
+    #         rate_limit_lua_script_shas=rate_limit_lua_script_shas,
+    #         pair_address='0x0e9971ff778b042d549994415fb2774b5a3fe7b6',
     #         from_block=15724103,
     #         to_block=15724113,
     #         fetch_timestamp=True,
@@ -1247,15 +1238,15 @@ if __name__ == '__main__':
 
     # print(f"\n\n{data}\n")
     # print(f"time taken to fetch price in epoch range: {start_time} - {end_time}")
-    
+
     # rate_limit_lua_script_shas = dict()
     # loop = asyncio.get_event_loop()
     # start_time = datetime.now()
     # data = loop.run_until_complete(
     #     get_pair_trade_volume(
-    #         loop, 
-    #         rate_limit_lua_script_shas, 
-    #         pair_address='0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc', 
+    #         loop,
+    #         rate_limit_lua_script_shas,
+    #         pair_address='0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc',
     #         from_block=15674700,
     #         to_block=15674710,
     #         fetch_timestamp=True,
@@ -1265,5 +1256,5 @@ if __name__ == '__main__':
     # end_time = datetime.now()
     # print(f"\n\n{data}\n")
     # print(f"time taken to fetch price in epoch range: {start_time} - {end_time}")
-    
+
     pass

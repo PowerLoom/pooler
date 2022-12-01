@@ -1,9 +1,6 @@
 from pydantic import BaseModel, validator
 from typing import Union, List, Optional, Mapping, Dict
 
-# TODO: clean up polymarket specific models as we develop the callback workers
-
-
 class EpochBase(BaseModel):
     begin: int
     end: int
@@ -77,12 +74,3 @@ class UniswapTradesSnapshot(BaseModel):
     events: UniswapTradeEvents
     chainHeightRange: EpochBase
     timestamp: float
-
-
-class ethLogRequestModel(BaseModel):
-    fromBlock: int = None
-    toBlock: int = None
-    contract: str = None
-    topics: list = None
-    requestId: str = None
-    retrialCount: int = 1

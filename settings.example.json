@@ -1,6 +1,14 @@
 {
     "development": {
-        "namespace": "staging",
+        "namespace": "UNISWAPV2-stg-1",
+        "core_api": {
+            "auth": {
+                "enabled": true,
+                "header_key": "X-API-KEY"
+            },
+            "public_rate_limit": "100000000/day;20000/minute;2500/second"
+        },
+        "chain_id": 1,
         "uniswap_contract_abis":{
             "factory":"./abis/IUniswapV2Factory.json",
             "router":"./abis/UniswapV2Router.json",
@@ -49,14 +57,9 @@
         ],
         "ipfs_url": "/ip4/172.31.29.63/tcp/5001",
         "uniswap_functions": {
-            "threading_semaphore": 5,
-            "semaphore_workers": 10,
             "retrial_attempts": 5
         },
         "rpc": {
-            "matic": [
-                "https://rpc-mainnet.maticvigil.com/v1/"
-            ],
             "full_nodes": [
                 {
                   "url": "https://rpc-public-bck.maticvigil.com/v1/****",
@@ -74,21 +77,8 @@
                 }
             ],
             "force_archive_blocks": 100,
-            "logs_query": {
-                "chunk": 1000000,
-                "retry": 2,
-                "timeout": 10
-            },
-            "eth_mainnet": "",
             "retry": 1,
-            "rate_limit": "10000000/day;1000/minute;100/second"
-        },
-        "eth_log_worker": {
-            "subtopic": "ethlogs",
-            "receiver_queue_name": "powerloom-ethlogs-request-receiver-q",
-            "sender_queue_name": "powerloom-ethlogs-request-sender-q",
-            "host": "127.0.0.1",
-            "port": 9003
+            "request_time_out": 5
         },
         "rlimit": {
             "file_descriptors": 2048
@@ -137,10 +127,6 @@
             "retry": 5,
             "skip_anchor_proof":true
         },
-        "audit_protocol_engine_2": {
-            "url": "http://localhost:9199",
-            "retry": 5
-        },
         "redis": {
             "host": "127.0.0.1",
             "port": 6379,
@@ -149,72 +135,18 @@
             "ssl": false,
             "cluster_mode": false
         },
-        "snapshot_max_workers": 5,
-        "snapshot_maticvigil_limits": {
-            "max_acquisition_tries": 20,
-            "acquisition_sleep": 1,
-            "max_workers": 10
-        },
-        "actor_semaphore_limits": {
-            "rpc": {
-                "max_acquisition_tries": 10,
-                "acquisition_sleep": 45
-            }
-        },
-        "payload_attrs_filter": [
-            "id",
-            "question",
-            "conditionId",
-            "end_date",
-            "description",
-            "created_at",
-            "updated_at",
-            "active"
-        ],
         "redis_reader": {
             "host": "127.0.0.1",
             "port": 6379,
             "db": 0,
             "password": null
         },
-        "offchain_snapshot_interval": 120,
-        "onchain_snapshot_interval": 120,
-        "update_pairs_interval": 300,
-        "verify_abi_endpoint": "https://mainnet.maticvigil.com/api/verifyABI",
-        "check_contract_endpoint": "https://mainnet.maticvigil.com/api/checkContract",
-        "verify_contract_endpoint": "https://mainnet.maticvigil.com/api/verify",
-        "activate_hook_endpoint": "https://mainnet.maticvigil.com/api/hooks/activate",
-        "deactivate_hook_endpoint": "https://mainnet.maticvigil.com/api/hooks/deactivate",
-        "update_hook_events_endpoint": "https://mainnet.maticvigil.com/api/hooks/updateEvents",
-        "add_hook_endpoint": "https://mainnet.maticvigil.com/api/hooks/add",
-        "login_endpoint": "https://mainnet.maticvigil.com/api/login",
         "webhook_listener": {
             "host": "127.0.0.1",
             "port": 9090,
-            "root": "https://anstripe.blocksapi.com",
-            "market_event_listener_path": "hooks",
+            "root": "https://pooler-callback.com",
             "commit_confirmation_callback_path": "commit_confirm"
         },
-        "event_confirmation_block_height": 12,
-        "event_cache_collection_chain_head_offset": 2,
-        "matic_vigil_keys": {
-            "private_key": "",
-            "read_key": "",
-            "api_key": ""
-        },
-        "seeding_retry_limits": {
-            "liquidity": 2,
-            "trade_vol": 10
-        },
-        "eth_logs_timeout": 600,
-        "client_session_timeout": {
-            "sock_read": 200,
-            "connect": 200,
-            "sock_connect": 200
-        },
-        "pending_commit_timeout": 300,
-        "number_of_blocks_in_epoch": 10,
-        "prune_price_zset_epoch_multiplier": 5,
         "logging_server":{
             "host":"localhost",
             "port": 9020
@@ -222,6 +154,15 @@
       },
       "testing": {
         "is_testing_env": true,
+        "namespace": "UNISWAPV2-stg-1",
+        "chain_id": 1,
+        "uniswap_contract_abis":{
+            "factory":"./abis/IUniswapV2Factory.json",
+            "router":"./abis/UniswapV2Router.json",
+            "pair_contract":"./abis/UniswapV2Pair.json",
+            "erc20":"./abis/IERC20.json",
+            "trade_events":"./abis/UniswapTradeEvents.json"
+        },
         "contract_addresses": {
             "iuniswap_v2_factory": "0x5757371414417b8C6CAad45bAeF941aBc7d3Ab32",
             "iuniswap_v2_router": "0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff",
@@ -263,14 +204,9 @@
         ],
         "ipfs_url": "/ip4/172.31.29.63/tcp/5001",
         "uniswap_functions": {
-            "threading_semaphore": 5,
-            "semaphore_workers": 10,
             "retrial_attempts": 5
         },
         "rpc": {
-            "matic": [
-                "https://rpc-mainnet.maticvigil.com/v1/"
-            ],
             "full_nodes": [
                 {
                   "url": "https://rpc-public-bck.maticvigil.com/v1/****",
@@ -288,21 +224,8 @@
                 }
             ],
             "force_archive_blocks": 100,
-            "logs_query": {
-                "chunk": 1000000,
-                "retry": 2,
-                "timeout": 10
-            },
-            "eth_mainnet": "",
             "retry": 1,
-            "rate_limit": "10000000/day;1000/minute;100/second"
-        },
-        "eth_log_worker": {
-            "subtopic": "ethlogs",
-            "receiver_queue_name": "powerloom-ethlogs-request-receiver-q",
-            "sender_queue_name": "powerloom-ethlogs-request-sender-q",
-            "host": "127.0.0.1",
-            "port": 9003
+            "request_time_out": 5
         },
         "rlimit": {
             "file_descriptors": 2048
@@ -351,10 +274,6 @@
             "retry": 5,
             "skip_anchor_proof":true
         },
-        "audit_protocol_engine_2": {
-            "url": "http://localhost:9199",
-            "retry": 5
-        },
         "redis": {
             "host": "127.0.0.1",
             "port": 6379,
@@ -363,72 +282,21 @@
             "ssl": false,
             "cluster_mode": false
         },
-        "snapshot_max_workers": 5,
-        "snapshot_maticvigil_limits": {
-            "max_acquisition_tries": 20,
-            "acquisition_sleep": 1,
-            "max_workers": 10
-        },
-        "actor_semaphore_limits": {
-            "rpc": {
-                "max_acquisition_tries": 10,
-                "acquisition_sleep": 45
-            }
-        },
-        "payload_attrs_filter": [
-            "id",
-            "question",
-            "conditionId",
-            "end_date",
-            "description",
-            "created_at",
-            "updated_at",
-            "active"
-        ],
         "redis_reader": {
             "host": "127.0.0.1",
             "port": 6379,
             "db": 6,
             "password": null
         },
-        "offchain_snapshot_interval": 120,
-        "onchain_snapshot_interval": 120,
-        "update_pairs_interval": 300,
-        "verify_abi_endpoint": "https://mainnet.maticvigil.com/api/verifyABI",
-        "check_contract_endpoint": "https://mainnet.maticvigil.com/api/checkContract",
-        "verify_contract_endpoint": "https://mainnet.maticvigil.com/api/verify",
-        "activate_hook_endpoint": "https://mainnet.maticvigil.com/api/hooks/activate",
-        "deactivate_hook_endpoint": "https://mainnet.maticvigil.com/api/hooks/deactivate",
-        "update_hook_events_endpoint": "https://mainnet.maticvigil.com/api/hooks/updateEvents",
-        "add_hook_endpoint": "https://mainnet.maticvigil.com/api/hooks/add",
-        "login_endpoint": "https://mainnet.maticvigil.com/api/login",
         "webhook_listener": {
             "host": "127.0.0.1",
             "port": 9090,
-            "root": "https://anstripe.blocksapi.com",
-            "market_event_listener_path": "hooks",
+            "root": "https://pooler-callback.com",
             "commit_confirmation_callback_path": "commit_confirm"
         },
-        "event_confirmation_block_height": 12,
-        "event_cache_collection_chain_head_offset": 2,
-        "matic_vigil_keys": {
-            "private_key": "",
-            "read_key": "",
-            "api_key": ""
-        },
-        "seeding_retry_limits": {
-            "liquidity": 2,
-            "trade_vol": 10
-        },
-        "eth_logs_timeout": 600,
-        "client_session_timeout": {
-            "sock_read": 200,
-            "connect": 200,
-            "sock_connect": 200
-        },
-        "pending_commit_timeout": 300,
-        "number_of_blocks_in_epoch": 10,
-        "prune_price_zset_epoch_multiplier": 5
+        "logging_server":{
+            "host":"localhost",
+            "port": 9020
+        }
     }
   }
-  
