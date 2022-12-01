@@ -1,4 +1,5 @@
 from httpx import AsyncClient
+from callback_modules.data_models import PayloadCommitAPIRequest
 from urllib.parse import urljoin
 from dynaconf import settings
 from eth_utils import keccak
@@ -6,10 +7,9 @@ from setproctitle import setproctitle
 from functools import partial
 from loguru import logger
 from uuid import uuid4
-from redis_conn import RedisPoolCache, REDIS_CONN_CONF
-from aio_pika import ExchangeType, IncomingMessage
+from redis_conn import RedisPoolCache
+from aio_pika import IncomingMessage
 from aio_pika.pool import Pool
-from functools import reduce
 from typing import Union, Dict
 import sys
 import resource
@@ -22,7 +22,6 @@ import multiprocessing
 import asyncio
 import signal
 import aio_pika
-import aiohttp
 from tenacity import AsyncRetrying, stop_after_attempt, wait_random_exponential
 
 
@@ -49,7 +48,7 @@ class AuditProtocolCommandsHelper:
     ):
         project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
         if not await redis_conn.sismember(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id):
-            """ Setup diffRules"""
+            """ Setup diffRules for this market"""
             # retry below call given at settings.AUDIT_PROTOCOL_ENGINE.RETRY
             async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY)):
                 with attempt:
@@ -115,7 +114,7 @@ class AuditProtocolCommandsHelper:
     ):
         project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
         if not await redis_conn.sismember(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id):
-            """ Setup diffRules """
+            """ Setup diffRules for this market"""
             # retry below call given at settings.AUDIT_PROTOCOL_ENGINE.RETRY
             async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY)):
                 with attempt:
@@ -182,36 +181,34 @@ class AuditProtocolCommandsHelper:
                 redis_conn.sadd(f'uniswap:{settings.NAMESPACE}:callbackURLSetFor', project_id)
 
     @classmethod
-    async def commit_payload(cls, pair_contract_address, stream, report_payload, session: AsyncClient):
-        # retry below call given at settings.AUDIT_PROTOCOL_ENGINE.RETRY
+    async def commit_payload(cls, report_payload: PayloadCommitAPIRequest, session: AsyncClient):
         async for attempt in AsyncRetrying(
-                reraise=True,
+                reraise=False,
                 stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY),
                 wait=wait_random_exponential(multiplier=2, max=10)
         ):
             with attempt:
-                project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
                 response_obj = await session.post(
                         url=urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, 'commit_payload'),
-                        json={
-                                'payload': report_payload,
-                                'projectId': project_id,
-                                'skipAnchorProof':settings.get('AUDIT_PROTOCOL_ENGINE.SKIP_ANCHOR_PROOF',True)
-                            }
+                        json=report_payload.dict()
                 )
                 response_status_code = response_obj.status_code
                 response = response_obj.json() or {}
                 if response_status_code in range(200, 300):
                     return response
-                elif response_status_code == 500 or response_status_code == 502:
-                    return {
-                        "message": f"failed with status code: {response_status_code}", "response": response
-                    }  # ignore 500 and 502 errors
+                elif attempt.retry_state.attempt_number == settings.AUDIT_PROTOCOL_ENGINE.RETRY:
+                    if attempt.retry_state.outcome and attempt.retry_state.outcome.exception():
+                        raise attempt.retry_state.outcome.exception()
+                    else:
+                        raise Exception(
+                            'Failed audit protocol engine call with status code: %s and response: %s',
+                            response_status_code, response
+                        )
                 else:
                     raise Exception(
-                        'Failed audit protocol engine call with status code: {} and response: {}'.format(
-                            response_status_code, response))
-
+                        'Failed audit protocol engine call with status code: %s and response: %s',
+                        response_status_code, response
+                    )
 
 
 class CallbackAsyncWorker(multiprocessing.Process):
@@ -224,6 +221,24 @@ class CallbackAsyncWorker(multiprocessing.Process):
         self._redis_conn: Union[None, aioredis.Redis] = None
         self._running_callback_tasks: Dict[str, asyncio.Task] = dict()
         super(CallbackAsyncWorker, self).__init__(name=name, **kwargs)
+        self._logger = logging.getLogger(self.name)
+        self._logger.setLevel(logging.DEBUG)
+        formatter = logging.Formatter(
+            "%(levelname)-8s %(name)-4s %(asctime)s %(msecs)d %(module)s-%(funcName)s: %(message)s")
+        stdout_handler = logging.StreamHandler(sys.stdout)
+        stdout_handler.setLevel(logging.DEBUG)
+        stdout_handler.setFormatter(formatter)
+        stderr_handler = logging.StreamHandler(sys.stderr)
+        stderr_handler.setLevel(logging.ERROR)
+        stderr_handler.setFormatter(formatter)
+        # self._logger.debug('Launched %s ', self._unique_id)
+        # self._logger.debug('Launched PID: %s', self.pid)
+        self._logger.handlers = [
+            logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST', 'localhost'),
+                                           port=settings.get('LOGGING_SERVER.PORT',
+                                                             logging.handlers.DEFAULT_TCP_LOGGING_PORT)),
+            stdout_handler, stderr_handler
+        ]
         # logger.add(
         #     sink='logs/' + self._unique_id + '_{time}.log', rotation='20MB', retention=20, compression='gz'
         # )
@@ -255,15 +270,15 @@ class CallbackAsyncWorker(multiprocessing.Process):
                         'Still running.',
                         t.get_name()
                     )
-                except Exception as exc:
+                except Exception as e:
                     self._logger.info(
                         'Shutdown handler: aio_pika consumer callback task %s raised Exception. '
                         '%s',
-                        t.get_name(), exc
+                        t.get_name(), e
                     )
                 else:
                     self._logger.info(
-                        'Shutdown handler: aio_pika consumer callback task %s returned with result %s',
+                        'Shutdown handler: aio_pika consumer callback task returned with result %s',
                         t.get_name(),
                         task_result
                     )
