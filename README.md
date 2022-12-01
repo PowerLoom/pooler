@@ -4,7 +4,7 @@
 ## Requirements
 
 * Python 3.8 and above
-* MacOS or Linux (we can not gurantee outcome on Windows)
+* MacOS or Linux (we can not guarantee outcome on Windows)
 
 ## Setup Instructions
 
@@ -41,7 +41,8 @@ Copy over [`settings.example.json`](settings.example.json) to `settings.json`
 cp settings.example.json settings.json
 ```
 
-Fill your API key in the `namespace` key
+* Fill your API key in the `namespace` key
+* Fill the audit protocol endpoint in `audit_protocol_engine.url` key: `https://auditprotocol-ethindia.powerloom.io/`
 
 ### Initialize rabbitmq exchanges and queues
 
