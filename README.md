@@ -41,8 +41,8 @@ Copy over [`settings.example.json`](settings.example.json) to `settings.json`
 cp settings.example.json settings.json
 ```
 
-* Fill your API key in the `namespace` key
-* Fill the audit protocol endpoint in `audit_protocol_engine.url` key: `https://auditprotocol-ethindia.powerloom.io/`
+* Fill your [API key](https://ethindia22.powerloom.io) in the `namespace` key
+* Fill the hosted audit protocol endpoint in `audit_protocol_engine.url` key: `https://auditprotocol-ethindia.powerloom.io/`
 
 ### Initialize rabbitmq exchanges and queues
 
