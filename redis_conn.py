@@ -85,16 +85,30 @@ def provide_redis_conn(fn):
                 return fn(*args, **kwargs)
     return wrapper
 
+
+def provide_async_redis_conn(fn):
+    @wraps(fn)
+    async def async_redis_conn_wrapper(*args, **kwargs):
+        redis_conn_raw = await kwargs['request'].app.redis_pool.acquire()
+        redis_conn = aioredis.Redis(redis_conn_raw)
+        kwargs['redis_conn'] = redis_conn
+        try:
+            return await fn(*args, **kwargs)
+        except Exception as e:
+            logger.error(e, exc_info=True)
+            return {'error': 'Internal Server Error'}
+        finally:
+            kwargs['request'].app.redis_pool.release(redis_conn_raw)
+    return async_redis_conn_wrapper
+
+
 # TODO: check wherever this is used and instead
 #       attempt to supply the aioredis.Redis object from an instantiated connection pool
 def provide_async_redis_conn_insta(fn):
     @wraps(fn)
     async def wrapped(*args, **kwargs):
         arg_conn = 'redis_conn'
-        func_params = fn.__code__.co_varnames
-        conn_in_args = arg_conn in func_params and func_params.index(arg_conn) < len(args)
-        conn_in_kwargs = arg_conn in kwargs
-        if conn_in_args or conn_in_kwargs:
+        if kwargs.get(arg_conn):
             return await fn(*args, **kwargs)
         else:
             # RedisPoolCache.append_ssl_connection_params(REDIS_CONN_CONF, settings_conf['redis'])
@@ -113,7 +127,7 @@ def provide_async_redis_conn_insta(fn):
                 # )
                 pass
             else:
-                logging.debug('Creating single connection via high level aioredis interface')
+                # logging.debug('Creating single connection via high level aioredis interface')
                 connection = await aioredis.Redis(
                     host=REDIS_CONN_CONF['host'],
                     port=REDIS_CONN_CONF['port'],
@@ -128,8 +142,7 @@ def provide_async_redis_conn_insta(fn):
                 raise
             finally:
                 try:  # ignore residual errors
-                    connection.close()
-                    await connection.wait_closed()
+                    await connection.close()
                 except:
                     pass
     return wrapped
