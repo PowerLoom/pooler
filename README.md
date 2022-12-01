@@ -1,5 +1,75 @@
+# For EthIndia 2022 hackathon participants
 
-## Table of Contents
+
+## Requirements
+
+* Python 3.8 and above
+* MacOS or Linux (we can not gurantee outcome on Windows)
+
+## Setup Instructions
+
+### Setup isolated `virtualenv`/`venv` or any other environment you are comfortable with
+
+Run `pip install -r requirements.txt`
+
+### Install dependency services
+
+```commandline
+brew install redis
+brew install zookeeper
+brew install rabbitmq
+```
+
+### Populate `static/cached_pair_addresses.json`
+
+Copy over [`static/cached_pair_addresses.example.json`](static/cached_pair_addresses.example.json) to `static/cached_pair_addresses.json`
+
+```
+cp static/cached_pair_addresses.example.json static/cached_pair_addresses.json
+```
+
+These are the pair contracts on Uniswap v2 or other forks of it that will be tracked for the following in this example implementation.
+
+* Token reserves of `token0` and `token1`
+* Trade volume information as described in the [Overview](#overview) section.
+
+### Populate `settings.json`
+
+Copy over [`settings.example.json`](settings.example.json) to `settings.json`
+
+```
+cp settings.example.json settings.json
+```
+
+Fill your API key in the `namespace` key
+
+### Initialize rabbitmq exchanges and queues
+
+```commandline
+python init_rabbitmq.py
+```
+
+### Launch Process Hub Core
+
+Preferably in a separate terminal session or `screen` session
+
+```commandline
+python launch_process_hub_core.py
+```
+
+### Run ticker and other snapshot generation services 
+
+```
+python processhub_cmd.py start EpochCallbackManager  
+sleep 1 
+python processhub_cmd.py start SystemEpochFinalizer  
+sleep 1 
+python processhub_cmd.py start SystemEpochCollator 
+sleep 1 
+python processhub_cmd.py start SystemLinearEpochClock --begin <blocknumber>
+```
+
+# Implementation walk through with code references
 
 - [Overview](#overview)
 - [Epoch Generation](#epoch-generation)
