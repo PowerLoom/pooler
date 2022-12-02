@@ -141,8 +141,8 @@ The size of an epoch is configurable. Let that be referred to as `size(E)`
 
 Overview of broadcasted epoch processing, building snapshot, and submitting it to audit-protocol ([whitepaper-ref](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#8ad76b8362b341bcaa9b3ae9fe203271)):
 
-1. Published/broadcasted epochs are received by `PairTotalReservesProcessorDistributor`, and get distributed to callback workers by publishing messages on respective queues ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/callback_modules/pair_total_reserves.py#L621-L645)).    
-[Distributor code-module](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/callback_modules/pair_total_reserves.py#L570-L579)
+1. Published/broadcasted epochs are received by `PairTotalReservesProcessorDistributor`, and get distributed to callback workers by publishing messages on respective queues ([code-ref](callback_modules/pair_total_reserves.py#L621-L645)).    
+[Distributor code-module](callback_modules/pair_total_reserves.py#L570-L579)
 ```
 queue.enqueue_msg_delivery(
     exchange=f'pair_processor_exchange',
@@ -151,13 +151,13 @@ queue.enqueue_msg_delivery(
 )
 ```   
 
-2. The Distributor's messages are received by the `PairTotalReservesProcessor` on_message handler. Multiple workers are running parallelly consuming incoming messages ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/callback_modules/pair_total_reserves.py#L312-L332)).    
-[Processor code-module](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/callback_modules/pair_total_reserves.py#L37-L44)
+2. The Distributor's messages are received by the `PairTotalReservesProcessor` on_message handler. Multiple workers are running parallelly consuming incoming messages ([code-ref](callback_modules/pair_total_reserves.py#L312-L332)).    
+[Processor code-module](callback_modules/pair_total_reserves.py#L37-L44)
 
 
 3. Each message goes through capturing smart-contract data and transforming it into a standardized JSON schema. All these data-point operations are detailed in the next section.    
 
-4. Generated snapshots get submitted to audit-protocol with appropriate status updated against message broadcast_id ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/callback_modules/pair_total_reserves.py#L378-L410)).
+4. Generated snapshots get submitted to audit-protocol with appropriate status updated against message broadcast_id ([code-ref](callback_modules/pair_total_reserves.py#L378-L410)).
 ```
 await AuditProtocolCommandsHelper.commit_payload(
     pair_contract_address=epoch_snapshot.contract, stream='pair_total_reserves',
@@ -171,23 +171,23 @@ Implementation breakdown of all <u><b>snapshot data-point operations</b></u> to 
 
 
 ### Token Price in USD 
-[[code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L612-L620)]
+[[code-ref](uniswap_functions.py#L612-L620)]
 
 Token price in USD(stable coins) more details in [whitepaper](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#8bb48365ac444f22b2376433b5cf36f7).
 
 Steps to calculate the token price:
-1. Calculate Eth USD price ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L639-L643)) 
+1. Calculate Eth USD price ([code-ref](uniswap_functions.py#L639-L643)) 
 ```
 eth_price_dict = await get_eth_price_usd(from_block, to_block, web3_provider, ...)
 ```
-`get_eth_price_usd()` function calculates average eth price using stablecoin pools (USDC, USDT and DAI) ( [code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L376-L381) ):
+`get_eth_price_usd()` function calculates average eth price using stablecoin pools (USDC, USDT and DAI) ( [code-ref](uniswap_functions.py#L376-L381) ):
 
 [[whitepaper-ref](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#10e57df8515d4d77bf9ac97c09e6f5db)]
 ```
 Eth_Price_Usd = daiWeight * dai_price + usdcWeight * usdc_price + usdtWeight * usdt_price
 ```
 
-2. Find a pair of target token with whitelisted tokens ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L647-L653)):
+2. Find a pair of target token with whitelisted tokens ([code-ref](uniswap_functions.py#L647-L653)):
 ```
 for -> (settings.UNISWAP_V2_WHITELIST):
     pair_address = await get_pair(white_token, token_adress, ...)
@@ -197,13 +197,13 @@ for -> (settings.UNISWAP_V2_WHITELIST):
 ```
 `get_pair(`)` function returns a pair address given token addresses, more detail in [Uniswap doc](https://docs.uniswap.org/protocol/V2/reference/smart-contracts/factory#getpair).
 
-3. Calculate the derived Eth of the target token using the whitelist pair([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L667-L670)):
+3. Calculate the derived Eth of the target token using the whitelist pair([code-ref](uniswap_functions.py#L667-L670)):
 ```
 white_token_derived_eth_dict = await get_token_derived_eth(
     from_block, to_block, white_token_metadata, web3_provider, ...
 )
 ```
-`get_token_derived_eth()` function return the derived ETH amount of the given token([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L559-L562)):
+`get_token_derived_eth()` function return the derived ETH amount of the given token([code-ref](uniswap_functions.py#L559-L562)):
 ```
 token_derived_eth_list = batch_eth_call_on_block_range(
     'getAmountsOut', UNISWAP_V2_ROUTER, from_block, to_block=to_block, 
@@ -213,7 +213,7 @@ token_derived_eth_list = batch_eth_call_on_block_range(
 `getAmountsOut()` is a uniswap-router2 smart contract function, more details in [Uniswap-doc](https://docs.uniswap.org/protocol/V2/reference/smart-contracts/router-02#getamountsin).
 
 
-4. Check if the Eth reserve of the whitelisted token is more than the threshold, else repeat steps 2 and 3 ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L677-L680)):
+4. Check if the Eth reserve of the whitelisted token is more than the threshold, else repeat steps 2 and 3 ([code-ref](uniswap_functions.py#L677-L680)):
 ```
 ...
 if white_token_reserves < threshold:
@@ -234,11 +234,11 @@ Important formulas to calculate tokens price
 
 ### Pair Metadata 
 
-[code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L202-L205)
+[code-ref](uniswap_functions.py#L202-L205)
 
 Fetch `symbol`, `name` and `decimal` of a given pair from RPC and store them in the cache.
 
-1. check if cache exists, metadata cache is stored as a redis-hashmap ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L249-L255)):
+1. check if cache exists, metadata cache is stored as a redis-hashmap ([code-ref](uniswap_functions.py#L249-L255)):
 ```
 pair_token_addresses_cache, pair_tokens_data_cache = await asyncio.gather(
     redis_conn.hgetall(uniswap_pair_contract_tokens_addresses.format(pair_address)),
@@ -246,7 +246,7 @@ pair_token_addresses_cache, pair_tokens_data_cache = await asyncio.gather(
 )
 ```
 
-2. fetch metadata from pair smart contract ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L277-L298)):
+2. fetch metadata from pair smart contract ([code-ref](uniswap_functions.py#L277-L298)):
 ```
 web3_provider.batch_call([
     token0-> name, symbol, decimals,
@@ -254,23 +254,23 @@ web3_provider.batch_call([
 ])
 ```
 
-3. store cache and return prepared metadata, return metadata ([data-model](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L300-L329)).
+3. store cache and return prepared metadata, return metadata ([data-model](uniswap_functions.py#L300-L329)).
 
 
 ### Pair Reserves 
-[code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L809-L816)
+[code-ref](uniswap_functions.py#L809-L816)
 Reserves of each token in pair contract ([more details in whitepaper](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#e04df592d3034f18aa1fc9502f749ec9)):
 
 Steps to calculate liquidity:
-1. Fetch block details from RPC and return `{block->details}` dictionary ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L824-L834)):
+1. Fetch block details from RPC and return `{block->details}` dictionary ([code-ref](uniswap_functions.py#L824-L834)):
 ```
 block_details_dict = await get_block_details_in_block_range(
     from_block, to_block, web3_provider, ...
 )
 ```
-`get_block_details_in_block_range()` is a batch RPC call to fetch data of each block for a given range ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L726-L732)).
+`get_block_details_in_block_range()` is a batch RPC call to fetch data of each block for a given range ([code-ref](uniswap_functions.py#L726-L732)).
 
-2. Fetch pair metadata of the pair smart-contract e.g. symbol, decimal, etc ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L836-L839)):
+2. Fetch pair metadata of the pair smart-contract e.g. symbol, decimal, etc ([code-ref](uniswap_functions.py#L836-L839)):
 `get_pair_metadata()` invoke `symbol()`, `decimal()` and `name()` functions on pair's smart-contract, more details in the [metadata section](#pairMetadata).
 ```
 pair_per_token_metadata = await get_pair_metadata(
@@ -278,14 +278,14 @@ pair_per_token_metadata = await get_pair_metadata(
 )
 ```
 
-3. Calculate the pair's token price ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L843-L852)):
+3. Calculate the pair's token price ([code-ref](uniswap_functions.py#L843-L852)):
 ```
 token0_price_map = await get_token_price_in_block_range(token0, from_block, to_block, ...)
 token1_price_map = await get_token_price_in_block_range(token1, from_block, to_block, ...)
 ```
 `get_token_price_in_block_range()` returns `{block->price}` dictionary for a given token, more details in the [price section](#tokenPriceUSD).
 
-4. Fetch pair reserves for each token ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L865-L872)):
+4. Fetch pair reserves for each token ([code-ref](uniswap_functions.py#L865-L872)):
 ```
 reserves_array = batch_eth_call_on_block_range(
     web3_provider, abi_dict, 'getReserves', 
@@ -294,14 +294,14 @@ reserves_array = batch_eth_call_on_block_range(
 ```
 `reserves_array` is an array of array, each element containing:`[token0Reserves, token1Reserves, timestamp]`. It invokes the `getReserves()` function on pair contracts, more details on [Uniswap-docs](https://docs.uniswap.org/protocol/V2/reference/smart-contracts/pair#getreserves).
 
-5. Prepare the final liquidity snapshot, by iterating on each block and taking a product of `tokenReserve` and `tokenPrice` ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L878-L897)):
+5. Prepare the final liquidity snapshot, by iterating on each block and taking a product of `tokenReserve` and `tokenPrice` ([code-ref](uniswap_functions.py#L878-L897)):
 
-6. `get_pair_reserve()` return type [data-model](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L890-L896).
+6. `get_pair_reserve()` return type [data-model](uniswap_functions.py#L890-L896).
 
 
 
 ### Fetch event logs 
-[code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L1081-L1091)
+[code-ref](uniswap_functions.py#L1081-L1091)
 Fetch event logs to calculate trade volume using `eth_getLogs`, more details in [whitepaper](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#b42d180a965d4fb9888fb2a586bdd0de).
 
 
@@ -312,7 +312,7 @@ get_events_logs, **{
     'contract_address': pair_address, 'topics': [event_sig], 'event_abi': event_abi, ...
 }
 ```
-`get_events_logs()` function is written in `rpc_helpers.py` module. It uses `eth.get_logs` RPC function to fetch event logs of given topics in block range ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/rpc_helper.py#L372-L387)):
+`get_events_logs()` function is written in `rpc_helpers.py` module. It uses `eth.get_logs` RPC function to fetch event logs of given topics in block range ([code-ref](rpc_helper.py#L372-L387)):
 ```
 event_log = web3Provider.eth.get_logs({
     'address': contract_address, 'toBlock': toBlock,
@@ -325,21 +325,21 @@ for -> (event_log):
 
 
 ### Pair trade volume 
-[code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L1038-L1047)
+[code-ref](uniswap_functions.py#L1038-L1047)
 Calculate The Trade volume of a pair using event logs, more details in [whitepaper](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#be2e5c71701d4491a04572589ac67f1b). 
 
 `Trade Volume = SwapValueUSD = token0Amount * token0PriceUSD = token1Amount * token1PriceUSD`
 
 Steps to calculate trade volume:
-1. Fetch block details from RPC and return `{block->details}` dictionary ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L824-L834)):
+1. Fetch block details from RPC and return `{block->details}` dictionary ([code-ref](uniswap_functions.py#L824-L834)):
 ```
 block_details_dict = await get_block_details_in_block_range(
     from_block, to_block, web3_provider, ...
 )
 ```
-`get_block_details_in_block_range()` is a batch RPC call to fetch data of each block for a given range ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L726-L732)).
+`get_block_details_in_block_range()` is a batch RPC call to fetch data of each block for a given range ([code-ref](uniswap_functions.py#L726-L732)).
 
-2. Fetch pair metadata of the pair smart-contract e.g. symbol, decimal, etc ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L836-L839)):
+2. Fetch pair metadata of the pair smart-contract e.g. symbol, decimal, etc ([code-ref](uniswap_functions.py#L836-L839)):
 `get_pair_metadata()` invoke `symbol()`, `decimal()` and `name()` functions on pair's smart-contract, more details in the [metadata section](#pairMetadata).
 ```
 pair_per_token_metadata = await get_pair_metadata(
@@ -347,7 +347,7 @@ pair_per_token_metadata = await get_pair_metadata(
 )
 ```
 
-3. Calculate the pair's token price ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L843-L852)):
+3. Calculate the pair's token price ([code-ref](uniswap_functions.py#L843-L852)):
 ```
 token0_price_map = await get_token_price_in_block_range(token0, from_block, to_block, ...)
 token1_price_map = await get_token_price_in_block_range(token1, from_block, to_block, ...)
@@ -358,27 +358,27 @@ token1_price_map = await get_token_price_in_block_range(token1, from_block, to_b
 
 4. Fetch event logs in the given block range, following the [event log section](#fetchEventLogs). 
 
-5. Group logs by transaction hash ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L1100-L1102))
+5. Group logs by transaction hash ([code-ref](uniswap_functions.py#L1100-L1102))
 ```
 for -> (event_logs):
     transaction_dict[tx_hash].append(log)
 ```
 
-6. Iterate on grouped logs, and group again by event type(swap, mint and burn) ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L1147-L1185))
+6. Iterate on grouped logs, and group again by event type(swap, mint and burn) ([code-ref](uniswap_functions.py#L1147-L1185))
 
-7. Add swap logs amount as effective trade volume ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L1174-L1177))
+7. Add swap logs amount as effective trade volume ([code-ref](uniswap_functions.py#L1174-L1177))
 
-8. `get_pair_trade_volume()` return type [data-model](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a9214a55922cbdee00f8e260eb9d960620fbcaff/message_models.py#L62)
+8. `get_pair_trade_volume()` return type [data-model](message_models.py#L62)
 
 
 
 ### Rate Limiter 
-[code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/rate_limiter.py#L64)
-All RPC node specified in [settings.json](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/settings.example.json#L60-L75) has a rate limit to them, every RPC calls honor this limit ([more details](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#d9bef53da81449b7b5e39290b25843ac)).
+[code-ref](rate_limiter.py#L64)
+All RPC node specified in [settings.json](settings.example.json#L60-L75) has a rate limit to them, every RPC calls honor this limit ([more details](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#d9bef53da81449b7b5e39290b25843ac)).
 
 
-* [Rate limiter module](https://github.com/PowerLoom/fpmm-pooler-internal/blob/main/rate_limiter.py)
-* [helper function](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a9214a55922cbdee00f8e260eb9d960620fbcaff/rate_limiter.py#L64)
+* [Rate limiter module](rate_limiter.py)
+* [helper function](rate_limiter.py#L64)
 
 ```
 rate_limiter:
@@ -402,6 +402,6 @@ Batch RPC calls by sending multiple queries in a single request, details in [Get
 ]
 ```
 
-`rpc_helper.py` ([code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/main/rpc_helper.py)) module contains several helpers which use batching: 
-* [batch_eth_call_on_block_range](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/rpc_helper.py#L268): to query a contract function on multiple block-heights.
-* [batch_eth_get_block](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/rpc_helper.py#L330): to get block data at multiple block heights. 
+`rpc_helper.py` ([code-ref](rpc_helper.py)) module contains several helpers which use batching: 
+* [batch_eth_call_on_block_range](rpc_helper.py#L268): to query a contract function on multiple block-heights.
+* [batch_eth_get_block](rpc_helper.py#L330): to get block data at multiple block heights. 
