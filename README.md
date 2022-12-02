@@ -77,7 +77,7 @@ python processhub_cmd.py start SystemLinearEpochClock --begin <blocknumber>
 - [Snapshot Building](#snapshot-building)
   - [Token Price in USD](#token-price-in-usd)
   - [Pair Metadata](#pair-metadata)
-  - [Liquidity / Pair Reserves](#liquidity--pair-reserves)
+  - [Pair Reserves](#pair-reserves)
   - [Fetch event logs](#fetch-event-logs)
   - [Pair trade volume](#pair-trade-volume)
   - [Rate Limiter](#rate-limiter)
@@ -106,7 +106,7 @@ Together with an Audit Protocol instance, they form a recently released PoC whos
 - to present a fully functional, distributed system comprised of lightweight services that can be deployed over multiple instances on a network or even on a single instance
 - to be able to serve most frequently sought data points on Uniswap v2
     - Total Value Locked (TVL)
-    - Trade Volume, Liquidity reserves, Fees earned
+    - Trade Volume, token reserves, Fees earned
         - grouped by
             - Pair contracts
             - Individual tokens participating in pair contract
@@ -257,7 +257,7 @@ web3_provider.batch_call([
 3. store cache and return prepared metadata, return metadata ([data-model](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L300-L329)).
 
 
-### Liquidity / Pair Reserves 
+### Pair Reserves 
 [code-ref](https://github.com/PowerLoom/fpmm-pooler-internal/blob/a8b8d0fa9fb7da51c8cad4e5509b1d56a92c23f5/uniswap_functions.py#L809-L816)
 Reserves of each token in pair contract ([more details in whitepaper](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#e04df592d3034f18aa1fc9502f749ec9)):
 
