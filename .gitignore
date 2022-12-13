@@ -1,7 +1,6 @@
 .env
 .python-version
 settings.json
-init_processes.sh
 __pycache__/
 logs/
 .idea/
