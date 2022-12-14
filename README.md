@@ -99,8 +99,6 @@ Here are the steps you need to get started with `settings.json`.
 - We've provided the `ipfs_url` by default but if you want to run your own IPFS node, you  can add that URL here
 - RabbitMq, Zookeeper, and Redis should work out of the box with the default config but if it doesn't, you can update the config in `rabbitmq`, `zookeeper`, and `redis` keys respectively.
 - Update the `host` and `port` keys if you want to run the service on some other port
-- TODO: Webhook Listener
-- TODO: Logging Server
 ### Populate `static/cached_pair_addresses.json`
 
 Copy over [`static/cached_pair_addresses.example.json`](static/cached_pair_addresses.example.json) to `static/cached_pair_addresses.json`
