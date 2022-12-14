@@ -22,6 +22,7 @@
   - [Pair trade volume](#pair-trade-volume)
   - [Rate Limiter](#rate-limiter)
   - [Batching RPC calls](#batching-rpc-calls)
+- [Architecture Details](#architecture-details)
 
 
 ## Overview
@@ -419,3 +420,6 @@ Batch RPC calls by sending multiple queries in a single request, details in [Get
 `rpc_helper.py` ([code-ref](/rpc_helper.py)) module contains several helpers which use batching: 
 * [batch_eth_call_on_block_range](rpc_helper.py#L268): to query a contract function on multiple block-heights.
 * [batch_eth_get_block](rpc_helper.py#L330): to get block data at multiple block heights. 
+
+## Architecture Details
+Details about working of various components is present in [Details.md](Details.md) if you're interested to know more about Pooler.
