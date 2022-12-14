@@ -10,7 +10,6 @@
     - [Required](#required)
     - [Optional](#optional)
   - [Populate `static/cached_pair_addresses.json`](#populate-staticcached_pair_addressesjson)
-  - [Initialize rabbitmq exchanges and queues](#initialize-rabbitmq-exchanges-and-queues)
   - [Set up Env variables](#set-up-env-variables)
 - [Starting all Processes](#starting-all-processes)
 - [Monitoring and Debugging](#monitoring-and-debugging)
@@ -111,14 +110,6 @@ These are the pair contracts on Uniswap v2 or other forks of it that will be tra
 
 * Token reserves of `token0` and `token1`
 * Trade volume information as described in the [Overview](#overview) section.
-
-### Initialize rabbitmq exchanges and queues
-
-**NOTE**: This is only a one-time step that you need to do on a fresh install.
-
-```commandline
-python init_rabbitmq.py
-```
 
 ### Set up Env variables
 To make sure Pm2 is using your virtual environment configuration, activate your virtual environment and run the following command to set `POOLER_INTERPRETER` to your active python version.
