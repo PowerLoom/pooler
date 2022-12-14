@@ -30,7 +30,8 @@ The epoch callback manager is defined in `epoch_broadcast_callback_manager.py` a
 It reads the messages from `epoch-broadcast` queue, adds a little extra helper context like contract_addresses for uniswap v2 pairs, 
 sends the messages to relavant routing channels according to topics defined in callback modules (see callback_modules/module_queue_config.json) and pushes the task to `backend-callbacks` queue.
 
-## TODO: Add missing callback worker info here
+## Process Hub Core
+Process Hub Core (defined in `process_hub_core.py`) is the main process manager in Pooler. It in combination with `processhub_cmd.py` is used to start and manage `System Block Epoch Ticker`, `System Epoch Collator`, `System Epoch Finalizer`, and `Epoch Callback Manager`. Process Hub Core is also responsible for spawing up the worker threads required for processing tasks from the `backend-callbacks` queue. These workers and their configuration is read from `callback_modules/module_queues_config.json`.
 
 ## Server
 The main FastAPI server and entry point for this module is `core_api.py`, this server is started using a custom Gunicorn handler present in `gunicorn_core_launcher.py`. Doing so provides more flexibility to customize the application and start it using `Pm2`. `core_api.py` provides multiple API endpoints to interact with the snapshotted data in various ways.
