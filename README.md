@@ -27,6 +27,8 @@
 
 ## Overview
 
+![Pooler workflow](https://user-images.githubusercontent.com/9114274/207610006-4b72cd52-1609-4fab-a7d8-311009e9b6d4.png)
+
 Pooler is the component of a fully functional, distributed system that works alongside Audit Protocol, and together they are responsible for
 * generating a time series database of changes occurring over smart contract state data and event logs, that live on decentralized storage protocols
 * higher order aggregated information calculated over decentralized indexes maintained atop the database mentioned above
