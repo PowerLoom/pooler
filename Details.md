@@ -1,6 +1,6 @@
 ## Architecture
 The high-level architecture of the single-node Pooler system is shown below.
-![PowerloomSingleNodeSystem-Overall Architecture drawio (2)-Overall Architecture drawio](https://user-images.githubusercontent.com/9114274/207516466-61ef36f6-0856-4a15-b8b5-3101b0362b2e.png)
+![PowerloomSingleNodeSystem-Overall Architecture drawio (2)-Overall Architecture-Overall Architecture](https://user-images.githubusercontent.com/9114274/207789809-1cb87843-3acb-44fb-ac29-0f4cd66b3400.jpg)
 
 ## RabbitMQ Initialization
 
