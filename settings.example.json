@@ -10,9 +10,6 @@
         },
         "chain_id": 1,
         "instance_id": "generated-uuid",
-        "chain_id": 5,
-        "instance_id": "generated-uuid",
-        "chain_id": 5,
         "uniswap_contract_abis":{
             "factory":"./abis/IUniswapV2Factory.json",
             "router":"./abis/UniswapV2Router.json",
