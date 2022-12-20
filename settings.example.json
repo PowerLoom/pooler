@@ -115,12 +115,6 @@
                 }
             }
         },
-        "zookeeper": {
-            "host": "127.0.0.1",
-            "port": "2181",
-            "user": "guest",
-            "password": "guest"
-        },
         "host": "127.0.0.1",
         "port": 9002,
         "audit_protocol_engine": {
@@ -265,12 +259,6 @@
                     "config": "module_queues_config.json"
                 }
             }
-        },
-        "zookeeper": {
-            "host": "127.0.0.1",
-            "port": "2181",
-            "user": "guest",
-            "password": "guest"
         },
         "host": "127.0.0.1",
         "port": 9002,

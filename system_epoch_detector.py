@@ -30,10 +30,6 @@ settings = Dynaconf(
     env_switcher="POOLER_ENV",
 )
 
-detector_logger = logging.getLogger('PowerLoom|EpochDetector')
-detector_logger.setLevel(logging.DEBUG)
-detector_logger.handlers = [logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST','localhost'),
-            port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT))]
 
 def chunks(start_idx, stop_idx, n):
     run_idx = 0
@@ -121,6 +117,7 @@ class EpochDetectorProcess(multiprocessing.Process):
             current_epoch_data = requests.get(consensus_epoch_tracker_url).json()
             current_epoch = {"begin":current_epoch_data['epochStartBlockHeight'], "end": current_epoch_data['epochEndBlockHeight'], "broadcast_id": str(uuid.uuid4())}
             self._logger.info('Current epoch: %s', current_epoch)
+            
             with create_redis_conn(self._connection_pool) as r:
                 last_processed_epoch_data = r.get(epoch_detector_last_processed_epoch)
                 if last_processed_epoch_data:
@@ -148,11 +145,13 @@ class EpochDetectorProcess(multiprocessing.Process):
                             sleep(sleep_secs_between_chunks)
                 else:
                     self._logger.debug('No last processed epoch found, processing current epoch')
+                    
                     report_obj = SystemEpochStatusReport(**current_epoch)
                     self._logger.info('Broadcasting finalized epoch for callbacks: %s', report_obj)
                     brodcast_msg = (report_obj.json().encode('utf-8'), exchange, routing_key)
                     self._rabbitmq_queue.put(brodcast_msg)
                     self.last_processed_epoch = current_epoch
+                    
                     self._logger.debug('Setting current epoch as last processed epoch: %s', current_epoch)
                     r.set(epoch_detector_last_processed_epoch, json.dumps(current_epoch))
                     self._logger.info('Sleeping for %d seconds...', settings.audit_protocol_engine.polling_interval)

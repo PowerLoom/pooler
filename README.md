@@ -70,7 +70,6 @@ You can read more about Audit Protocol and the Uniswap v2 PoC in the  [Powerloom
 * macOS or Linux (We're still working on windows support)
 * Python 3.9
 * [Redis](https://redis.io/docs/getting-started/installation/)
-* [Zookeeper](https://zookeeper.apache.org/)
 * [RabbitMQ](https://www.rabbitmq.com/download.html)
 * [Pm2](https://pm2.keymetrics.io/docs/usage/quick-start/)
 
@@ -99,7 +98,7 @@ Here are the steps you need to get started with `settings.json`.
 
 #### Optional
 - We've provided the `ipfs_url` by default but if you want to run your own IPFS node, you  can add that URL here
-- RabbitMq, Zookeeper, and Redis should work out of the box with the default config but if it doesn't, you can update the config in `rabbitmq`, `zookeeper`, and `redis` keys respectively.
+- RabbitMq and Redis should work out of the box with the default config but if it doesn't, you can update the config in `rabbitmq` and `redis` keys respectively.
 - Update the `host` and `port` keys if you want to run the service on some other port
 ### Populate `static/cached_pair_addresses.json`
 
@@ -120,16 +119,14 @@ To make sure Pm2 is using your virtual environment configuration, activate your 
 export POOLER_INTERPRETER=$(which python)
 ```
 
-The other environment variable that you need to set is `POOLER_LAST_BLOCK` which is the value of the block you want to start snapshotting from. You can get this info from Explorer of whichever chain you're running this for.
-Use this command to set `POOLER_LAST_BLOCK`
-```commandline
-export POOLER_LAST_BLOCK=<FILL_LAST_BLOCK_NUMBER_HERE>
-```
-
 ## Starting all Processes
 To launch all the required processes, you can run
 ```commandline
 pm2 start pm2.config.js
+```
+then you need to execute `init_processes.sh` using the following command
+```commandline
+./init_processes.sh
 ```
 
 ## Monitoring and Debugging

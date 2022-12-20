@@ -33,22 +33,6 @@ import requests
 # logging.debug('Got powerloom helpers library logger')
 
 
-def construct_kazoo_url(
-        user=settings.ZOOKEEPER['user'],
-        password=settings.ZOOKEEPER['password'],
-        host=settings.ZOOKEEPER['host'],
-        port=settings.ZOOKEEPER['port']
-):
-    if user and password:
-        seg_1 = f'{user}:{password}@'
-    else:
-        seg_1 = ''
-    if host and port:
-        seg_2 = f'{host}:{port}'
-    else:
-        seg_2 = '127.0.0.1:2181'
-    return f'{seg_1}{seg_2}'
-
 
 class FailedRequestToMaticVigil(Exception):
     pass
