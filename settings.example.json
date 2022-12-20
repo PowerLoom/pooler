@@ -94,11 +94,6 @@
               "num_instances": 16
             }
         },
-        "epoch": {
-            "height": 10,
-            "head_offset": 2,
-            "block_time": 2
-        },
         "rabbitmq": {
             "user": "guest",
             "password": "guest",
@@ -239,11 +234,6 @@
               "num_instances": 16
             }
         },
-        "epoch": {
-            "height": 10,
-            "head_offset": 2,
-            "block_time": 2
-        },
         "rabbitmq": {
             "user": "guest",
             "password": "guest",
@@ -265,7 +255,11 @@
         "audit_protocol_engine": {
             "url": "http://localhost:9000",
             "retry": 5,
-            "skip_anchor_proof":true
+            "skip_anchor_proof":true,
+            "consensus_url": "http://localhost:9030",
+            "epoch_tracker_path": "/currentEpoch",
+            "polling_interval":15,
+            "fall_behind_reset_num_blocks":1000
         },
         "redis": {
             "host": "127.0.0.1",
