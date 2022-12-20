@@ -21,11 +21,9 @@ from rabbitmq_helpers import RabbitmqThreadedSelectLoopInteractor
 from redis_conn import create_redis_conn, REDIS_CONN_CONF
 
 settings = Dynaconf(
-    envvar_prefix="POOLER",
     settings_files=["settings.json"],
     environments=True,
     load_dotenv=True,
-    env_switcher="POOLER_ENV",
 )
 
 
@@ -125,7 +123,6 @@ class EpochDetectorProcess(multiprocessing.Process):
         The entry point for the process.
         """
         consensus_epoch_tracker_url = f'{settings.audit_protocol_engine.consensus_url}{settings.audit_protocol_engine.epoch_tracker_path}'
-        
         for signame in [signal.SIGINT, signal.SIGTERM, signal.SIGQUIT]:
             signal.signal(signame, self._generic_exit_handler)
         exchange = f'{settings.RABBITMQ.SETUP.CORE.EXCHANGE}:{settings.NAMESPACE}'
@@ -136,7 +133,12 @@ class EpochDetectorProcess(multiprocessing.Process):
         sleep_secs_between_chunks = 60
 
         while True:
-            current_epoch_data = requests.get(consensus_epoch_tracker_url).json()
+            response = requests.get(consensus_epoch_tracker_url)
+            if response.status_code != 200:
+                self._logger.error('Error while fetching current epoch data: %s', response.status_code)
+                sleep(settings.audit_protocol_engine.polling_interval)
+                continue
+            current_epoch_data = response.json()
             current_epoch = {"begin":current_epoch_data['epochStartBlockHeight'], "end": current_epoch_data['epochEndBlockHeight'], "broadcast_id": str(uuid.uuid4())}
             self._logger.info('Current epoch: %s', current_epoch)
             
@@ -154,8 +156,12 @@ class EpochDetectorProcess(multiprocessing.Process):
                         if current_epoch['end'] - last_processed_epoch['end'] > fall_behind_reset_threshold:
                             # TODO: build automatic clean slate procedure, for now just issuing warning on every new epoch fetch
                             self._logger.warning('Epochs are falling behind by more than %d blocks, consider resetting the snapshotter.', fall_behind_reset_threshold)
-                        epoch_height = current_epoch['end']-current_epoch['begin']
+                        epoch_height = current_epoch['end']-current_epoch['begin']+1
                         
+                        if last_processed_epoch['end']> current_epoch['end']:
+                            self._logger.warning('Last processed epoch end is greater than current epoch end, something is wrong. Please consider resetting the state.')
+                            sys.exit(0)
+
                         for epoch in chunks(last_processed_epoch['end'], current_epoch['end'], epoch_height):
                             epoch_from_chunk = {'begin': epoch[0], 'end': epoch[1], 'broadcast_id': str(uuid.uuid4())}
                             self._logger.debug('Epoch of sufficient length found: %s', epoch_from_chunk)
