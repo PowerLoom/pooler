@@ -123,8 +123,8 @@
             "skip_anchor_proof":true,
             "consensus_url": "http://localhost:9030",
             "epoch_tracker_path": "/currentEpoch",
-            "polling_interval":15
-            
+            "polling_interval":15,
+            "fall_behind_reset_num_blocks":1000
         },
         "redis": {
             "host": "127.0.0.1",

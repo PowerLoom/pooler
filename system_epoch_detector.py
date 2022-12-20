@@ -128,6 +128,10 @@ class EpochDetectorProcess(multiprocessing.Process):
                         sleep(settings.audit_protocol_engine.polling_interval)
                         continue
                     else:
+                        fall_behind_reset_threshold = settings.audit_protocol_engine.fall_behind_reset_num_blocks
+                        if current_epoch['end'] - last_processed_epoch['end'] > fall_behind_reset_threshold:
+                            # TODO: build automatic clean slate procedure, for now just issuing warning on every new epoch fetch
+                            self._logger.warning('Epochs are falling behind by more than %d blocks, consider resetting the snapshotter.', fall_behind_reset_threshold)
                         epoch_height = current_epoch['end']-current_epoch['begin']
                         for epoch in chunks(last_processed_epoch['end'], current_epoch['end'], epoch_height):
 
