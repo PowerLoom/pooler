@@ -8,10 +8,6 @@ from typing import Dict, Union
 from dynaconf import settings
 from message_models import ProcessHubCommand
 from helper_functions import cleanup_children_procs
-from system_ticker_linear import LinearTickerProcess
-from system_epoch_collator import EpochCollatorProcess
-from system_epoch_finalizer import EpochFinalizerProcess
-from system_epoch_detector import EpochDetectorProcess
 from epoch_broadcast_callback_manager import EpochCallbackManager
 import redis
 import pydantic
@@ -28,26 +24,6 @@ from rabbitmq_helpers import RabbitmqSelectLoopInteractor
 
 
 PROC_STR_ID_TO_CLASS_MAP = {
-    'SystemLinearEpochClock': {
-        'class': LinearTickerProcess,
-        'name': 'PowerLoom|SystemEpochClock|Linear',
-        'target': None
-    },
-    'SystemEpochDetector': {
-        'class': EpochDetectorProcess,
-        'name': 'PowerLoom|SystemEpochDetector',
-        'target': None
-    },
-    'SystemEpochCollator': {
-        'class': EpochCollatorProcess,
-        'name': 'PowerLoom|SystemEpochCollator',
-        'target': None
-    },
-    'SystemEpochFinalizer': {
-        'class': EpochFinalizerProcess,
-        'name': 'PowerLoom|SystemEpochFinalizer',
-        'target': None
-    },
     'EpochCallbackManager': {
         'class': EpochCallbackManager,
         'name': 'PowerLoom|EpochCallbackManager',
