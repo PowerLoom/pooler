@@ -11,6 +11,7 @@ from helper_functions import cleanup_children_procs
 from system_ticker_linear import LinearTickerProcess
 from system_epoch_collator import EpochCollatorProcess
 from system_epoch_finalizer import EpochFinalizerProcess
+from system_epoch_detector import EpochDetectorProcess
 from epoch_broadcast_callback_manager import EpochCallbackManager
 import redis
 import pydantic
@@ -30,6 +31,11 @@ PROC_STR_ID_TO_CLASS_MAP = {
     'SystemLinearEpochClock': {
         'class': LinearTickerProcess,
         'name': 'PowerLoom|SystemEpochClock|Linear',
+        'target': None
+    },
+    'SystemEpochDetector': {
+        'class': EpochDetectorProcess,
+        'name': 'PowerLoom|SystemEpochDetector',
         'target': None
     },
     'SystemEpochCollator': {

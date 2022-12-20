@@ -125,9 +125,12 @@
         "port": 9002,
         "audit_protocol_engine": {
             "url": "http://localhost:9000",
-            "consensus_url": "http://localhost:9099",
             "retry": 5,
-            "skip_anchor_proof":true
+            "skip_anchor_proof":true,
+            "consensus_url": "http://localhost:9030",
+            "epoch_tracker_path": "/currentEpoch",
+            "polling_interval":15
+            
         },
         "redis": {
             "host": "127.0.0.1",

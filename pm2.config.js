@@ -37,6 +37,15 @@ module.exports = {
       }
     },
     {
+      name   : "pooler-epoch-detector",
+      script : `${INTERPRETER} ${__dirname}/system_epoch_detector.py`,
+      max_restarts: MAX_RESTART,
+      min_uptime: MIN_UPTIME,
+      env: {
+        NODE_ENV: NODE_ENV,
+      }
+    },
+    {
       name   : "pooler-init-processes",
       script : `bash ${__dirname}/init_processes.sh ${START_BLOCK}`,
       max_restarts: 1,
