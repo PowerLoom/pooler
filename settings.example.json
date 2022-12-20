@@ -94,6 +94,11 @@
               "num_instances": 16
             }
         },
+        "epoch": {
+            "height": 10,
+            "head_offset": 2,
+            "block_time": 2
+        },
         "rabbitmq": {
             "user": "guest",
             "password": "guest",
@@ -119,7 +124,7 @@
             "consensus_url": "http://localhost:9030",
             "epoch_tracker_path": "/currentEpoch",
             "polling_interval":15,
-            "fall_behind_reset_num_blocks":1000
+            "fall_behind_reset_num_blocks":100
         },
         "redis": {
             "host": "127.0.0.1",
@@ -234,6 +239,11 @@
               "num_instances": 16
             }
         },
+        "epoch": {
+            "height": 10,
+            "head_offset": 2,
+            "block_time": 2
+        },
         "rabbitmq": {
             "user": "guest",
             "password": "guest",
@@ -259,7 +269,7 @@
             "consensus_url": "http://localhost:9030",
             "epoch_tracker_path": "/currentEpoch",
             "polling_interval":15,
-            "fall_behind_reset_num_blocks":1000
+            "fall_behind_reset_num_blocks":100
         },
         "redis": {
             "host": "127.0.0.1",
