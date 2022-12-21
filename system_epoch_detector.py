@@ -12,19 +12,13 @@ import json
 from time import sleep
 from signal import SIGINT, SIGTERM, SIGQUIT
 from functools import wraps
-from dynaconf import Dynaconf
+from dynaconf import settings
 from exceptions import GenericExitOnSignal
 from message_models import SystemEpochStatusReport
 from redis_keys import epoch_detector_last_processed_epoch
 from setproctitle import setproctitle
 from rabbitmq_helpers import RabbitmqThreadedSelectLoopInteractor
 from redis_conn import create_redis_conn, REDIS_CONN_CONF
-
-settings = Dynaconf(
-    settings_files=["settings.json"],
-    environments=True,
-    load_dotenv=True,
-)
 
 
 def chunks(start_idx, stop_idx, n):
@@ -100,6 +94,9 @@ class EpochDetectorProcess(multiprocessing.Process):
             stdout_handler, 
             stderr_handler
         ]
+        self._exchange = f'{settings.RABBITMQ.SETUP.CORE.EXCHANGE}:{settings.NAMESPACE}'
+        self._routing_key = f'epoch-broadcast:{settings.NAMESPACE}:{settings.INSTANCE_ID}'
+
 
         self.last_processed_epoch = None
         setproctitle(name)
@@ -117,16 +114,27 @@ class EpochDetectorProcess(multiprocessing.Process):
             self._rabbitmq_interactor.stop()
             raise GenericExitOnSignal
 
+    def _broadcast_epoch(self, epoch:dict):
+        """Broadcast epoch to the RabbitMQ queue and save update in redis."""
+        report_obj = SystemEpochStatusReport(**epoch)
+        self._logger.info('Broadcasting  epoch for callbacks: %s', report_obj)
+        brodcast_msg = (report_obj.json().encode('utf-8'), self._exchange, self._routing_key)
+        self._rabbitmq_queue.put(brodcast_msg)
+        self._last_processed_epoch = epoch_from_chunk
+        with create_redis_conn(self._connection_pool) as r:
+            r.set(epoch_detector_last_processed_epoch, json.dumps(epoch_from_chunk))
+            self._logger.info('DONE: Broadcasting finalized epoch for callbacks: %s',
+                            report_obj)
+
+
     @rabbitmq_and_redis_cleanup
     def run(self):
         """
         The entry point for the process.
         """
-        consensus_epoch_tracker_url = f'{settings.audit_protocol_engine.consensus_url}{settings.audit_protocol_engine.epoch_tracker_path}'
+        consensus_epoch_tracker_url = f'{settings.AUDIT_PROTOCOL_ENGINE.CONSENSUS_URL}{settings.AUDIT_PROTOCOL_ENGINE.EPOCH_TRACKER_PATH}'
         for signame in [signal.SIGINT, signal.SIGTERM, signal.SIGQUIT]:
             signal.signal(signame, self._generic_exit_handler)
-        exchange = f'{settings.RABBITMQ.SETUP.CORE.EXCHANGE}:{settings.NAMESPACE}'
-        routing_key = f'epoch-broadcast:{settings.NAMESPACE}:{settings.INSTANCE_ID}'
         self._rabbitmq_thread = threading.Thread(target=self._interactor_wrapper, kwargs={'q': self._rabbitmq_queue})
         self._rabbitmq_thread.start()
         
@@ -136,7 +144,7 @@ class EpochDetectorProcess(multiprocessing.Process):
             response = requests.get(consensus_epoch_tracker_url)
             if response.status_code != 200:
                 self._logger.error('Error while fetching current epoch data: %s', response.status_code)
-                sleep(settings.audit_protocol_engine.polling_interval)
+                sleep(settings.AUDIT_PROTOCOL_ENGINE.POLLING_INTERVAL)
                 continue
             current_epoch_data = response.json()
             current_epoch = {"begin":current_epoch_data['epochStartBlockHeight'], "end": current_epoch_data['epochEndBlockHeight'], "broadcast_id": str(uuid.uuid4())}
@@ -144,55 +152,35 @@ class EpochDetectorProcess(multiprocessing.Process):
             
             with create_redis_conn(self._connection_pool) as r:
                 last_processed_epoch_data = r.get(epoch_detector_last_processed_epoch)
-                if last_processed_epoch_data:
-                    last_processed_epoch = json.loads(last_processed_epoch_data)
-                    if last_processed_epoch['end'] == current_epoch['end']:
-                        self._logger.debug('Last processed epoch is same as current epoch, Sleeping for %d seconds...', settings.audit_protocol_engine.polling_interval)
-                        sleep(settings.audit_protocol_engine.polling_interval)
-                        continue
+            
+            if last_processed_epoch_data:
+                last_processed_epoch = json.loads(last_processed_epoch_data)
+                if last_processed_epoch['end'] == current_epoch['end']:
+                    self._logger.debug('Last processed epoch is same as current epoch, Sleeping for %d seconds...', settings.AUDIT_PROTOCOL_ENGINE.POLLING_INTERVAL)
+                    sleep(settings.AUDIT_PROTOCOL_ENGINE.POLLING_INTERVAL)
+                    continue
 
-                    else:
-                        fall_behind_reset_threshold = settings.audit_protocol_engine.fall_behind_reset_num_blocks
-                        if current_epoch['end'] - last_processed_epoch['end'] > fall_behind_reset_threshold:
-                            # TODO: build automatic clean slate procedure, for now just issuing warning on every new epoch fetch
-                            self._logger.warning('Epochs are falling behind by more than %d blocks, consider resetting the snapshotter.', fall_behind_reset_threshold)
-                        epoch_height = current_epoch['end']-current_epoch['begin']+1
-                        
-                        if last_processed_epoch['end']> current_epoch['end']:
-                            self._logger.warning('Last processed epoch end is greater than current epoch end, something is wrong. Please consider resetting the state.')
-                            sys.exit(0)
-
-                        for epoch in chunks(last_processed_epoch['end'], current_epoch['end'], epoch_height):
-                            epoch_from_chunk = {'begin': epoch[0], 'end': epoch[1], 'broadcast_id': str(uuid.uuid4())}
-                            self._logger.debug('Epoch of sufficient length found: %s', epoch_from_chunk)
-                            
-                            report_obj = SystemEpochStatusReport(**epoch_from_chunk)
-                            self._logger.info('Broadcasting finalized epoch for callbacks: %s', report_obj)
-                            brodcast_msg = (report_obj.json().encode('utf-8'), exchange, routing_key)
-                            self._rabbitmq_queue.put(brodcast_msg)
-                            self._last_processed_epoch = epoch_from_chunk
-                            r.set(epoch_detector_last_processed_epoch, json.dumps(epoch_from_chunk))
-                            self._logger.info('DONE: Broadcasting finalized epoch for callbacks: %s',
-                                            report_obj)
-                            
-                            self._logger.info('Sleeping for %d seconds...', sleep_secs_between_chunks)
-                            sleep(sleep_secs_between_chunks)
                 else:
-                    self._logger.debug('No last processed epoch found, processing current epoch')
+                    fall_behind_reset_threshold = settings.AUDIT_PROTOCOL_ENGINE.FALL_BEHIND_RESET_NUM_BLOCKS
+                    if current_epoch['end'] - last_processed_epoch['end'] > fall_behind_reset_threshold:
+                        # TODO: build automatic clean slate procedure, for now just issuing warning on every new epoch fetch
+                        self._logger.error('Epochs are falling behind by more than %d blocks, consider reset state to continue.', fall_behind_reset_threshold)
+                        raise GenericExitOnSignal
+                    epoch_height = current_epoch['end']-current_epoch['begin']+1
                     
-                    report_obj = SystemEpochStatusReport(**current_epoch)
-                    self._logger.info('Broadcasting finalized epoch for callbacks: %s', report_obj)
-                    brodcast_msg = (report_obj.json().encode('utf-8'), exchange, routing_key)
-                    self._rabbitmq_queue.put(brodcast_msg)
-                    self.last_processed_epoch = current_epoch
-                    self._logger.debug('Setting current epoch as last processed epoch: %s', current_epoch)
-                    r.set(epoch_detector_last_processed_epoch, json.dumps(current_epoch))
-                    
-                    self._logger.info('Sleeping for %d seconds...', settings.audit_protocol_engine.polling_interval)
-                    sleep(settings.audit_protocol_engine.polling_interval)
-                
+                    if last_processed_epoch['end']> current_epoch['end']:
+                        self._logger.warning('Last processed epoch end is greater than current epoch end, something is wrong. Please consider resetting the state.')
+                        raise GenericExitOnSignal
 
-if __name__ == '__main__':
-    kwargs = dict()
-    ps = EpochDetectorProcess(name='PowerLoom|EpochDetector', **kwargs)
-    ps.start()
+                    for epoch in chunks(last_processed_epoch['end'], current_epoch['end'], epoch_height):
+                        epoch_from_chunk = {'begin': epoch[0], 'end': epoch[1], 'broadcast_id': str(uuid.uuid4())}
+                        
+                        self._broadcast_epoch(epoch_from_chunk)
+                        self._logger.info('Sleeping for %d seconds...', sleep_secs_between_chunks)
+                        sleep(sleep_secs_between_chunks)
+            else:
+                self._logger.debug('No last processed epoch found, processing current epoch')
+                self._broadcast_epoch(current_epoch)
+                
+                self._logger.info('Sleeping for %d seconds...', settings.AUDIT_PROTOCOL_ENGINE.POLLING_INTERVAL)
+                sleep(settings.AUDIT_PROTOCOL_ENGINE.POLLING_INTERVAL)

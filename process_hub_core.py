@@ -9,6 +9,7 @@ from dynaconf import settings
 from message_models import ProcessHubCommand
 from helper_functions import cleanup_children_procs
 from epoch_broadcast_callback_manager import EpochCallbackManager
+from system_epoch_detector import EpochDetectorProcess
 import redis
 import pydantic
 import psutil
@@ -27,6 +28,11 @@ PROC_STR_ID_TO_CLASS_MAP = {
     'EpochCallbackManager': {
         'class': EpochCallbackManager,
         'name': 'PowerLoom|EpochCallbackManager',
+        'target': None
+    },
+    'SystemEpochDetector': {
+        'class': EpochDetectorProcess,
+        'name': 'PowerLoom|SystemEpochDetector',
         'target': None
     }
 }

@@ -14,8 +14,8 @@ This is a one-time task that users need to do when they run the pooler for the f
 
 
 ## System Epoch Detector
-The system epoch detector is defined in `system_epoch_detector.py` and is initiated by using the pm2 script. 
-The main role of this process is to generate detect the latest epoch from our `offchain-consensus` service. Generate epochs of height `h` from the `last_processed_epoch` stored in redis to the current epoch and push the epochs to `epoch-broadcast` queue.
+The system epoch detector is defined in `system_epoch_detector.py` and is and is initiated using the `processhub_cmd.py` CLI. 
+The main role of this process is to detect the latest epoch from our `offchain-consensus` service, Generate epochs of height `h` from the `last_processed_epoch` stored in redis to the current epoch detected and push the epochs to `epoch-broadcast` queue at configured intervals.
 
 ## Epoch Callback Manager
 The epoch callback manager is defined in `epoch_broadcast_callback_manager.py` and is also initiated using the `processhub_cmd.py` CLI.

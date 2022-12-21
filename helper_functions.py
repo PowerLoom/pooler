@@ -33,11 +33,6 @@ import requests
 # logging.debug('Got powerloom helpers library logger')
 
 
-
-class FailedRequestToMaticVigil(Exception):
-    pass
-
-
 def make_post_call(url: str, params: dict):
     try:
         logging.debug('Making post call to %s: %s', url, params)
