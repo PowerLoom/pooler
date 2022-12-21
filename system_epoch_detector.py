@@ -147,8 +147,8 @@ class EpochDetectorProcess(multiprocessing.Process):
                     self._logger.error('Error while fetching current epoch data: %s', response.status_code)
                     sleep(settings.CONSENSUS.POLLING_INTERVAL)
                     continue
-            except:
-                self._logger.error(f"Unable to fetch current epoch, sleeping for {settings.CONSENSUS.POLLING_INTERVAL} seconds.")
+            except Exception as E:
+                self._logger.error(f"Unable to fetch current epoch, ERROR: {E}, sleeping for {settings.CONSENSUS.POLLING_INTERVAL} seconds.")
                 sleep(settings.CONSENSUS.POLLING_INTERVAL)
                 continue
             epoch_info = EpochInfo(**response.json())
