@@ -19,7 +19,7 @@ from redis_keys import epoch_detector_last_processed_epoch
 from setproctitle import setproctitle
 from rabbitmq_helpers import RabbitmqThreadedSelectLoopInteractor
 from redis_conn import create_redis_conn, REDIS_CONN_CONF
-
+from data_models import EpochInfo
 
 def chunks(start_idx, stop_idx, n):
     """
@@ -134,27 +134,25 @@ class EpochDetectorProcess(multiprocessing.Process):
         """
         The entry point for the process.
         """
-        consensus_epoch_tracker_url = f'{settings.AUDIT_PROTOCOL_ENGINE.CONSENSUS_URL}{settings.AUDIT_PROTOCOL_ENGINE.EPOCH_TRACKER_PATH}'
+        consensus_epoch_tracker_url = f'{settings.CONSENSUS.URL}{settings.CONSENSUS.EPOCH_TRACKER_PATH}'
         for signame in [signal.SIGINT, signal.SIGTERM, signal.SIGQUIT]:
             signal.signal(signame, self._generic_exit_handler)
         self._rabbitmq_thread = threading.Thread(target=self._interactor_wrapper, kwargs={'q': self._rabbitmq_queue})
         self._rabbitmq_thread.start()
         
-        sleep_secs_between_chunks = 60
-
         while True:
             try:
                 response = requests.get(consensus_epoch_tracker_url)
                 if response.status_code != 200:
                     self._logger.error('Error while fetching current epoch data: %s', response.status_code)
-                    sleep(settings.AUDIT_PROTOCOL_ENGINE.POLLING_INTERVAL)
+                    sleep(settings.CONSENSUS.POLLING_INTERVAL)
                     continue
             except:
-                self._logger.error(f"Unable to fetch current epoch, sleeping for {settings.AUDIT_PROTOCOL_ENGINE.POLLING_INTERVAL} seconds.")
-                sleep(settings.AUDIT_PROTOCOL_ENGINE.POLLING_INTERVAL)
+                self._logger.error(f"Unable to fetch current epoch, sleeping for {settings.CONSENSUS.POLLING_INTERVAL} seconds.")
+                sleep(settings.CONSENSUS.POLLING_INTERVAL)
                 continue
-            current_epoch_data = response.json()
-            current_epoch = {"begin":current_epoch_data['epochStartBlockHeight'], "end": current_epoch_data['epochEndBlockHeight'], "broadcast_id": str(uuid.uuid4())}
+            epoch_info = EpochInfo(**response.json())
+            current_epoch = {"begin":epoch_info.epochStartBlockHeight, "end": epoch_info.epochEndBlockHeight, "broadcast_id": str(uuid.uuid4())}
             self._logger.info('Current epoch: %s', current_epoch)
             
             # Only use redis is state is not locally present
@@ -166,12 +164,12 @@ class EpochDetectorProcess(multiprocessing.Process):
 
             if self._last_processed_epoch:
                 if self._last_processed_epoch['end'] == current_epoch['end']:
-                    self._logger.debug('Last processed epoch is same as current epoch, Sleeping for %d seconds...', settings.AUDIT_PROTOCOL_ENGINE.POLLING_INTERVAL)
-                    sleep(settings.AUDIT_PROTOCOL_ENGINE.POLLING_INTERVAL)
+                    self._logger.debug('Last processed epoch is same as current epoch, Sleeping for %d seconds...', settings.CONSENSUS.POLLING_INTERVAL)
+                    sleep(settings.CONSENSUS.POLLING_INTERVAL)
                     continue
 
                 else:
-                    fall_behind_reset_threshold = settings.AUDIT_PROTOCOL_ENGINE.FALL_BEHIND_RESET_NUM_BLOCKS
+                    fall_behind_reset_threshold = settings.CONSENSUS.FALL_BEHIND_RESET_NUM_BLOCKS
                     if current_epoch['end'] - self._last_processed_epoch['end'] > fall_behind_reset_threshold:
                         # TODO: build automatic clean slate procedure, for now just issuing warning on every new epoch fetch
                         self._logger.error('Epochs are falling behind by more than %d blocks, consider reset state to continue.', fall_behind_reset_threshold)
@@ -186,11 +184,11 @@ class EpochDetectorProcess(multiprocessing.Process):
                         epoch_from_chunk = {'begin': epoch[0], 'end': epoch[1], 'broadcast_id': str(uuid.uuid4())}
                         
                         self._broadcast_epoch(epoch_from_chunk)
-                        self._logger.info('Sleeping for %d seconds...', sleep_secs_between_chunks)
-                        sleep(sleep_secs_between_chunks)
+                        self._logger.info('Sleeping for %d seconds...', settings.CONSENSUS.SLEEP_SECS_BETWEEN_CHUNKS)
+                        sleep(settings.CONSENSUS.SLEEP_SECS_BETWEEN_CHUNKS)
             else:
                 self._logger.debug('No last processed epoch found, processing current epoch')
                 self._broadcast_epoch(current_epoch)
                 
-                self._logger.info('Sleeping for %d seconds...', settings.AUDIT_PROTOCOL_ENGINE.POLLING_INTERVAL)
-                sleep(settings.AUDIT_PROTOCOL_ENGINE.POLLING_INTERVAL)
+                self._logger.info('Sleeping for %d seconds...', settings.CONSENSUS.POLLING_INTERVAL)
+                sleep(settings.CONSENSUS.POLLING_INTERVAL)
