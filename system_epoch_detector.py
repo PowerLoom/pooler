@@ -98,7 +98,7 @@ class EpochDetectorProcess(multiprocessing.Process):
         self._routing_key = f'epoch-broadcast:{settings.NAMESPACE}:{settings.INSTANCE_ID}'
 
 
-        self.last_processed_epoch = None
+        self._last_processed_epoch = None
         setproctitle(name)
 
 
@@ -122,10 +122,12 @@ class EpochDetectorProcess(multiprocessing.Process):
         self._rabbitmq_queue.put(brodcast_msg)
         self._last_processed_epoch = epoch_from_chunk
         with create_redis_conn(self._connection_pool) as r:
-            r.set(epoch_detector_last_processed_epoch, json.dumps(epoch_from_chunk))
-            self._logger.info('DONE: Broadcasting finalized epoch for callbacks: %s',
-                            report_obj)
-
+            try:
+                r.set(epoch_detector_last_processed_epoch, json.dumps(epoch_from_chunk))
+                self._logger.info('DONE: Broadcasting finalized epoch for callbacks: %s',
+                                report_obj)
+            except:
+                self._logger.error("Unable to save state in redis. Will try again on next epoch.")
 
     @rabbitmq_and_redis_cleanup
     def run(self):
@@ -141,38 +143,46 @@ class EpochDetectorProcess(multiprocessing.Process):
         sleep_secs_between_chunks = 60
 
         while True:
-            response = requests.get(consensus_epoch_tracker_url)
-            if response.status_code != 200:
-                self._logger.error('Error while fetching current epoch data: %s', response.status_code)
+            try:
+                response = requests.get(consensus_epoch_tracker_url)
+                if response.status_code != 200:
+                    self._logger.error('Error while fetching current epoch data: %s', response.status_code)
+                    sleep(settings.AUDIT_PROTOCOL_ENGINE.POLLING_INTERVAL)
+                    continue
+            except:
+                self._logger.error(f"Unable to fetch current epoch, sleeping for {settings.AUDIT_PROTOCOL_ENGINE.POLLING_INTERVAL} seconds.")
                 sleep(settings.AUDIT_PROTOCOL_ENGINE.POLLING_INTERVAL)
                 continue
             current_epoch_data = response.json()
             current_epoch = {"begin":current_epoch_data['epochStartBlockHeight'], "end": current_epoch_data['epochEndBlockHeight'], "broadcast_id": str(uuid.uuid4())}
             self._logger.info('Current epoch: %s', current_epoch)
             
-            with create_redis_conn(self._connection_pool) as r:
-                last_processed_epoch_data = r.get(epoch_detector_last_processed_epoch)
-            
-            if last_processed_epoch_data:
-                last_processed_epoch = json.loads(last_processed_epoch_data)
-                if last_processed_epoch['end'] == current_epoch['end']:
+            # Only use redis is state is not locally present
+            if not self._last_processed_epoch:
+                with create_redis_conn(self._connection_pool) as r:
+                    last_processed_epoch_data = r.get(epoch_detector_last_processed_epoch)
+                if last_processed_epoch_data:
+                    self._last_processed_epoch = json.loads(last_processed_epoch_data)             
+
+            if self._last_processed_epoch:
+                if self._last_processed_epoch['end'] == current_epoch['end']:
                     self._logger.debug('Last processed epoch is same as current epoch, Sleeping for %d seconds...', settings.AUDIT_PROTOCOL_ENGINE.POLLING_INTERVAL)
                     sleep(settings.AUDIT_PROTOCOL_ENGINE.POLLING_INTERVAL)
                     continue
 
                 else:
                     fall_behind_reset_threshold = settings.AUDIT_PROTOCOL_ENGINE.FALL_BEHIND_RESET_NUM_BLOCKS
-                    if current_epoch['end'] - last_processed_epoch['end'] > fall_behind_reset_threshold:
+                    if current_epoch['end'] - self._last_processed_epoch['end'] > fall_behind_reset_threshold:
                         # TODO: build automatic clean slate procedure, for now just issuing warning on every new epoch fetch
                         self._logger.error('Epochs are falling behind by more than %d blocks, consider reset state to continue.', fall_behind_reset_threshold)
                         raise GenericExitOnSignal
                     epoch_height = current_epoch['end']-current_epoch['begin']+1
                     
-                    if last_processed_epoch['end']> current_epoch['end']:
+                    if self._last_processed_epoch['end']> current_epoch['end']:
                         self._logger.warning('Last processed epoch end is greater than current epoch end, something is wrong. Please consider resetting the state.')
                         raise GenericExitOnSignal
 
-                    for epoch in chunks(last_processed_epoch['end'], current_epoch['end'], epoch_height):
+                    for epoch in chunks(self._last_processed_epoch['end'], current_epoch['end'], epoch_height):
                         epoch_from_chunk = {'begin': epoch[0], 'end': epoch[1], 'broadcast_id': str(uuid.uuid4())}
                         
                         self._broadcast_epoch(epoch_from_chunk)
