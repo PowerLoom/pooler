@@ -120,10 +120,10 @@ class EpochDetectorProcess(multiprocessing.Process):
         self._logger.info('Broadcasting  epoch for callbacks: %s', report_obj)
         brodcast_msg = (report_obj.json().encode('utf-8'), self._exchange, self._routing_key)
         self._rabbitmq_queue.put(brodcast_msg)
-        self._last_processed_epoch = epoch_from_chunk
+        self._last_processed_epoch = epoch
         with create_redis_conn(self._connection_pool) as r:
             try:
-                r.set(epoch_detector_last_processed_epoch, json.dumps(epoch_from_chunk))
+                r.set(epoch_detector_last_processed_epoch, json.dumps(epoch))
                 self._logger.info('DONE: Broadcasting finalized epoch for callbacks: %s',
                                 report_obj)
             except:
