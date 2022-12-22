@@ -294,14 +294,6 @@ def start(ctx: typer.Context, process_str_id: str):
         typer.secho('Unknown Process identifier supplied. Check list with listProcesses command', err=True, fg=typer.colors.RED)
         return
     kwargs = dict()
-    if process_str_id == 'SystemLinearEpochClock':
-        # for now assuming it would only be passed as --begin <block_num> , so ctx.args[0] is 'begin'
-        try:
-            begin_idx = int(ctx.args[1])
-        except:
-            pass
-        else:
-            kwargs['begin'] = begin_idx
 
     typer.secho('Creating RabbitMQ connection...', fg=typer.colors.GREEN)
     c = create_rabbitmq_conn()

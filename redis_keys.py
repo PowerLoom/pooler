@@ -28,3 +28,4 @@ uniswap_pair_cached_block_height_token_price = 'uniswap:pairContract:'+settings.
 cached_block_details_at_height = 'uniswap:blockDetail:'+settings.NAMESPACE+':blockDetailZset'
 uniswap_pair_hits_payload_data_key = 'hitsPayloadData'
 powerloom_broadcast_id_zset = 'powerloom:broadcastID:' + settings.NAMESPACE + ':broadcastProcessingStatus'
+epoch_detector_last_processed_epoch = 'SystemEpochDetector:lastProcessedEpoch'

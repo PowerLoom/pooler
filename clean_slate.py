@@ -65,6 +65,11 @@ def redis_cleanup_audit_protocol():
         pass
 
     try:
+        print('Cleaning EpochDetector lastProcessedEpoch')
+        r.delete('SystemEpochDetector:lastProcessedEpoch')
+    except:
+        pass
+    try:
         c = r.delete(*r.keys(f'*uniswap*pairContract*{settings.NAMESPACE}*'))
         print('Other Pair contract related keys deleted: ', c)
     except:

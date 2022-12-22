@@ -69,3 +69,8 @@ class epoch_event_trade_data(BaseModel):
     Mint: event_trade_data
     Burn: event_trade_data
     Trades: trade_data
+
+class EpochInfo(BaseModel):
+    chainId: int
+    epochStartBlockHeight: int
+    epochEndBlockHeight: int

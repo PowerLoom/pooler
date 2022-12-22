@@ -108,7 +108,7 @@ def init_exchanges_queues():
     init_rmq_logger.debug('Initialized RabbitMQ Direct exchange: %s', exchange_name)
 
     to_be_inited = [
-        ('powerloom-processhub-commands-q', 'processhub-commands'), ('powerloom-epoch-consensus-q', 'epoch-consensus'),
+        ('powerloom-processhub-commands-q', 'processhub-commands'),
         ('powerloom-epoch-broadcast-q', 'epoch-broadcast'), ('powerloom-epoch-confirm-cb-q', 'epoch-confirm-cb')
     ]
     for queue_name, routing_key in to_be_inited:

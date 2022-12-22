@@ -115,19 +115,19 @@
                 }
             }
         },
-        "zookeeper": {
-            "host": "127.0.0.1",
-            "port": "2181",
-            "user": "guest",
-            "password": "guest"
-        },
         "host": "127.0.0.1",
         "port": 9002,
         "audit_protocol_engine": {
-            "url": "http://localhost:9000",
-            "consensus_url": "http://localhost:9099",
+            "url": "https://auditprotocol-ethindia.powerloom.io/",
             "retry": 5,
             "skip_anchor_proof":true
+        },
+        "consensus":{
+            "url": "http://localhost:9030",
+            "epoch_tracker_path": "/currentEpoch",
+            "polling_interval":15,
+            "fall_behind_reset_num_blocks":1000,
+            "sleep_secs_between_chunks":60
         },
         "redis": {
             "host": "127.0.0.1",
@@ -263,18 +263,19 @@
                 }
             }
         },
-        "zookeeper": {
-            "host": "127.0.0.1",
-            "port": "2181",
-            "user": "guest",
-            "password": "guest"
-        },
         "host": "127.0.0.1",
         "port": 9002,
         "audit_protocol_engine": {
-            "url": "http://localhost:9000",
+            "url": "https://auditprotocol-ethindia.powerloom.io/",
             "retry": 5,
             "skip_anchor_proof":true
+        },
+        "consensus":{
+            "url": "http://localhost:9030",
+            "epoch_tracker_path": "/currentEpoch",
+            "polling_interval":15,
+            "fall_behind_reset_num_blocks":1000,
+            "sleep_secs_between_chunks":60
         },
         "redis": {
             "host": "127.0.0.1",
