@@ -180,7 +180,7 @@ class EpochDetectorProcess(multiprocessing.Process):
                         self._logger.warning('Last processed epoch end is greater than current epoch end, something is wrong. Please consider resetting the state.')
                         raise GenericExitOnSignal
 
-                    for epoch in chunks(self._last_processed_epoch['end'], current_epoch['end'], epoch_height):
+                    for epoch in chunks(self._last_processed_epoch['end']+1, current_epoch['end'], epoch_height):
                         epoch_from_chunk = {'begin': epoch[0], 'end': epoch[1], 'broadcast_id': str(uuid.uuid4())}
                         
                         self._broadcast_epoch(epoch_from_chunk)
