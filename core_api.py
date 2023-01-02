@@ -17,6 +17,7 @@ import coloredlogs
 from redis import asyncio as aioredis
 import aiohttp
 from web3 import Web3
+from default_logger import logger 
 
 import redis_keys
 from redis_conn import RedisPoolCache
@@ -47,18 +48,9 @@ SNAPSHOT_STATUS_MAP = {
     4: "TX_CONFIRMED"
 }
 
-formatter = logging.Formatter(u"%(levelname)-8s %(name)-4s %(asctime)s,%(msecs)d %(module)s-%(funcName)s: %(message)s")
 
-stdout_handler = logging.StreamHandler(sys.stdout)
-stdout_handler.setLevel(logging.DEBUG)
-stderr_handler = logging.StreamHandler(sys.stderr)
-stderr_handler.setLevel(logging.ERROR)
-
-rest_logger = logging.getLogger(__name__)
-rest_logger.setLevel(logging.DEBUG)
-rest_logger.addHandler(stdout_handler)
-rest_logger.addHandler(stderr_handler)
-coloredlogs.install(level='DEBUG', logger=rest_logger, stream=sys.stdout)
+# setup logging
+rest_logger = logger.bind(module='PowerLoom|CoreAPI')
 
 # setup CORS origins stuff
 origins = ["*"]

@@ -9,11 +9,12 @@ from rate_limiter import check_rpc_rate_limit
 from redis import asyncio as aioredis
 from functools import partial
 from dynaconf import settings
-from callback_modules.uniswap.logger import logger
 from web3 import Web3
 import asyncio
 import json
+from default_logger import logger
 
+helper_logger = logger.bind(module='PowerLoom|Uniswap|Helpers')
 
 def get_maker_pair_data(prop):
     prop = prop.lower()
@@ -51,7 +52,7 @@ async def get_pair(
         parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], redis_conn=redis_conn, 
         request_payload={"token0": token0, "token1": token1},
         error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get_pair fn"},
-        logger=logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
+        logger=helper_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
     )
     pair = await loop.run_in_executor(func=pair_func, executor=None)
 
@@ -98,7 +99,7 @@ async def get_pair_metadata(
                 parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url', '').split('/')[-1], 
                 redis_conn=redis_conn, request_payload={"pair_address": pair_address},
                 error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get_pair_metadata fn"},
-                logger=logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
+                logger=helper_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
             )
             token0Addr, token1Addr = web3_provider['web3_client'].batch_call([
                 pair_contract_obj.functions.token0(),
@@ -161,7 +162,7 @@ async def get_pair_metadata(
                 parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url', '').split('/')[-1], redis_conn=redis_conn, 
                 request_payload={"pair_address": pair_address},
                 error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get_pair_metadata fn"},
-                logger=logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
+                logger=helper_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
             )
             if maker_token1:
                 [token0_name, token0_symbol, token0_decimals, token1_decimals] = web3_provider['web3_client'].batch_call(
@@ -208,7 +209,7 @@ async def get_pair_metadata(
         }
     except Exception as err:
         # this will be retried in next cycle
-        logger.error(f"RPC error while fetcing metadata for pair {pair_address}, error_msg:{err}", exc_info=True)
+        helper_logger.error(f"RPC error while fetcing metadata for pair {pair_address}, error_msg:{err}", exc_info=True)
         raise err
 
 @provide_async_redis_conn_insta
@@ -242,7 +243,7 @@ async def get_block_details_in_block_range(
             parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], redis_conn=redis_conn, 
             request_payload={ "from_block": from_block, "to_block": to_block},
             error_msg={'msg': "exhausted_api_key_rate_limit inside get_block_details_in_block_range"},
-            logger=logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas
+            logger=helper_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas
         )
         rpc_batch_block_details = batch_eth_get_block(rpc_endpoint=web3_provider.get('rpc_url'), from_block=from_block, to_block=to_block)
         rpc_batch_block_details = rpc_batch_block_details if rpc_batch_block_details else []

@@ -7,21 +7,10 @@ import coloredlogs
 import aio_pika
 from aio_pika.pool import Pool
 from functools import partial
+from default_logger import logger
 
-
-formatter = logging.Formatter(u"%(levelname)-8s %(name)-4s %(asctime)s,%(msecs)d %(module)s-%(funcName)s: %(message)s")
-
-stdout_handler = logging.StreamHandler(sys.stdout)
-stdout_handler.setLevel(logging.DEBUG)
-stderr_handler = logging.StreamHandler(sys.stderr)
-stderr_handler.setLevel(logging.ERROR)
-
-init_rmq_logger = logging.getLogger(__name__)
-init_rmq_logger.setLevel(logging.DEBUG)
-init_rmq_logger.addHandler(stdout_handler)
-init_rmq_logger.addHandler(stderr_handler)
-coloredlogs.install(level='DEBUG', logger=init_rmq_logger, stream=sys.stdout)
-
+# setup logging
+init_rmq_logger = logger.bind(module='PowerLoom|RabbitMQ|Init')
 
 def create_rabbitmq_conn():
     c = pika.BlockingConnection(pika.ConnectionParameters(

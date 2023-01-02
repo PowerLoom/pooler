@@ -148,10 +148,6 @@
             "port": 9090,
             "root": "https://pooler-callback.com",
             "commit_confirmation_callback_path": "commit_confirm"
-        },
-        "logging_server":{
-            "host":"localhost",
-            "port": 9020
         }
       },
       "testing": {
@@ -296,10 +292,6 @@
             "port": 9090,
             "root": "https://pooler-callback.com",
             "commit_confirmation_callback_path": "commit_confirm"
-        },
-        "logging_server":{
-            "host":"localhost",
-            "port": 9020
         }
     }
   }

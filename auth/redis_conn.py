@@ -4,19 +4,8 @@ from redis import asyncio as aioredis
 import contextlib
 import redis.exceptions as redis_exc
 import redis
-
-import logging
 import sys
 import coloredlogs
-formatter = logging.Formatter(u"%(levelname)-8s %(name)-4s %(asctime)s,%(msecs)d %(module)s-%(funcName)s: %(message)s")
-
-stdout_handler = logging.StreamHandler(sys.stdout)
-stdout_handler.setLevel(logging.DEBUG)
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-logger.addHandler(stdout_handler)
-coloredlogs.install(level='DEBUG', logger=logger, stream=sys.stdout)
 
 
 def construct_redis_url():

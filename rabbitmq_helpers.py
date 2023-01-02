@@ -14,11 +14,10 @@ import queue
 import pika
 import pika.exceptions
 import pika.channel
+from default_logger import logger
 
-logger = logging.getLogger('PowerLoom|RabbitmqHelpers')
-logger.setLevel(logging.DEBUG)
-logger.handlers = [logging.handlers.SocketHandler(host='localhost', port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT))]
-
+# setup logging
+logger = logger.bind(module='PowerLoom|RabbitmqHelpers')
 
 def log_retry_callback(retry_state: RetryCallState):
     print('In rabbitmq reconnection helper decorator. attempt number: ', retry_state.attempt_number)
@@ -861,15 +860,8 @@ class RabbitmqThreadedSelectLoopInteractor(object):
                     break
 
     def run(self):
-        self._logger = logging.getLogger('PowerLoom|RabbitmqHelpers')
-        self._logger.setLevel(logging.DEBUG)
-        network_log_handler = logging.handlers.SocketHandler(
-            host='localhost', port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT)
-        )
-        network_log_handler.setFormatter(
-            logging.Formatter(self._consumer_worker_name + ': %(message)s')
-        )
-        self._logger.handlers = [network_log_handler]
+
+        self._logger = logger.bind(module='PowerLoom|RabbitmqHelpers')
 
         while not self._stopping:
             self._connection = None

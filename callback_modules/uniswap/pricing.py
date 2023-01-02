@@ -10,12 +10,13 @@ from callback_modules.uniswap.helpers import get_pair, get_pair_metadata
 from rate_limiter import check_rpc_rate_limit
 from redis import asyncio as aioredis
 from dynaconf import settings
-from callback_modules.uniswap.logger import logger
 from web3 import Web3
 import asyncio
 import json
+from default_logger import logger
 
 
+pricing_logger = logger.bind(module='PowerLoom|Uniswap|Pricing')
 
 from redis_keys import (
     uniswap_pair_contract_tokens_addresses, uniswap_pair_contract_tokens_data, uniswap_pair_cached_token_price,
@@ -82,7 +83,7 @@ async def get_eth_price_usd(
             parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], 
             redis_conn=redis_conn, request_payload={"from_block": from_block, "to_block": to_block},
             error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get eth usd price fn"},
-            logger=logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
+            logger=pricing_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
         )
 
         # create dictionary of ABI {function_name -> {signature, abi, input, output}}
@@ -145,7 +146,7 @@ async def get_eth_price_usd(
         return eth_price_usd_dict
 
     except Exception as err:
-        logger.error(f"RPC ERROR failed to fetch ETH price, error_msg:{err}", exc_info=True)
+        pricing_logger.error(f"RPC ERROR failed to fetch ETH price, error_msg:{err}", exc_info=True)
         raise err
 
 
@@ -169,7 +170,7 @@ async def get_token_pair_price_and_white_token_reserves(
         parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], redis_conn=redis_conn, 
         request_payload={"from_block": from_block, "to_block": to_block},
         error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get_token_pair_based_price fn"},
-        logger=logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
+        logger=pricing_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
     )
 
     # get white
@@ -226,7 +227,7 @@ async def get_token_derived_eth(
         parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], redis_conn=redis_conn, 
         request_payload={"from_block": from_block, "to_block": to_block},
         error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get_token_derived_eth fn"},
-        logger=logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
+        logger=pricing_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
     )
 
     # get white
@@ -355,7 +356,7 @@ async def get_token_price_in_block_range(
 
 
             if debug_log:
-                logger.debug(f"{token_metadata['symbol']}: price is {token_price_dict} | its eth price is {token_eth_price_dict}")
+                pricing_logger.debug(f"{token_metadata['symbol']}: price is {token_price_dict} | its eth price is {token_eth_price_dict}")
 
         # cache price at height
         if from_block != 'latest' and to_block != 'latest' and len(token_price_dict) > 0:
@@ -369,7 +370,7 @@ async def get_token_price_in_block_range(
         return token_price_dict
 
     except Exception as err:
-        logger.error(f"Error while calculating price of token: {token_metadata['symbol']} | {token_metadata['address']} | err: {str(err)}")
+        pricing_logger.error(f"Error while calculating price of token: {token_metadata['symbol']} | {token_metadata['address']} | err: {str(err)}")
         raise RPCException(request={"contract": token_metadata['address'], "from_block": from_block, "to_block": to_block},
             response={}, underlying_exception=None,
             extra_info={'msg': f"rpc error: {str(err)}"}) from err

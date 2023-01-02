@@ -16,16 +16,11 @@ from eth_abi.codec import ABICodec
 import json
 from async_limits import parse_many as limit_parse_many
 from gnosis.eth import EthereumClient
+from default_logger import logger
 #from callback_modules.uniswap.constants import GLOBAL_WEB3_PROVIDER
 
-
-formatter = logging.Formatter('%(levelname)-8s %(name)-4s %(asctime)s,%(msecs)d %(module)s-%(funcName)s: %(message)s')
-rpc_logger = logging.getLogger('NodeRPCHelper')
-rpc_logger.setLevel(logging.DEBUG)
-rpc_logger.handlers = [logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST','localhost'),
-            port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT))]
-# rpc_logger.handlers[0].setFormatter(formatter)
-
+# setup logging
+rpc_logger = logger.bind(module='PowerLoom|NodeRPCHelper')
 
 def auto_retry(tries=3, exc=Exception, delay=5):
     def deco(func):

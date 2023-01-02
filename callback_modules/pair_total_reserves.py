@@ -35,6 +35,7 @@ import os
 import logging
 import time
 import multiprocessing
+from default_logger import logger
 
 SETTINGS_ENV = os.getenv('ENV_FOR_DYNACONF', 'development')
 
@@ -585,15 +586,9 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
         setproctitle(self.name)
         for signame in [SIGINT, SIGTERM, SIGQUIT]:
             signal.signal(signame, self._exit_signal_handler)
-        # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|Callbacks|TradeVolumeProcessDistributor'))
-        self._logger = logging.getLogger(
-            f'PowerLoom|Callbacks|PairTotalReservesProcessDistributor:{settings.NAMESPACE}-{settings.INSTANCE_ID}'
-        )
-        self._logger.setLevel(logging.DEBUG)
-        self._logger.handlers = [
-            logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST', 'localhost'),
-                                           port=settings.get('LOGGING_SERVER.PORT',
-                                                             logging.handlers.DEFAULT_TCP_LOGGING_PORT))]
+
+        self._logger = logger.bind(module=f'PowerLoom|Callbacks|PairTotalReservesProcessDistributor:{settings.NAMESPACE}-{settings.INSTANCE_ID}')
+
         self._connection_pool = redis.BlockingConnectionPool(**REDIS_CONN_CONF)
         queue_name = f'powerloom-backend-cb:{settings.NAMESPACE}:{settings.INSTANCE_ID}'
         self.ev_loop = asyncio.get_event_loop()

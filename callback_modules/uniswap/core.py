@@ -16,10 +16,12 @@ from redis_conn import provide_async_redis_conn_insta
 from redis import asyncio as aioredis
 from dynaconf import settings
 from functools import partial
-from callback_modules.uniswap.logger import logger
 from web3 import Web3
 import asyncio
 import json
+from default_logger import logger
+
+core_logger = logger.bind(module='PowerLoom|UniswapCore')
 
 
 @provide_async_redis_conn_insta
@@ -40,7 +42,7 @@ async def get_pair_reserves(
     web3_provider=global_w3_client
 ):
     try:
-        logger.debug(f"Starting pair total reserves query for: {pair_address}")
+        core_logger.debug(f"Starting pair total reserves query for: {pair_address}")
         if not rate_limit_lua_script_shas:
             rate_limit_lua_script_shas = await load_rate_limiter_scripts(redis_conn)
         pair_address = Web3.toChecksumAddress(pair_address)
@@ -53,7 +55,7 @@ async def get_pair_reserves(
                     rate_limit_lua_script_shas=rate_limit_lua_script_shas, web3_provider=web3_provider
                 )
             except Exception as err:
-                logger.error('Error attempting to get block details of block-range %s-%s: %s, retrying again', from_block, to_block, err, exc_info=True)
+                core_logger.error('Error attempting to get block details of block-range %s-%s: %s, retrying again', from_block, to_block, err, exc_info=True)
                 raise err
         else:
             block_details_dict = dict()
@@ -63,7 +65,7 @@ async def get_pair_reserves(
             rate_limit_lua_script_shas=rate_limit_lua_script_shas
         )
 
-        logger.debug(f"total pair reserves fetched block details for epoch for: {pair_address}")
+        core_logger.debug(f"total pair reserves fetched block details for epoch for: {pair_address}")
 
         token0_price_map, token1_price_map = await asyncio.gather(
             get_token_price_in_block_range(
@@ -76,7 +78,7 @@ async def get_pair_reserves(
             )
         )
 
-        logger.debug(f"Total reserves fetched token prices for: {pair_address}")
+        core_logger.debug(f"Total reserves fetched token prices for: {pair_address}")
 
         # create dictionary of ABI {function_name -> {signature, abi, input, output}}
         pair_abi_dict = contract_abi_dict(pair_contract_abi)
@@ -85,7 +87,7 @@ async def get_pair_reserves(
             parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], redis_conn=redis_conn, 
             request_payload={"contract": pair_address, "from_block": from_block, "to_block": to_block},
             error_msg={'msg': "exhausted_api_key_rate_limit inside get_pair_reserves"},
-            logger=logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
+            logger=core_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
         )
         reserves_array = batch_eth_call_on_block_range(
             rpc_endpoint=web3_provider.get('rpc_url'), abi_dict=pair_abi_dict, function_name='getReserves', 
@@ -96,7 +98,7 @@ async def get_pair_reserves(
                 response=reserves_array, underlying_exception=None,
                 extra_info={'msg': f"Error: failed to retrieve pair reserves from RPC"})
 
-        logger.debug(f"Total reserves fetched getReserves results: {pair_address}")
+        core_logger.debug(f"Total reserves fetched getReserves results: {pair_address}")
         token0_decimals = pair_per_token_metadata['token0']['decimals']
         token1_decimals = pair_per_token_metadata['token1']['decimals']
 
@@ -121,10 +123,10 @@ async def get_pair_reserves(
             }
             block_count+=1
 
-        logger.debug(f"Calculated pair total reserves for epoch-range: {from_block} - {to_block} | pair_contract: {pair_address}")
+        core_logger.debug(f"Calculated pair total reserves for epoch-range: {from_block} - {to_block} | pair_contract: {pair_address}")
         return pair_reserves_arr
     except Exception as exc:
-        logger.error("error at get_pair_reserves fn, retrying..., error_msg: %s", exc, exc_info=True)
+        core_logger.error("error at get_pair_reserves fn, retrying..., error_msg: %s", exc, exc_info=True)
         raise RPCException(request={"contract": pair_address, "from_block": from_block, "to_block": to_block},
             response={}, underlying_exception=None,
             extra_info={'msg': f"Error: get_pair_reserves error_msg: {str(exc)}"}) from exc
@@ -261,7 +263,7 @@ async def get_pair_trade_volume(
                     web3_provider=web3_provider
                 )
             except Exception as err:
-                logger.error('Error attempting to get block details of to_block %s: %s, retrying again', max_chain_height, err, exc_info=True)
+                core_logger.error('Error attempting to get block details of to_block %s: %s, retrying again', max_chain_height, err, exc_info=True)
                 raise err
 
         pair_per_token_metadata = await get_pair_metadata(
@@ -297,7 +299,7 @@ async def get_pair_trade_volume(
             parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], redis_conn=redis_conn, 
             request_payload={"contract": data_source_contract_address, "to_block": max_chain_height, "from_block": min_chain_height},
             error_msg={'msg': "exhausted_api_key_rate_limit inside uniswap_functions get async trade volume"},
-            logger=logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
+            logger=core_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1
         )
         events_log = await ev_loop.run_in_executor(func=pfunc_get_event_logs, executor=None)
 
@@ -396,7 +398,7 @@ async def get_pair_trade_volume(
         epoch_trade_logs.update({'timestamp': max_block_timestamp})            
         return epoch_trade_logs
     except Exception as exc:
-        logger.error("error at get_pair_trade_volume fn: %s", exc, exc_info=True)
+        core_logger.error("error at get_pair_trade_volume fn: %s", exc, exc_info=True)
         raise RPCException(request={"contract": data_source_contract_address, "fromBlock": min_chain_height, "toBlock": max_chain_height},
             response={}, underlying_exception=None,
             extra_info={'msg': f"error: get_pair_trade_volume, error_msg: {str(exc)}"}) from exc

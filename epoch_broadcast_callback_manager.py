@@ -14,7 +14,7 @@ import sys
 import json
 import os
 from setproctitle import setproctitle
-
+from default_logger import logger
 
 def append_epoch_context(msg_json: dict):
     injected_contract = os.getenv('EPOCH_CONTEXT_INJECT')
@@ -96,20 +96,9 @@ class EpochCallbackManager(Process):
         for signame in [SIGINT, SIGTERM, SIGQUIT]:
             signal.signal(signame, self._exit_signal_handler)
         setproctitle(f'PowerLoom|EpochCallbackManager:{settings.NAMESPACE}-{settings.INSTANCE_ID[:5]}')
-        self._logger = logging.getLogger(f'PowerLoom|EpochCallbackManager:{settings.NAMESPACE}-{settings.INSTANCE_ID}')
-        self._logger.setLevel(logging.DEBUG)
-        stdout_handler = logging.StreamHandler(sys.stdout)
-        stdout_handler.setLevel(logging.DEBUG)
-        stderr_handler = logging.StreamHandler(sys.stderr)
-        stderr_handler.setLevel(logging.ERROR)
-        self._logger.handlers = [
-            logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST','localhost'),
-            port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT)),
-            stdout_handler,
-            stderr_handler
-        ]
+        self._logger = logger.bind(module=f'PowerLoom|EpochCallbackManager:{settings.NAMESPACE}-{settings.INSTANCE_ID}')
+
         self._logger.debug('Launched PowerLoom|EpochCallbackManager with PID: %s', self.pid)
-        # self._asys = ActorSystem('multiprocTCPBase', logDefs=logcfg_thespian_main)
         self._connection_pool = redis.BlockingConnectionPool(**REDIS_CONN_CONF)
         queue_name = f"powerloom-epoch-broadcast-q:{settings.NAMESPACE}:{settings.INSTANCE_ID}"
         self.rabbitmq_interactor: RabbitmqSelectLoopInteractor = RabbitmqSelectLoopInteractor(

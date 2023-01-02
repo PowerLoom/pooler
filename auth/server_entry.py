@@ -13,20 +13,10 @@ import coloredlogs
 from redis import asyncio as aioredis
 import time
 from auth.redis_conn import RedisPoolCache
+from default_logger import logger
 
-
-formatter = logging.Formatter(u"%(levelname)-8s %(name)-4s %(asctime)s,%(msecs)d %(module)s-%(funcName)s: %(message)s")
-
-stdout_handler = logging.StreamHandler(sys.stdout)
-stdout_handler.setLevel(logging.DEBUG)
-stderr_handler = logging.StreamHandler(sys.stderr)
-stderr_handler.setLevel(logging.ERROR)
-
-api_logger = logging.getLogger(__name__)
-api_logger.setLevel(logging.DEBUG)
-api_logger.addHandler(stdout_handler)
-api_logger.addHandler(stderr_handler)
-coloredlogs.install(level='DEBUG', logger=api_logger, stream=sys.stdout)
+# setup logging
+api_logger = logger.bind(module=__name__)
 
 # setup CORS origins stuff
 origins = ["*"]

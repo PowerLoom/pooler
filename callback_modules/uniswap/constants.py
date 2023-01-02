@@ -1,17 +1,19 @@
 from rpc_helper import GLOBAL_WEB3_PROVIDER
 from file_utils import read_json_file
-from callback_modules.uniswap.logger import logger
 from dynaconf import settings
 from web3 import Web3
+from default_logger import logger
 
+
+constants_logger = logger.bind(module='PowerLoom|Uniswap|Constants')
 
 
 ###### LOAD ABIs ######
-pair_contract_abi = read_json_file(settings.UNISWAP_CONTRACT_ABIS.PAIR_CONTRACT, logger)
-erc20_abi = read_json_file(settings.UNISWAP_CONTRACT_ABIS.erc20, logger)
-router_contract_abi = read_json_file(settings.UNISWAP_CONTRACT_ABIS.ROUTER, logger)
-uniswap_trade_events_abi = read_json_file(settings.UNISWAP_CONTRACT_ABIS.TRADE_EVENTS, logger)
-factory_contract_abi = read_json_file(settings.UNISWAP_CONTRACT_ABIS.FACTORY, logger)
+pair_contract_abi = read_json_file(settings.UNISWAP_CONTRACT_ABIS.PAIR_CONTRACT, constants_logger)
+erc20_abi = read_json_file(settings.UNISWAP_CONTRACT_ABIS.erc20, constants_logger)
+router_contract_abi = read_json_file(settings.UNISWAP_CONTRACT_ABIS.ROUTER, constants_logger)
+uniswap_trade_events_abi = read_json_file(settings.UNISWAP_CONTRACT_ABIS.TRADE_EVENTS, constants_logger)
+factory_contract_abi = read_json_file(settings.UNISWAP_CONTRACT_ABIS.FACTORY, constants_logger)
 #######################
 
 

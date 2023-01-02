@@ -20,6 +20,7 @@ from setproctitle import setproctitle
 from rabbitmq_helpers import RabbitmqThreadedSelectLoopInteractor
 from redis_conn import create_redis_conn, REDIS_CONN_CONF
 from data_models import EpochInfo
+from default_logger import logger
 
 def chunks(start_idx, stop_idx, n):
     """
@@ -80,20 +81,8 @@ class EpochDetectorProcess(multiprocessing.Process):
         self._rabbitmq_queue = queue.Queue()
         self._shutdown_initiated = False
         self._connection_pool = redis.BlockingConnectionPool(**REDIS_CONN_CONF)
+        self._logger = logger.bind(module=f'{name}|{settings.NAMESPACE}-{settings.INSTANCE_ID[:5]}')
 
-        self._logger = logging.getLogger(f'{name}|{settings.NAMESPACE}-{settings.INSTANCE_ID[:5]}')
-        self._logger.setLevel(logging.DEBUG)
-        stdout_handler = logging.StreamHandler(sys.stdout)
-        stdout_handler.setLevel(logging.DEBUG)
-        stderr_handler = logging.StreamHandler(sys.stderr)
-        stderr_handler.setLevel(logging.ERROR)
-        
-        self._logger.handlers = [
-            logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST','localhost'),
-            port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT)),
-            stdout_handler, 
-            stderr_handler
-        ]
         self._exchange = f'{settings.RABBITMQ.SETUP.CORE.EXCHANGE}:{settings.NAMESPACE}'
         self._routing_key = f'epoch-broadcast:{settings.NAMESPACE}:{settings.INSTANCE_ID}'
 

@@ -25,15 +25,6 @@ module.exports = {
       env: {
         NODE_ENV: NODE_ENV,
       }
-    },
-    {
-      name   : "pooler-adapter-central-logging",
-      script : `${INTERPRETER} ${__dirname}/proto_system_logging_server.py`,
-      max_restarts: MAX_RESTART,
-      min_uptime: MIN_UPTIME,
-      env: {
-        NODE_ENV: NODE_ENV,
-      }
     }
   ]
 }

@@ -22,7 +22,7 @@ from signal import signal, SIGINT, SIGTERM, SIGQUIT, SIGCHLD
 import os
 import sys
 from rabbitmq_helpers import RabbitmqSelectLoopInteractor
-
+from default_logger import logger
 
 PROC_STR_ID_TO_CLASS_MAP = {
     'EpochCallbackManager': {
@@ -164,20 +164,8 @@ class ProcessHubCore(Process):
 
     @cleanup_children_procs
     def run(self) -> None:
-        # self._logger = get_mp_logger()
-        # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|ProcessHub|Core'))
         setproctitle(f'PowerLoom|ProcessHub|Core')
-        self._logger = logging.getLogger('PowerLoom|ProcessHub|Core')
-        self._logger.setLevel(logging.DEBUG)
-        stdout_handler = logging.StreamHandler(sys.stdout)
-        stdout_handler.setLevel(logging.DEBUG)
-        stderr_handler = logging.StreamHandler(sys.stderr)
-        stderr_handler.setLevel(logging.ERROR)
-        self._logger.handlers = [
-            logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST','localhost'),
-            port=settings.get('LOGGING_SERVER.PORT', logging.handlers.DEFAULT_TCP_LOGGING_PORT)),
-            stdout_handler, stderr_handler
-        ]
+        self._logger = logger.bind(module='PowerLoom|ProcessHub|Core')
 
         for signame in [SIGINT, SIGTERM, SIGQUIT, SIGCHLD]:
             signal(signame, self.signal_handler)
@@ -296,18 +284,7 @@ class ProcessHubCore(Process):
 
 
 if __name__ == '__main__':
-    logger = logging.getLogger('PowerLoom|ProcessHub|Core')
-    logger.setLevel(logging.DEBUG)
-    stdout_handler = logging.StreamHandler(sys.stdout)
-    stdout_handler.setLevel(logging.DEBUG)
-    stderr_handler = logging.StreamHandler(sys.stderr)
-    stderr_handler.setLevel(logging.ERROR)
-    logger.handlers = [
-        logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST','localhost'),
-            port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT)),
-        stdout_handler, stderr_handler
-    ]
-
+   
     p = ProcessHubCore(name='PowerLoom|UniswapPoolerProcessHub|Core')
     p.start()
     while p.is_alive():

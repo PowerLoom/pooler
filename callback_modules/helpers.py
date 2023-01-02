@@ -23,7 +23,10 @@ import asyncio
 import signal
 import aio_pika
 from tenacity import AsyncRetrying, stop_after_attempt, wait_random_exponential
+from default_logger import logger
 
+# setup logger
+helper_logger = logger.bind(module='PowerLoom|Callback|Helpers')
 
 async def get_rabbitmq_connection():
     return await aio_pika.connect_robust(
@@ -93,7 +96,7 @@ class AuditProtocolCommandsHelper:
                     )
                     response_status_code = response_obj.status_code
                     response = response_obj.json() or {}
-                    logger.debug('Response code on setting diff rule on audit protocol: %s', response_status_code)
+                    helper_logger.debug('Response code on setting diff rule on audit protocol: %s', response_status_code)
                     if response_status_code in range(200, 300):
                         await redis_conn.sadd(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id)
                         return {"message": f"success status code: {response_status_code}", "response": response}
@@ -153,7 +156,7 @@ class AuditProtocolCommandsHelper:
                     )
                     response_status_code = response_obj.status_code
                     response = response_obj.json() or {}
-                    logger.debug('Response code on setting diff rule on audit protocol: %s', response_status_code)
+                    helper_logger.debug('Response code on setting diff rule on audit protocol: %s', response_status_code)
                     if response_status_code in range(200, 300):
                         await redis_conn.sadd(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id)
                         return {"message": f"success status code: {response_status_code}", "response": response}
@@ -209,7 +212,7 @@ class AuditProtocolCommandsHelper:
                         'Failed audit protocol engine call with status code: %s and response: %s',
                         response_status_code, response
                     )
-
+                    
 
 class CallbackAsyncWorker(multiprocessing.Process):
     def __init__(self, name, rmq_q, rmq_routing, **kwargs):
@@ -221,28 +224,8 @@ class CallbackAsyncWorker(multiprocessing.Process):
         self._redis_conn: Union[None, aioredis.Redis] = None
         self._running_callback_tasks: Dict[str, asyncio.Task] = dict()
         super(CallbackAsyncWorker, self).__init__(name=name, **kwargs)
-        self._logger = logging.getLogger(self.name)
-        self._logger.setLevel(logging.DEBUG)
-        formatter = logging.Formatter(
-            "%(levelname)-8s %(name)-4s %(asctime)s %(msecs)d %(module)s-%(funcName)s: %(message)s")
-        stdout_handler = logging.StreamHandler(sys.stdout)
-        stdout_handler.setLevel(logging.DEBUG)
-        stdout_handler.setFormatter(formatter)
-        stderr_handler = logging.StreamHandler(sys.stderr)
-        stderr_handler.setLevel(logging.ERROR)
-        stderr_handler.setFormatter(formatter)
-        # self._logger.debug('Launched %s ', self._unique_id)
-        # self._logger.debug('Launched PID: %s', self.pid)
-        self._logger.handlers = [
-            logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST', 'localhost'),
-                                           port=settings.get('LOGGING_SERVER.PORT',
-                                                             logging.handlers.DEFAULT_TCP_LOGGING_PORT)),
-            stdout_handler, stderr_handler
-        ]
-        # logger.add(
-        #     sink='logs/' + self._unique_id + '_{time}.log', rotation='20MB', retention=20, compression='gz'
-        # )
-        # setup_loguru_intercept()
+        self._logger = logger.bind(module=self.name)
+
         self._shutdown_signal_received_count = 0
 
     async def _shutdown_handler(self, sig, loop: asyncio.AbstractEventLoop):
@@ -322,23 +305,8 @@ class CallbackAsyncWorker(multiprocessing.Process):
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         resource.setrlimit(resource.RLIMIT_NOFILE, (settings['rlimit']['file_descriptors'], hard))
         # logging.config.dictConfig(config_logger_with_namespace(self.name))
-        self._logger = logging.getLogger(self.name)
-        self._logger.setLevel(logging.DEBUG)
-        formatter = logging.Formatter(
-            "%(levelname)-8s %(name)-4s %(asctime)s %(msecs)d %(module)s-%(funcName)s: %(message)s")
-        stdout_handler = logging.StreamHandler(sys.stdout)
-        stdout_handler.setLevel(logging.DEBUG)
-        stdout_handler.setFormatter(formatter)
-        stderr_handler = logging.StreamHandler(sys.stderr)
-        stderr_handler.setLevel(logging.ERROR)
-        stderr_handler.setFormatter(formatter)
-        # self._logger.debug('Launched %s ', self._unique_id)
-        # self._logger.debug('Launched PID: %s', self.pid)
-        self._logger.handlers = [
-            logging.handlers.SocketHandler(host=settings.get('LOGGING_SERVER.HOST','localhost'),
-            port=settings.get('LOGGING_SERVER.PORT',logging.handlers.DEFAULT_TCP_LOGGING_PORT)),
-            stdout_handler, stderr_handler
-        ]
+        self._logger = logger.bind(module=self.name)
+        
         ev_loop = asyncio.get_event_loop()
         signals = (signal.SIGTERM, signal.SIGINT, signal.SIGQUIT)
         for s in signals:
