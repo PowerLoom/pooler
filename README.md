@@ -72,12 +72,11 @@ You can read more about Audit Protocol and the Uniswap v2 PoC in the  [Powerloom
 * [Redis](https://redis.io/docs/getting-started/installation/)
 * [RabbitMQ](https://www.rabbitmq.com/download.html)
 * [Pm2](https://pm2.keymetrics.io/docs/usage/quick-start/)
-
+* [Poetry](https://python-poetry.org/docs/)
 ## Setup Instructions
 
 ### Setup Virtual Env
-Setup and Activate an isolated virtual environment with [venv](https://docs.python.org/3/tutorial/venv.html) or any something like [conda](https://conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html) and run `pip install -r requirements.txt` to install the required dependencies.
-
+Make sure you have poetry installed and run `poetry install`.
 
 ### Generate settings.json
 Pooler needs `settings.json` to be present in your project root directory. We've provided a settings template in `settings.example.json` to help you get started.
@@ -112,12 +111,6 @@ These are the pair contracts on Uniswap v2 or other forks of it that will be tra
 
 * Token reserves of `token0` and `token1`
 * Trade volume information as described in the [Overview](#overview) section.
-
-### Set up Env variables
-To make sure Pm2 is using your virtual environment configuration, activate your virtual environment and run the following command to set `POOLER_INTERPRETER` to your active python version.
-```commandline
-export POOLER_INTERPRETER=$(which python)
-```
 
 ## Starting all Processes
 To launch all the required processes, you can run
