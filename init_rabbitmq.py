@@ -1,12 +1,7 @@
 from dynaconf import settings
 import pika
 import json
-import logging
-import sys
-import coloredlogs
 import aio_pika
-from aio_pika.pool import Pool
-from functools import partial
 from default_logger import logger
 
 # setup logging

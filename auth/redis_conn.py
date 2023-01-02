@@ -1,11 +1,8 @@
 from .conf import auth_settings
-from functools import wraps
 from redis import asyncio as aioredis
 import contextlib
 import redis.exceptions as redis_exc
 import redis
-import sys
-import coloredlogs
 
 
 def construct_redis_url():

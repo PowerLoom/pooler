@@ -2,9 +2,7 @@ import redis
 import sys
 import signal
 import threading
-import logging.handlers
 import queue
-import time
 import multiprocessing
 import uuid
 import requests

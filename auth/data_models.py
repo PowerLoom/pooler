@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from enum import Enum
-from typing import Union, Optional, List
+from typing import List, Optional
 
 
 class UserStatusEnum(str, Enum):

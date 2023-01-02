@@ -118,7 +118,6 @@ async def get_token_price_at_block_height(
                     # if reverted then it means token do not have pair with this stablecoin, try another
                     if "execution reverted" in str(error):
                         temp_token_price = 0
-                        pass
                 else:
                     # if there was no exception and price is still 0 then increase token amount in path (token->stablecoin)
                     if temp_token_price == 0:
@@ -265,4 +264,3 @@ if __name__ == '__main__':
         get_pair_tokens_price(pair_address, loop)
     )
     print(f"\n\n{data}\n")
-    pass

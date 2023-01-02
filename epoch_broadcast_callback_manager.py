@@ -1,4 +1,3 @@
-from exceptions import GenericExitOnSignal
 from signal import SIGINT, SIGTERM, SIGQUIT
 from rabbitmq_helpers import RabbitmqSelectLoopInteractor
 from redis_keys import powerloom_broadcast_id_zset, uniswap_cb_broadcast_processing_logs_zset
@@ -8,9 +7,6 @@ from multiprocessing import Process
 import signal
 import redis
 import time
-import logging
-import logging.handlers
-import sys
 import json
 import os
 from setproctitle import setproctitle

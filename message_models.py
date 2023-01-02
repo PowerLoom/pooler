@@ -1,5 +1,5 @@
-from pydantic import BaseModel, validator
-from typing import Union, List, Optional, Mapping, Dict
+from pydantic import BaseModel
+from typing import Dict, List, Optional
 
 class EpochBase(BaseModel):
     begin: int

@@ -41,4 +41,3 @@ if __name__ == '__main__':
     print(f"\n\n{data}\n")
     print(f"time taken to fetch price in epoch range: {start_time} - {end_time}")
     
-    pass

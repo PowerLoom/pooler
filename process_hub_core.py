@@ -20,7 +20,6 @@ import json
 from setproctitle import setproctitle
 from signal import signal, SIGINT, SIGTERM, SIGQUIT, SIGCHLD
 import os
-import sys
 from rabbitmq_helpers import RabbitmqSelectLoopInteractor
 from default_logger import logger
 
@@ -274,7 +273,7 @@ class ProcessHubCore(Process):
             try:
                 # TODO
                 self._logger.debug('Process Hub Core received restart command: %s', cmd_json)
-                proc_identifier = cmd_json.proc_str_id
+                cmd_json.proc_str_id
                 # first kill
                 self._logger.debug('Attempting to kill process: %s', cmd_json.pid)
                 self.kill_process(cmd_json.pid)

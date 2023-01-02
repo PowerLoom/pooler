@@ -1,5 +1,5 @@
 from .conf import auth_settings
-from .helpers import rate_limit_auth_check, inject_rate_limit_fail_response
+from .helpers import rate_limit_auth_check
 from .settings_models import AuthSettings, RedisConfig
 from .data_models import RateLimitAuthCheck
 from . import conf

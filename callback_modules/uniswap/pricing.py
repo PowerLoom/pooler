@@ -19,9 +19,7 @@ from default_logger import logger
 pricing_logger = logger.bind(module='PowerLoom|Uniswap|Pricing')
 
 from redis_keys import (
-    uniswap_pair_contract_tokens_addresses, uniswap_pair_contract_tokens_data, uniswap_pair_cached_token_price,
-    uniswap_pair_contract_V2_pair_data, uniswap_pair_cached_block_height_token_price,uniswap_eth_usd_price_zset,
-    uniswap_tokens_pair_map, cached_block_details_at_height
+    uniswap_pair_cached_block_height_token_price, uniswap_eth_usd_price_zset
 )
 
 

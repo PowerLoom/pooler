@@ -1,15 +1,10 @@
-from typing import Optional, Union
-from fastapi import Depends, FastAPI, Request, Response, Query
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from auth.redis_keys import (
     user_details_htable, all_users_set, user_active_api_keys_set, user_revoked_api_keys_set, api_key_to_owner_key
 )
-from urllib.parse import urlencode, urljoin
 from dynaconf import settings
 from auth.data_models import AppOwnerModel, AddApiKeyRequest, UserAllDetailsResponse
-import logging
-import sys
-import coloredlogs
 from redis import asyncio as aioredis
 import time
 from auth.redis_conn import RedisPoolCache

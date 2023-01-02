@@ -6,7 +6,6 @@ from callback_modules.uniswap.constants import (
     global_w3_client, pair_contract_abi, 
     UNISWAP_TRADE_EVENT_SIGS, UNISWAP_EVENTS_ABI
 )
-from redis_keys import uniswap_pair_contract_tokens_addresses, uniswap_pair_contract_tokens_data
 from tenacity import retry, stop_after_attempt, wait_random_exponential, retry_if_exception_type
 from data_models import trade_data, epoch_event_trade_data, event_trade_data
 from callback_modules.uniswap.helpers import get_pair_metadata, get_block_details_in_block_range

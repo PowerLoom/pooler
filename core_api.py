@@ -1,8 +1,6 @@
 from typing import Optional
 from urllib.parse import urljoin
 from rate_limiter import load_rate_limiter_scripts
-import logging
-import sys
 import json
 import os
 from fastapi import Depends, FastAPI, Request, Response, Query
@@ -13,7 +11,6 @@ from auth.data_models import RateLimitAuthCheck, UserStatusEnum
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from dynaconf import settings
-import coloredlogs
 from redis import asyncio as aioredis
 import aiohttp
 from web3 import Web3

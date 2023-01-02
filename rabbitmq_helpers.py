@@ -3,13 +3,9 @@
 from dynaconf import settings
 from typing import Union
 from functools import wraps
-from exceptions import SelfExitException, GenericExitOnSignal
-from tenacity import Retrying, stop_after_attempt, wait_random_exponential, retry_if_exception_type, RetryCallState, retry_if_exception
+from tenacity import RetryCallState, Retrying, wait_random_exponential
 import uuid
 import functools
-import logging
-import logging.handlers
-import threading
 import queue
 import pika
 import pika.exceptions

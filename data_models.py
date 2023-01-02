@@ -1,5 +1,5 @@
-from pydantic import BaseModel, validator
-from typing import Union, List, Optional
+from pydantic import BaseModel
+from typing import List
 
 class TimeoutConfig(BaseModel):
     basic: int

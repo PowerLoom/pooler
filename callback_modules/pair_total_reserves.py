@@ -1,4 +1,4 @@
-from typing import Optional, List, Awaitable, Callable, Dict, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 from httpx import AsyncClient, AsyncHTTPTransport, Timeout, Limits
 from setproctitle import setproctitle
 from callback_modules.uniswap.core import (
@@ -22,9 +22,9 @@ from redis_keys import (
     uniswap_cb_broadcast_processing_logs_zset, uniswap_failed_query_pair_total_reserves_epochs_redis_q_f,
     uniswap_failed_query_pair_trade_volume_epochs_redis_q_f
 )
-from pydantic import ValidationError, BaseModel as CustomDataModel
+from pydantic import ValidationError
 from .data_models import PayloadCommitAPIRequest, SourceChainDetails
-from aio_pika import ExchangeType, IncomingMessage, Message, DeliveryMode
+from aio_pika import IncomingMessage
 from rabbitmq_helpers import RabbitmqSelectLoopInteractor
 import queue
 import signal
@@ -32,7 +32,6 @@ import redis
 import asyncio
 import json
 import os
-import logging
 import time
 import multiprocessing
 from default_logger import logger
@@ -522,7 +521,6 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
 
         except Exception as exc:
             self._logger.warning(f"There was an error while warming-up cache for epoch data. error_msg: {exc}")
-            pass
 
         return None
 
@@ -537,7 +535,7 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
         except ValidationError:
             self._logger.error('Bad message structure of epoch callback', exc_info=True)
             return
-        except Exception as e:
+        except Exception:
             self._logger.error('Unexpected message format of epoch callback', exc_info=True)
             return
 

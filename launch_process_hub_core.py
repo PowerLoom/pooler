@@ -2,9 +2,6 @@ from init_rabbitmq import init_exchanges_queues
 from process_hub_core import ProcessHubCore
 from setproctitle import setproctitle
 from exceptions import GenericExitOnSignal
-import sys
-import logging
-import logging.handlers
 import signal
 from dynaconf import settings
 from default_logger import logger

@@ -1,27 +1,10 @@
-from web3 import Web3, WebsocketProvider, HTTPProvider
-from exceptions import SelfExitException
-from cached_property import cached_property as cached_property_async
-from httpx import AsyncClient, Limits, Timeout, AsyncHTTPTransport
-from typing import Union
-from eth_account.messages import encode_defunct
-from eth_account.account import Account
-from eth_utils import keccak
-from functools import wraps, reduce
+from functools import wraps
 from dynaconf import settings
-from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception, RetryCallState
-from uuid import uuid4
-import redis
-import psutil
-import os
-from redis import asyncio as aioredis
-import asyncio
 import aiohttp
 import logging
 import logging.handlers
 import sys
-import eth_abi
 import json
-import time
 import requests
 
 """ Initialize the loggers """
@@ -164,7 +147,7 @@ def acquire_threading_semaphore(fn):
         semaphore.acquire()
         try:
             resp = fn(*args, **kwargs)
-        except Exception as e:
+        except Exception:
             raise
         finally:
             semaphore.release()

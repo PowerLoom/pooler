@@ -7,8 +7,6 @@ import redis.exceptions as redis_exc
 import redis
 
 import logging
-import sys
-import coloredlogs
 from default_logger import logger
 
 

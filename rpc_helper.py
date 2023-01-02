@@ -3,8 +3,6 @@ from message_models import RPCNodesObject
 from functools import wraps
 import requests
 import time
-import logging
-import logging.handlers
 import multiprocessing
 from dynaconf import settings
 from web3 import Web3
@@ -84,7 +82,6 @@ class ConstructRPC:
         q_s = self.construct_one_timeRPC(procedure=procedure, params=params)
         rpc_urls = rpc_nodes.NODES
         retry = dict(zip(rpc_urls, repeat(0)))
-        success = False
         while True:
             if all(val == rpc_nodes.RETRY_LIMIT for val in retry.values()):
                 rpc_logger.error("Retry limit reached for all RPC endpoints. Following request")
@@ -99,20 +96,19 @@ class ConstructRPC:
                 except (requests.exceptions.Timeout,
                         requests.exceptions.ConnectionError,
                         requests.exceptions.HTTPError):
-                    success = False
-                except Exception as e:
-                    success = False
+                    pass
+                except Exception:
+                    pass
                 else:
                     if procedure == 'eth_getBlockByNumber' and not json_response['result']:
                         continue
-                    success = True
                     return json_response
 
     def rpc_eth_blocknumber(self, rpc_nodes: RPCNodesObject):
         rpc_response = self.sync_post_json_rpc(procedure="eth_blockNumber", rpc_nodes=rpc_nodes)
         try:
             new_blocknumber = int(rpc_response["result"], 16)
-        except Exception as e:
+        except Exception:
             raise BailException
         else:
             return new_blocknumber
@@ -123,7 +119,7 @@ class ConstructRPC:
                                                params=[hex(blocknum), False])
         try:
             blockdetails = rpc_response["result"]
-        except Exception as e:
+        except Exception:
             raise
         else:
             return blockdetails
@@ -135,7 +131,7 @@ class ConstructRPC:
                                                rpc_nodes=rpc_nodes)
         try:
             tx_count = int(rpc_response["result"], 16)
-        except Exception as e:
+        except Exception:
             raise
         else:
             return tx_count
@@ -147,7 +143,7 @@ class ConstructRPC:
                                                params=[tx])
         try:
             tx_receipt = rpc_response["result"]
-        except KeyError as e:
+        except KeyError:
             process_name = multiprocessing.current_process().name
             rpc_logger.debug("{1}: Unexpected JSON RPC response: {0}".format(rpc_response, process_name))
             raise
@@ -161,7 +157,7 @@ class ConstructRPC:
                                                params=[tx])
         try:
             tx_hash = rpc_response["result"]
-        except KeyError as e:
+        except KeyError:
             process_name = multiprocessing.current_process().name
             rpc_logger.debug("{1}: Unexpected JSON RPC response: {0}".format(rpc_response, process_name))
             raise

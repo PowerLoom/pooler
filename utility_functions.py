@@ -21,7 +21,7 @@ async def retrieve_payload_data(payload_cid,  writer_redis_conn=None, logger=Non
         - Given a payload_cid, get its data from ipfs, at the same time increase its hit
     """
     if writer_redis_conn:
-        r = await writer_redis_conn.zincrby(uniswap_pair_hits_payload_data_key, 1.0, payload_cid)
+        await writer_redis_conn.zincrby(uniswap_pair_hits_payload_data_key, 1.0, payload_cid)
         if logger:
             logger.debug("Payload Data hit for: ")
             logger.debug(payload_cid)

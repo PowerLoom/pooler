@@ -11,13 +11,9 @@ from redis_conn import RedisPoolCache
 from aio_pika import IncomingMessage
 from aio_pika.pool import Pool
 from typing import Union, Dict
-import sys
 import resource
 from redis import asyncio as aioredis
 import requests
-import logging
-import logging.handlers
-import redis
 import multiprocessing
 import asyncio
 import signal
