@@ -1,16 +1,20 @@
-from signal import SIGINT, SIGTERM, SIGQUIT
-from rabbitmq_helpers import RabbitmqSelectLoopInteractor
-from redis_keys import powerloom_broadcast_id_zset, uniswap_cb_broadcast_processing_logs_zset
-from redis_conn import create_redis_conn, REDIS_CONN_CONF
-from dynaconf import settings
-from multiprocessing import Process
-import signal
-import redis
-import time
 import json
 import os
+import signal
+import time
+from multiprocessing import Process
+from signal import SIGINT, SIGQUIT, SIGTERM
+
+import redis
+from dynaconf import settings
 from setproctitle import setproctitle
+
 from default_logger import logger
+from rabbitmq_helpers import RabbitmqSelectLoopInteractor
+from redis_conn import REDIS_CONN_CONF, create_redis_conn
+from redis_keys import (powerloom_broadcast_id_zset,
+                        uniswap_cb_broadcast_processing_logs_zset)
+
 
 def append_epoch_context(msg_json: dict):
     injected_contract = os.getenv('EPOCH_CONTEXT_INJECT')

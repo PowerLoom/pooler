@@ -1,8 +1,8 @@
-from .pair_total_reserves import (
-    PairTotalReservesProcessor, PairTotalReservesProcessorDistributor, UniswapPairTotalReservesSnapshot,
-    UniswapTradesSnapshot
-)
 from . import uniswap
+from .pair_total_reserves import (PairTotalReservesProcessor,
+                                  PairTotalReservesProcessorDistributor,
+                                  UniswapPairTotalReservesSnapshot,
+                                  UniswapTradesSnapshot)
 
 __all__ = [
     'PairTotalReservesProcessor',

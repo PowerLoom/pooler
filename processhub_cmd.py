@@ -1,24 +1,23 @@
-from typing import Optional
 import json
 import time
 from datetime import datetime
+from typing import Optional
 
-import redis
 import psutil
-import typer
+import redis
 import timeago
+import typer
 from dynaconf import settings
 
-from process_hub_core import PROC_STR_ID_TO_CLASS_MAP
+from file_utils import read_json_file
 from init_rabbitmq import create_rabbitmq_conn, processhub_command_publish
 from message_models import ProcessHubCommand
+from process_hub_core import PROC_STR_ID_TO_CLASS_MAP
 from redis_conn import REDIS_CONN_CONF
-from redis_keys import (
-    powerloom_broadcast_id_zset,
-    uniswap_cb_broadcast_processing_logs_zset,
-    uniswap_projects_dag_verifier_status
-)
-from file_utils import read_json_file
+from redis_keys import (powerloom_broadcast_id_zset,
+                        uniswap_cb_broadcast_processing_logs_zset,
+                        uniswap_projects_dag_verifier_status)
+
 app = typer.Typer()
 
 

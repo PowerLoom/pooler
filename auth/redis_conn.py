@@ -1,8 +1,10 @@
-from .conf import auth_settings
-from redis import asyncio as aioredis
 import contextlib
-import redis.exceptions as redis_exc
+
 import redis
+import redis.exceptions as redis_exc
+from redis import asyncio as aioredis
+
+from .conf import auth_settings
 
 
 def construct_redis_url():

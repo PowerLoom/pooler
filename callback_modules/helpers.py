@@ -1,25 +1,27 @@
-from httpx import AsyncClient
-from callback_modules.data_models import PayloadCommitAPIRequest
-from urllib.parse import urljoin
-from dynaconf import settings
-from eth_utils import keccak
-from setproctitle import setproctitle
+import asyncio
+import multiprocessing
+import resource
+import signal
 from functools import partial
-from loguru import logger
+from typing import Dict, Union
+from urllib.parse import urljoin
 from uuid import uuid4
-from redis_conn import RedisPoolCache
+
+import aio_pika
+import requests
 from aio_pika import IncomingMessage
 from aio_pika.pool import Pool
-from typing import Union, Dict
-import resource
+from dynaconf import settings
+from eth_utils import keccak
+from httpx import AsyncClient
+from loguru import logger
 from redis import asyncio as aioredis
-import requests
-import multiprocessing
-import asyncio
-import signal
-import aio_pika
+from setproctitle import setproctitle
 from tenacity import AsyncRetrying, stop_after_attempt, wait_random_exponential
+
+from callback_modules.data_models import PayloadCommitAPIRequest
 from default_logger import logger
+from redis_conn import RedisPoolCache
 
 # setup logger
 helper_logger = logger.bind(module='PowerLoom|Callback|Helpers')

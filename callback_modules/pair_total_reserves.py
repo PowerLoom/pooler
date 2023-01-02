@@ -1,40 +1,43 @@
-from typing import Callable, Dict, List, Optional, Tuple, Union
-from httpx import AsyncClient, AsyncHTTPTransport, Timeout, Limits
-from setproctitle import setproctitle
-from callback_modules.uniswap.core import (
-    get_pair_reserves, get_pair_trade_volume,
-    warm_up_cache_for_snapshot_constructors
-)
-from rate_limiter import load_rate_limiter_scripts
-from eth_utils import keccak
-from uuid import uuid4
-from signal import SIGINT, SIGTERM, SIGQUIT
-from message_models import (
-    PowerloomCallbackEpoch, PowerloomCallbackProcessMessage, UniswapPairTotalReservesSnapshot,
-    EpochBase, UniswapTradesSnapshot
-)
-from dynaconf import settings
-from callback_modules.helpers import AuditProtocolCommandsHelper, CallbackAsyncWorker
-from redis_conn import create_redis_conn, REDIS_CONN_CONF
-from redis_keys import (
-    uniswap_discarded_query_pair_total_reserves_epochs_redis_q_f,
-    uniswap_discarded_query_pair_trade_volume_epochs_redis_q_f,
-    uniswap_cb_broadcast_processing_logs_zset, uniswap_failed_query_pair_total_reserves_epochs_redis_q_f,
-    uniswap_failed_query_pair_trade_volume_epochs_redis_q_f
-)
-from pydantic import ValidationError
-from .data_models import PayloadCommitAPIRequest, SourceChainDetails
-from aio_pika import IncomingMessage
-from rabbitmq_helpers import RabbitmqSelectLoopInteractor
-import queue
-import signal
-import redis
 import asyncio
 import json
-import os
-import time
 import multiprocessing
+import os
+import queue
+import signal
+import time
+from signal import SIGINT, SIGQUIT, SIGTERM
+from typing import Callable, Dict, List, Optional, Tuple, Union
+from uuid import uuid4
+
+import redis
+from aio_pika import IncomingMessage
+from dynaconf import settings
+from eth_utils import keccak
+from httpx import AsyncClient, AsyncHTTPTransport, Limits, Timeout
+from pydantic import ValidationError
+from setproctitle import setproctitle
+
+from callback_modules.helpers import (AuditProtocolCommandsHelper,
+                                      CallbackAsyncWorker)
+from callback_modules.uniswap.core import (
+    get_pair_reserves, get_pair_trade_volume,
+    warm_up_cache_for_snapshot_constructors)
 from default_logger import logger
+from message_models import (EpochBase, PowerloomCallbackEpoch,
+                            PowerloomCallbackProcessMessage,
+                            UniswapPairTotalReservesSnapshot,
+                            UniswapTradesSnapshot)
+from rabbitmq_helpers import RabbitmqSelectLoopInteractor
+from rate_limiter import load_rate_limiter_scripts
+from redis_conn import REDIS_CONN_CONF, create_redis_conn
+from redis_keys import (
+    uniswap_cb_broadcast_processing_logs_zset,
+    uniswap_discarded_query_pair_total_reserves_epochs_redis_q_f,
+    uniswap_discarded_query_pair_trade_volume_epochs_redis_q_f,
+    uniswap_failed_query_pair_total_reserves_epochs_redis_q_f,
+    uniswap_failed_query_pair_trade_volume_epochs_redis_q_f)
+
+from .data_models import PayloadCommitAPIRequest, SourceChainDetails
 
 SETTINGS_ENV = os.getenv('ENV_FOR_DYNACONF', 'development')
 

@@ -1,10 +1,11 @@
-from redis import Redis
-from redis_conn import REDIS_CONN_CONF
-from dynaconf import settings
-import fnmatch
-from IPFS_API import ipfshttpclient
 import argparse
+import fnmatch
 
+from dynaconf import settings
+from IPFS_API import ipfshttpclient
+from redis import Redis
+
+from redis_conn import REDIS_CONN_CONF
 
 # Define the parser
 parser = argparse.ArgumentParser(description='clean slate script')

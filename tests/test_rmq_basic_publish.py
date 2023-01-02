@@ -1,10 +1,12 @@
 import queue
 import threading
+
 import pika
 from dynaconf import settings
 
 from init_rabbitmq import create_rabbitmq_conn
 from rabbitmq_helpers import RabbitmqThreadedSelectLoopInteractor
+
 
 def interactor_wrapper_obj(rmq_q: queue.Queue):
     rmq_interactor = RabbitmqThreadedSelectLoopInteractor(publish_queue=rmq_q)

@@ -1,18 +1,18 @@
 import asyncio
-import time
-import os
 import json
+import os
+import time
+
 import requests
-from web3 import Web3
 from dynaconf import settings
-from rich.table import Table
 from rich.console import Console
-
+from rich.table import Table
 from uniswap_functions import get_pair_trade_volume, load_rate_limiter_scripts
-from redis_conn import provide_async_redis_conn_insta
-from ipfs_async import client as ipfs_client
-from clean_slate import redis_cleanup_pooler_namespace
+from web3 import Web3
 
+from clean_slate import redis_cleanup_pooler_namespace
+from ipfs_async import client as ipfs_client
+from redis_conn import provide_async_redis_conn_insta
 
 console = Console()
 

@@ -1,7 +1,9 @@
-from dynaconf import settings
-import pika
 import json
+
 import aio_pika
+import pika
+from dynaconf import settings
+
 from default_logger import logger
 
 # setup logging

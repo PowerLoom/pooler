@@ -1,10 +1,13 @@
+import signal
+
+from dynaconf import settings
+from setproctitle import setproctitle
+
+from default_logger import logger
+from exceptions import GenericExitOnSignal
 from init_rabbitmq import init_exchanges_queues
 from process_hub_core import ProcessHubCore
-from setproctitle import setproctitle
-from exceptions import GenericExitOnSignal
-import signal
-from dynaconf import settings
-from default_logger import logger
+
 
 def generic_exit_handler(signum, frame):
     raise GenericExitOnSignal

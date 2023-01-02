@@ -1,18 +1,21 @@
-from redis_keys import (
-    uniswap_pair_contract_tokens_addresses, uniswap_pair_contract_tokens_data,
-    uniswap_tokens_pair_map, cached_block_details_at_height
-)
-from callback_modules.uniswap.constants import global_w3_client, erc20_abi, pair_contract_abi
-from rpc_helper import batch_eth_get_block, RPCException
-from redis_conn import provide_async_redis_conn_insta
-from rate_limiter import check_rpc_rate_limit
-from redis import asyncio as aioredis
-from functools import partial
-from dynaconf import settings
-from web3 import Web3
 import asyncio
 import json
+from functools import partial
+
+from dynaconf import settings
+from redis import asyncio as aioredis
+from web3 import Web3
+
+from callback_modules.uniswap.constants import (erc20_abi, global_w3_client,
+                                                pair_contract_abi)
 from default_logger import logger
+from rate_limiter import check_rpc_rate_limit
+from redis_conn import provide_async_redis_conn_insta
+from redis_keys import (cached_block_details_at_height,
+                        uniswap_pair_contract_tokens_addresses,
+                        uniswap_pair_contract_tokens_data,
+                        uniswap_tokens_pair_map)
+from rpc_helper import RPCException, batch_eth_get_block
 
 helper_logger = logger.bind(module='PowerLoom|Uniswap|Helpers')
 

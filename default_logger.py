@@ -1,4 +1,5 @@
 import sys
+
 from loguru import logger
 
 FORMAT = "{time:MMMM D, YYYY > HH:mm:ss!UTC} | {level} | {message}| {extra}"

@@ -1,26 +1,26 @@
-from callback_modules.uniswap.constants import (
-    global_w3_client, pair_contract_abi, tokens_decimals, router_contract_abi, 
-    factory_contract_obj
-)
-from rpc_helper import (
-    contract_abi_dict, batch_eth_call_on_block_range, RPCException
-)
-from redis_conn import provide_async_redis_conn_insta
-from callback_modules.uniswap.helpers import get_pair, get_pair_metadata
-from rate_limiter import check_rpc_rate_limit
-from redis import asyncio as aioredis
-from dynaconf import settings
-from web3 import Web3
 import asyncio
 import json
-from default_logger import logger
 
+from dynaconf import settings
+from redis import asyncio as aioredis
+from web3 import Web3
+
+from callback_modules.uniswap.constants import (factory_contract_obj,
+                                                global_w3_client,
+                                                pair_contract_abi,
+                                                router_contract_abi,
+                                                tokens_decimals)
+from callback_modules.uniswap.helpers import get_pair, get_pair_metadata
+from default_logger import logger
+from rate_limiter import check_rpc_rate_limit
+from redis_conn import provide_async_redis_conn_insta
+from rpc_helper import (RPCException, batch_eth_call_on_block_range,
+                        contract_abi_dict)
 
 pricing_logger = logger.bind(module='PowerLoom|Uniswap|Pricing')
 
-from redis_keys import (
-    uniswap_pair_cached_block_height_token_price, uniswap_eth_usd_price_zset
-)
+from redis_keys import (uniswap_eth_usd_price_zset,
+                        uniswap_pair_cached_block_height_token_price)
 
 
 @provide_async_redis_conn_insta

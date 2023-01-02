@@ -1,6 +1,8 @@
-from callback_modules.uniswap.core import get_pair_reserves, get_pair_trade_volume
-from datetime import datetime
 import asyncio
+from datetime import datetime
+
+from callback_modules.uniswap.core import (get_pair_reserves,
+                                           get_pair_trade_volume)
 
 if __name__ == '__main__':
     toBlock = 15839788

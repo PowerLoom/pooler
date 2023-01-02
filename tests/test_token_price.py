@@ -1,15 +1,12 @@
 import asyncio
-from functools import partial
 import json
+from functools import partial
 
-from web3 import Web3
 from dynaconf import settings
 from redis import asyncio as aioredis
-
-from uniswap_functions import (get_pair_metadata,
-                                provide_async_redis_conn_insta,
-                                load_rate_limiter_scripts)
-
+from uniswap_functions import (get_pair_metadata, load_rate_limiter_scripts,
+                               provide_async_redis_conn_insta)
+from web3 import Web3
 
 w3 = Web3(Web3.HTTPProvider(settings.RPC.FULL_NODES[0].url))
 pair_address= Web3.toChecksumAddress("0x97c4adc5d28a86f9470c70dd91dc6cc2f20d2d4d")

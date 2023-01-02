@@ -1,15 +1,17 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=C0111,C0103,R0205
-from dynaconf import settings
-from typing import Union
-from functools import wraps
-from tenacity import RetryCallState, Retrying, wait_random_exponential
-import uuid
 import functools
 import queue
+import uuid
+from functools import wraps
+from typing import Union
+
 import pika
-import pika.exceptions
 import pika.channel
+import pika.exceptions
+from dynaconf import settings
+from tenacity import RetryCallState, Retrying, wait_random_exponential
+
 from default_logger import logger
 
 # setup logging

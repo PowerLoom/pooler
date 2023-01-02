@@ -1,13 +1,16 @@
+import time
+
+from dynaconf import settings
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from auth.redis_keys import (
-    user_details_htable, all_users_set, user_active_api_keys_set, user_revoked_api_keys_set, api_key_to_owner_key
-)
-from dynaconf import settings
-from auth.data_models import AppOwnerModel, AddApiKeyRequest, UserAllDetailsResponse
 from redis import asyncio as aioredis
-import time
+
+from auth.data_models import (AddApiKeyRequest, AppOwnerModel,
+                              UserAllDetailsResponse)
 from auth.redis_conn import RedisPoolCache
+from auth.redis_keys import (all_users_set, api_key_to_owner_key,
+                             user_active_api_keys_set, user_details_htable,
+                             user_revoked_api_keys_set)
 from default_logger import logger
 
 # setup logging

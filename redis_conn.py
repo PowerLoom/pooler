@@ -1,14 +1,14 @@
-from dynaconf import settings as settings_conf
-from functools import wraps
-from redis import asyncio as aioredis
 import contextlib
-import tenacity
-import redis.exceptions as redis_exc
-import redis
-
 import logging
-from default_logger import logger
+from functools import wraps
 
+import redis
+import redis.exceptions as redis_exc
+import tenacity
+from dynaconf import settings as settings_conf
+from redis import asyncio as aioredis
+
+from default_logger import logger
 
 # setup logging
 logger = logger.bind(module='PowerLoom|RedisConn')

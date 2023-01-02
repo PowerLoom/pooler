@@ -1,6 +1,8 @@
 from math import floor
+
 from ipfs_async import client as ipfs_client
 from redis_keys import uniswap_pair_hits_payload_data_key
+
 
 def v2_pair_data_unpack(prop):
     prop = prop.replace("US$", "")

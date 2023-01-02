@@ -1,24 +1,27 @@
-import redis
-import sys
-import signal
-import threading
-import queue
-import multiprocessing
-import uuid
-import requests
 import json
-from time import sleep
-from signal import SIGINT, SIGTERM, SIGQUIT
+import multiprocessing
+import queue
+import signal
+import sys
+import threading
+import uuid
 from functools import wraps
+from signal import SIGINT, SIGQUIT, SIGTERM
+from time import sleep
+
+import redis
+import requests
 from dynaconf import settings
-from exceptions import GenericExitOnSignal
-from message_models import SystemEpochStatusReport
-from redis_keys import epoch_detector_last_processed_epoch
 from setproctitle import setproctitle
-from rabbitmq_helpers import RabbitmqThreadedSelectLoopInteractor
-from redis_conn import create_redis_conn, REDIS_CONN_CONF
+
 from data_models import EpochInfo
 from default_logger import logger
+from exceptions import GenericExitOnSignal
+from message_models import SystemEpochStatusReport
+from rabbitmq_helpers import RabbitmqThreadedSelectLoopInteractor
+from redis_conn import REDIS_CONN_CONF, create_redis_conn
+from redis_keys import epoch_detector_last_processed_epoch
+
 
 def chunks(start_idx, stop_idx, n):
     """

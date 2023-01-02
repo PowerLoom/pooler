@@ -1,20 +1,23 @@
-from itertools import repeat
-from message_models import RPCNodesObject
-from functools import wraps
-import requests
-import time
-import multiprocessing
-from dynaconf import settings
-from web3 import Web3
-from hexbytes import HexBytes
-import eth_abi
-from eth_utils import keccak
-from web3._utils.events import get_event_data
-from eth_abi.codec import ABICodec
 import json
+import multiprocessing
+import time
+from functools import wraps
+from itertools import repeat
+
+import eth_abi
+import requests
 from async_limits import parse_many as limit_parse_many
+from dynaconf import settings
+from eth_abi.codec import ABICodec
+from eth_utils import keccak
 from gnosis.eth import EthereumClient
+from hexbytes import HexBytes
+from web3 import Web3
+from web3._utils.events import get_event_data
+
 from default_logger import logger
+from message_models import RPCNodesObject
+
 #from callback_modules.uniswap.constants import GLOBAL_WEB3_PROVIDER
 
 # setup logging

@@ -1,6 +1,7 @@
 import json
-import os
 import logging
+import os
+
 
 def read_json_file(file_path: str, logger = logging):
     """Read given json file and return its content as a dictionary."""

@@ -1,24 +1,29 @@
-from rpc_helper import (
-    inject_web3_provider_first_run, inject_web3_provider_on_exception, RPCException, 
-    batch_eth_call_on_block_range, get_event_sig_and_abi, get_events_logs, contract_abi_dict
-)
-from callback_modules.uniswap.constants import (
-    global_w3_client, pair_contract_abi, 
-    UNISWAP_TRADE_EVENT_SIGS, UNISWAP_EVENTS_ABI
-)
-from tenacity import retry, stop_after_attempt, wait_random_exponential, retry_if_exception_type
-from data_models import trade_data, epoch_event_trade_data, event_trade_data
-from callback_modules.uniswap.helpers import get_pair_metadata, get_block_details_in_block_range
-from rate_limiter import check_rpc_rate_limit, load_rate_limiter_scripts
-from callback_modules.uniswap.pricing import get_token_price_in_block_range, get_eth_price_usd
-from redis_conn import provide_async_redis_conn_insta
-from redis import asyncio as aioredis
-from dynaconf import settings
-from functools import partial
-from web3 import Web3
 import asyncio
 import json
+from functools import partial
+
+from dynaconf import settings
+from redis import asyncio as aioredis
+from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
+                      wait_random_exponential)
+from web3 import Web3
+
+from callback_modules.uniswap.constants import (UNISWAP_EVENTS_ABI,
+                                                UNISWAP_TRADE_EVENT_SIGS,
+                                                global_w3_client,
+                                                pair_contract_abi)
+from callback_modules.uniswap.helpers import (get_block_details_in_block_range,
+                                              get_pair_metadata)
+from callback_modules.uniswap.pricing import (get_eth_price_usd,
+                                              get_token_price_in_block_range)
+from data_models import epoch_event_trade_data, event_trade_data, trade_data
 from default_logger import logger
+from rate_limiter import check_rpc_rate_limit, load_rate_limiter_scripts
+from redis_conn import provide_async_redis_conn_insta
+from rpc_helper import (RPCException, batch_eth_call_on_block_range,
+                        contract_abi_dict, get_event_sig_and_abi,
+                        get_events_logs, inject_web3_provider_first_run,
+                        inject_web3_provider_on_exception)
 
 core_logger = logger.bind(module='PowerLoom|UniswapCore')
 

@@ -1,27 +1,29 @@
-import threading
-import uuid
-from exceptions import SelfExitException
-from redis_conn import provide_redis_conn
-from threading import Thread
-from multiprocessing import Process
-from typing import Dict, Union
-from dynaconf import settings
-from message_models import ProcessHubCommand
-from helper_functions import cleanup_children_procs
-from epoch_broadcast_callback_manager import EpochCallbackManager
-from system_epoch_detector import EpochDetectorProcess
-import redis
-import pydantic
-import psutil
-import logging
-import logging.handlers
 import importlib
 import json
-from setproctitle import setproctitle
-from signal import signal, SIGINT, SIGTERM, SIGQUIT, SIGCHLD
+import logging
+import logging.handlers
 import os
-from rabbitmq_helpers import RabbitmqSelectLoopInteractor
+import threading
+import uuid
+from multiprocessing import Process
+from signal import SIGCHLD, SIGINT, SIGQUIT, SIGTERM, signal
+from threading import Thread
+from typing import Dict, Union
+
+import psutil
+import pydantic
+import redis
+from dynaconf import settings
+from setproctitle import setproctitle
+
 from default_logger import logger
+from epoch_broadcast_callback_manager import EpochCallbackManager
+from exceptions import SelfExitException
+from helper_functions import cleanup_children_procs
+from message_models import ProcessHubCommand
+from rabbitmq_helpers import RabbitmqSelectLoopInteractor
+from redis_conn import provide_redis_conn
+from system_epoch_detector import EpochDetectorProcess
 
 PROC_STR_ID_TO_CLASS_MAP = {
     'EpochCallbackManager': {

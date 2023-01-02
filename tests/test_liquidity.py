@@ -1,12 +1,12 @@
 import asyncio
 import json
 import os
+
 import requests
 from redis import asyncio as aioredis
+from uniswap_functions import (get_pair_reserves, load_rate_limiter_scripts,
+                               provide_async_redis_conn_insta)
 
-from uniswap_functions import (get_pair_reserves,
-                                load_rate_limiter_scripts,
-                                provide_async_redis_conn_insta)
 
 def load_contracts():
     contracts = list()

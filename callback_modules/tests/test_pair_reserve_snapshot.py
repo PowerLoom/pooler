@@ -1,9 +1,11 @@
-from dynaconf import settings
-from init_rabbitmq import init_exchanges_queues
-from message_models import PowerloomCallbackProcessMessage
-from callback_modules.pair_total_reserves import PairTotalReservesProcessor
 import asyncio
 import uuid
+
+from dynaconf import settings
+
+from callback_modules.pair_total_reserves import PairTotalReservesProcessor
+from init_rabbitmq import init_exchanges_queues
+from message_models import PowerloomCallbackProcessMessage
 
 
 async def test_construction_snapshot(

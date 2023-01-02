@@ -1,9 +1,9 @@
-from rpc_helper import GLOBAL_WEB3_PROVIDER
-from file_utils import read_json_file
 from dynaconf import settings
 from web3 import Web3
-from default_logger import logger
 
+from default_logger import logger
+from file_utils import read_json_file
+from rpc_helper import GLOBAL_WEB3_PROVIDER
 
 constants_logger = logger.bind(module='PowerLoom|Uniswap|Constants')
 
