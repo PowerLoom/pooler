@@ -148,8 +148,8 @@ The size of an epoch is configurable. Let that be referred to as `size(E)`
 
 Overview of broadcasted epoch processing, building snapshot, and submitting it to audit-protocol ([whitepaper-ref](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#8ad76b8362b341bcaa9b3ae9fe203271)):
 
-1. Published/broadcasted epochs are received by `PairTotalReservesProcessorDistributor`, and get distributed to callback workers by publishing messages on respective queues ([code-ref](callback_modules/pair_total_reserves.py#L621-L645)).    
-[Distributor code-module](callback_modules/pair_total_reserves.py#L570-L579)
+1. Published/broadcasted epochs are received by `PairTotalReservesProcessorDistributor`, and get distributed to callback workers by publishing messages on respective queues ([code-ref](pooler/callback_modules/pair_total_reserves.py#L621-L645)).    
+[Distributor code-module](pooler/callback_modules/pair_total_reserves.py#L570-L579)
 ```
 queue.enqueue_msg_delivery(
     exchange=f'pair_processor_exchange',
@@ -158,13 +158,13 @@ queue.enqueue_msg_delivery(
 )
 ```   
 
-2. The Distributor's messages are received by the `PairTotalReservesProcessor` on_message handler. Multiple workers are running parallelly consuming incoming messages ([code-ref](callback_modules/pair_total_reserves.py#L312-L332)).    
-[Processor code-module](callback_modules/pair_total_reserves.py#L37-L44)
+2. The Distributor's messages are received by the `PairTotalReservesProcessor` on_message handler. Multiple workers are running parallelly consuming incoming messages ([code-ref](pooler/callback_modules/pair_total_reserves.py#L312-L332)).    
+[Processor code-module](pooler/callback_modules/pair_total_reserves.py#L37-L44)
 
 
 3. Each message goes through capturing smart-contract data and transforming it into a standardized JSON schema. All these data-point operations are detailed in the next section.    
 
-4. Generated snapshots get submitted to audit-protocol with appropriate status updated against message broadcast_id ([code-ref](callback_modules/pair_total_reserves.py#L378-L410)).
+4. Generated snapshots get submitted to audit-protocol with appropriate status updated against message broadcast_id ([code-ref](pooler/callback_modules/pair_total_reserves.py#L378-L410)).
 ```
 await AuditProtocolCommandsHelper.commit_payload(
     pair_contract_address=epoch_snapshot.contract, stream='pair_total_reserves',
@@ -183,11 +183,11 @@ Implementation breakdown of all <u><b>snapshot data-point operations</b></u> to 
 Token price in USD(stable coins) more details in [whitepaper](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#8bb48365ac444f22b2376433b5cf36f7).
 
 Steps to calculate the token price:
-1. Calculate Eth USD price ([code-ref](uniswap_functions.py#L639-L643)) 
+1. Calculate Eth USD price ([code-ref](pooler/callback_modules/uniswap/pricing.py#L345-L350)) 
 ```
 eth_price_dict = await get_eth_price_usd(from_block, to_block, web3_provider, ...)
 ```
-`get_eth_price_usd()` function calculates the average eth price using stablecoin pools (USDC, USDT, and DAI) ( [code-ref](uniswap_functions.py#L376-L381) ):
+`get_eth_price_usd()` function calculates the average eth price using stablecoin pools (USDC, USDT, and DAI) ( [code-ref](pooler/callback_modules/uniswap/pricing.py#L27-L148) ):
 
 [[whitepaper-ref](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#10e57df8515d4d77bf9ac97c09e6f5db)]
 ```
@@ -319,7 +319,7 @@ get_events_logs, **{
     'contract_address': pair_address, 'topics': [event_sig], 'event_abi': event_abi, ...
 }
 ```
-`get_events_logs()` function is written in `rpc_helpers.py` module. It uses the `eth.get_logs` RPC function to fetch event logs of given topics in block range ([code-ref](rpc_helper.py#L372-L387)):
+`get_events_logs()` function is written in `rpc_helpers.py` module. It uses the `eth.get_logs` RPC function to fetch event logs of given topics in block range ([code-ref](pooler/utils/rpc_helper.py#L372-L387)):
 ```
 event_log = web3Provider.eth.get_logs({
     'address': contract_address, 'toBlock': toBlock,
@@ -332,7 +332,7 @@ for -> (event_log):
 
 
 ### Pair trade volume 
-[code-ref](uniswap_functions.py#L1038-L1047)
+[code-ref](pooler/callback_modules/uniswap/core.py)
 Calculate The Trade volume of a pair using event logs, more details in [whitepaper](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#be2e5c71701d4491a04572589ac67f1b). 
 
 `Trade Volume = SwapValueUSD = token0Amount * token0PriceUSD = token1Amount * token1PriceUSD`
@@ -375,17 +375,17 @@ for -> (event_logs):
 
 7. Add swap logs amount as effective trade volume ([code-ref](uniswap_functions.py#L1174-L1177))
 
-8. `get_pair_trade_volume()` return type [data-model](message_models.py#L62)
+8. `get_pair_trade_volume()` return type [data-model](pooler/utils/models/message_models.py#L62)
 
 
 
 ### Rate Limiter 
-[code-ref](rate_limiter.py#L64)
+[code-ref](pooler/utils/redis/rate_limiter.py#L64)
 All RPC nodes specified in [settings.json](settings.example.json#L60-L75) has a rate limit to them, every RPC calls honor this limit ([more details](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#d9bef53da81449b7b5e39290b25843ac)).
 
 
-* [Rate limiter module](/rate_limiter.py)
-* [helper function](rate_limiter.py#L64)
+* [Rate limiter module](pooler/utils/redis/rate_limiter.py)
+* [helper function](pooler/utils/redis/rate_limiter.py#L64)
 
 ```
 rate_limiter:
@@ -409,9 +409,9 @@ Batch RPC calls by sending multiple queries in a single request, details in [Get
 ]
 ```
 
-`rpc_helper.py` ([code-ref](/rpc_helper.py)) module contains several helpers which use batching: 
-* [batch_eth_call_on_block_range](rpc_helper.py#L268): to query a contract function on multiple block-heights.
-* [batch_eth_get_block](rpc_helper.py#L330): to get block data at multiple block heights. 
+`rpc_helper.py` ([code-ref](pooler/utils/rpc_helper.py)) module contains several helpers which use batching: 
+* [batch_eth_call_on_block_range](pooler/utils/rpc_helper.py#L268): to query a contract function on multiple block-heights.
+* [batch_eth_get_block](pooler/utils/rpc_helper.py#L330): to get block data at multiple block heights. 
 
 ## Architecture Details
-Details about working of various components is present in [Details.md](Details.md) if you're interested to know more about Pooler.
+Details about working of various components is present in [Details.md](pooler/Details.md) if you're interested to know more about Pooler.
