@@ -11,11 +11,11 @@
         "chain_id": 1,
         "instance_id": "generated-uuid",
         "uniswap_contract_abis":{
-            "factory":"./abis/IUniswapV2Factory.json",
-            "router":"./abis/UniswapV2Router.json",
-            "pair_contract":"./abis/UniswapV2Pair.json",
-            "erc20":"./abis/IERC20.json",
-            "trade_events":"./abis/UniswapTradeEvents.json"
+            "factory":"pooler/static/abis/IUniswapV2Factory.json",
+            "router":"pooler/static/abis/UniswapV2Router.json",
+            "pair_contract":"pooler/static/abis/UniswapV2Pair.json",
+            "erc20":"pooler/static/abis/IERC20.json",
+            "trade_events":"pooler/static/abis/UniswapTradeEvents.json"
         },
         "contract_addresses": {
             "iuniswap_v2_factory": "0x5757371414417b8C6CAad45bAeF941aBc7d3Ab32",
@@ -110,7 +110,7 @@
                 },
                 "callbacks": {
                     "exchange": "powerloom-backend-callbacks",
-                    "path": "callback_modules/",
+                    "path": "pooler/callback_modules/",
                     "config": "module_queues_config.json"
                 }
             }
@@ -155,11 +155,11 @@
         "namespace": "UNISWAPV2-stg-1",
         "chain_id": 1,
         "uniswap_contract_abis":{
-            "factory":"./abis/IUniswapV2Factory.json",
-            "router":"./abis/UniswapV2Router.json",
-            "pair_contract":"./abis/UniswapV2Pair.json",
-            "erc20":"./abis/IERC20.json",
-            "trade_events":"./abis/UniswapTradeEvents.json"
+            "factory":"pooler/static/abis/IUniswapV2Factory.json",
+            "router":"pooler/static/abis/UniswapV2Router.json",
+            "pair_contract":"pooler/static/abis/UniswapV2Pair.json",
+            "erc20":"pooler/static/abis/IERC20.json",
+            "trade_events":"pooler/static/abis/UniswapTradeEvents.json"
         },
         "contract_addresses": {
             "iuniswap_v2_factory": "0x5757371414417b8C6CAad45bAeF941aBc7d3Ab32",
@@ -254,7 +254,7 @@
                 },
                 "callbacks": {
                     "exchange": "powerloom-backend-callbacks",
-                    "path": "callback_modules/",
+                    "path": "pooler/callback_modules/",
                     "config": "module_queues_config.json"
                 }
             }

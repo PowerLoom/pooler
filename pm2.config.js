@@ -10,7 +10,7 @@ module.exports = {
   apps : [
     {
       name   : "pooler-process-hub-core",
-      script : `${INTERPRETER} ${__dirname}/launch_process_hub_core.py`,
+      script : `${INTERPRETER} -m pooler.launch_process_hub_core`,
       max_restarts: MAX_RESTART,
       min_uptime: MIN_UPTIME,
       env: {
@@ -19,7 +19,7 @@ module.exports = {
     },
     {
       name   : "pooler-core-api",
-      script : `${INTERPRETER} ${__dirname}/gunicorn_core_launcher.py`,
+      script : `${INTERPRETER} -m pooler.gunicorn_core_launcher`,
       max_restarts: MAX_RESTART,
       min_uptime: MIN_UPTIME,
       env: {
