@@ -8,8 +8,10 @@ class TimeoutConfig(BaseModel):
     archival: int
     connection_init: int
 
+
 class RLimitConfig(BaseModel):
     file_descriptors: int
+
 
 class liquidityProcessedData(BaseModel):
     contractAddress: str
@@ -27,6 +29,7 @@ class liquidityProcessedData(BaseModel):
     latestTimestamp: float
     earliestTimestamp: float
 
+
 class trade_data(BaseModel):
     totalTradesUSD: float
     totalFeeUSD: float
@@ -35,7 +38,7 @@ class trade_data(BaseModel):
     token0TradeVolumeUSD: float
     token1TradeVolumeUSD: float
 
-    def __add__(self, other):
+    def __add__(self, other: 'trade_data') -> 'trade_data':
         self.totalTradesUSD += other.totalTradesUSD
         self.totalFeeUSD += other.totalFeeUSD
         self.token0TradeVolume += other.token0TradeVolume
@@ -44,7 +47,7 @@ class trade_data(BaseModel):
         self.token1TradeVolumeUSD += other.token1TradeVolumeUSD
         return self
 
-    def __sub__(self, other):
+    def __sub__(self, other: 'trade_data') -> 'trade_data':
         self.totalTradesUSD -= other.totalTradesUSD
         self.totalFeeUSD -= other.totalFeeUSD
         self.token0TradeVolume -= other.token0TradeVolume
@@ -53,7 +56,7 @@ class trade_data(BaseModel):
         self.token1TradeVolumeUSD -= other.token1TradeVolumeUSD
         return self
 
-    def __abs__(self):
+    def __abs__(self) -> 'trade_data':
         self.totalTradesUSD = abs(self.totalTradesUSD)
         self.totalFeeUSD = abs(self.totalFeeUSD)
         self.token0TradeVolume = abs(self.token0TradeVolume)
@@ -62,15 +65,18 @@ class trade_data(BaseModel):
         self.token1TradeVolumeUSD = abs(self.token1TradeVolumeUSD)
         return self
 
+
 class event_trade_data(BaseModel):
     logs: List[dict]
     trades: trade_data
+
 
 class epoch_event_trade_data(BaseModel):
     Swap: event_trade_data
     Mint: event_trade_data
     Burn: event_trade_data
     Trades: trade_data
+
 
 class EpochInfo(BaseModel):
     chainId: int

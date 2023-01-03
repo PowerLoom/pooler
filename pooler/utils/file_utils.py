@@ -1,14 +1,17 @@
 import json
-import logging
 import os
+from typing import Any
+from typing import Optional
+
+from loguru import logger
 
 
-def read_json_file(file_path: str, logger = logging):
+def read_json_file(file_path: str, logger: logger) -> Optional[dict]:
     """Read given json file and return its content as a dictionary."""
     try:
         f_ = open(file_path, 'r', encoding='utf-8')
     except Exception as exc:
-        logger.warning(f"Unable to open the {file_path} file")
+        logger.warning(f'Unable to open the {file_path} file')
         logger.error(exc, exc_info=True)
         raise exc
     else:
@@ -16,14 +19,14 @@ def read_json_file(file_path: str, logger = logging):
         return json_data
 
 
-def write_json_file(directory:str, file_name: str, data, logger):
+def write_json_file(directory: str, file_name: str, data: Any, logger: logger = logger) -> None:
     try:
         file_path = directory + file_name
         if not os.path.exists(directory):
             os.makedirs(directory)
         f_ = open(file_path, 'w', encoding='utf-8')
     except Exception as exc:
-        logger.error(f"Unable to open the {file_path} file")
+        logger.error(f'Unable to open the {file_path} file')
         raise exc
     else:
         json.dump(data, f_, ensure_ascii=False, indent=4)

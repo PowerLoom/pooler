@@ -1,5 +1,6 @@
 from enum import Enum
-from typing import List, Optional
+from typing import List
+from typing import Optional
 
 from pydantic import BaseModel
 
@@ -39,5 +40,3 @@ class RateLimitAuthCheck(AuthCheck):
     retry_after: int = 1
     violated_limit: str
     current_limit: str
-
-

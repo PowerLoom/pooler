@@ -11,31 +11,33 @@ from pooler.utils.redis.redis_conn import REDIS_CONN_CONF
 parser = argparse.ArgumentParser(description='clean slate script')
 parser.add_argument(
     '--ipfs', action=argparse.BooleanOptionalAction, type=bool, dest='ipfs',
-    default=False, help='cleanup ipfs keys'
+    default=False, help='cleanup ipfs keys',
 )
 args = parser.parse_args()
 
-def del_namespace_specific_keys_hash(redis:Redis, key:str):
+
+def del_namespace_specific_keys_hash(redis: Redis, key: str):
     try:
         hash_set = redis.hgetall(key)
         hash_keys = list(map(lambda x: x.decode('utf-8'), hash_set.keys()))
         for k in hash_keys:
-            if fnmatch.fnmatch(k,f'uniswap*{settings.NAMESPACE}*'):
+            if fnmatch.fnmatch(k, f'uniswap*{settings.NAMESPACE}*'):
                 redis.hdel(key, k)
     except:
         pass
 
+
 def redis_cleanup_audit_protocol():
     REDIS_AUDIT_PROTOCOL_CONFIG = {
-        "host": settings['redis']['host'],
-        "port": settings['redis']['port'],
-        "password": settings['redis']['password'],
-        "db": 13 #TODO: this should be fetched from audit-protocol config
+        'host': settings['redis']['host'],
+        'port': settings['redis']['port'],
+        'password': settings['redis']['password'],
+        'db': 13,  # TODO: this should be fetched from audit-protocol config
     }
     r = Redis(**REDIS_AUDIT_PROTOCOL_CONFIG)
 
-    del_namespace_specific_keys_hash(r,'projects:pruningStatus')
-    del_namespace_specific_keys_hash(r,'projects:pruningVerificationStatus')
+    del_namespace_specific_keys_hash(r, 'projects:pruningStatus')
+    del_namespace_specific_keys_hash(r, 'projects:pruningVerificationStatus')
     try:
         c = r.delete('pruningRunStatus')
     except:
@@ -106,7 +108,7 @@ def redis_cleanup_audit_protocol():
     except:
         pass
 
-    del_namespace_specific_keys_hash(r,'auditprotocol:lastSeenSnapshots')
+    del_namespace_specific_keys_hash(r, 'auditprotocol:lastSeenSnapshots')
     try:
         c = r.delete(*r.keys('lastPruned*uniswap*'))
         print(c)
@@ -123,7 +125,9 @@ def redis_cleanup_pooler_namespace(redis_config=None):
         pass
 
     try:
-        r.delete(*r.keys(f'*uniswap:V2PairsSummarySnapshot*{settings.NAMESPACE}*snapshotsZset*'))
+        r.delete(
+            *r.keys(f'*uniswap:V2PairsSummarySnapshot*{settings.NAMESPACE}*snapshotsZset*'),
+        )
     except:
         pass
 
@@ -138,7 +142,6 @@ def redis_cleanup_pooler_namespace(redis_config=None):
         print('Broadcast related keys deleted: ', c)
     except:
         pass
-
 
     r.delete(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}')
 
@@ -212,10 +215,10 @@ def redis_cleanup_pooler_namespace(redis_config=None):
 def cleanup_ipfs():
     client = ipfshttpclient.connect(addr=settings['ipfs_url'], session=True)
     REDIS_AUDIT_PROTOCOL_CONFIG = {
-        "host": settings['redis']['host'],
-        "port": settings['redis']['port'],
-        "password": settings['redis']['password'],
-        "db": 13 #TODO: this should be fetched from audit-protocol config
+        'host': settings['redis']['host'],
+        'port': settings['redis']['port'],
+        'password': settings['redis']['password'],
+        'db': 13,  # TODO: this should be fetched from audit-protocol config
     }
 
     r = Redis(**REDIS_AUDIT_PROTOCOL_CONFIG)
@@ -228,11 +231,11 @@ def cleanup_ipfs():
         res = r.zrangebyscore(
             name=key,
             min='-inf',
-            max='+inf'
+            max='+inf',
         )
         cids = cids + [cid.decode('utf-8') for cid in res] if res else []
 
-    print(f"Total cids to be deleted: {len(cids)}")
+    print(f'Total cids to be deleted: {len(cids)}')
 
     for cid in cids:
         try:
@@ -240,25 +243,23 @@ def cleanup_ipfs():
             print(f'Unpinned {cid} result: {res}')
         except ipfshttpclient.exceptions.ErrorResponse as err:
             if str(err) == 'not pinned or pinned indirectly':
-                print(f"cid already unpinned cid:{cid}")
+                print(f'cid already unpinned cid:{cid}')
             else:
-                print(f"Unknown error: {err}")
+                print(f'Unknown error: {err}')
                 raise err
 
-    #print('Running garbage collector: ')
-    #print(client.repo.gc())
-    #TODO: we need to enforce gc here but it might timeout if there are too many cids
+    # TODO: we need to enforce gc here but it might timeout if there are too many cids
     #      default gc is set to 1hour, any objects which are not pinned and not queried
     #      should get gc’d in an hour.
 
 
 if __name__ == '__main__':
     if args.ipfs:
-        print("\n\n## Starting ipfs cleanup...")
+        print('\n\n## Starting ipfs cleanup...')
         cleanup_ipfs()
-    print(f"\n\n## Starting {settings.NAMESPACE} pooler cleanup...")
+    print(f'\n\n## Starting {settings.NAMESPACE} pooler cleanup...')
     redis_cleanup_pooler_namespace()
-    print("\n\n## Starting audit-protocol specific cleanup...")
+    print('\n\n## Starting audit-protocol specific cleanup...')
     redis_cleanup_audit_protocol()
 
-    print("\n\n## Done with clean slate!!")
+    print('\n\n## Done with clean slate!!')

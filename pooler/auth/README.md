@@ -27,8 +27,8 @@ The `redis` part of the config is used to configure the Redis instance that will
 The `bind` part of the config is used to configure the `host` and `port` where the API server will run.
 
 #### Setting Models
-The config JSON structure above is not entirely flexible. Everything from the auth_settings.json is loaded in well-defined `Settings Models` defined in `settings_models.py` using `conf.py`. 
-If any new config needs to be added, users must update the Setting Models first. This will make sure we always have a proper and updated data model for app configuration. 
+The config JSON structure above is not entirely flexible. Everything from the auth_settings.json is loaded in well-defined `Settings Models` defined in `settings_models.py` using `conf.py`.
+If any new config needs to be added, users must update the Setting Models first. This will make sure we always have a proper and updated data model for app configuration.
 
 ### Redis Utilities
 `redis_conn.py` contains utility and helper functions for Redis pool setup and `redis_keys.py` contains functions to generate all the `keys` that are used in Redis across the entire module.

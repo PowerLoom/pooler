@@ -18,8 +18,8 @@ def construct_redis_url():
 async def get_aioredis_pool(pool_size=200):
     return await aioredis.from_url(
         url=construct_redis_url(),
-        retry_on_error=[redis.exceptions.ReadOnlyError, ],
-        max_connections=pool_size
+        retry_on_error=[redis.exceptions.ReadOnlyError],
+        max_connections=pool_size,
     )
 
 

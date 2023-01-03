@@ -37,14 +37,14 @@ Pooler by itself performs the following functions:
 
 1. Tracks the blockchain on which the data source smart contract lives
 2. In equally spaced 'epochs'
-    * it snapshots raw smart contract state variables, event logs, etc 
+    * it snapshots raw smart contract state variables, event logs, etc
     * transforms the same
     * and submits these snapshots to audit-protocol
 
 
 This specific implementation is called Pooler since it tracks Uniswap v2 'pools'.
 
-Together with an Audit Protocol instance, they form a recently released PoC whose objectives were 
+Together with an Audit Protocol instance, they form a recently released PoC whose objectives were
 
 - to present a fully functional, distributed system comprised of lightweight services that can be deployed over multiple instances on a network or even on a single instance
 - to be able to serve the most frequently sought data points on Uniswap v2
@@ -131,7 +131,7 @@ then you need to execute `init_processes.sh` using the following command
 
 ## Epoch Generation
 
-An epoch denotes a range of block heights on the data source blockchain, Ethereum mainnet in the case of Uniswap v2. This makes it easier to collect state transitions and snapshots of data on equally spaced block height intervals, as well as to support future work on other lightweight anchor proof mechanisms like Merkle proofs, succinct proofs, etc. 
+An epoch denotes a range of block heights on the data source blockchain, Ethereum mainnet in the case of Uniswap v2. This makes it easier to collect state transitions and snapshots of data on equally spaced block height intervals, as well as to support future work on other lightweight anchor proof mechanisms like Merkle proofs, succinct proofs, etc.
 
 The size of an epoch is configurable. Let that be referred to as `size(E)`
 
@@ -148,7 +148,7 @@ The size of an epoch is configurable. Let that be referred to as `size(E)`
 
 Overview of broadcasted epoch processing, building snapshot, and submitting it to audit-protocol ([whitepaper-ref](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#8ad76b8362b341bcaa9b3ae9fe203271)):
 
-1. Published/broadcasted epochs are received by `PairTotalReservesProcessorDistributor`, and get distributed to callback workers by publishing messages on respective queues ([code-ref](pooler/callback_modules/pair_total_reserves.py#L621-L645)).    
+1. Published/broadcasted epochs are received by `PairTotalReservesProcessorDistributor`, and get distributed to callback workers by publishing messages on respective queues ([code-ref](pooler/callback_modules/pair_total_reserves.py#L621-L645)).
 [Distributor code-module](pooler/callback_modules/pair_total_reserves.py#L570-L579)
 ```
 queue.enqueue_msg_delivery(
@@ -156,13 +156,13 @@ queue.enqueue_msg_delivery(
     routing_key='callback_routing_key',
     msg_body={epoch_begin, epoch_end, pair_contract, broadcast_id}
 )
-```   
+```
 
-2. The Distributor's messages are received by the `PairTotalReservesProcessor` on_message handler. Multiple workers are running parallelly consuming incoming messages ([code-ref](pooler/callback_modules/pair_total_reserves.py#L312-L332)).    
+2. The Distributor's messages are received by the `PairTotalReservesProcessor` on_message handler. Multiple workers are running parallelly consuming incoming messages ([code-ref](pooler/callback_modules/pair_total_reserves.py#L312-L332)).
 [Processor code-module](pooler/callback_modules/pair_total_reserves.py#L37-L44)
 
 
-3. Each message goes through capturing smart-contract data and transforming it into a standardized JSON schema. All these data-point operations are detailed in the next section.    
+3. Each message goes through capturing smart-contract data and transforming it into a standardized JSON schema. All these data-point operations are detailed in the next section.
 
 4. Generated snapshots get submitted to audit-protocol with appropriate status updated against message broadcast_id ([code-ref](pooler/callback_modules/pair_total_reserves.py#L378-L410)).
 ```
@@ -173,17 +173,17 @@ await AuditProtocolCommandsHelper.commit_payload(
 ```
 
 
-Implementation breakdown of all <u><b>snapshot data-point operations</b></u> to transform smart-contract data and generate snapshots for each epoch. For more explanation check out the [whitepaper section](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#8ad76b8362b341bcaa9b3ae9fe203271): 
+Implementation breakdown of all <u><b>snapshot data-point operations</b></u> to transform smart-contract data and generate snapshots for each epoch. For more explanation check out the [whitepaper section](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#8ad76b8362b341bcaa9b3ae9fe203271):
 
 
 
-### Token Price in USD 
+### Token Price in USD
 [[code-ref](uniswap_functions.py#L612-L620)]
 
 Token price in USD(stable coins) more details in [whitepaper](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#8bb48365ac444f22b2376433b5cf36f7).
 
 Steps to calculate the token price:
-1. Calculate Eth USD price ([code-ref](pooler/callback_modules/uniswap/pricing.py#L345-L350)) 
+1. Calculate Eth USD price ([code-ref](pooler/callback_modules/uniswap/pricing.py#L345-L350))
 ```
 eth_price_dict = await get_eth_price_usd(from_block, to_block, web3_provider, ...)
 ```
@@ -213,7 +213,7 @@ white_token_derived_eth_dict = await get_token_derived_eth(
 `get_token_derived_eth()` function return the derived ETH amount of the given token([code-ref](uniswap_functions.py#L559-L562)):
 ```
 token_derived_eth_list = batch_eth_call_on_block_range(
-    'getAmountsOut', UNISWAP_V2_ROUTER, from_block, to_block=to_block, 
+    'getAmountsOut', UNISWAP_V2_ROUTER, from_block, to_block=to_block,
     params=[10, [whitelist_token_address, weth_address]], ...
 )
 ```
@@ -239,7 +239,7 @@ Important formulas to calculate tokens price
 
 
 
-### Pair Metadata 
+### Pair Metadata
 
 [code-ref](uniswap_functions.py#L202-L205)
 
@@ -264,7 +264,7 @@ web3_provider.batch_call([
 3. store cache and return prepared metadata, return metadata ([data-model](uniswap_functions.py#L300-L329)).
 
 
-### Liquidity / Pair Reserves 
+### Liquidity / Pair Reserves
 [code-ref](uniswap_functions.py#L809-L816)
 Reserves of each token in pair contract ([more details in whitepaper](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#e04df592d3034f18aa1fc9502f749ec9)):
 
@@ -295,7 +295,7 @@ token1_price_map = await get_token_price_in_block_range(token1, from_block, to_b
 4. Fetch pair reserves for each token ([code-ref](uniswap_functions.py#L865-L872)):
 ```
 reserves_array = batch_eth_call_on_block_range(
-    web3_provider, abi_dict, 'getReserves', 
+    web3_provider, abi_dict, 'getReserves',
     pair_address, from_block, to_block, ...
 )
 ```
@@ -307,7 +307,7 @@ reserves_array = batch_eth_call_on_block_range(
 
 
 
-### Fetch event logs 
+### Fetch event logs
 [code-ref](uniswap_functions.py#L1081-L1091)
 Fetch event logs to calculate trade volume using `eth_getLogs`, more details in [whitepaper](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#b42d180a965d4fb9888fb2a586bdd0de).
 
@@ -331,9 +331,9 @@ for -> (event_log):
 `ABICodec` is used to decode the event logs in plain text using the `get_event_data` function, check out more details in the [library](https://github.com/ethereum/web3.py/blob/fbaf1ad11b0c7fac09ba34baff2c256cffe0a148/web3/_utils/events.py#L200).
 
 
-### Pair trade volume 
+### Pair trade volume
 [code-ref](pooler/callback_modules/uniswap/core.py)
-Calculate The Trade volume of a pair using event logs, more details in [whitepaper](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#be2e5c71701d4491a04572589ac67f1b). 
+Calculate The Trade volume of a pair using event logs, more details in [whitepaper](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#be2e5c71701d4491a04572589ac67f1b).
 
 `Trade Volume = SwapValueUSD = token0Amount * token0PriceUSD = token1Amount * token1PriceUSD`
 
@@ -363,7 +363,7 @@ token1_price_map = await get_token_price_in_block_range(token1, from_block, to_b
 `get_token_price_in_block_range()` returns `{block->price}` dictionary for a given token, more details in the [price section](#tokenPriceUSD).
 
 
-4. Fetch event logs in the given block range, following the [event log section](#fetchEventLogs). 
+4. Fetch event logs in the given block range, following the [event log section](#fetchEventLogs).
 
 5. Group logs by transaction hash ([code-ref](uniswap_functions.py#L1100-L1102))
 ```
@@ -379,7 +379,7 @@ for -> (event_logs):
 
 
 
-### Rate Limiter 
+### Rate Limiter
 [code-ref](pooler/utils/redis/rate_limiter.py#L64)
 All RPC nodes specified in [settings.json](settings.example.json#L60-L75) has a rate limit to them, every RPC calls honor this limit ([more details](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#d9bef53da81449b7b5e39290b25843ac)).
 
@@ -409,9 +409,9 @@ Batch RPC calls by sending multiple queries in a single request, details in [Get
 ]
 ```
 
-`rpc_helper.py` ([code-ref](pooler/utils/rpc_helper.py)) module contains several helpers which use batching: 
+`rpc_helper.py` ([code-ref](pooler/utils/rpc_helper.py)) module contains several helpers which use batching:
 * [batch_eth_call_on_block_range](pooler/utils/rpc_helper.py#L268): to query a contract function on multiple block-heights.
-* [batch_eth_get_block](pooler/utils/rpc_helper.py#L330): to get block data at multiple block heights. 
+* [batch_eth_get_block](pooler/utils/rpc_helper.py#L330): to get block data at multiple block heights.
 
 ## Architecture Details
 Details about working of various components is present in [Details.md](pooler/Details.md) if you're interested to know more about Pooler.

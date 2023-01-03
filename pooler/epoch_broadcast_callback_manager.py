@@ -3,7 +3,9 @@ import os
 import signal
 import time
 from multiprocessing import Process
-from signal import SIGINT, SIGQUIT, SIGTERM
+from signal import SIGINT
+from signal import SIGQUIT
+from signal import SIGTERM
 
 import redis
 from dynaconf import settings
@@ -11,9 +13,10 @@ from setproctitle import setproctitle
 
 from pooler.utils.default_logger import logger
 from pooler.utils.rabbitmq_helpers import RabbitmqSelectLoopInteractor
-from pooler.utils.redis.redis_conn import REDIS_CONN_CONF, create_redis_conn
-from pooler.utils.redis.redis_keys import (
-    powerloom_broadcast_id_zset, uniswap_cb_broadcast_processing_logs_zset)
+from pooler.utils.redis.redis_conn import create_redis_conn
+from pooler.utils.redis.redis_conn import REDIS_CONN_CONF
+from pooler.utils.redis.redis_keys import powerloom_broadcast_id_zset
+from pooler.utils.redis.redis_keys import uniswap_cb_broadcast_processing_logs_zset
 
 
 def append_epoch_context(msg_json: dict):
@@ -57,7 +60,7 @@ class EpochCallbackManager(Process):
                 self.rabbitmq_interactor.enqueue_msg_delivery(
                     exchange=callback_exchange_name,
                     routing_key=routing_key,
-                    msg_body=json.dumps(broadcast_json)
+                    msg_body=json.dumps(broadcast_json),
                 )
                 self._logger.debug(f'Sent epoch to callback routing key {routing_key}: {body}')
                 update_log = {
@@ -67,23 +70,37 @@ class EpochCallbackManager(Process):
                         'info': {
                             'routing_key': routing_key,
                             'exchange': callback_exchange_name,
-                            'msg': broadcast_json
-                        }
-                    }
+                            'msg': broadcast_json,
+                        },
+                    },
                 }
                 r.zadd(
-                    uniswap_cb_broadcast_processing_logs_zset.format(broadcast_json['broadcast_id']),
-                    {json.dumps(update_log): int(time.time())}
+                    uniswap_cb_broadcast_processing_logs_zset.format(
+                        broadcast_json['broadcast_id'],
+                    ),
+                    {json.dumps(update_log): int(time.time())},
                 )
 
-            r.zadd(powerloom_broadcast_id_zset, {broadcast_json['broadcast_id']: int(time.time())})
+            r.zadd(
+                powerloom_broadcast_id_zset, {
+                    broadcast_json['broadcast_id']: int(time.time()),
+                },
+            )
             # attempt to keep broadcast id processing logs set at 20
             to_be_pruned_ts = settings.EPOCH.HEIGHT * settings.EPOCH.BLOCK_TIME * 20
-            older_broadcast_ids = r.zrangebyscore(powerloom_broadcast_id_zset, min='-inf', max=int(time.time() - to_be_pruned_ts), withscores=False)
+            older_broadcast_ids = r.zrangebyscore(
+                powerloom_broadcast_id_zset, min='-inf', max=int(time.time() - to_be_pruned_ts), withscores=False,
+            )
             if older_broadcast_ids:
                 older_broadcast_ids_dec = map(lambda x: x.decode('utf-8'), older_broadcast_ids)
-                [r.delete(uniswap_cb_broadcast_processing_logs_zset.format(k)) for k in older_broadcast_ids_dec]
-            r.zremrangebyscore(powerloom_broadcast_id_zset, min='-inf', max=int(time.time() - to_be_pruned_ts))
+                [
+                    r.delete(uniswap_cb_broadcast_processing_logs_zset.format(k))
+                    for k in older_broadcast_ids_dec
+                ]
+            r.zremrangebyscore(
+                powerloom_broadcast_id_zset, min='-inf',
+                max=int(time.time() - to_be_pruned_ts),
+            )
         self.rabbitmq_interactor._channel.basic_ack(delivery_tag=method.delivery_tag)
 
     def _exit_signal_handler(self, signum, sigframe):
@@ -95,15 +112,19 @@ class EpochCallbackManager(Process):
         # logging.config.dictConfig(config_logger_with_namespace('PowerLoom|EpochCallbackManager'))
         for signame in [SIGINT, SIGTERM, SIGQUIT]:
             signal.signal(signame, self._exit_signal_handler)
-        setproctitle(f'PowerLoom|EpochCallbackManager:{settings.NAMESPACE}-{settings.INSTANCE_ID[:5]}')
-        self._logger = logger.bind(module=f'PowerLoom|EpochCallbackManager:{settings.NAMESPACE}-{settings.INSTANCE_ID}')
+        setproctitle(
+            f'PowerLoom|EpochCallbackManager:{settings.NAMESPACE}-{settings.INSTANCE_ID[:5]}',
+        )
+        self._logger = logger.bind(
+            module=f'PowerLoom|EpochCallbackManager:{settings.NAMESPACE}-{settings.INSTANCE_ID}',
+        )
 
         self._logger.debug('Launched PowerLoom|EpochCallbackManager with PID: %s', self.pid)
         self._connection_pool = redis.BlockingConnectionPool(**REDIS_CONN_CONF)
-        queue_name = f"powerloom-epoch-broadcast-q:{settings.NAMESPACE}:{settings.INSTANCE_ID}"
+        queue_name = f'powerloom-epoch-broadcast-q:{settings.NAMESPACE}:{settings.INSTANCE_ID}'
         self.rabbitmq_interactor: RabbitmqSelectLoopInteractor = RabbitmqSelectLoopInteractor(
             consume_queue_name=queue_name,
-            consume_callback=self._epoch_broadcast_callback
+            consume_callback=self._epoch_broadcast_callback,
         )
         # self.rabbitmq_interactor.start_publishing()
         self._logger.debug('Starting RabbitMQ consumer on queue %s', queue_name)

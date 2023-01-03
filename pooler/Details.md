@@ -5,7 +5,7 @@ The high-level architecture of the Pooler system is shown below.
 
 ## RabbitMQ Initialization
 
-Just like the name suggests, the `init_rabbitmq.py` file sets up the various queues required for Pooler to function. At the top level, there are two types of queues, exchange queues, and callback queues. 
+Just like the name suggests, the `init_rabbitmq.py` file sets up the various queues required for Pooler to function. At the top level, there are two types of queues, exchange queues, and callback queues.
 Callback Queue is consumed by workers to generate the actual snapshot data (see the `callback_modules` folder) to be submitted to Audit Protocol.
 Exchange queues are usually used for high-level operations like Epoch notifications etc.
 
@@ -13,12 +13,12 @@ This is a one-time task that users need to do when they run the pooler for the f
 
 
 ## System Epoch Detector
-The system epoch detector is defined in `system_epoch_detector.py` and is and is initiated using the `processhub_cmd.py` CLI. 
+The system epoch detector is defined in `system_epoch_detector.py` and is and is initiated using the `processhub_cmd.py` CLI.
 The main role of this process is to detect the latest epoch from our `offchain-consensus` service, Generate epochs of height `h` from the `last_processed_epoch` stored in redis to the current epoch detected and push the epochs to `epoch-broadcast` queue at configured intervals.
 
 ## Epoch Callback Manager
 The epoch callback manager is defined in `epoch_broadcast_callback_manager.py` and is also initiated using the `processhub_cmd.py` CLI.
-It reads the messages from `epoch-broadcast` queue, adds a little extra helper context like contract_addresses for uniswap v2 pairs, 
+It reads the messages from `epoch-broadcast` queue, adds a little extra helper context like contract_addresses for uniswap v2 pairs,
 sends the messages to relavant routing channels according to topics defined in callback modules (see callback_modules/module_queue_config.json) and pushes the task to `backend-callbacks` queue.
 
 ## Process Hub Core
@@ -50,4 +50,4 @@ The main FastAPI server and entry point for this module is `core_api.py`, this s
 ### Other Utilities
 `rate_limiter.py` and `utility_functions.py` contain helper functions for rate limiting using Redis and some other generic utilities.
 
-`launch_process_hub_core.py` is used to initialize necessary RabbitMQ queues and start the `process_hub_core` with a custom title (for cleaner process management using Pm2) 
+`launch_process_hub_core.py` is used to initialize necessary RabbitMQ queues and start the `process_hub_core` with a custom title (for cleaner process management using Pm2)

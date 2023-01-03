@@ -14,4 +14,3 @@ class PayloadCommitAPIRequest(BaseModel):
     # skip anchor tx by default, unless passed
     skipAnchorProof: bool = True
     sourceChainDetails: SourceChainDetails
-

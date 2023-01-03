@@ -28,14 +28,14 @@ if __name__ == '__main__':
             ch = c.channel()
             ch.basic_publish(
                 exchange=f'{settings.RABBITMQ.SETUP.CORE.EXCHANGE}:{settings.NAMESPACE}',
-                routing_key = f'processhub-commands:{settings.NAMESPACE}',
+                routing_key=f'processhub-commands:{settings.NAMESPACE}',
                 body=CMD.encode('utf-8'),
                 properties=pika.BasicProperties(
                     delivery_mode=2,
                     content_type='text/plain',
-                    content_encoding='utf-8'
+                    content_encoding='utf-8',
                 ),
-                mandatory=True
+                mandatory=True,
             )
             print('Published to rabbitmq')
         else:

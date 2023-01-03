@@ -1,32 +1,35 @@
 import time
 
 from dynaconf import settings
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI
+from fastapi import Request
+from fastapi import Response
 from fastapi.middleware.cors import CORSMiddleware
 from redis import asyncio as aioredis
 
-from pooler.auth.helpers.data_models import (AddApiKeyRequest, AppOwnerModel,
-                                             UserAllDetailsResponse)
+from pooler.auth.helpers.data_models import AddApiKeyRequest
+from pooler.auth.helpers.data_models import AppOwnerModel
+from pooler.auth.helpers.data_models import UserAllDetailsResponse
 from pooler.auth.helpers.redis_conn import RedisPoolCache
-from pooler.auth.helpers.redis_keys import (all_users_set,
-                                            api_key_to_owner_key,
-                                            user_active_api_keys_set,
-                                            user_details_htable,
-                                            user_revoked_api_keys_set)
+from pooler.auth.helpers.redis_keys import all_users_set
+from pooler.auth.helpers.redis_keys import api_key_to_owner_key
+from pooler.auth.helpers.redis_keys import user_active_api_keys_set
+from pooler.auth.helpers.redis_keys import user_details_htable
+from pooler.auth.helpers.redis_keys import user_revoked_api_keys_set
 from pooler.utils.default_logger import logger
 
 # setup logging
 api_logger = logger.bind(module=__name__)
 
 # setup CORS origins stuff
-origins = ["*"]
+origins = ['*']
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"]
+    allow_methods=['*'],
+    allow_headers=['*'],
 )
 
 
@@ -42,7 +45,7 @@ async def startup_boilerplate():
 async def create_update_user(
         request: Request,
         user_cu_request: AppOwnerModel,
-        response: Response
+        response: Response,
 
 ):
     """
@@ -52,14 +55,14 @@ async def create_update_user(
     try:
         await redis_conn.sadd(
             all_users_set(),
-            user_cu_request.email
+            user_cu_request.email,
         )
         if not await redis_conn.sismember(all_users_set(), user_cu_request.email):
             user_cu_request.next_reset_at = int(time.time()) + 86400
         user_details = user_cu_request.dict()
         await redis_conn.hset(
             name=user_details_htable(user_cu_request.email),
-            mapping=user_details
+            mapping=user_details,
         )
     except Exception as e:
         api_logger.error('%s', e, exc_info=True)
@@ -73,7 +76,7 @@ async def add_api_key(
         api_key_request: AddApiKeyRequest,
         email: str,
         request: Request,
-        response: Response
+        response: Response,
 ):
     redis_conn: aioredis.Redis = request.app.state.redis_pool
     if not await redis_conn.sismember(all_users_set(), email):
@@ -82,7 +85,7 @@ async def add_api_key(
     async with redis_conn.pipeline(transaction=True) as p:
         await p.sadd(
             user_active_api_keys_set(email),
-            api_key_request.api_key
+            api_key_request.api_key,
         ).set(api_key_to_owner_key(api_key_request.api_key), email).execute()
     return {'success': True}
 
@@ -92,7 +95,7 @@ async def revoke_api_key(
         api_key_request: AddApiKeyRequest,
         email: str,
         request: Request,
-        response: Response
+        response: Response,
 ):
     redis_conn: aioredis.Redis = request.app.state.redis_pool
     if not await redis_conn.sismember(all_users_set(), email):
@@ -110,7 +113,7 @@ async def revoke_api_key(
 async def get_user_details(
         request: Request,
         response: Response,
-        email: str
+        email: str,
 ):
     redis_conn: aioredis.Redis = request.app.state.redis_pool
 
@@ -127,19 +130,19 @@ async def get_user_details(
             UserAllDetailsResponse(
                 **{k.decode('utf-8'): v.decode('utf-8') for k, v in all_details.items()},
                 active_api_keys=[x.decode('utf-8') for x in active_api_keys],
-                revoked_api_keys=[x.decode('utf-8') for x in revoked_api_keys]
-            ).dict()
+                revoked_api_keys=[x.decode('utf-8') for x in revoked_api_keys],
+            ).dict(),
     }
 
 
 @app.get('/users')
 async def get_all_users(
         request: Request,
-        response: Response
+        response: Response,
 ):
     redis_conn: aioredis.Redis = request.app.state.redis_pool
     all_users = await redis_conn.smembers(all_users_set())
     return {
         'success': True,
-        'data': [x.decode('utf-8') for x in all_users]
+        'data': [x.decode('utf-8') for x in all_users],
     }

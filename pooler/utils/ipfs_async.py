@@ -50,11 +50,11 @@ client.add_str = async_ipfs_client.async_add_str
 
 
 async def test_async_funcs():
-    out = await client.dag.put(io.BytesIO(json.dumps({'a':'b'}).encode()))
+    out = await client.dag.put(io.BytesIO(json.dumps({'a': 'b'}).encode()))
     print(out)
     out = await client.dag.get(out.as_json()['Cid']['/'])
     print(out)
-    cid = await client.add_str("asdasad")
+    cid = await client.add_str('asdasad')
     print(cid)
     out = await client.cat(cid)
     print(out)
@@ -62,9 +62,9 @@ async def test_async_funcs():
     print(out)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     tasks = asyncio.gather(
-        test_async_funcs()
+        test_async_funcs(),
     )
 
     asyncio.get_event_loop().run_until_complete(tasks)

@@ -14,16 +14,16 @@ from pooler.utils.default_logger import logger
 logger = logger.bind(module='PowerLoom|RedisConn')
 
 REDIS_CONN_CONF = {
-    "host": settings_conf['redis']['host'],
-    "port": settings_conf['redis']['port'],
-    "password": settings_conf['redis']['password'],
-    "db": settings_conf['redis']['db'],
-    "retry_on_error": [redis.exceptions.ReadOnlyError, ]
+    'host': settings_conf['redis']['host'],
+    'port': settings_conf['redis']['port'],
+    'password': settings_conf['redis']['password'],
+    'db': settings_conf['redis']['db'],
+    'retry_on_error': [redis.exceptions.ReadOnlyError],
 }
 
 
 def construct_redis_url():
-    if REDIS_CONN_CONF["password"]:
+    if REDIS_CONN_CONF['password']:
         return f'redis://{REDIS_CONN_CONF["password"]}@{REDIS_CONN_CONF["host"]}:{REDIS_CONN_CONF["port"]}'\
                f'/{REDIS_CONN_CONF["db"]}'
     else:
@@ -33,8 +33,8 @@ def construct_redis_url():
 async def get_aioredis_pool(pool_size=200):
     return await aioredis.from_url(
         url=construct_redis_url(),
-        retry_on_error=[redis.exceptions.ReadOnlyError, ],
-        max_connections=pool_size
+        retry_on_error=[redis.exceptions.ReadOnlyError],
+        max_connections=pool_size,
     )
 
 
@@ -56,7 +56,7 @@ def create_redis_conn(connection_pool: redis.BlockingConnectionPool) -> redis.Re
     stop=tenacity.stop_after_delay(60),
     wait=tenacity.wait_random_exponential(multiplier=1, max=60),
     retry=tenacity.retry_if_exception_type(redis_exc.RedisError),
-    reraise=True
+    reraise=True,
 )
 def provide_redis_conn(fn):
     @wraps(fn)
@@ -126,7 +126,7 @@ def provide_async_redis_conn_insta(fn):
                     port=REDIS_CONN_CONF['port'],
                     db=REDIS_CONN_CONF['db'],
                     password=REDIS_CONN_CONF['password'],
-                    retry_on_error=[redis.exceptions.ReadOnlyError, ]
+                    retry_on_error=[redis.exceptions.ReadOnlyError],
                 )
             kwargs[arg_conn] = connection
             try:

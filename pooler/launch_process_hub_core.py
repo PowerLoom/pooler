@@ -16,10 +16,15 @@ def generic_exit_handler(signum, frame):
 def main():
     for signame in [signal.SIGINT, signal.SIGTERM, signal.SIGQUIT]:
         signal.signal(signame, generic_exit_handler)
-    setproctitle(f'PowerLoom|UniswapPoolerProcessHub|Core|Launcher:{settings.NAMESPACE}-{settings.INSTANCE_ID[:5]}')
+    setproctitle(
+        f'PowerLoom|UniswapPoolerProcessHub|Core|Launcher:{settings.NAMESPACE}-{settings.INSTANCE_ID[:5]}',
+    )
 
     # setup logging
-    launcher_logger = logger.bind(module='PowerLoom|UniswapPoolerProcessHub|Core|Launcher', namespace=settings.NAMESPACE, instance_id=settings.INSTANCE_ID[:5])
+    launcher_logger = logger.bind(
+        module='PowerLoom|UniswapPoolerProcessHub|Core|Launcher',
+        namespace=settings.NAMESPACE, instance_id=settings.INSTANCE_ID[:5],
+    )
 
     init_exchanges_queues()
     p_name = f'PowerLoom|UniswapPoolerProcessHub|Core-{settings.INSTANCE_ID[:5]}'
@@ -28,27 +33,28 @@ def main():
     launcher_logger.debug('Launched %s with PID %s', p_name, core.pid)
     try:
         launcher_logger.debug(
-            '%s Launcher still waiting on core to join...', p_name
+            '%s Launcher still waiting on core to join...', p_name,
         )
         core.join()
     except GenericExitOnSignal:
-        launcher_logger.debug('%s Launcher received SIGTERM. Will attempt to join with ProcessHubCore process...', p_name)
+        launcher_logger.debug(
+            '%s Launcher received SIGTERM. Will attempt to join with ProcessHubCore process...', p_name,
+        )
     finally:
         try:
             launcher_logger.debug(
-                '%s Launcher still waiting on core to join...', p_name
+                '%s Launcher still waiting on core to join...', p_name,
             )
             core.join()
         except Exception as e:
             launcher_logger.info(
                 '%s Launcher caught exception still waiting on core to join... %s',
-                p_name, e
+                p_name, e,
             )
         launcher_logger.debug(
-            '%s Launcher found alive status of core: %s', p_name, core.is_alive()
+            '%s Launcher found alive status of core: %s', p_name, core.is_alive(),
         )
 
 
 if __name__ == '__main__':
     main()
-

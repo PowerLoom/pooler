@@ -54,8 +54,8 @@ async def load_rate_limiter_scripts(redis_conn: aioredis.Redis):
     script_clear_keys_sha = await redis_conn.script_load(SCRIPT_CLEAR_KEYS)
     script_incr_expire = await redis_conn.script_load(SCRIPT_INCR_EXPIRE)
     return {
-        "script_incr_expire": script_incr_expire,
-        "script_clear_keys": script_clear_keys_sha
+        'script_incr_expire': script_incr_expire,
+        'script_clear_keys': script_clear_keys_sha,
     }
 
 
@@ -64,7 +64,7 @@ async def generic_rate_limiter(
         key_bits: list,
         redis_conn: aioredis.Redis,
         rate_limit_lua_script_shas=None,
-        limit_incr_by=1
+        limit_incr_by=1,
 ):
     """
     return: tuple of (can_request, retry_after in case of false can_request, violated rate limit string if applicable)
@@ -88,7 +88,7 @@ async def generic_rate_limiter(
                 return False, retry_after, str(each_lim)
         except (
                 redis.exceptions.ConnectionError, redis.exceptions.TimeoutError,
-                redis.exceptions.ResponseError
+                redis.exceptions.ResponseError,
         ) as exc:
             raise Exception from exc
     return True, 0, ''
@@ -102,7 +102,7 @@ async def check_rpc_rate_limit(
         error_msg,
         logger,
         rate_limit_lua_script_shas=None,
-        limit_incr_by=1
+        limit_incr_by=1,
 ):
     """
         rate limiter for rpc calls
@@ -113,11 +113,11 @@ async def check_rpc_rate_limit(
             parsed_limits,
             key_bits,
             redis_conn,
-            rate_limit_lua_script_shas
+            rate_limit_lua_script_shas,
         )
     except Exception as exc:
         logger.error(
-            'Caught exception on rate limiter operations: %s | Bypassing rate limit check ', exc, exc_info=True
+            'Caught exception on rate limiter operations: %s | Bypassing rate limit check ', exc, exc_info=True,
         )
         raise
 
@@ -125,6 +125,6 @@ async def check_rpc_rate_limit(
         raise RPCException(
             request=request_payload,
             response={}, underlying_exception=None,
-            extra_info=error_msg
+            extra_info=error_msg,
         )
     return can_request

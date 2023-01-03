@@ -3,7 +3,8 @@ import multiprocessing
 import resource
 import signal
 from functools import partial
-from typing import Dict, Union
+from typing import Dict
+from typing import Union
 from urllib.parse import urljoin
 from uuid import uuid4
 
@@ -17,7 +18,9 @@ from httpx import AsyncClient
 from loguru import logger
 from redis import asyncio as aioredis
 from setproctitle import setproctitle
-from tenacity import AsyncRetrying, stop_after_attempt, wait_random_exponential
+from tenacity import AsyncRetrying
+from tenacity import stop_after_attempt
+from tenacity import wait_random_exponential
 
 from pooler.callback_modules.data_models import PayloadCommitAPIRequest
 from pooler.utils.default_logger import logger
@@ -26,13 +29,14 @@ from pooler.utils.redis.redis_conn import RedisPoolCache
 # setup logger
 helper_logger = logger.bind(module='PowerLoom|Callback|Helpers')
 
+
 async def get_rabbitmq_connection():
     return await aio_pika.connect_robust(
         host=settings.RABBITMQ.HOST,
         port=settings.RABBITMQ.PORT,
         virtual_host='/',
         login=settings.RABBITMQ.USER,
-        password=settings.RABBITMQ.PASSWORD
+        password=settings.RABBITMQ.PASSWORD,
     )
 
 
@@ -45,7 +49,7 @@ class AuditProtocolCommandsHelper:
     @classmethod
     async def set_diff_rule_for_pair_reserves(
             cls, pair_contract_address, session: AsyncClient,
-            redis_conn: aioredis.Redis, stream='pair_total_reserves'
+            redis_conn: aioredis.Redis, stream='pair_total_reserves',
     ):
         project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
         if not await redis_conn.sismember(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id):
@@ -54,58 +58,65 @@ class AuditProtocolCommandsHelper:
             async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY)):
                 with attempt:
                     response_obj = await session.post(
-                            url=urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{project_id}/diffRules'),
-                            json={
-                                'rules': [
-                                    {
-                                        "ruleType": "ignore",
-                                        "field": "chainHeightRange",
-                                        "fieldType": "map",
-                                        "ignoreMemberFields": ["begin", "end"],
-                                    },
-                                    {
-                                        "ruleType": "compare",
-                                        "field": "token0Reserves",
-                                        "fieldType": "map",
-                                        "operation": "listSlice",
-                                        "memberFields": -1
-                                    },
-                                    {
-                                        "ruleType": "compare",
-                                        "field": "token1Reserves",
-                                        "fieldType": "map",
-                                        "operation": "listSlice",
-                                        "memberFields": -1
-                                    },
+                        url=urljoin(
+                            settings.AUDIT_PROTOCOL_ENGINE.URL,
+                            f'/{project_id}/diffRules',
+                        ),
+                        json={
+                            'rules': [
+                                {
+                                    'ruleType': 'ignore',
+                                    'field': 'chainHeightRange',
+                                    'fieldType': 'map',
+                                    'ignoreMemberFields': ['begin', 'end'],
+                                },
+                                {
+                                    'ruleType': 'compare',
+                                    'field': 'token0Reserves',
+                                    'fieldType': 'map',
+                                    'operation': 'listSlice',
+                                    'memberFields': -1,
+                                },
+                                {
+                                    'ruleType': 'compare',
+                                    'field': 'token1Reserves',
+                                    'fieldType': 'map',
+                                    'operation': 'listSlice',
+                                    'memberFields': -1,
+                                },
 
-                                    {
-                                        "ruleType": "ignore",
-                                        "field": "broadcast_id",
-                                        "fieldType": "str"
-                                    },
+                                {
+                                    'ruleType': 'ignore',
+                                    'field': 'broadcast_id',
+                                    'fieldType': 'str',
+                                },
 
-                                    {
-                                        "ruleType": "ignore",
-                                        "field": "timestamp",
-                                        "fieldType": "float"
-                                    }
-                                ]
-                            }
+                                {
+                                    'ruleType': 'ignore',
+                                    'field': 'timestamp',
+                                    'fieldType': 'float',
+                                },
+                            ],
+                        },
                     )
                     response_status_code = response_obj.status_code
                     response = response_obj.json() or {}
-                    helper_logger.debug('Response code on setting diff rule on audit protocol: %s', response_status_code)
+                    helper_logger.debug(
+                        'Response code on setting diff rule on audit protocol: %s', response_status_code,
+                    )
                     if response_status_code in range(200, 300):
                         await redis_conn.sadd(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id)
-                        return {"message": f"success status code: {response_status_code}", "response": response}
+                        return {'message': f'success status code: {response_status_code}', 'response': response}
                     elif response_status_code == 500 or response_status_code == 502:
                         return {
-                            "message": f"failed with status code: {response_status_code}", "response": response
+                            'message': f'failed with status code: {response_status_code}', 'response': response,
                         }  # ignore 500 and 502 errors
                     else:
                         raise Exception(
                             'Failed audit protocol engine call with status code: {} and response: {}'.format(
-                                response_status_code, response))
+                                response_status_code, response,
+                            ),
+                        )
 
     @classmethod
     async def set_diff_rule_for_trade_volume(
@@ -120,63 +131,75 @@ class AuditProtocolCommandsHelper:
             async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY)):
                 with attempt:
                     response_obj = await session.post(
-                            url=urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{project_id}/diffRules'),
-                            json={
-                                'rules': [
-                                    {
-                                        "ruleType": "ignore",
-                                        "field": "chainHeightRange",
-                                        "fieldType": "map",
-                                        "ignoreMemberFields": ["begin", "end"],
-                                    },
-                                    {
-                                        "ruleType": "ignore",
-                                        "field": "broadcast_id",
-                                        "fieldType": "str"
-                                    },
-                                    {
-                                        "ruleType": "ignore",
-                                        "field": "timestamp",
-                                        "fieldType": "float"
-                                    },
-                                    {
-                                        "ruleType": "ignore",
-                                        "field": "events",
-                                        "fieldType": "float"
-                                    },
-                                    {
-                                        "ruleType": "ignore",
-                                        "field": "recent_logs",
-                                        "fieldType": "float"
-                                    }
-                                ]
-                            }
+                        url=urljoin(
+                            settings.AUDIT_PROTOCOL_ENGINE.URL,
+                            f'/{project_id}/diffRules',
+                        ),
+                        json={
+                            'rules': [
+                                {
+                                    'ruleType': 'ignore',
+                                    'field': 'chainHeightRange',
+                                    'fieldType': 'map',
+                                    'ignoreMemberFields': ['begin', 'end'],
+                                },
+                                {
+                                    'ruleType': 'ignore',
+                                    'field': 'broadcast_id',
+                                    'fieldType': 'str',
+                                },
+                                {
+                                    'ruleType': 'ignore',
+                                    'field': 'timestamp',
+                                    'fieldType': 'float',
+                                },
+                                {
+                                    'ruleType': 'ignore',
+                                    'field': 'events',
+                                    'fieldType': 'float',
+                                },
+                                {
+                                    'ruleType': 'ignore',
+                                    'field': 'recent_logs',
+                                    'fieldType': 'float',
+                                },
+                            ],
+                        },
                     )
                     response_status_code = response_obj.status_code
                     response = response_obj.json() or {}
-                    helper_logger.debug('Response code on setting diff rule on audit protocol: %s', response_status_code)
+                    helper_logger.debug(
+                        'Response code on setting diff rule on audit protocol: %s', response_status_code,
+                    )
                     if response_status_code in range(200, 300):
                         await redis_conn.sadd(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id)
-                        return {"message": f"success status code: {response_status_code}", "response": response}
+                        return {'message': f'success status code: {response_status_code}', 'response': response}
                     elif response_status_code == 500 or response_status_code == 502:
                         return {
-                            "message": f"failed with status code: {response_status_code}", "response": response
+                            'message': f'failed with status code: {response_status_code}', 'response': response,
                         }  # ignore 500 and 502 errors
                     else:
                         raise Exception(
                             'Failed audit protocol engine call with status code: {} and response: {}'.format(
-                                response_status_code, response))
+                                response_status_code, response,
+                            ),
+                        )
 
     @classmethod
     def set_commit_callback_url(cls, pair_contract_address, stream, redis_conn: aioredis.Redis):
         project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
         if not redis_conn.sismember(f'uniswap:{settings.NAMESPACE}:callbackURLSetFor', project_id):
             r = requests.post(
-                url=urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{project_id}/confirmations/callback'),
+                url=urljoin(
+                    settings.AUDIT_PROTOCOL_ENGINE.URL,
+                    f'/{project_id}/confirmations/callback',
+                ),
                 json={
-                    'callbackURL': urljoin(settings.WEBHOOK_LISTENER.ROOT,
-                                           settings.WEBHOOK_LISTENER.COMMIT_CONFIRMATION_CALLBACK_PATH)
-                }
+                    'callbackURL': urljoin(
+                        settings.WEBHOOK_LISTENER.ROOT,
+                        settings.WEBHOOK_LISTENER.COMMIT_CONFIRMATION_CALLBACK_PATH,
+                    ),
+                },
             )
             if r.status_code in range(200, 300):
                 redis_conn.sadd(f'uniswap:{settings.NAMESPACE}:callbackURLSetFor', project_id)
@@ -186,12 +209,12 @@ class AuditProtocolCommandsHelper:
         async for attempt in AsyncRetrying(
                 reraise=False,
                 stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY),
-                wait=wait_random_exponential(multiplier=2, max=10)
+                wait=wait_random_exponential(multiplier=2, max=10),
         ):
             with attempt:
                 response_obj = await session.post(
-                        url=urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, 'commit_payload'),
-                        json=report_payload.dict()
+                    url=urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, 'commit_payload'),
+                    json=report_payload.dict(),
                 )
                 response_status_code = response_obj.status_code
                 response = response_obj.json() or {}
@@ -203,14 +226,14 @@ class AuditProtocolCommandsHelper:
                     else:
                         raise Exception(
                             'Failed audit protocol engine call with status code: %s and response: %s',
-                            response_status_code, response
+                            response_status_code, response,
                         )
                 else:
                     raise Exception(
                         'Failed audit protocol engine call with status code: %s and response: %s',
-                        response_status_code, response
+                        response_status_code, response,
                     )
-                    
+
 
 class CallbackAsyncWorker(multiprocessing.Process):
     def __init__(self, name, rmq_q, rmq_routing, **kwargs):
@@ -230,43 +253,47 @@ class CallbackAsyncWorker(multiprocessing.Process):
         self._shutdown_signal_received_count += 1
         if self._shutdown_signal_received_count > 1:
             self._logger.info(
-                f'Received exit signal {sig.name}. Not processing as shutdown sequence was already initiated...')
+                f'Received exit signal {sig.name}. Not processing as shutdown sequence was already initiated...',
+            )
         else:
             self._logger.info(
-                f'Received exit signal {sig.name}. Processing shutdown sequence...')
+                f'Received exit signal {sig.name}. Processing shutdown sequence...',
+            )
             # check the done or cancelled status of self._running_callback_tasks.values()
             for u_uid, t in self._running_callback_tasks.items():
                 self._logger.debug(
-                    'Shutdown handler: Checking result and status of aio_pika consumer callback task %s', t.get_name()
+                    'Shutdown handler: Checking result and status of aio_pika consumer callback task %s', t.get_name(),
                 )
                 try:
                     task_result = t.result()
                 except asyncio.CancelledError:
                     self._logger.info(
-                        'Shutdown handler: aio_pika consumer callback task %s was cancelled', t.get_name()
+                        'Shutdown handler: aio_pika consumer callback task %s was cancelled', t.get_name(),
                     )
                 except asyncio.InvalidStateError:
                     self._logger.info(
                         'Shutdown handler: aio_pika consumer callback task %s result not available yet. '
                         'Still running.',
-                        t.get_name()
+                        t.get_name(),
                     )
                 except Exception as e:
                     self._logger.info(
                         'Shutdown handler: aio_pika consumer callback task %s raised Exception. '
                         '%s',
-                        t.get_name(), e
+                        t.get_name(), e,
                     )
                 else:
                     self._logger.info(
                         'Shutdown handler: aio_pika consumer callback task returned with result %s',
                         t.get_name(),
-                        task_result
+                        task_result,
                     )
             # await asyncio.gather(*self._running_callback_tasks.values(), return_exceptions=True)
 
-            tasks = [t for t in asyncio.all_tasks(loop) if t is not
-                     asyncio.current_task(loop)]
+            tasks = [
+                t for t in asyncio.all_tasks(loop) if t is not
+                asyncio.current_task(loop)
+            ]
 
             [task.cancel() for task in tasks]
 
@@ -277,15 +304,19 @@ class CallbackAsyncWorker(multiprocessing.Process):
 
     async def _rabbitmq_consumer(self, loop):
         self._rmq_connection_pool = Pool(get_rabbitmq_connection, max_size=5, loop=loop)
-        self._rmq_channel_pool = Pool(partial(get_rabbitmq_channel, self._rmq_connection_pool), max_size=20,
-                                      loop=loop)
+        self._rmq_channel_pool = Pool(
+            partial(get_rabbitmq_channel, self._rmq_connection_pool), max_size=20,
+            loop=loop,
+        )
         async with self._rmq_channel_pool.acquire() as channel:
             await channel.set_qos(20)
             q_obj = await channel.get_queue(
                 name=self._q,
-                ensure=False
+                ensure=False,
             )
-            self._logger.debug(f'Consuming queue {self._q} with routing key {self._rmq_routing}...')
+            self._logger.debug(
+                f'Consuming queue {self._q} with routing key {self._rmq_routing}...',
+            )
             await q_obj.consume(self._on_rabbitmq_message)
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
@@ -301,15 +332,19 @@ class CallbackAsyncWorker(multiprocessing.Process):
     def run(self) -> None:
         setproctitle(self._unique_id)
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
-        resource.setrlimit(resource.RLIMIT_NOFILE, (settings['rlimit']['file_descriptors'], hard))
+        resource.setrlimit(
+            resource.RLIMIT_NOFILE,
+            (settings['rlimit']['file_descriptors'], hard),
+        )
         # logging.config.dictConfig(config_logger_with_namespace(self.name))
         self._logger = logger.bind(module=self.name)
-        
+
         ev_loop = asyncio.get_event_loop()
         signals = (signal.SIGTERM, signal.SIGINT, signal.SIGQUIT)
         for s in signals:
             ev_loop.add_signal_handler(
-                s, lambda x=s: ev_loop.create_task(self._shutdown_handler(x, ev_loop)))
+                s, lambda x=s: ev_loop.create_task(self._shutdown_handler(x, ev_loop)),
+            )
         self._logger.debug(f'Starting asynchronous epoch callback worker {self._unique_id}...')
         self._core_rmq_consumer = asyncio.ensure_future(self._rabbitmq_consumer(ev_loop))
         try:

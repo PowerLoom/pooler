@@ -1,4 +1,6 @@
-from typing import Dict, List, Optional
+from typing import Dict
+from typing import List
+from typing import Optional
 
 from pydantic import BaseModel
 
@@ -68,7 +70,7 @@ class UniswapTradeEvents(BaseModel):
 class UniswapTradesSnapshot(BaseModel):
     contract: str
     totalTrade: float  # in USD
-    totalFee: float # in USD
+    totalFee: float  # in USD
     token0TradeVolume: float  # in token native decimals supply
     token1TradeVolume: float  # in token native decimals supply
     token0TradeVolumeUSD: float
