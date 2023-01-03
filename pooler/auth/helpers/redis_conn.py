@@ -1,7 +1,4 @@
-import contextlib
-
 import redis
-import redis.exceptions as redis_exc
 from redis import asyncio as aioredis
 
 from pooler.auth.conf import auth_settings
@@ -21,20 +18,6 @@ async def get_aioredis_pool(pool_size=200):
         retry_on_error=[redis.exceptions.ReadOnlyError],
         max_connections=pool_size,
     )
-
-
-@contextlib.contextmanager
-def create_redis_conn(connection_pool: redis.BlockingConnectionPool) -> redis.Redis:
-    """
-    Contextmanager that will create and teardown a session.
-    """
-    try:
-        redis_conn = redis.Redis(connection_pool=connection_pool)
-        yield redis_conn
-    except redis_exc.RedisError:
-        raise
-    except KeyboardInterrupt:
-        pass
 
 
 class RedisPoolCache:

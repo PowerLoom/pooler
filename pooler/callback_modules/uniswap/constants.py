@@ -1,8 +1,9 @@
 from dynaconf import settings
-from utils.default_logger import logger
-from utils.file_utils import read_json_file
-from utils.rpc_helper import GLOBAL_WEB3_PROVIDER
 from web3 import Web3
+
+from pooler.utils.default_logger import logger
+from pooler.utils.file_utils import read_json_file
+from pooler.utils.rpc_helper import GLOBAL_WEB3_PROVIDER
 
 constants_logger = logger.bind(module='PowerLoom|Uniswap|Constants')
 
