@@ -8,6 +8,7 @@ Fixes #
 - [ ] My branch is up-to-date with upstream/develop branch.
 - [ ] Everything works and tested for Python 3.8.0 and above.
 - [ ] I ran pre-commit checks against my changes.
+- [ ] I've written tests against my changes and all the current present tests are passing.
 
 ### Current behaviour
 <!-- Describe the code you are going to change and its behaviour -->
@@ -37,3 +38,6 @@ Fixes #
 <!-- #### Removed -->
 <!-- Edit these points below to describe the removed features with this PR -->
 <!-- - Deprecated feature 1 -->
+
+## Deployment Instructions
+<!-- Any specific deployment instructions to deploy your code -->

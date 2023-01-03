@@ -18,7 +18,8 @@
 <!-- Please provide the following environment details -->
 * python version
 * OS details
-* Anything else relevant
+* Config details
+* Logs
 
 ### Do you want to work on this issue?
 <!-- yes/no -->
