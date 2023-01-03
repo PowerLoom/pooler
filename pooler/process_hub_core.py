@@ -188,7 +188,7 @@ class ProcessHubCore(Process):
 
     @cleanup_children_procs
     def run(self) -> None:
-        setproctitle(f'PowerLoom|ProcessHub|Core')
+        setproctitle('PowerLoom|ProcessHub|Core')
         self._logger = logger.bind(module='PowerLoom|ProcessHub|Core')
 
         for signame in [SIGINT, SIGTERM, SIGQUIT, SIGCHLD]:
@@ -316,7 +316,6 @@ class ProcessHubCore(Process):
             try:
                 # TODO
                 self._logger.debug('Process Hub Core received restart command: %s', cmd_json)
-                cmd_json.proc_str_id
                 # first kill
                 self._logger.debug('Attempting to kill process: %s', cmd_json.pid)
                 self.kill_process(cmd_json.pid)
