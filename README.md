@@ -62,9 +62,6 @@ Together with an Audit Protocol instance, they form a recently released PoC whos
 
 You can read more about Audit Protocol and the Uniswap v2 PoC in the  [Powerloom Protocol Overview document](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#8ad76b8362b341bcaa9b3ae9fe203271)
 
-![Screenshot](whitepaper_screenshot.png)
-
-
 ## Requirements
 
 * macOS or Linux (We're still working on windows support)
