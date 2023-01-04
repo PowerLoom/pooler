@@ -118,8 +118,8 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 if fetch_ts:
                     if not block_pair_total_reserves.get('timestamp', None):
                         self._logger.error(
-                            'Could not fetch timestamp against max block height in epoch %s - %s'
-                            'to calculate pair reserves for contract %s. '
+                            'Could not fetch timestamp against max block height in epoch {} - {}'
+                            'to calculate pair reserves for contract {}. '
                             'Using current time stamp for snapshot construction',
                             data_source_contract_address, min_chain_height, max_chain_height,
                         )
@@ -156,7 +156,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 )
                 self._logger.info(
                     'Found queued epoch against which snapshot construction for pair contract\'s '
-                    '%s failed earlier: %s',
+                    '{} failed earlier: {}',
                     snapshot_name, epoch_broadcast,
                 )
                 queued_epochs.append(epoch_broadcast)
@@ -168,7 +168,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         # check for continuity in epochs before ordering them
         self._logger.info(
             'Attempting to check for continuity in queued epochs to generate snapshots against pair contract\'s '
-            '%s including current epoch: %s', snapshot_name, queued_epochs,
+            '{} including current epoch: {}', snapshot_name, queued_epochs,
         )
         continuity = True
         for idx, each_epoch in enumerate(queued_epochs):
@@ -181,7 +181,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             # pop off current epoch added to end of this list
             queued_epochs = queued_epochs[:-1]
             self._logger.info(
-                'Recording epochs as discarded during snapshot construction stage for %s: %s',
+                'Recording epochs as discarded during snapshot construction stage for {}: {}',
                 snapshot_name, queued_epochs,
             )
             for x in queued_epochs:
@@ -261,7 +261,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                     queue_msg_obj.json(),
                 )
                 self._logger.debug(
-                    f'Enqueued epoch broadcast ID %s because reserve query failed on %s - %s | Exception: %s',
+                    'Enqueued epoch broadcast ID {} because reserve query failed on {} - {} | Exception: {}',
                     queue_msg_obj.broadcast_id, epoch_against_result[0], epoch_against_result[1],
                     each_result,
                 )
@@ -316,7 +316,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             epoch_begin,
             epoch_end,
     ):
-        self._logger.debug('Trade volume processed snapshot: %s', trade_vol_processed_snapshot)
+        self._logger.debug('Trade volume processed snapshot: {}', trade_vol_processed_snapshot)
 
         # Set effective trade volume at top level
         total_trades_in_usd = trade_vol_processed_snapshot['Trades']['totalTradesUSD']
@@ -365,7 +365,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         for each_epoch, epoch_snapshot in epoch_snapshot_map.items():
             if not epoch_snapshot:
                 self._logger.error(
-                    'No epoch snapshot to commit. Construction of snapshot failed for %s against epoch %s',
+                    'No epoch snapshot to commit. Construction of snapshot failed for {} against epoch {}',
                     snapshot_name, each_epoch,
                 )
                 # TODO: standardize/unify update log data model
@@ -428,7 +428,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                     )
                 except Exception as e:
                     self._logger.opt(exception=True).error(
-                        'Exception committing snapshot to audit protocol: %s | dump: %s',
+                        'Exception committing snapshot to audit protocol: {} | dump: {}',
                         epoch_snapshot, e,
                     )
                     update_log = {
@@ -453,7 +453,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                     )
                 else:
                     self._logger.debug(
-                        'Sent snapshot to audit protocol payload commit service: %s | Response: %s',
+                        'Sent snapshot to audit protocol payload commit service: {} | Response: {}',
                         commit_payload, r,
                     )
                     update_log = {
@@ -485,12 +485,12 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             msg_obj = PowerloomCallbackProcessMessage.parse_raw(message.body)
         except ValidationError as e:
             self._logger.opt(exception=True).error(
-                'Bad message structure of callback in processor for total pair reserves: %s', e,
+                'Bad message structure of callback in processor for total pair reserves: {}', e,
             )
             return
         except Exception as e:
             self._logger.opt(exception=True).error(
-                'Unexpected message structure of callback in processor for total pair reserves: %s',
+                'Unexpected message structure of callback in processor for total pair reserves: {}',
                 e,
             )
             return
@@ -502,11 +502,11 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         if not self._rate_limiting_lua_scripts:
             self._rate_limiting_lua_scripts = await load_rate_limiter_scripts(self._redis_conn)
         self._logger.debug(
-            'Got epoch to process for calculating total reserves for pair: %s', msg_obj,
+            'Got epoch to process for calculating total reserves for pair: {}', msg_obj,
         )
 
         self._logger.debug(
-            'Got aiohttp session cache. Attempting to snapshot total reserves data in epoch %s...',
+            'Got aiohttp session cache. Attempting to snapshot total reserves data in epoch {}...',
             msg_obj,
         )
 
@@ -583,7 +583,7 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
         if 'pair_total_reserves' not in method.routing_key or method.routing_key.split('.')[1] != 'pair_total_reserves':
             return
         self._logger.debug(
-            'Got processed epoch to distribute among processors for total reserves of a pair: %s', body,
+            'Got processed epoch to distribute among processors for total reserves of a pair: {}', body,
         )
         try:
             msg_obj: PowerloomCallbackEpoch = PowerloomCallbackEpoch.parse_raw(body)
@@ -654,5 +654,5 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
             consumer_worker_name=f'PowerLoom|Callbacks|PairTotalReservesProcessDistributor:{settings.namespace}-{settings.instance_id}',
         )
         # self.rabbitmq_interactor.start_publishing()
-        self._logger.debug('Starting RabbitMQ consumer on queue %s', queue_name)
+        self._logger.debug('Starting RabbitMQ consumer on queue {}', queue_name)
         self._rabbitmq_interactor.run()

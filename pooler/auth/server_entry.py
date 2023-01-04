@@ -65,7 +65,7 @@ async def create_update_user(
             mapping=user_details,
         )
     except Exception as e:
-        api_logger.error('%s', e, exc_info=True)
+        api_logger.error('{}', e, exc_info=True)
         return {'success': False}
     else:
         return {'success': True}

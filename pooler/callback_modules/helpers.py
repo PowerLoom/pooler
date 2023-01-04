@@ -102,7 +102,7 @@ class AuditProtocolCommandsHelper:
                     response_status_code = response_obj.status_code
                     response = response_obj.json() or {}
                     helper_logger.debug(
-                        'Response code on setting diff rule on audit protocol: %s', response_status_code,
+                        'Response code on setting diff rule on audit protocol: {}', response_status_code,
                     )
                     if response_status_code in range(200, 300):
                         await redis_conn.sadd(f'uniswap:diffRuleSetFor:{settings.namespace}', project_id)
@@ -169,7 +169,7 @@ class AuditProtocolCommandsHelper:
                     response_status_code = response_obj.status_code
                     response = response_obj.json() or {}
                     helper_logger.debug(
-                        'Response code on setting diff rule on audit protocol: %s', response_status_code,
+                        'Response code on setting diff rule on audit protocol: {}', response_status_code,
                     )
                     if response_status_code in range(200, 300):
                         await redis_conn.sadd(f'uniswap:diffRuleSetFor:{settings.namespace}', project_id)
@@ -225,13 +225,11 @@ class AuditProtocolCommandsHelper:
                         raise attempt.retry_state.outcome.exception()
                     else:
                         raise Exception(
-                            'Failed audit protocol engine call with status code: %s and response: %s',
-                            response_status_code, response,
+                            f'Failed audit protocol engine call with status code: {response_status_code} and response: {response}'
                         )
                 else:
                     raise Exception(
-                        'Failed audit protocol engine call with status code: %s and response: %s',
-                        response_status_code, response,
+                        f'Failed audit protocol engine call with status code: {response_status_code} and response: {response}'
                     )
 
 
@@ -262,29 +260,29 @@ class CallbackAsyncWorker(multiprocessing.Process):
             # check the done or cancelled status of self._running_callback_tasks.values()
             for u_uid, t in self._running_callback_tasks.items():
                 self._logger.debug(
-                    'Shutdown handler: Checking result and status of aio_pika consumer callback task %s', t.get_name(),
+                    'Shutdown handler: Checking result and status of aio_pika consumer callback task {}', t.get_name(),
                 )
                 try:
                     task_result = t.result()
                 except asyncio.CancelledError:
                     self._logger.info(
-                        'Shutdown handler: aio_pika consumer callback task %s was cancelled', t.get_name(),
+                        'Shutdown handler: aio_pika consumer callback task {} was cancelled', t.get_name(),
                     )
                 except asyncio.InvalidStateError:
                     self._logger.info(
-                        'Shutdown handler: aio_pika consumer callback task %s result not available yet. '
+                        'Shutdown handler: aio_pika consumer callback task {} result not available yet. '
                         'Still running.',
                         t.get_name(),
                     )
                 except Exception as e:
                     self._logger.info(
-                        'Shutdown handler: aio_pika consumer callback task %s raised Exception. '
-                        '%s',
+                        'Shutdown handler: aio_pika consumer callback task {} raised Exception. '
+                        '{}',
                         t.get_name(), e,
                     )
                 else:
                     self._logger.info(
-                        'Shutdown handler: aio_pika consumer callback task returned with result %s',
+                        'Shutdown handler: aio_pika consumer callback task returned with result {}',
                         t.get_name(),
                         task_result,
                     )

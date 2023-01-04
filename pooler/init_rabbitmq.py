@@ -58,7 +58,7 @@ def init_callback_queue(ch: pika.adapters.blocking_connection.BlockingChannel) -
     # exchange declaration for top level callback modules to listen in on
     ch.exchange_declare(exchange=callback_exchange_name, exchange_type='topic', durable=True)
     init_rmq_logger.debug(
-        'Initialized RabbitMQ Topic exchange for top level callbacks: %s', callback_exchange_name,
+        'Initialized RabbitMQ Topic exchange for top level callbacks: {}', callback_exchange_name,
     )
     # for example, callbacks for trade volume calculation may be sent on routing key
     # 'powerloom-backend-callback:{settings.namespace}.trade_volume'
@@ -82,7 +82,7 @@ def init_queue(ch: pika.adapters.blocking_connection.BlockingChannel, queue_name
     ch.queue_declare(queue_name)
     ch.queue_bind(exchange=exchange_name, queue=queue_name, routing_key=routing_key)
     init_rmq_logger.debug(
-        'Initialized RabbitMQ setup | Queue: %s | Exchange: %s | Routing Key: %s',
+        'Initialized RabbitMQ setup | Queue: {} | Exchange: {} | Routing Key: {}',
         queue_name,
         exchange_name,
         routing_key,
@@ -95,7 +95,7 @@ def init_exchanges_queues():
     # core exchange remains same for multiple pooler instances in the namespace to share across different instance IDs
     exchange_name = f'{settings.rabbitmq.setup.core.exchange}:{settings.namespace}'
     ch.exchange_declare(exchange=exchange_name, exchange_type='direct', durable=True)
-    init_rmq_logger.debug('Initialized RabbitMQ Direct exchange: %s', exchange_name)
+    init_rmq_logger.debug('Initialized RabbitMQ Direct exchange: {}', exchange_name)
 
     to_be_inited = [
         ('powerloom-processhub-commands-q', 'processhub-commands'),

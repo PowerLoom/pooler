@@ -89,8 +89,8 @@ class ConstructRPC:
                 rpc_logger.error(
                     'Retry limit reached for all RPC endpoints. Following request',
                 )
-                rpc_logger.error('%s', q_s)
-                rpc_logger.error('%s', retry)
+                rpc_logger.error('{}', q_s)
+                rpc_logger.error('{}', retry)
                 raise BailException
             for _url in rpc_urls:
                 try:

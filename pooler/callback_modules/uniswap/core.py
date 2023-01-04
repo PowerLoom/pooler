@@ -67,7 +67,7 @@ async def get_pair_reserves(
                 )
             except Exception as err:
                 core_logger.opt(exception=True).error(
-                    'Error attempting to get block details of block-range %s-%s: %s, retrying again',
+                    'Error attempting to get block details of block-range {}-{}: {}, retrying again',
                     from_block, to_block, err,
                 )
                 raise err
@@ -157,7 +157,7 @@ async def get_pair_reserves(
         return pair_reserves_arr
     except Exception as exc:
         core_logger.opt(exception=True).error(
-            'error at get_pair_reserves fn, retrying..., error_msg: %s',
+            'error at get_pair_reserves fn, retrying..., error_msg: {}',
         )
         raise RPCException(
             request={'contract': pair_address, 'from_block': from_block, 'to_block': to_block},
@@ -296,7 +296,7 @@ async def get_pair_trade_volume(
                 )
             except Exception as err:
                 core_logger.opt(exception=True).error(
-                    'Error attempting to get block details of to_block %s: %s, retrying again', max_chain_height, err,
+                    'Error attempting to get block details of to_block {}: {}, retrying again', max_chain_height, err,
                 )
                 raise err
 
@@ -450,7 +450,7 @@ async def get_pair_trade_volume(
         epoch_trade_logs.update({'timestamp': max_block_timestamp})
         return epoch_trade_logs
     except Exception as exc:
-        core_logger.error('error at get_pair_trade_volume fn: %s', exc, exc_info=True)
+        core_logger.error('error at get_pair_trade_volume fn: {}', exc, exc_info=True)
         raise RPCException(
             request={
                 'contract': data_source_contract_address,

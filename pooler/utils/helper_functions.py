@@ -11,7 +11,7 @@ from pooler.settings.config import settings
 
 def make_post_call(url: str, params: dict):
     try:
-        logging.debug('Making post call to %s: %s', url, params)
+        logging.debug('Making post call to {}: {}', url, params)
         response = requests.post(url, json=params)
         if response.status_code == 200:
             return response.json()
@@ -106,7 +106,7 @@ def cleanup_children_procs(fn):
             logging.info('Finished running process hub core...')
         except Exception as e:
             logging.opt(exception=True).error(
-                'Received an exception on process hub core run(): %s',
+                'Received an exception on process hub core run(): {}',
                 e,
             )
             # logging.error('Initiating kill children....')
@@ -123,21 +123,21 @@ def cleanup_children_procs(fn):
                 for worker_unique_id, worker_unique_process_details in unique_worker_entries.items():
                     if worker_unique_process_details['process'].pid:
                         logging.error(
-                            'Waiting on spawned callback worker %s | Unique ID %s | PID %s  to join...',
+                            'Waiting on spawned callback worker {} | Unique ID {} | PID {}  to join...',
                             worker_class_name, worker_unique_id, worker_unique_process_details['process'].pid,
                         )
                         worker_unique_process_details['process'].join()
 
             logging.error(
-                'Waiting on spawned core workers to join... %s',
+                'Waiting on spawned core workers to join... {}',
                 self._spawned_processes_map,
             )
             for worker_class_name, unique_worker_entries in self._spawned_processes_map.items():
-                logging.error('spawned Process Pid to wait on %s', unique_worker_entries.pid)
+                logging.error('spawned Process Pid to wait on {}', unique_worker_entries.pid)
                 # internal state reporter might set proc_id_map[k] = -1
                 if unique_worker_entries != -1:
                     logging.error(
-                        'Waiting on spawned core worker %s | PID %s  to join...',
+                        'Waiting on spawned core worker {} | PID {}  to join...',
                         worker_class_name, unique_worker_entries.pid,
                     )
                     unique_worker_entries.join()

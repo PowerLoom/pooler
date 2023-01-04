@@ -31,29 +31,29 @@ def main():
     p_name = f'PowerLoom|UniswapPoolerProcessHub|Core-{settings.instance_id[:5]}'
     core = ProcessHubCore(name=p_name)
     core.start()
-    launcher_logger.debug('Launched %s with PID %s', p_name, core.pid)
+    launcher_logger.debug('Launched {} with PID {}', p_name, core.pid)
     try:
         launcher_logger.debug(
-            '%s Launcher still waiting on core to join...', p_name,
+            '{} Launcher still waiting on core to join...', p_name,
         )
         core.join()
     except GenericExitOnSignal:
         launcher_logger.debug(
-            '%s Launcher received SIGTERM. Will attempt to join with ProcessHubCore process...', p_name,
+            '{} Launcher received SIGTERM. Will attempt to join with ProcessHubCore process...', p_name,
         )
     finally:
         try:
             launcher_logger.debug(
-                '%s Launcher still waiting on core to join...', p_name,
+                '{} Launcher still waiting on core to join...', p_name,
             )
             core.join()
         except Exception as e:
             launcher_logger.info(
-                '%s Launcher caught exception still waiting on core to join... %s',
+                '{} Launcher caught exception still waiting on core to join... {}',
                 p_name, e,
             )
         launcher_logger.debug(
-            '%s Launcher found alive status of core: %s', p_name, core.is_alive(),
+            '{} Launcher found alive status of core: {}', p_name, core.is_alive(),
         )
 
 

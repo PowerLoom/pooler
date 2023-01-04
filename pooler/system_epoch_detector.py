@@ -67,9 +67,9 @@ def rabbitmq_and_redis_cleanup(fn):
                             json.dumps(self._last_processed_epoch),
                         )
             except Exception as E:
-                self._logger.opt(exception=True).error('Error while saving progress: %s', E)
+                self._logger.opt(exception=True).error('Error while saving progress: {}', E)
         except Exception as E:
-            self._logger.opt(exception=True).error('Error while running: %s', E)
+            self._logger.opt(exception=True).error('Error while running: {}', E)
         finally:
             self._logger.debug('Shutting down!')
             sys.exit(0)
@@ -114,7 +114,7 @@ class EpochDetectorProcess(multiprocessing.Process):
     def _broadcast_epoch(self, epoch: dict):
         """Broadcast epoch to the RabbitMQ queue and save update in redis."""
         report_obj = SystemEpochStatusReport(**epoch)
-        self._logger.info('Broadcasting  epoch for callbacks: %s', report_obj)
+        self._logger.info('Broadcasting  epoch for callbacks: {}', report_obj)
         brodcast_msg = (report_obj.json().encode('utf-8'), self._exchange, self._routing_key)
         self._rabbitmq_queue.put(brodcast_msg)
         self._last_processed_epoch = epoch
@@ -122,7 +122,7 @@ class EpochDetectorProcess(multiprocessing.Process):
             try:
                 r.set(epoch_detector_last_processed_epoch, json.dumps(epoch))
                 self._logger.info(
-                    'DONE: Broadcasting finalized epoch for callbacks: %s',
+                    'DONE: Broadcasting finalized epoch for callbacks: {}',
                     report_obj,
                 )
             except:
@@ -148,7 +148,7 @@ class EpochDetectorProcess(multiprocessing.Process):
                 response = requests.get(consensus_epoch_tracker_url)
                 if response.status_code != 200:
                     self._logger.error(
-                        'Error while fetching current epoch data: %s', response.status_code,
+                        'Error while fetching current epoch data: {}', response.status_code,
                     )
                     sleep(settings.consensus.polling_interval)
                     continue
@@ -163,7 +163,7 @@ class EpochDetectorProcess(multiprocessing.Process):
                 'begin': epoch_info.epochStartBlockHeight,
                 'end': epoch_info.epochEndBlockHeight, 'broadcast_id': str(uuid.uuid4()),
             }
-            self._logger.info('Current epoch: %s', current_epoch)
+            self._logger.info('Current epoch: {}', current_epoch)
 
             # Only use redis is state is not locally present
             if not self._last_processed_epoch:
@@ -175,7 +175,7 @@ class EpochDetectorProcess(multiprocessing.Process):
             if self._last_processed_epoch:
                 if self._last_processed_epoch['end'] == current_epoch['end']:
                     self._logger.debug(
-                        'Last processed epoch is same as current epoch, Sleeping for %d seconds...', settings.consensus.polling_interval,
+                        'Last processed epoch is same as current epoch, Sleeping for {} seconds...', settings.consensus.polling_interval,
                     )
                     sleep(settings.consensus.polling_interval)
                     continue
@@ -185,7 +185,7 @@ class EpochDetectorProcess(multiprocessing.Process):
                     if current_epoch['end'] - self._last_processed_epoch['end'] > fall_behind_reset_threshold:
                         # TODO: build automatic clean slate procedure, for now just issuing warning on every new epoch fetch
                         self._logger.error(
-                            'Epochs are falling behind by more than %d blocks, consider reset state to continue.', fall_behind_reset_threshold,
+                            'Epochs are falling behind by more than {} blocks, consider reset state to continue.', fall_behind_reset_threshold,
                         )
                         raise GenericExitOnSignal
                     epoch_height = current_epoch['end'] - current_epoch['begin'] + 1
@@ -203,7 +203,7 @@ class EpochDetectorProcess(multiprocessing.Process):
 
                         self._broadcast_epoch(epoch_from_chunk)
                         self._logger.info(
-                            'Sleeping for %d seconds...',
+                            'Sleeping for {} seconds...',
                             settings.consensus.sleep_secs_between_chunks,
                         )
                         sleep(settings.consensus.sleep_secs_between_chunks)
@@ -212,7 +212,7 @@ class EpochDetectorProcess(multiprocessing.Process):
                 self._broadcast_epoch(current_epoch)
 
                 self._logger.info(
-                    'Sleeping for %d seconds...',
+                    'Sleeping for {} seconds...',
                     settings.consensus.polling_interval,
                 )
                 sleep(settings.consensus.polling_interval)

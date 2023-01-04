@@ -49,7 +49,7 @@ class EpochCallbackManager(Process):
 
     def _epoch_broadcast_callback(self, dont_use_ch, method, properties, body):
         broadcast_json = json.loads(body)
-        self._logger.debug('Got epoch broadcast: %s', broadcast_json)
+        self._logger.debug('Got epoch broadcast: {}', broadcast_json)
         append_epoch_context(broadcast_json)
 
         callback_exchange_name = f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}'
@@ -119,7 +119,7 @@ class EpochCallbackManager(Process):
             module=f'PowerLoom|EpochCallbackManager:{settings.namespace}-{settings.instance_id}',
         )
 
-        self._logger.debug('Launched PowerLoom|EpochCallbackManager with PID: %s', self.pid)
+        self._logger.debug('Launched PowerLoom|EpochCallbackManager with PID: {}', self.pid)
         self._connection_pool = redis.BlockingConnectionPool(**REDIS_CONN_CONF)
         queue_name = f'powerloom-epoch-broadcast-q:{settings.namespace}:{settings.instance_id}'
         self.rabbitmq_interactor: RabbitmqSelectLoopInteractor = RabbitmqSelectLoopInteractor(
@@ -127,5 +127,5 @@ class EpochCallbackManager(Process):
             consume_callback=self._epoch_broadcast_callback,
         )
         # self.rabbitmq_interactor.start_publishing()
-        self._logger.debug('Starting RabbitMQ consumer on queue %s', queue_name)
+        self._logger.debug('Starting RabbitMQ consumer on queue {}', queue_name)
         self.rabbitmq_interactor.run()

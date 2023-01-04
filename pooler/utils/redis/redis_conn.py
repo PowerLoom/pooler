@@ -66,10 +66,8 @@ def provide_redis_conn(fn):
         conn_in_args = arg_conn in func_params and func_params.index(arg_conn) < len(args)
         conn_in_kwargs = arg_conn in kwargs
         if conn_in_args or conn_in_kwargs:
-            # logging.debug('Found redis_conn populated already in %s', fn.__name__)
             return fn(*args, **kwargs)
         else:
-            # logging.debug('Found redis_conn not populated in %s', fn.__name__)
             connection_pool = redis.BlockingConnectionPool(**REDIS_CONN_CONF)
             # logging.debug('Created Redis connection Pool')
             with create_redis_conn(connection_pool) as redis_obj:

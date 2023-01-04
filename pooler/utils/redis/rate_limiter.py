@@ -76,7 +76,7 @@ async def generic_rate_limiter(
     for each_lim in parsed_limits:
         # window_stats = custom_limiter.get_window_stats(each_lim, key_bits)
         # local_app_cacher_logger.debug(window_stats)
-        # rest_logger.debug('Limit %s expiry: %s', each_lim, each_lim.get_expiry())
+        # rest_logger.debug('Limit {} expiry: {}', each_lim, each_lim.get_expiry())
         # async limits rate limit check
         # if rate limit checks out then we call
         try:
@@ -117,7 +117,7 @@ async def check_rpc_rate_limit(
         )
     except Exception as exc:
         logger.opt(exception=True).error(
-            'Caught exception on rate limiter operations: %s | Bypassing rate limit check ', exc,
+            'Caught exception on rate limiter operations: {} | Bypassing rate limit check ', exc,
         )
         raise
 

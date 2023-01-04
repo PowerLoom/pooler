@@ -62,7 +62,7 @@ class ProcessHubCore(Process):
                 return
             if os.WIFSIGNALED(status) or os.WIFEXITED(status):
                 self._logger.debug(
-                    'Received process crash notification for child process PID: %s', pid,
+                    'Received process crash notification for child process PID: {}', pid,
                 )
                 callback_worker_module_file = None
                 callback_worker_class = None
@@ -73,7 +73,7 @@ class ProcessHubCore(Process):
                         if worker_process_details['process'].pid == pid:
                             self._logger.debug(
                                 'Found crashed child process PID in spawned callback workers | '
-                                'Callback worker class: %s | Unique worker identifier: %s',
+                                'Callback worker class: {} | Unique worker identifier: {}',
                                 k, worker_process_details['id'],
                             )
                             callback_worker_class = k
@@ -81,7 +81,7 @@ class ProcessHubCore(Process):
                             callback_worker_unique_id = unique_id
                             for each_cb_worker_module_file, worker_type_list in CALLBACK_WORKERS_MAP.items():
                                 self._logger.debug(
-                                    'Searching callback workers specified in module %s for worker class %s details',
+                                    'Searching callback workers specified in module {} for worker class {} details',
                                     each_cb_worker_module_file, callback_worker_class,
                                 )
                                 if type(worker_type_list) is list:
@@ -92,7 +92,7 @@ class ProcessHubCore(Process):
                                     if worker_details:
                                         callback_worker_module_file = each_cb_worker_module_file
                                         self._logger.debug(
-                                            'Found callback worker process initiation name %s for worker class %s',
+                                            'Found callback worker process initiation name {} for worker class {}',
                                             callback_worker_name, callback_worker_class,
                                         )
                                         break
@@ -111,15 +111,15 @@ class ProcessHubCore(Process):
                         'id': callback_worker_name, 'process': worker_obj,
                     }
                     self._logger.debug(
-                        'Respawned callback worker class %s unique ID %s '
-                        'with PID %s after receiving crash signal against PID %s',
+                        'Respawned callback worker class {} unique ID {} '
+                        'with PID {} after receiving crash signal against PID {}',
                         callback_worker_class, callback_worker_unique_id, worker_obj.pid, pid,
                     )
                     return
 
                 for k, worker_unique_id in self._spawned_processes_map.items():
                     if worker_unique_id != -1 and worker_unique_id.pid == pid:
-                        self._logger.debug('RESPAWNING: process for %s', k)
+                        self._logger.debug('RESPAWNING: process for {}', k)
                         proc_details: dict = PROC_STR_ID_TO_CLASS_MAP.get(k)
                         init_kwargs = dict(name=proc_details['name'])
                         if proc_details.get('class'):
@@ -129,7 +129,7 @@ class ProcessHubCore(Process):
                             proc_obj = Process(target=proc_details['target'])
                             proc_obj.start()
                         self._logger.debug(
-                            'RESPAWNED: process for %s with PID: %s', k, proc_obj.pid,
+                            'RESPAWNED: process for {} with PID: {}', k, proc_obj.pid,
                         )
                         self._spawned_processes_map[k] = proc_obj
         elif signum in [SIGINT, SIGTERM, SIGQUIT]:
@@ -142,12 +142,12 @@ class ProcessHubCore(Process):
             module=f'PowerLoom|ProcessHub|Core:{settings.namespace}-{settings.instance_id}',
         )
         p = psutil.Process(pid)
-        _logger.debug('Attempting to send SIGTERM to process ID %s for following command', pid)
+        _logger.debug('Attempting to send SIGTERM to process ID {} for following command', pid)
         p.terminate()
         _logger.debug('Waiting for 3 seconds to confirm termination of process')
         gone, alive = psutil.wait_procs([p], timeout=3)
         for p_ in alive:
-            _logger.debug('Process ID %s not terminated by SIGTERM. Sending SIGKILL...', p_.pid)
+            _logger.debug('Process ID {} not terminated by SIGTERM. Sending SIGKILL...', p_.pid)
             p_.kill()
 
         for k, v in self._spawned_cb_processes_map.items():
@@ -196,7 +196,7 @@ class ProcessHubCore(Process):
 
         for callback_worker_file, worker_list in CALLBACK_WORKERS_MAP.items():
             self._logger.debug('=' * 80)
-            self._logger.debug('Launching workers for functionality %s', callback_worker_file)
+            self._logger.debug('Launching workers for functionality {}', callback_worker_file)
             for each_worker in worker_list:
                 # print(each_worker)
                 worker_class = getattr(
@@ -224,7 +224,7 @@ class ProcessHubCore(Process):
                         {unique_id: {'id': unique_name, 'process': worker_obj}},
                     )
                     self._logger.debug(
-                        'Process Hub Core launched process %s for callback worker %s with PID: %s',
+                        'Process Hub Core launched process {} for callback worker {} with PID: {}',
                         unique_name, each_worker['class'], worker_obj.pid,
                     )
 
@@ -241,7 +241,7 @@ class ProcessHubCore(Process):
             consume_callback=self.callback,
             consumer_worker_name=f'PowerLoom|ProcessHub|Core-{settings.instance_id[:5]}',
         )
-        self._logger.debug('Starting RabbitMQ consumer on queue %s', queue_name)
+        self._logger.debug('Starting RabbitMQ consumer on queue {}', queue_name)
         self.rabbitmq_interactor.run()
         self._logger.debug('RabbitMQ interactor ioloop ended...')
         self._thread_shutdown_event.set()
@@ -258,7 +258,7 @@ class ProcessHubCore(Process):
             return
 
         if cmd_json.command == 'stop':
-            self._logger.debug('Process Hub Core received stop command: %s', cmd_json)
+            self._logger.debug('Process Hub Core received stop command: {}', cmd_json)
             process_id = cmd_json.pid
             proc_str_id = cmd_json.proc_str_id
             if process_id:
@@ -271,12 +271,12 @@ class ProcessHubCore(Process):
                 mapped_p = self._spawned_processes_map.get(proc_str_id)
                 if not mapped_p:
                     self._logger.error(
-                        'Did not find process ID in core processes string map: %s', proc_str_id,
+                        'Did not find process ID in core processes string map: {}', proc_str_id,
                     )
                     mapped_p = self._spawned_cb_processes_map.get(proc_str_id)
                     if not mapped_p:
                         self._logger.error(
-                            'Did not find process ID in callback processes string map: %s', proc_str_id,
+                            'Did not find process ID in callback processes string map: {}', proc_str_id,
                         )
                         return
                     else:
@@ -288,9 +288,9 @@ class ProcessHubCore(Process):
 
         elif cmd_json.command == 'start':
             try:
-                self._logger.debug('Process Hub Core received start command: %s', cmd_json)
+                self._logger.debug('Process Hub Core received start command: {}', cmd_json)
                 proc_name = cmd_json.proc_str_id
-                self._logger.debug('Process Hub Core launching process for %s', proc_name)
+                self._logger.debug('Process Hub Core launching process for {}', proc_name)
                 proc_details: dict = PROC_STR_ID_TO_CLASS_MAP.get(proc_name)
                 init_kwargs = dict(name=proc_details['name'])
                 init_kwargs.update(cmd_json.init_kwargs)
@@ -303,7 +303,7 @@ class ProcessHubCore(Process):
                     )
                     proc_obj.start()
                 self._logger.debug(
-                    'Process Hub Core launched process for %s with PID: %s', proc_name, proc_obj.pid,
+                    'Process Hub Core launched process for {} with PID: {}', proc_name, proc_obj.pid,
                 )
                 self._spawned_processes_map[proc_name] = proc_obj
             except Exception as err:
@@ -313,11 +313,11 @@ class ProcessHubCore(Process):
         elif cmd_json.command == 'restart':
             try:
                 # TODO
-                self._logger.debug('Process Hub Core received restart command: %s', cmd_json)
+                self._logger.debug('Process Hub Core received restart command: {}', cmd_json)
                 # first kill
-                self._logger.debug('Attempting to kill process: %s', cmd_json.pid)
+                self._logger.debug('Attempting to kill process: {}', cmd_json.pid)
                 self.kill_process(cmd_json.pid)
-                self._logger.debug('Attempting to start process: %s', cmd_json.proc_str_id)
+                self._logger.debug('Attempting to start process: {}', cmd_json.proc_str_id)
             except Exception as err:
                 self._logger.opt(exception=True).error(
                     f'Error while restarting a process:{cmd_json} | error_msg: {str(err)}',
