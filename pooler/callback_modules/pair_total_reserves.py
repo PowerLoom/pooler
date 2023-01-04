@@ -18,7 +18,6 @@ from uuid import uuid4
 
 import redis
 from aio_pika import IncomingMessage
-from dynaconf import settings
 from eth_utils import keccak
 from httpx import AsyncClient
 from httpx import AsyncHTTPTransport
@@ -34,6 +33,7 @@ from pooler.callback_modules.helpers import CallbackAsyncWorker
 from pooler.callback_modules.uniswap.core import get_pair_reserves
 from pooler.callback_modules.uniswap.core import get_pair_trade_volume
 from pooler.callback_modules.uniswap.core import warm_up_cache_for_snapshot_constructors
+from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.models.message_models import EpochBase
 from pooler.utils.models.message_models import PowerloomCallbackEpoch
@@ -57,8 +57,8 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
     def __init__(self, name: str, **kwargs: dict) -> None:
         super(PairTotalReservesProcessor, self).__init__(
             name=name,
-            rmq_q=f'powerloom-backend-cb-pair_total_reserves-processor:{settings.NAMESPACE}:{settings.INSTANCE_ID}',
-            rmq_routing=f'powerloom-backend-callback:{settings.NAMESPACE}:{settings.INSTANCE_ID}.pair_total_reserves_worker.processor',
+            rmq_q=f'powerloom-backend-cb-pair_total_reserves-processor:{settings.namespace}:{settings.instance_id}',
+            rmq_routing=f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.pair_total_reserves_worker.processor',
             **kwargs,
         )
         self._rate_limiting_lua_scripts = dict()
@@ -408,12 +408,12 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                     mapping={json.dumps(update_log): int(time.time())},
                 )
                 source_chain_details = SourceChainDetails(
-                    chainID=settings.CHAIN_ID,
+                    chainID=settings.chain_id,
                     epochStartHeight=each_epoch[0],
                     epochEndHeight=each_epoch[1],
                 )
                 payload = epoch_snapshot.dict()
-                project_id = f'uniswap_pairContract_{audit_stream}_{original_epoch.contract}_{settings.NAMESPACE}'
+                project_id = f'uniswap_pairContract_{audit_stream}_{original_epoch.contract}_{settings.namespace}'
 
                 commit_payload = PayloadCommitAPIRequest(
                     projectId=project_id,
@@ -427,9 +427,9 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                         session=self._client,
                     )
                 except Exception as e:
-                    self._logger.error(
+                    self._logger.opt(exception=True).error(
                         'Exception committing snapshot to audit protocol: %s | dump: %s',
-                        epoch_snapshot, e, exc_info=True,
+                        epoch_snapshot, e,
                     )
                     update_log = {
                         'worker': self._unique_id,
@@ -484,15 +484,14 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         try:
             msg_obj = PowerloomCallbackProcessMessage.parse_raw(message.body)
         except ValidationError as e:
-            self._logger.error(
-                'Bad message structure of callback in processor for total pair reserves: %s', e, exc_info=True,
+            self._logger.opt(exception=True).error(
+                'Bad message structure of callback in processor for total pair reserves: %s', e,
             )
             return
         except Exception as e:
-            self._logger.error(
+            self._logger.opt(exception=True).error(
                 'Unexpected message structure of callback in processor for total pair reserves: %s',
                 e,
-                exc_info=True,
             )
             return
         cur_task: asyncio.Task = asyncio.current_task(asyncio.get_running_loop())
@@ -607,8 +606,8 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
                 broadcast_id=msg_obj.broadcast_id,
             )
             self._rabbitmq_interactor.enqueue_msg_delivery(
-                exchange=f'{settings.RABBITMQ.SETUP.CALLBACKS.EXCHANGE}.subtopics:{settings.NAMESPACE}',
-                routing_key=f'powerloom-backend-callback:{settings.NAMESPACE}:{settings.INSTANCE_ID}.pair_total_reserves_worker.processor',
+                exchange=f'{settings.rabbitmq.setup.callbacks.exchange}.subtopics:{settings.namespace}',
+                routing_key=f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.pair_total_reserves_worker.processor',
                 msg_body=pair_total_reserves_process_unit.json(),
             )
             self._logger.debug(
@@ -619,8 +618,8 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
             'update': {
                 'action': 'RabbitMQ.Publish',
                 'info': {
-                    'routing_key': f'powerloom-backend-callback:{settings.NAMESPACE}.pair_total_reserves_worker.processor',
-                    'exchange': f'{settings.RABBITMQ.SETUP.CALLBACKS.EXCHANGE}.subtopics:{settings.NAMESPACE}',
+                    'routing_key': f'powerloom-backend-callback:{settings.namespace}.pair_total_reserves_worker.processor',
+                    'exchange': f'{settings.rabbitmq.setup.callbacks.exchange}.subtopics:{settings.namespace}',
                     'msg': msg_obj.dict(),
                 },
             },
@@ -643,16 +642,16 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
             signal.signal(signame, self._exit_signal_handler)
 
         self._logger = logger.bind(
-            module=f'PowerLoom|Callbacks|PairTotalReservesProcessDistributor:{settings.NAMESPACE}-{settings.INSTANCE_ID}',
+            module=f'PowerLoom|Callbacks|PairTotalReservesProcessDistributor:{settings.namespace}-{settings.instance_id}',
         )
 
         self._connection_pool = redis.BlockingConnectionPool(**REDIS_CONN_CONF)
-        queue_name = f'powerloom-backend-cb:{settings.NAMESPACE}:{settings.INSTANCE_ID}'
+        queue_name = f'powerloom-backend-cb:{settings.namespace}:{settings.instance_id}'
         self.ev_loop = asyncio.get_event_loop()
         self._rabbitmq_interactor: RabbitmqSelectLoopInteractor = RabbitmqSelectLoopInteractor(
             consume_queue_name=queue_name,
             consume_callback=self._distribute_callbacks,
-            consumer_worker_name=f'PowerLoom|Callbacks|PairTotalReservesProcessDistributor:{settings.NAMESPACE}-{settings.INSTANCE_ID}',
+            consumer_worker_name=f'PowerLoom|Callbacks|PairTotalReservesProcessDistributor:{settings.namespace}-{settings.instance_id}',
         )
         # self.rabbitmq_interactor.start_publishing()
         self._logger.debug('Starting RabbitMQ consumer on queue %s', queue_name)

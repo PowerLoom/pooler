@@ -1,10 +1,10 @@
 import signal
 
-from dynaconf import settings
 from setproctitle import setproctitle
 
 from pooler.init_rabbitmq import init_exchanges_queues
 from pooler.process_hub_core import ProcessHubCore
+from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.exceptions import GenericExitOnSignal
 
@@ -17,18 +17,18 @@ def main():
     for signame in [signal.SIGINT, signal.SIGTERM, signal.SIGQUIT]:
         signal.signal(signame, generic_exit_handler)
     setproctitle(
-        f'PowerLoom|UniswapPoolerProcessHub|Core|Launcher:{settings.NAMESPACE}-{settings.INSTANCE_ID[:5]}',
+        f'PowerLoom|UniswapPoolerProcessHub|Core|Launcher:{settings.namespace}-{settings.instance_id[:5]}',
     )
 
     # setup logging
     # Using bind to pass extra parameters to the logger, will show up in the {extra} field
     launcher_logger = logger.bind(
         module='PowerLoom|UniswapPoolerProcessHub|Core|Launcher',
-        namespace=settings.NAMESPACE, instance_id=settings.INSTANCE_ID[:5],
+        namespace=settings.namespace, instance_id=settings.instance_id[:5],
     )
 
     init_exchanges_queues()
-    p_name = f'PowerLoom|UniswapPoolerProcessHub|Core-{settings.INSTANCE_ID[:5]}'
+    p_name = f'PowerLoom|UniswapPoolerProcessHub|Core-{settings.instance_id[:5]}'
     core = ProcessHubCore(name=p_name)
     core.start()
     launcher_logger.debug('Launched %s with PID %s', p_name, core.pid)

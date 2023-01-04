@@ -4,7 +4,6 @@ from typing import Optional
 from urllib.parse import urljoin
 
 import aiohttp
-from dynaconf import settings
 from eth_utils import to_checksum_address
 from fastapi import Depends
 from fastapi import FastAPI
@@ -22,6 +21,7 @@ from pooler.auth.helpers.helpers import incr_success_calls_count
 from pooler.auth.helpers.helpers import inject_rate_limit_fail_response
 from pooler.auth.helpers.helpers import rate_limit_auth_check
 from pooler.auth.helpers.redis_conn import RedisPoolCache as AuthRedisPoolCache
+from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.file_utils import read_json_file
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
@@ -38,10 +38,10 @@ from pooler.utils.utility_functions import number_to_abbreviated_string
 from pooler.utils.utility_functions import retrieve_payload_data
 
 REDIS_CONN_CONF = {
-    'host': settings['redis']['host'],
-    'port': settings['redis']['port'],
-    'password': settings['redis']['password'],
-    'db': settings['redis']['db'],
+    'host': settings.redis.host,
+    'port': settings.redis.port,
+    'password': settings.redis.password,
+    'db': settings.redis.db,
 }
 
 SNAPSHOT_STATUS_MAP = {
@@ -93,7 +93,7 @@ def project_namespace_inject(request: Request, stream: str = Query(default='pair
         for eg. pair total reserves, pair trades etc. Effectively, it injects namespaces into a project ID
     """
     pair_contract_address = request.path_params['pair_contract_address']
-    audit_project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
+    audit_project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.namespace}'
     return audit_project_id
 
 
@@ -153,7 +153,7 @@ async def get_past_snapshots(
         }
     max_count = 10 if not maxCount else maxCount
     last_block_height_url = urljoin(
-        settings.AUDIT_PROTOCOL_ENGINE.URL, f'/{audit_project_id}/payloads/height',
+        settings.audit_protocol_engine.url, f'/{audit_project_id}/payloads/height',
     )
     async with aiohttp.ClientSession() as session:
         async with session.get(url=last_block_height_url) as resp:
@@ -172,7 +172,7 @@ async def get_past_snapshots(
         data = data.lower()
     query_params = {'from_height': from_block, 'to_height': to_block, 'data': data}
     range_fetch_url = urljoin(
-        settings.AUDIT_PROTOCOL_ENGINE.URL,
+        settings.audit_protocol_engine.url,
         f'/{audit_project_id}/payloads',
     )
     async with aiohttp.ClientSession() as session:

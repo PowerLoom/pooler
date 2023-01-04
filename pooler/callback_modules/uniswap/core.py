@@ -2,7 +2,6 @@ import asyncio
 import json
 from functools import partial
 
-from dynaconf import settings
 from redis import asyncio as aioredis
 from tenacity import retry
 from tenacity import retry_if_exception_type
@@ -18,6 +17,7 @@ from pooler.callback_modules.uniswap.helpers import get_block_details_in_block_r
 from pooler.callback_modules.uniswap.helpers import get_pair_metadata
 from pooler.callback_modules.uniswap.pricing import get_eth_price_usd
 from pooler.callback_modules.uniswap.pricing import get_token_price_in_block_range
+from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.models.data_models import epoch_event_trade_data
 from pooler.utils.models.data_models import event_trade_data
@@ -42,7 +42,7 @@ core_logger = logger.bind(module='PowerLoom|UniswapCore')
     reraise=True,
     retry=retry_if_exception_type(RPCException),
     wait=wait_random_exponential(multiplier=1, max=10),
-    stop=stop_after_attempt(settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS),
+    stop=stop_after_attempt(settings.uniswap_functions.retrial_attempts),
     before_sleep=inject_web3_provider_on_exception,
 )
 async def get_pair_reserves(
@@ -66,9 +66,9 @@ async def get_pair_reserves(
                     rate_limit_lua_script_shas=rate_limit_lua_script_shas, web3_provider=web3_provider,
                 )
             except Exception as err:
-                core_logger.error(
+                core_logger.opt(exception=True).error(
                     'Error attempting to get block details of block-range %s-%s: %s, retrying again',
-                    from_block, to_block, err, exc_info=True,
+                    from_block, to_block, err,
                 )
                 raise err
         else:
@@ -156,8 +156,8 @@ async def get_pair_reserves(
         )
         return pair_reserves_arr
     except Exception as exc:
-        core_logger.error(
-            'error at get_pair_reserves fn, retrying..., error_msg: %s', exc, exc_info=True,
+        core_logger.opt(exception=True).error(
+            'error at get_pair_reserves fn, retrying..., error_msg: %s',
         )
         raise RPCException(
             request={'contract': pair_address, 'from_block': from_block, 'to_block': to_block},
@@ -269,7 +269,7 @@ def extract_trade_volume_log(event_name, log, pair_per_token_metadata, token0_pr
     reraise=True,
     retry=retry_if_exception_type(RPCException),
     wait=wait_random_exponential(multiplier=1, max=10),
-    stop=stop_after_attempt(settings.UNISWAP_FUNCTIONS.RETRIAL_ATTEMPTS),
+    stop=stop_after_attempt(settings.uniswap_functions.retrial_attempts),
     before_sleep=inject_web3_provider_on_exception,
 )
 async def get_pair_trade_volume(
@@ -295,8 +295,8 @@ async def get_pair_trade_volume(
                     web3_provider=web3_provider,
                 )
             except Exception as err:
-                core_logger.error(
-                    'Error attempting to get block details of to_block %s: %s, retrying again', max_chain_height, err, exc_info=True,
+                core_logger.opt(exception=True).error(
+                    'Error attempting to get block details of to_block %s: %s, retrying again', max_chain_height, err,
                 )
                 raise err
 

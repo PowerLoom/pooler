@@ -9,11 +9,11 @@ from typing import Union
 
 import pika.channel
 import pika.exceptions
-from dynaconf import settings
 from tenacity import RetryCallState
 from tenacity import Retrying
 from tenacity import wait_random_exponential
 
+from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 # setup logging
 logger = logger.bind(module='PowerLoom|RabbitmqHelpers')
@@ -94,16 +94,16 @@ class RabbitmqSelectLoopInteractor(object):
         """
         logger.info(
             '%s: RabbitMQ select loop interactor: Creating RabbitMQ select ioloop connection to %s',
-            self._consumer_worker_name, (settings.RABBITMQ.HOST, settings.RABBITMQ.PORT),
+            self._consumer_worker_name, (settings.rabbitmq.host, settings.rabbitmq.port),
         )
         return pika.SelectConnection(
             parameters=pika.ConnectionParameters(
-                host=settings.RABBITMQ.HOST,
-                port=settings.RABBITMQ.PORT,
+                host=settings.rabbitmq.host,
+                port=settings.rabbitmq.port,
                 virtual_host='/',
                 credentials=pika.PlainCredentials(
-                    username=settings.RABBITMQ.USER,
-                    password=settings.RABBITMQ.PASSWORD,
+                    username=settings.rabbitmq.user,
+                    password=settings.rabbitmq.password,
                 ),
                 heartbeat=30,
             ),
@@ -193,7 +193,7 @@ class RabbitmqSelectLoopInteractor(object):
         )
         self._channel = channel
         self.add_on_channel_close_callback()
-        # self.setup_exchange(self.EXCHANGE)
+        # self.setup_exchange(self.exchange)
         try:
             self.start_publishing()
             if self._consume_queue and self._consume_callback:
@@ -203,9 +203,9 @@ class RabbitmqSelectLoopInteractor(object):
                     auto_ack=False,
                 )
         except Exception as err:
-            logger.error(
+            logger.opt(exception=True).error(
                 '%s: RabbitMQ select loop interactor: Failed on_channel_open hook with error_msg: %s',
-                self._consumer_worker_name, str(err), exc_info=True,
+                self._consumer_worker_name, str(err),
             )
             # must be raised back to caller to be handled there
             raise err
@@ -249,10 +249,10 @@ class RabbitmqSelectLoopInteractor(object):
                     e,
                 )
             else:
-                logger.error(
+                logger.opt(exception=True).error(
                     '%s: RabbitMQ select loop interactor: Exception closing connection '
                     'on channel close callback: %s. Will close ioloop now.',
-                    self._consumer_worker_name, e, exc_info=True,
+                    self._consumer_worker_name, e,
                 )
             self._connection.ioloop.stop()
 
@@ -379,10 +379,10 @@ class RabbitmqSelectLoopInteractor(object):
                 k: self.queued_messages[k] for k in self.queued_messages if k not in pushed_outputs
             }
         except Exception as err:
-            logger.error(
+            logger.opt(exception=True).error(
                 '%s: RabbitMQ select loop interactor: Error while publishing message to rabbitmq error_msg: '
                 '%s, exchange: %s, routing_key: %s, msg: %s',
-                self._consumer_worker_name, str(err), exchange, routing_key, msg, exc_info=True,
+                self._consumer_worker_name, str(err), exchange, routing_key, msg,
             )
         finally:
             self.schedule_next_message()
@@ -586,16 +586,16 @@ class RabbitmqThreadedSelectLoopInteractor(object):
         """
         self._logger.info(
             'Creating RabbitMQ threaded select ioloop connection to %s',
-            (settings.RABBITMQ.HOST, settings.RABBITMQ.PORT),
+            (settings.rabbitmq.host, settings.rabbitmq.port),
         )
         return pika.SelectConnection(
             parameters=pika.ConnectionParameters(
-                host=settings.RABBITMQ.HOST,
-                port=settings.RABBITMQ.PORT,
+                host=settings.rabbitmq.host,
+                port=settings.rabbitmq.port,
                 virtual_host='/',
                 credentials=pika.PlainCredentials(
-                    username=settings.RABBITMQ.USER,
-                    password=settings.RABBITMQ.PASSWORD,
+                    username=settings.rabbitmq.user,
+                    password=settings.rabbitmq.password,
                 ),
                 heartbeat=30,
             ),
@@ -676,7 +676,7 @@ class RabbitmqThreadedSelectLoopInteractor(object):
         self._logger.info('RabbitMQ threaded select loop interactor: Channel opened')
         self._channel = channel
         self.add_on_channel_close_callback()
-        # self.setup_exchange(self.EXCHANGE)
+        # self.setup_exchange(self.exchange)
         self.start_publishing()
         if self._consume_queue and self._consume_callback:
             self.start_consuming(
@@ -721,10 +721,10 @@ class RabbitmqThreadedSelectLoopInteractor(object):
                     e,
                 )
             else:
-                self._logger.error(
+                self._logger.opt(exception=True).error(
                     'RabbitMQ threaded select loop interactor: Exception closing connection '
                     'on channel close callback: %s. Will close ioloop now.',
-                    e, exc_info=True,
+                    e,
                 )
                 # because on_connection_closed callback would not be reached
                 self._connection.ioloop.stop()
@@ -747,7 +747,7 @@ class RabbitmqThreadedSelectLoopInteractor(object):
         )
         self._channel.exchange_declare(
             exchange=exchange_name,
-            exchange_type=self.EXCHANGE_TYPE,
+            exchange_type=self.exchange_TYPE,
             callback=cb,
         )
 
@@ -786,12 +786,12 @@ class RabbitmqThreadedSelectLoopInteractor(object):
 
         """
         self._logger.info(
-            'Binding %s to %s with %s', self.EXCHANGE, self.QUEUE,
+            'Binding %s to %s with %s', self.exchange, self.QUEUE,
             self.ROUTING_KEY,
         )
         self._channel.queue_bind(
             self.QUEUE,
-            self.EXCHANGE,
+            self.exchange,
             routing_key=self.ROUTING_KEY,
             callback=self.on_bindok,
         )

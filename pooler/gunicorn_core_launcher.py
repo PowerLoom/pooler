@@ -2,10 +2,10 @@ import logging
 import os
 import sys
 
-from dynaconf import settings
 from loguru import logger
 
 from pooler.core_api import app
+from pooler.settings.config import settings
 from pooler.utils.gunicorn import InterceptHandler
 from pooler.utils.gunicorn import StandaloneApplication
 from pooler.utils.gunicorn import StubbedGunicornLogger
@@ -43,7 +43,7 @@ if __name__ == '__main__':
     )
 
     options = {
-        'bind': f'{settings.HOST}:{settings.PORT}',
+        'bind': f'{settings.host}:{settings.port}',
         'workers': WORKERS,
         'accesslog': '-',
         'errorlog': '-',

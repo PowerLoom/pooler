@@ -105,9 +105,9 @@ async def check_user_details(
 async def auth_check(
         request: Request,
 ) -> AuthCheck:
-    core_settings = request.app.state.core_settings['core_api']
+    core_settings = request.app.state.core_settings.core_api
     auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
-    expected_header_key_for_auth = core_settings['auth']['header_key']
+    expected_header_key_for_auth = core_settings.auth.header_key
     api_key_in_header = request.headers[expected_header_key_for_auth] \
         if expected_header_key_for_auth in request.headers else None
     if not api_key_in_header:
@@ -124,7 +124,7 @@ async def auth_check(
         if not ip_user_dets_b:
             public_owner = AppOwnerModel(
                 email=user_ip,
-                rate_limit=core_settings['public_rate_limit'],
+                rate_limit=core_settings.public_rate_limit,
                 active=UserStatusEnum.active,
                 callsCount=0,
                 throttledCount=0,
@@ -156,7 +156,7 @@ async def rate_limit_auth_check(
             passed, retry_after, violated_limit = await generic_rate_limiter(
                 parsed_limits=parse_many(auth_check.owner.rate_limit),
                 key_bits=[
-                    str(request.app.state.core_settings['chain_id']),
+                    str(request.app.state.core_settings.chain_id),
                     auth_check.owner.email,
                 ],
                 redis_conn=auth_redis_conn,

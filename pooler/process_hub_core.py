@@ -16,10 +16,10 @@ from typing import Union
 import psutil
 import pydantic
 import redis
-from dynaconf import settings
 from setproctitle import setproctitle
 
 from pooler.epoch_broadcast_callback_manager import EpochCallbackManager
+from pooler.settings.config import settings
 from pooler.system_epoch_detector import EpochDetectorProcess
 from pooler.utils.default_logger import logger
 from pooler.utils.exceptions import SelfExitException
@@ -139,7 +139,7 @@ class ProcessHubCore(Process):
 
     def kill_process(self, pid: int):
         _logger = logger.bind(
-            module=f'PowerLoom|ProcessHub|Core:{settings.NAMESPACE}-{settings.INSTANCE_ID}',
+            module=f'PowerLoom|ProcessHub|Core:{settings.namespace}-{settings.instance_id}',
         )
         p = psutil.Process(pid)
         _logger.debug('Attempting to send SIGTERM to process ID %s for following command', pid)
@@ -177,13 +177,13 @@ class ProcessHubCore(Process):
                     }
             proc_id_map['callback_workers'] = json.dumps(proc_id_map['callback_workers'])
             redis_conn.hset(
-                name=f'powerloom:uniswap:{settings.NAMESPACE}:{settings.INSTANCE_ID}:Processes', mapping=proc_id_map,
+                name=f'powerloom:uniswap:{settings.namespace}:{settings.instance_id}:Processes', mapping=proc_id_map,
             )
         self._logger.error(
             'Caught thread shutdown notification event. Deleting process worker map in redis...',
         )
         redis_conn.delete(
-            f'powerloom:uniswap:{settings.NAMESPACE}:{settings.INSTANCE_ID}:Processes',
+            f'powerloom:uniswap:{settings.namespace}:{settings.instance_id}:Processes',
         )
 
     @cleanup_children_procs
@@ -208,9 +208,7 @@ class ProcessHubCore(Process):
 
                 # check if there is settings-config for workers
                 if each_worker.get('class', '') == 'PairTotalReservesProcessor':
-                    worker_count = settings.get(
-                        'MODULE_QUEUES_CONFIG.PAIR_TOTAL_RESERVES.NUM_INSTANCES', None,
-                    )
+                    worker_count = settings.module_queues_config.pair_total_reserves.num_instances
 
                 # else if settings-config doesn't exist then use module_queues_config
                 if not worker_count:
@@ -219,7 +217,7 @@ class ProcessHubCore(Process):
                 self._spawned_cb_processes_map[each_worker['class']] = dict()
                 for _ in range(worker_count):
                     unique_id = str(uuid.uuid4())[:5]
-                    unique_name = f'{each_worker["name"]}:{settings.NAMESPACE}:{settings.INSTANCE_ID}' + '-' + unique_id
+                    unique_name = f'{each_worker["name"]}:{settings.namespace}:{settings.instance_id}' + '-' + unique_id
                     worker_obj: Process = worker_class(name=unique_name)
                     worker_obj.start()
                     self._spawned_cb_processes_map[each_worker['class']].update(
@@ -237,11 +235,11 @@ class ProcessHubCore(Process):
         self._reporter_thread.start()
         self._logger.debug('Starting Process Hub Core...')
 
-        queue_name = f'powerloom-processhub-commands-q:{settings.NAMESPACE}:{settings.INSTANCE_ID}'
+        queue_name = f'powerloom-processhub-commands-q:{settings.namespace}:{settings.instance_id}'
         self.rabbitmq_interactor: RabbitmqSelectLoopInteractor = RabbitmqSelectLoopInteractor(
             consume_queue_name=queue_name,
             consume_callback=self.callback,
-            consumer_worker_name=f'PowerLoom|ProcessHub|Core-{settings.INSTANCE_ID[:5]}',
+            consumer_worker_name=f'PowerLoom|ProcessHub|Core-{settings.instance_id[:5]}',
         )
         self._logger.debug('Starting RabbitMQ consumer on queue %s', queue_name)
         self.rabbitmq_interactor.run()
@@ -309,8 +307,8 @@ class ProcessHubCore(Process):
                 )
                 self._spawned_processes_map[proc_name] = proc_obj
             except Exception as err:
-                self._logger.error(
-                    f'Error while starting a process:{cmd_json} | error_msg: {str(err)}', exc_info=True,
+                self._logger.opt(exception=True).error(
+                    f'Error while starting a process:{cmd_json} | error_msg: {str(err)}',
                 )
         elif cmd_json.command == 'restart':
             try:
@@ -321,8 +319,8 @@ class ProcessHubCore(Process):
                 self.kill_process(cmd_json.pid)
                 self._logger.debug('Attempting to start process: %s', cmd_json.proc_str_id)
             except Exception as err:
-                self._logger.error(
-                    f'Error while restarting a process:{cmd_json} | error_msg: {str(err)}', exc_info=True,
+                self._logger.opt(exception=True).error(
+                    f'Error while restarting a process:{cmd_json} | error_msg: {str(err)}',
                 )
 
 

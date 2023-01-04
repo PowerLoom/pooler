@@ -7,11 +7,11 @@ import psutil
 import redis
 import timeago
 import typer
-from dynaconf import settings
 
 from pooler.init_rabbitmq import create_rabbitmq_conn
 from pooler.init_rabbitmq import processhub_command_publish
 from pooler.process_hub_core import PROC_STR_ID_TO_CLASS_MAP
+from pooler.settings.config import settings
 from pooler.utils.file_utils import read_json_file
 from pooler.utils.models.message_models import ProcessHubCommand
 from pooler.utils.redis.redis_conn import REDIS_CONN_CONF
@@ -48,7 +48,7 @@ def pidStatus(connections: bool = False):
 
     r = redis.Redis(**REDIS_CONN_CONF, single_connection_client=True)
     print('\n')
-    for k, v in r.hgetall(name=f'powerloom:uniswap:{settings.NAMESPACE}:{settings.INSTANCE_ID}:Processes').items():
+    for k, v in r.hgetall(name=f'powerloom:uniswap:{settings.namespace}:{settings.instance_id}:Processes').items():
         key = k.decode('utf-8')
         value = v.decode('utf-8')
 
@@ -163,8 +163,8 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
     r = redis.Redis(**REDIS_CONN_CONF, single_connection_client=True)
     pair_contracts = read_json_file('static/cached_pair_addresses.json')
     pair_projects = [
-        'projectID:uniswap_pairContract_trade_volume_{}_' + settings.NAMESPACE + ':{}',
-        'projectID:uniswap_pairContract_pair_total_reserves_{}_' + settings.NAMESPACE + ':{}',
+        'projectID:uniswap_pairContract_trade_volume_{}_' + settings.namespace + ':{}',
+        'projectID:uniswap_pairContract_pair_total_reserves_{}_' + settings.namespace + ':{}',
     ]
     total_zsets = {}
     total_issue_count = {

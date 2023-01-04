@@ -4,13 +4,13 @@ import os
 import time
 
 import requests
-from dynaconf import settings
 from rich.console import Console
 from rich.table import Table
 from uniswap_functions import get_pair_trade_volume
 from uniswap_functions import load_rate_limiter_scripts
 from web3 import Web3
 
+from pooler.settings.config import settings
 from pooler.utils.clean_slate import redis_cleanup_pooler_namespace
 from pooler.utils.ipfs_async import client as ipfs_client
 from pooler.utils.redis.redis_conn import provide_async_redis_conn_insta
@@ -371,15 +371,6 @@ async def verify_trade_volume_calculations(loop, pair_contract, timePeriod, star
             uniswap_url, uniswap_payload,
         )
         print('\n\n')
-
-    # Clean testing redis
-    if settings.from_env('testing').IS_TESTING_ENV:
-        redis_cleanup_pooler_namespace({
-            'host': settings['redis']['host'],
-            'port': settings['redis']['port'],
-            'password': settings['redis']['password'],
-            'db': settings['redis']['db'],
-        })
 
 
 async def generate_trade_volume_report(loop, pair_contract_address, time_period, debug_logs):

@@ -1,6 +1,5 @@
 import time
 
-from dynaconf import settings
 from fastapi import FastAPI
 from fastapi import Request
 from fastapi import Response
@@ -16,6 +15,7 @@ from pooler.auth.helpers.redis_keys import api_key_to_owner_key
 from pooler.auth.helpers.redis_keys import user_active_api_keys_set
 from pooler.auth.helpers.redis_keys import user_details_htable
 from pooler.auth.helpers.redis_keys import user_revoked_api_keys_set
+from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 
 # setup logging

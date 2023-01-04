@@ -5,7 +5,8 @@ from functools import wraps
 
 import aiohttp
 import requests
-from dynaconf import settings
+
+from pooler.settings.config import settings
 
 
 def make_post_call(url: str, params: dict):
@@ -63,8 +64,8 @@ async def make_post_call_async(url: str, params: dict, session: aiohttp.ClientSe
         async with session.post(
             url=url, json=params, timeout=aiohttp.ClientTimeout(
                 total=None,
-                sock_read=settings.TIMEOUTS.ARCHIVAL,
-                sock_connect=settings.TIMEOUTS.CONNECTION_INIT,
+                sock_read=settings.timeouts.archival,
+                sock_connect=settings.timeouts.connection_init,
             ),
         ) as response_obj:
             response = await response_obj.json()
@@ -104,9 +105,9 @@ def cleanup_children_procs(fn):
             fn(self, *args, **kwargs)
             logging.info('Finished running process hub core...')
         except Exception as e:
-            logging.error(
+            logging.opt(exception=True).error(
                 'Received an exception on process hub core run(): %s',
-                e, exc_info=True,
+                e,
             )
             # logging.error('Initiating kill children....')
             # # silently kill all children

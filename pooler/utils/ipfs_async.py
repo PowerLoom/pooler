@@ -2,9 +2,10 @@ import asyncio
 import io
 import json
 
-from dynaconf import settings
 from greenletio import async_
 from IPFS_API import ipfshttpclient
+
+from pooler.settings.config import settings
 
 
 class AsyncIpfsClient:
@@ -31,7 +32,7 @@ class AsyncIpfsClient:
         return await async_(self.cat)(*args, **kwargs)
 
 
-client = ipfshttpclient.connect(settings.IPFS_URL)
+client = ipfshttpclient.connect(settings.ipfs_url)
 
 async_ipfs_client = AsyncIpfsClient(
     get=client.dag.get,

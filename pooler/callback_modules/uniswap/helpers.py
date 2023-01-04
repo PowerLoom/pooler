@@ -2,13 +2,13 @@ import asyncio
 import json
 from functools import partial
 
-from dynaconf import settings
 from redis import asyncio as aioredis
 from web3 import Web3
 
 from pooler.callback_modules.uniswap.constants import erc20_abi
 from pooler.callback_modules.uniswap.constants import global_w3_client
 from pooler.callback_modules.uniswap.constants import pair_contract_abi
+from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.redis.rate_limiter import check_rpc_rate_limit
 from pooler.utils.redis.redis_conn import provide_async_redis_conn_insta
@@ -157,7 +157,7 @@ async def get_pair_metadata(
             # special case to handle maker token
             maker_token0 = None
             maker_token1 = None
-            if(Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.MAKER) == Web3.toChecksumAddress(token0Addr)):
+            if(Web3.toChecksumAddress(settings.contract_addresses.maker) == Web3.toChecksumAddress(token0Addr)):
                 token0_name = get_maker_pair_data('name')
                 token0_symbol = get_maker_pair_data('symbol')
                 maker_token0 = True
@@ -166,7 +166,7 @@ async def get_pair_metadata(
                 tasks.append(token0.functions.symbol())
             tasks.append(token0.functions.decimals())
 
-            if(Web3.toChecksumAddress(settings.CONTRACT_ADDRESSES.MAKER) == Web3.toChecksumAddress(token1Addr)):
+            if(Web3.toChecksumAddress(settings.contract_addresses.maker) == Web3.toChecksumAddress(token1Addr)):
                 token1_name = get_maker_pair_data('name')
                 token1_symbol = get_maker_pair_data('symbol')
                 maker_token1 = True
@@ -228,8 +228,8 @@ async def get_pair_metadata(
         }
     except Exception as err:
         # this will be retried in next cycle
-        helper_logger.error(
-            f'RPC error while fetcing metadata for pair {pair_address}, error_msg:{err}', exc_info=True,
+        helper_logger.opt(exception=True).error(
+            f'RPC error while fetcing metadata for pair {pair_address}, error_msg:{err}',
         )
         raise err
 
@@ -306,7 +306,7 @@ async def get_block_details_in_block_range(
                 redis_conn.zremrangebyscore(
                     name=cached_block_details_at_height,
                     min=0,
-                    max=int(from_block) - settings.EPOCH.HEIGHT * 3,
+                    max=int(from_block) - settings.epoch.height * 3,
                 ),
             )
 

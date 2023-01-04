@@ -5,19 +5,19 @@ from functools import wraps
 import redis
 import redis.exceptions as redis_exc
 import tenacity
-from dynaconf import settings as settings_conf
 from redis import asyncio as aioredis
 
+from pooler.settings.config import settings as settings_conf
 from pooler.utils.default_logger import logger
 
 # setup logging
 logger = logger.bind(module='PowerLoom|RedisConn')
 
 REDIS_CONN_CONF = {
-    'host': settings_conf['redis']['host'],
-    'port': settings_conf['redis']['port'],
-    'password': settings_conf['redis']['password'],
-    'db': settings_conf['redis']['db'],
+    'host': settings_conf.redis.host,
+    'port': settings_conf.redis.port,
+    'password': settings_conf.redis.password,
+    'db': settings_conf.redis.db,
     'retry_on_error': [redis.exceptions.ReadOnlyError],
 }
 
@@ -104,10 +104,9 @@ def provide_async_redis_conn_insta(fn):
         if kwargs.get(arg_conn):
             return await fn(*args, **kwargs)
         else:
-            # RedisPoolCache.append_ssl_connection_params(REDIS_CONN_CONF, settings_conf['redis'])
             redis_cluster_mode_conn = False
             # try:
-            #     if settings_conf.REDIS.CLUSTER_MODE:
+            #     if settings_conf.redis.cluster_mode:
             #         redis_cluster_mode_conn = True
             # except:
             #     pass

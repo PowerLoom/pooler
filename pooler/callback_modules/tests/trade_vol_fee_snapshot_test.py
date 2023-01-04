@@ -1,11 +1,10 @@
 import asyncio
 import uuid
 
-from dynaconf import settings
-
 from pooler.callback_modules.pair_total_reserves import \
     PairTotalReservesProcessor
 from pooler.init_rabbitmq import init_exchanges_queues
+from pooler.settings.config import settings
 from pooler.utils.models.message_models import PowerloomCallbackProcessMessage
 
 
@@ -25,7 +24,7 @@ async def test_construction_snapshot(
     failed_query_epochs = list()
     for _ in range(failed_queued_epochs_past):
         past_failed_query_epoch_end = epoch_begin - 1
-        past_failed_query_epoch_begin = past_failed_query_epoch_end - settings.EPOCH.HEIGHT + 1
+        past_failed_query_epoch_begin = past_failed_query_epoch_end - settings.epoch.height + 1
         failed_query_epochs.insert(
             0,
             PowerloomCallbackProcessMessage(

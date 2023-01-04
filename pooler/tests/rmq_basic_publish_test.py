@@ -2,9 +2,9 @@ import queue
 import threading
 
 import pika
-from dynaconf import settings
 
 from pooler.init_rabbitmq import create_rabbitmq_conn
+from pooler.settings.config import settings
 from pooler.utils.rabbitmq_helpers import RabbitmqThreadedSelectLoopInteractor
 
 
@@ -16,8 +16,8 @@ def interactor_wrapper_obj(rmq_q: queue.Queue):
 if __name__ == '__main__':
     q = queue.Queue()
     CMD = '{"command": "start", "pid": null, "proc_str_id": "EpochCallbackManager", "init_kwargs": {}}'
-    exchange = f'{settings.RABBITMQ.SETUP.CORE.EXCHANGE}:{settings.NAMESPACE}'
-    routing_key = f'processhub-commands:{settings.NAMESPACE}'
+    exchange = f'{settings.rabbitmq.setup.core.exchange}:{settings.namespace}'
+    routing_key = f'processhub-commands:{settings.namespace}'
     try:
         t = threading.Thread(target=interactor_wrapper_obj, kwargs={'q': q})
         t.start()
@@ -27,8 +27,8 @@ if __name__ == '__main__':
             c = create_rabbitmq_conn()
             ch = c.channel()
             ch.basic_publish(
-                exchange=f'{settings.RABBITMQ.SETUP.CORE.EXCHANGE}:{settings.NAMESPACE}',
-                routing_key=f'processhub-commands:{settings.NAMESPACE}',
+                exchange=f'{settings.rabbitmq.setup.core.exchange}:{settings.namespace}',
+                routing_key=f'processhub-commands:{settings.namespace}',
                 body=CMD.encode('utf-8'),
                 properties=pika.BasicProperties(
                     delivery_mode=2,

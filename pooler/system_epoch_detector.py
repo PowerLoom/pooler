@@ -13,9 +13,9 @@ from time import sleep
 
 import redis
 import requests
-from dynaconf import settings
 from setproctitle import setproctitle
 
+from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.exceptions import GenericExitOnSignal
 from pooler.utils.models.data_models import EpochInfo
@@ -67,9 +67,9 @@ def rabbitmq_and_redis_cleanup(fn):
                             json.dumps(self._last_processed_epoch),
                         )
             except Exception as E:
-                self._logger.error('Error while saving progress: %s', E)
+                self._logger.opt(exception=True).error('Error while saving progress: %s', E)
         except Exception as E:
-            self._logger.error('Error while running: %s', E)
+            self._logger.opt(exception=True).error('Error while running: %s', E)
         finally:
             self._logger.debug('Shutting down!')
             sys.exit(0)
@@ -90,11 +90,11 @@ class EpochDetectorProcess(multiprocessing.Process):
         self._shutdown_initiated = False
         self._connection_pool = redis.BlockingConnectionPool(**REDIS_CONN_CONF)
         self._logger = logger.bind(
-            module=f'{name}|{settings.NAMESPACE}-{settings.INSTANCE_ID[:5]}',
+            module=f'{name}|{settings.namespace}-{settings.instance_id[:5]}',
         )
 
-        self._exchange = f'{settings.RABBITMQ.SETUP.CORE.EXCHANGE}:{settings.NAMESPACE}'
-        self._routing_key = f'epoch-broadcast:{settings.NAMESPACE}:{settings.INSTANCE_ID}'
+        self._exchange = f'{settings.rabbitmq.setup.core.exchange}:{settings.namespace}'
+        self._routing_key = f'epoch-broadcast:{settings.namespace}:{settings.instance_id}'
 
         self._last_processed_epoch = None
         setproctitle(name)
@@ -135,7 +135,7 @@ class EpochDetectorProcess(multiprocessing.Process):
         """
         The entry point for the process.
         """
-        consensus_epoch_tracker_url = f'{settings.CONSENSUS.URL}{settings.CONSENSUS.EPOCH_TRACKER_PATH}'
+        consensus_epoch_tracker_url = f'{settings.consensus.url}{settings.consensus.epoch_tracker_path}'
         for signame in [signal.SIGINT, signal.SIGTERM, signal.SIGQUIT]:
             signal.signal(signame, self._generic_exit_handler)
         self._rabbitmq_thread = threading.Thread(
@@ -150,13 +150,13 @@ class EpochDetectorProcess(multiprocessing.Process):
                     self._logger.error(
                         'Error while fetching current epoch data: %s', response.status_code,
                     )
-                    sleep(settings.CONSENSUS.POLLING_INTERVAL)
+                    sleep(settings.consensus.polling_interval)
                     continue
             except Exception as E:
                 self._logger.error(
-                    f'Unable to fetch current epoch, ERROR: {E}, sleeping for {settings.CONSENSUS.POLLING_INTERVAL} seconds.',
+                    f'Unable to fetch current epoch, ERROR: {E}, sleeping for {settings.consensus.polling_interval} seconds.',
                 )
-                sleep(settings.CONSENSUS.POLLING_INTERVAL)
+                sleep(settings.consensus.polling_interval)
                 continue
             epoch_info = EpochInfo(**response.json())
             current_epoch = {
@@ -175,13 +175,13 @@ class EpochDetectorProcess(multiprocessing.Process):
             if self._last_processed_epoch:
                 if self._last_processed_epoch['end'] == current_epoch['end']:
                     self._logger.debug(
-                        'Last processed epoch is same as current epoch, Sleeping for %d seconds...', settings.CONSENSUS.POLLING_INTERVAL,
+                        'Last processed epoch is same as current epoch, Sleeping for %d seconds...', settings.consensus.polling_interval,
                     )
-                    sleep(settings.CONSENSUS.POLLING_INTERVAL)
+                    sleep(settings.consensus.polling_interval)
                     continue
 
                 else:
-                    fall_behind_reset_threshold = settings.CONSENSUS.FALL_BEHIND_RESET_NUM_BLOCKS
+                    fall_behind_reset_threshold = settings.consensus.fall_behind_reset_num_blocks
                     if current_epoch['end'] - self._last_processed_epoch['end'] > fall_behind_reset_threshold:
                         # TODO: build automatic clean slate procedure, for now just issuing warning on every new epoch fetch
                         self._logger.error(
@@ -204,15 +204,15 @@ class EpochDetectorProcess(multiprocessing.Process):
                         self._broadcast_epoch(epoch_from_chunk)
                         self._logger.info(
                             'Sleeping for %d seconds...',
-                            settings.CONSENSUS.SLEEP_SECS_BETWEEN_CHUNKS,
+                            settings.consensus.sleep_secs_between_chunks,
                         )
-                        sleep(settings.CONSENSUS.SLEEP_SECS_BETWEEN_CHUNKS)
+                        sleep(settings.consensus.sleep_secs_between_chunks)
             else:
                 self._logger.debug('No last processed epoch found, processing current epoch')
                 self._broadcast_epoch(current_epoch)
 
                 self._logger.info(
                     'Sleeping for %d seconds...',
-                    settings.CONSENSUS.POLLING_INTERVAL,
+                    settings.consensus.polling_interval,
                 )
-                sleep(settings.CONSENSUS.POLLING_INTERVAL)
+                sleep(settings.consensus.polling_interval)

@@ -7,7 +7,6 @@ from itertools import repeat
 import eth_abi
 import requests
 from async_limits import parse_many as limit_parse_many
-from dynaconf import settings
 from eth_abi.codec import ABICodec
 from eth_utils import keccak
 from gnosis.eth import EthereumClient
@@ -15,6 +14,7 @@ from hexbytes import HexBytes
 from web3 import Web3
 from web3._utils.events import get_event_data
 
+from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.models.message_models import RPCNodesObject
 
@@ -240,8 +240,8 @@ def load_web3_providers_and_rate_limits(full_nodes, archive_nodes):
                 })
             except Exception as exc:
                 print(f'Error while initialising one of the web3 providers, err_msg: {exc}')
-                rpc_logger.error(
-                    f'Error while initialising one of the web3 providers, err_msg: {exc}', exc_info=True,
+                rpc_logger.opt(exception=True).error(
+                    f'Error while initialising one of the web3 providers, err_msg: {exc}',
                 )
             else:
                 count += 1
@@ -253,8 +253,8 @@ def load_web3_providers_and_rate_limits(full_nodes, archive_nodes):
 
 
 GLOBAL_WEB3_PROVIDER = load_web3_providers_and_rate_limits(
-    full_nodes=settings.RPC.FULL_NODES,
-    archive_nodes=settings.RPC.ARCHIVE_NODES,
+    full_nodes=settings.rpc.full_nodes,
+    archive_nodes=settings.rpc.archive_nodes,
 )
 
 

@@ -2,8 +2,8 @@ import json
 
 import aio_pika
 import pika
-from dynaconf import settings
 
+from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 
 # setup logging
@@ -13,12 +13,12 @@ init_rmq_logger = logger.bind(module='PowerLoom|RabbitMQ|Init')
 def create_rabbitmq_conn() -> pika.BlockingConnection:
     c = pika.BlockingConnection(
         pika.ConnectionParameters(
-            host=settings.RABBITMQ.HOST,
-            port=settings.RABBITMQ.PORT,
+            host=settings.rabbitmq.host,
+            port=settings.rabbitmq.port,
             virtual_host='/',
             credentials=pika.PlainCredentials(
-                username=settings.RABBITMQ.USER,
-                password=settings.RABBITMQ.PASSWORD,
+                username=settings.rabbitmq.user,
+                password=settings.rabbitmq.password,
             ),
             heartbeat=30,
         ),
@@ -28,18 +28,18 @@ def create_rabbitmq_conn() -> pika.BlockingConnection:
 
 async def get_rabbitmq_connection_async() -> aio_pika.Connection:
     return await aio_pika.connect_robust(
-        host=settings.RABBITMQ.HOST,
-        port=settings.RABBITMQ.PORT,
+        host=settings.rabbitmq.host,
+        port=settings.rabbitmq.port,
         virtual_host='/',
-        login=settings.RABBITMQ.USER,
-        password=settings.RABBITMQ.PASSWORD,
+        login=settings.rabbitmq.user,
+        password=settings.rabbitmq.password,
     )
 
 
 def processhub_command_publish(ch: pika.adapters.blocking_connection.BlockingChannel, cmd: str) -> None:
     ch.basic_publish(
-        exchange=f'{settings.RABBITMQ.SETUP.CORE.EXCHANGE}:{settings.NAMESPACE}',
-        routing_key=f'processhub-commands:{settings.NAMESPACE}:{settings.INSTANCE_ID}',
+        exchange=f'{settings.rabbitmq.setup.core.exchange}:{settings.namespace}',
+        routing_key=f'processhub-commands:{settings.namespace}:{settings.instance_id}',
         body=cmd.encode('utf-8'),
         properties=pika.BasicProperties(
             delivery_mode=2,
@@ -51,30 +51,30 @@ def processhub_command_publish(ch: pika.adapters.blocking_connection.BlockingCha
 
 
 def init_callback_queue(ch: pika.adapters.blocking_connection.BlockingChannel) -> None:
-    callback_q_conf_path = f'{settings.RABBITMQ.SETUP.CALLBACKS.PATH}{settings.RABBITMQ.SETUP.CALLBACKS.CONFIG}'
+    callback_q_conf_path = f'{settings.rabbitmq.setup.callbacks.path}{settings.rabbitmq.setup.callbacks.config}'
     with open(callback_q_conf_path, 'r') as f:
         callback_q_config = json.load(f)
-    callback_exchange_name = f'{settings.RABBITMQ.SETUP.CALLBACKS.EXCHANGE}:{settings.NAMESPACE}'
+    callback_exchange_name = f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}'
     # exchange declaration for top level callback modules to listen in on
     ch.exchange_declare(exchange=callback_exchange_name, exchange_type='topic', durable=True)
     init_rmq_logger.debug(
         'Initialized RabbitMQ Topic exchange for top level callbacks: %s', callback_exchange_name,
     )
     # for example, callbacks for trade volume calculation may be sent on routing key
-    # 'powerloom-backend-callback:{settings.NAMESPACE}.trade_volume'
-    routing_key_pattern = f'powerloom-backend-callback:{settings.NAMESPACE}:{settings.INSTANCE_ID}.*'
-    queue_name = f'powerloom-backend-cb:{settings.NAMESPACE}:{settings.INSTANCE_ID}'
+    # 'powerloom-backend-callback:{settings.namespace}.trade_volume'
+    routing_key_pattern = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.*'
+    queue_name = f'powerloom-backend-cb:{settings.namespace}:{settings.instance_id}'
     init_queue(
         ch, queue_name=queue_name, routing_key=routing_key_pattern,
         exchange_name=callback_exchange_name,
     )
     # for internal worker distribution by top level callback modules
-    sub_topic_exchange_name = f'{settings.RABBITMQ.SETUP.CALLBACKS.EXCHANGE}.subtopics:{settings.NAMESPACE}'
+    sub_topic_exchange_name = f'{settings.rabbitmq.setup.callbacks.exchange}.subtopics:{settings.namespace}'
     ch.exchange_declare(exchange=sub_topic_exchange_name, exchange_type='direct', durable=True)
     for topic in callback_q_config['callback_topics'].keys():
         for sub_topic in callback_q_config['callback_topics'][topic]['sub_topics']:
-            sub_topic_routing_key = f'powerloom-backend-callback:{settings.NAMESPACE}:{settings.INSTANCE_ID}.{topic}_worker.{sub_topic}'
-            queue_name = f'powerloom-backend-cb-{topic}-{sub_topic}:{settings.NAMESPACE}:{settings.INSTANCE_ID}'
+            sub_topic_routing_key = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.{topic}_worker.{sub_topic}'
+            queue_name = f'powerloom-backend-cb-{topic}-{sub_topic}:{settings.namespace}:{settings.instance_id}'
             init_queue(ch, queue_name, sub_topic_routing_key, sub_topic_exchange_name)
 
 
@@ -93,7 +93,7 @@ def init_exchanges_queues():
     c = create_rabbitmq_conn()
     ch: pika.adapters.blocking_connection.BlockingChannel = c.channel()
     # core exchange remains same for multiple pooler instances in the namespace to share across different instance IDs
-    exchange_name = f'{settings.RABBITMQ.SETUP.CORE.EXCHANGE}:{settings.NAMESPACE}'
+    exchange_name = f'{settings.rabbitmq.setup.core.exchange}:{settings.namespace}'
     ch.exchange_declare(exchange=exchange_name, exchange_type='direct', durable=True)
     init_rmq_logger.debug('Initialized RabbitMQ Direct exchange: %s', exchange_name)
 
@@ -106,8 +106,8 @@ def init_exchanges_queues():
     ]
     for queue_name, routing_key in to_be_inited:
         # add namespace and instance ID to facilitate multiple pooler instances sharing same rabbitmq setup and broker
-        q = f'{queue_name}:{settings.NAMESPACE}:{settings.INSTANCE_ID}'
-        r = f'{routing_key}:{settings.NAMESPACE}:{settings.INSTANCE_ID}'
+        q = f'{queue_name}:{settings.namespace}:{settings.instance_id}'
+        r = f'{routing_key}:{settings.namespace}:{settings.instance_id}'
         init_queue(ch, q, r, exchange_name)
 
     init_callback_queue(ch)

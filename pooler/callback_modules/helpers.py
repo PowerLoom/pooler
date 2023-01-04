@@ -12,7 +12,6 @@ import aio_pika
 import requests
 from aio_pika import IncomingMessage
 from aio_pika.pool import Pool
-from dynaconf import settings
 from eth_utils import keccak
 from httpx import AsyncClient
 from loguru import logger
@@ -23,6 +22,7 @@ from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
 
 from pooler.callback_modules.data_models import PayloadCommitAPIRequest
+from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.redis.redis_conn import RedisPoolCache
 
@@ -32,11 +32,11 @@ helper_logger = logger.bind(module='PowerLoom|Callback|Helpers')
 
 async def get_rabbitmq_connection():
     return await aio_pika.connect_robust(
-        host=settings.RABBITMQ.HOST,
-        port=settings.RABBITMQ.PORT,
+        host=settings.rabbitmq.host,
+        port=settings.rabbitmq.port,
         virtual_host='/',
-        login=settings.RABBITMQ.USER,
-        password=settings.RABBITMQ.PASSWORD,
+        login=settings.rabbitmq.user,
+        password=settings.rabbitmq.password,
     )
 
 
@@ -51,15 +51,15 @@ class AuditProtocolCommandsHelper:
             cls, pair_contract_address, session: AsyncClient,
             redis_conn: aioredis.Redis, stream='pair_total_reserves',
     ):
-        project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
-        if not await redis_conn.sismember(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id):
+        project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.namespace}'
+        if not await redis_conn.sismember(f'uniswap:diffRuleSetFor:{settings.namespace}', project_id):
             """ Setup diffRules for this market"""
-            # retry below call given at settings.AUDIT_PROTOCOL_ENGINE.RETRY
-            async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY)):
+            # retry below call given at settings.audit_protocol_engine.RETRY
+            async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(settings.audit_protocol_engine.retry)):
                 with attempt:
                     response_obj = await session.post(
                         url=urljoin(
-                            settings.AUDIT_PROTOCOL_ENGINE.URL,
+                            settings.audit_protocol_engine.url,
                             f'/{project_id}/diffRules',
                         ),
                         json={
@@ -105,7 +105,7 @@ class AuditProtocolCommandsHelper:
                         'Response code on setting diff rule on audit protocol: %s', response_status_code,
                     )
                     if response_status_code in range(200, 300):
-                        await redis_conn.sadd(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id)
+                        await redis_conn.sadd(f'uniswap:diffRuleSetFor:{settings.namespace}', project_id)
                         return {'message': f'success status code: {response_status_code}', 'response': response}
                     elif response_status_code == 500 or response_status_code == 502:
                         return {
@@ -124,15 +124,15 @@ class AuditProtocolCommandsHelper:
             redis_conn: aioredis.Redis = None, stream='trade_volume',
 
     ):
-        project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
-        if not await redis_conn.sismember(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id):
+        project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.namespace}'
+        if not await redis_conn.sismember(f'uniswap:diffRuleSetFor:{settings.namespace}', project_id):
             """ Setup diffRules for this market"""
-            # retry below call given at settings.AUDIT_PROTOCOL_ENGINE.RETRY
-            async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY)):
+            # retry below call given at settings.audit_protocol_engine.RETRY
+            async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(settings.audit_protocol_engine.retry)):
                 with attempt:
                     response_obj = await session.post(
                         url=urljoin(
-                            settings.AUDIT_PROTOCOL_ENGINE.URL,
+                            settings.audit_protocol_engine.url,
                             f'/{project_id}/diffRules',
                         ),
                         json={
@@ -172,7 +172,7 @@ class AuditProtocolCommandsHelper:
                         'Response code on setting diff rule on audit protocol: %s', response_status_code,
                     )
                     if response_status_code in range(200, 300):
-                        await redis_conn.sadd(f'uniswap:diffRuleSetFor:{settings.NAMESPACE}', project_id)
+                        await redis_conn.sadd(f'uniswap:diffRuleSetFor:{settings.namespace}', project_id)
                         return {'message': f'success status code: {response_status_code}', 'response': response}
                     elif response_status_code == 500 or response_status_code == 502:
                         return {
@@ -187,40 +187,40 @@ class AuditProtocolCommandsHelper:
 
     @classmethod
     def set_commit_callback_url(cls, pair_contract_address, stream, redis_conn: aioredis.Redis):
-        project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.NAMESPACE}'
-        if not redis_conn.sismember(f'uniswap:{settings.NAMESPACE}:callbackURLSetFor', project_id):
+        project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.namespace}'
+        if not redis_conn.sismember(f'uniswap:{settings.namespace}:callbackURLSetFor', project_id):
             r = requests.post(
                 url=urljoin(
-                    settings.AUDIT_PROTOCOL_ENGINE.URL,
+                    settings.audit_protocol_engine.url,
                     f'/{project_id}/confirmations/callback',
                 ),
                 json={
                     'callbackURL': urljoin(
-                        settings.WEBHOOK_LISTENER.ROOT,
-                        settings.WEBHOOK_LISTENER.COMMIT_CONFIRMATION_CALLBACK_PATH,
+                        settings.webhook_listener.root,
+                        settings.webhook_listener.commit_confirmation_callback_path,
                     ),
                 },
             )
             if r.status_code in range(200, 300):
-                redis_conn.sadd(f'uniswap:{settings.NAMESPACE}:callbackURLSetFor', project_id)
+                redis_conn.sadd(f'uniswap:{settings.namespace}:callbackURLSetFor', project_id)
 
     @classmethod
     async def commit_payload(cls, report_payload: PayloadCommitAPIRequest, session: AsyncClient):
         async for attempt in AsyncRetrying(
                 reraise=False,
-                stop=stop_after_attempt(settings.AUDIT_PROTOCOL_ENGINE.RETRY),
+                stop=stop_after_attempt(settings.audit_protocol_engine.retry),
                 wait=wait_random_exponential(multiplier=2, max=10),
         ):
             with attempt:
                 response_obj = await session.post(
-                    url=urljoin(settings.AUDIT_PROTOCOL_ENGINE.URL, 'commit_payload'),
+                    url=urljoin(settings.audit_protocol_engine.url, 'commit_payload'),
                     json=report_payload.dict(),
                 )
                 response_status_code = response_obj.status_code
                 response = response_obj.json() or {}
                 if response_status_code in range(200, 300):
                     return response
-                elif attempt.retry_state.attempt_number == settings.AUDIT_PROTOCOL_ENGINE.RETRY:
+                elif attempt.retry_state.attempt_number == settings.audit_protocol_engine.retry:
                     if attempt.retry_state.outcome and attempt.retry_state.outcome.exception():
                         raise attempt.retry_state.outcome.exception()
                     else:
@@ -326,7 +326,6 @@ class CallbackAsyncWorker(multiprocessing.Process):
         if not self._aioredis_pool:
             self._aioredis_pool = RedisPoolCache()
             await self._aioredis_pool.populate()
-            # RedisPoolCache.append_ssl_connection_params(REDIS_CONN_CONF, settings['redis'])
             self._redis_conn = self._aioredis_pool._aioredis_pool
 
     def run(self) -> None:
@@ -334,7 +333,7 @@ class CallbackAsyncWorker(multiprocessing.Process):
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         resource.setrlimit(
             resource.RLIMIT_NOFILE,
-            (settings['rlimit']['file_descriptors'], hard),
+            (settings.rlimit.file_descriptors, hard),
         )
         # logging.config.dictConfig(config_logger_with_namespace(self.name))
         self._logger = logger.bind(module=self.name)

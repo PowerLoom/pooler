@@ -116,8 +116,8 @@ async def check_rpc_rate_limit(
             rate_limit_lua_script_shas,
         )
     except Exception as exc:
-        logger.error(
-            'Caught exception on rate limiter operations: %s | Bypassing rate limit check ', exc, exc_info=True,
+        logger.opt(exception=True).error(
+            'Caught exception on rate limiter operations: %s | Bypassing rate limit check ', exc,
         )
         raise
 
