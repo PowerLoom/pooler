@@ -2,8 +2,8 @@
 name = "pooler"
 version = "0.1.0"
 description = ""
-authors = ["Your Name <you@example.com>"]
-license = "MIT"
+authors = ["Powerloom, Inc."]
+license = "Apache"
 readme = "README.md"
 
 [tool.poetry.dependencies]
