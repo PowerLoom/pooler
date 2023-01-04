@@ -21,6 +21,7 @@ def main():
     )
 
     # setup logging
+    # Using bind to pass extra parameters to the logger, will show up in the {extra} field
     launcher_logger = logger.bind(
         module='PowerLoom|UniswapPoolerProcessHub|Core|Launcher',
         namespace=settings.NAMESPACE, instance_id=settings.INSTANCE_ID[:5],

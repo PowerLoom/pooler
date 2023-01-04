@@ -2,6 +2,7 @@ import sys
 
 from loguru import logger
 
+# {extra} field can be used to pass extra parameters to the logger using .bind()
 FORMAT = '{time:MMMM D, YYYY > HH:mm:ss!UTC} | {level} | {message}| {extra}'
 
 logger.remove(0)
