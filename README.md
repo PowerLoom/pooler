@@ -127,7 +127,7 @@ then you need to execute `init_processes.sh` using the following command
 
 ## For Contributors
 We use [pre-commit hooks](https://pre-commit.com/) to ensure our code quality is maintained over time. For this contributors need to do a one-time setup by running the following commands.
-* Install the required dependencies using `pip install dev-requirements.txt`, this will setup everything needed for pre-commit checks.
+* Install the required dependencies using `pip install -r dev-requirements.txt`, this will setup everything needed for pre-commit checks.
 * Run `pre-commit install`
 
 Now, whenever you commit anything, it'll automatically check the files you've changed/edited for code quality issues and suggest improvements.
