@@ -65,7 +65,7 @@ You can read more about Audit Protocol and the Uniswap v2 PoC in the  [Powerloom
 ## Requirements
 
 * macOS or Linux (We're still working on windows support)
-* Python 3.9
+* Python 3.8 or above
 * [Redis](https://redis.io/docs/getting-started/installation/)
 * [RabbitMQ](https://www.rabbitmq.com/download.html)
 * [Pm2](https://pm2.keymetrics.io/docs/usage/quick-start/)
@@ -125,6 +125,12 @@ then you need to execute `init_processes.sh` using the following command
 - To see logs for a specific process you can run `pm2 logs <Process Identifier>`
 - To see only error logs you can run `pm2 logs --err`
 
+## For Contributors
+We use [pre-commit hooks](https://pre-commit.com/) to ensure our code quality is maintained over time. For this contributors need to do a one-time setup by running the following commands.
+* Install the required dependencies using `pip install dev-requirements.txt`, this will setup everything needed for pre-commit checks.
+* Run `pre-commit install`
+
+Now, whenever you commit anything, it'll automatically check the files you've changed/edited for code quality issues and suggest improvements.
 
 ## Epoch Generation
 
