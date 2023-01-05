@@ -3,7 +3,7 @@ name = "pooler"
 version = "0.1.0"
 description = ""
 authors = ["Powerloom, Inc."]
-license = "Apache"
+license = "Apache-2.0"
 readme = "README.md"
 
 [tool.poetry.dependencies]
