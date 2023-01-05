@@ -12,7 +12,7 @@ def read_json_file(file_path: str, logger: logger) -> Optional[dict]:
         f_ = open(file_path, 'r', encoding='utf-8')
     except Exception as exc:
         logger.warning(f'Unable to open the {file_path} file')
-        logger.error(exc, exc_info=True)
+        logger.opt(exception=True).error(exc)
         raise exc
     else:
         json_data = json.loads(f_.read())

@@ -588,10 +588,10 @@ class PairTotalReservesProcessorDistributor(multiprocessing.Process):
         try:
             msg_obj: PowerloomCallbackEpoch = PowerloomCallbackEpoch.parse_raw(body)
         except ValidationError:
-            self._logger.error('Bad message structure of epoch callback', exc_info=True)
+            self._logger.opt(exception=True).error('Bad message structure of epoch callback')
             return
         except Exception:
-            self._logger.error('Unexpected message format of epoch callback', exc_info=True)
+            self._logger.opt(exception=True).error('Unexpected message format of epoch callback')
             return
 
         # warm-up cache before constructing snapshots

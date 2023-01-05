@@ -86,7 +86,7 @@ def provide_async_redis_conn(fn):
         try:
             return await fn(*args, **kwargs)
         except Exception as e:
-            logger.error(e, exc_info=True)
+            logger.opt(exception=True).error(e)
             return {'error': 'Internal Server Error'}
         finally:
             kwargs['request'].app.redis_pool.release(redis_conn_raw)

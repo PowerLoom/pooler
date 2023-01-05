@@ -450,7 +450,7 @@ async def get_pair_trade_volume(
         epoch_trade_logs.update({'timestamp': max_block_timestamp})
         return epoch_trade_logs
     except Exception as exc:
-        core_logger.error('error at get_pair_trade_volume fn: {}', exc, exc_info=True)
+        core_logger.opt(exception=True).error('error at get_pair_trade_volume fn: {}', exc)
         raise RPCException(
             request={
                 'contract': data_source_contract_address,

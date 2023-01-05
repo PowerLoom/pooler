@@ -1112,7 +1112,7 @@ async def get_v2_pairs_daily_stats(
         else:
             return daily_stats
     except Exception as exc:
-        rest_logger.error(f'Error in get_v2_pairs_daily_stats: {str(exc)}', exc_info=True)
+        rest_logger.opt(exception=True).error(f'Error in get_v2_pairs_daily_stats: {str(exc)}')
         return {'error': 'No data found'}
     finally:
         auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
