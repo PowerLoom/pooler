@@ -1,4 +1,6 @@
 from typing import List
+from typing import Optional
+from typing import Union
 
 from pydantic import BaseModel
 from pydantic import Field
@@ -26,7 +28,7 @@ class ArchiveNode(BaseModel):
 
 class RPC(BaseModel):
     full_nodes: List[FullNode]
-    archive_nodes: List[ArchiveNode]
+    archive_nodes: Optional[List[ArchiveNode]]
     force_archive_blocks: int
     retry: int
     request_time_out: int
@@ -122,7 +124,7 @@ class Redis(BaseModel):
     host: str
     port: int
     db: int
-    password: str = None
+    password: Union[str, None] = None
     ssl: bool = False
     cluster_mode: bool = False
 
@@ -131,7 +133,7 @@ class RedisReader(BaseModel):
     host: str
     port: int
     db: int
-    password: str = None
+    password: Union[str, None] = None
     ssl: bool = False
     cluster_mode: bool = False
 
