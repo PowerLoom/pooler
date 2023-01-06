@@ -1,12 +1,9 @@
 #!/bin/bash
 
 # Waiting for other processes to start
-sleep 15
+sleep 10
 
-python processhub_cmd.py start EpochCallbackManager  
-sleep 3 
-
-python processhub_cmd.py start SystemEpochDetector  
+poetry run python -m pooler.processhub_cmd start EpochCallbackManager
 sleep 3
 
-exit 0
+poetry run python -m pooler.processhub_cmd start SystemEpochDetector
