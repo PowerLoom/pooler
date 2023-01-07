@@ -116,7 +116,11 @@
     "audit_protocol_engine": {
         "url": "http://127.0.0.1:9000",
         "retry": 5,
-        "skip_anchor_proof":true
+        "skip_anchor_proof":true,
+        "dag_verifier": {
+          "issue_report_port": 9030,
+          "service_url": "http://localhost"
+        }
     },
     "consensus":{
         "url": "http://localhost:9030",

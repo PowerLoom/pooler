@@ -82,10 +82,16 @@ class RabbitMQ(BaseModel):
     setup: RabbitMQSetup
 
 
+class DAGVerifierSettings(BaseModel):
+    service_url: str
+    issue_report_port: int
+
+
 class AuditProtocolEngine(BaseModel):
     url: str
     retry: int
     skip_anchor_proof: bool
+    dag_verifier: DAGVerifierSettings
 
 
 class Consensus(BaseModel):

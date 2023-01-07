@@ -155,6 +155,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         queued_epochs = list()
         # checks for any previously queued epochs, returns a list of such epochs in increasing order of blockheights
         if 'test' not in SETTINGS_ENV:
+            dag_verifier_settings = settings.audit_protocol_engine.dag_verifier
             project_id = f'uniswap_pairContract_{stream}_{current_epoch.contract}_{settings.namespace}'
             fall_behind_reset_threshold = settings.rpc.skip_epoch_threshold_blocks
             last_processed_epoch = await self._redis_conn.get(epoch_detector_last_processed_epoch)
@@ -164,7 +165,10 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 if current_epoch.begin - last_processed_epoch['end'] > fall_behind_reset_threshold:
                     # send alert
                     await self._client.post(
-                        url=urljoin(f'http://localhost:{settings.dag_verifier.issue_reporter_port}', '/reportIssue'),
+                        url=urljoin(
+                            f'{dag_verifier_settings.service_url}:{dag_verifier_settings.issue_report_port}',
+                            '/reportIssue'
+                        ),
                         json=SnapshotterIssue(
                             instanceID=settings.instance_id,
                             severity=SnapshotterIssueSeverity.medium,
@@ -208,7 +212,10 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 if current_epoch.begin - epoch_broadcast.end > fall_behind_reset_threshold:
                     # send alert
                     await self._client.post(
-                        url=urljoin(f'http://localhost:{settings.dag_verifier.issue_reporter_port}', '/reportIssue'),
+                        url=urljoin(
+                            f'{dag_verifier_settings.service_url}:{dag_verifier_settings.issue_report_port}',
+                            '/reportIssue'
+                        ),
                         json=SnapshotterIssue(
                             instanceID=settings.instance_id,
                             severity=SnapshotterIssueSeverity.medium,
