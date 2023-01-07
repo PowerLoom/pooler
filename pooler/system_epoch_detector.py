@@ -181,18 +181,13 @@ class EpochDetectorProcess(multiprocessing.Process):
                     continue
 
                 else:
-                    fall_behind_reset_threshold = settings.consensus.fall_behind_reset_num_blocks
-                    if current_epoch['end'] - self._last_processed_epoch['end'] > fall_behind_reset_threshold:
-                        # TODO: build automatic clean slate procedure, for now just issuing warning on every new epoch fetch
-                        self._logger.error(
-                            'Epochs are falling behind by more than {} blocks, consider reset state to continue.', fall_behind_reset_threshold,
-                        )
-                        raise GenericExitOnSignal
                     epoch_height = current_epoch['end'] - current_epoch['begin'] + 1
-
                     if self._last_processed_epoch['end'] > current_epoch['end']:
                         self._logger.warning(
-                            'Last processed epoch end is greater than current epoch end, something is wrong. Please consider resetting the state.',
+                            'Last processed epoch end {} is greater than current epoch end {}, '
+                            'something is wrong. '
+                            'Please consider resetting the state.',
+                            self._last_processed_epoch, current_epoch,
                         )
                         raise GenericExitOnSignal
 

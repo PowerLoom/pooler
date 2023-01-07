@@ -32,6 +32,7 @@ class RPC(BaseModel):
     force_archive_blocks: int
     retry: int
     request_time_out: int
+    skip_epoch_threshold_blocks: int
 
 
 class RLimit(BaseModel):
