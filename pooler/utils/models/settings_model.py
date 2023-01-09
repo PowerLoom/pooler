@@ -12,6 +12,8 @@ class Auth(BaseModel):
 
 
 class CoreAPI(BaseModel):
+    host: str
+    port: int
     auth: Auth
     public_rate_limit: str
 
@@ -164,8 +166,6 @@ class Settings(BaseModel):
     module_queues_config: ModuleQueuesConfig
     epoch: Epoch
     rabbitmq: RabbitMQ
-    host: str
-    port: int
     audit_protocol_engine: AuditProtocolEngine
     consensus: Consensus
     redis: Redis
