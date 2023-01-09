@@ -6,7 +6,10 @@ from typing import Optional
 from loguru import logger
 
 
-def read_json_file(file_path: str, logger: logger) -> Optional[dict]:
+default_logger = logger.bind(module='PowerLoom|FileUtils')
+
+
+def read_json_file(file_path: str, logger: logger = default_logger) -> Optional[dict]:
     """Read given json file and return its content as a dictionary."""
     try:
         f_ = open(file_path, 'r', encoding='utf-8')
