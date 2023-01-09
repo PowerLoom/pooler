@@ -40,8 +40,8 @@ def main():
     all_projects.append(f'uniswap_V2DailyStatsSnapshot_{namespace}')
 
     r = requests.post(
-        url=settings.audit_protocol_engine + 'registerProjects',
-        json=ProjectRegistrationRequest(projects=all_projects).dict(),
+        url=settings.audit_protocol_engine.url + '/registerProjects',
+        json=ProjectRegistrationRequest(projectIDs=all_projects).dict(),
     )
 
     if r.status_code == 200:
@@ -65,20 +65,20 @@ def main():
             ),
         )
 
-        data = ProjectRegistrationRequestForIndexing(
-            projects=indexer_registration_data,
-            namespace=settings.namespace,
-        )
+    data = ProjectRegistrationRequestForIndexing(
+        projects=indexer_registration_data,
+        namespace=settings.namespace,
+    )
 
-        r = requests.post(
-            url=settings.audit_protocol_engine + 'registerProjectsForIndexing',
-            json=data.dict(),
-        )
+    r = requests.post(
+        url=settings.audit_protocol_engine.url + '/registerProjectsForIndexing',
+        json=data.dict(),
+    )
 
-        if r.status_code == 200:
-            registration_logger.info('Successfully registered projects for indexing with audit protocol.')
-        else:
-            registration_logger.error('Failed to register projects for indexing with audit protocol.')
+    if r.status_code == 200:
+        registration_logger.info('Successfully registered projects for indexing with audit protocol.')
+    else:
+        registration_logger.error('Failed to register projects for indexing with audit protocol.')
 
 
 if __name__ == '__main__':
