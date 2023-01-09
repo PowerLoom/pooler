@@ -262,7 +262,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             # mark others as discarded
             discarded_epochs = queued_epochs[:-1]
             # pop off current epoch added to end of this list
-            queued_epochs = queued_epochs[-1]
+            queued_epochs = [queued_epochs[-1]]
             self._logger.info(
                 'Recording epochs as discarded during snapshot construction stage for {}: {}',
                 snapshot_name, queued_epochs,
