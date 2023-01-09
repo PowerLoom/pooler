@@ -1,6 +1,8 @@
 {
     "namespace": "relevant-namespace",
     "core_api": {
+        "host": "127.0.0.1",
+        "port": 8002,
         "auth": {
             "enabled": false,
             "header_key": "X-API-KEY"
@@ -110,8 +112,7 @@
             }
         }
     },
-    "host": "127.0.0.1",
-    "port": 9002,
+
     "audit_protocol_engine": {
         "url": "http://127.0.0.1:9000",
         "retry": 5,

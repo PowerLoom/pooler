@@ -43,7 +43,7 @@ if __name__ == '__main__':
     )
 
     options = {
-        'bind': f'{settings.host}:{settings.port}',
+        'bind': f'{settings.core_api.host}:{settings.core_api.port}',
         'workers': WORKERS,
         'accesslog': '-',
         'errorlog': '-',
