@@ -5,6 +5,7 @@ import os
 import queue
 import signal
 import time
+import redis
 from signal import SIGINT
 from signal import SIGQUIT
 from signal import SIGTERM
@@ -14,10 +15,8 @@ from typing import List
 from typing import Optional
 from typing import Tuple
 from typing import Union
-from urllib.parse import urljoin
 from uuid import uuid4
 
-import redis
 from aio_pika import IncomingMessage
 from eth_utils import keccak
 from httpx import AsyncClient
@@ -27,9 +26,9 @@ from httpx import Timeout
 from pydantic import ValidationError
 from setproctitle import setproctitle
 
-from pooler.callback_modules.data_models import PayloadCommitAPIRequest
 from pooler.callback_modules.data_models import SnapshotterIssue
 from pooler.callback_modules.data_models import SnapshotterIssueSeverity
+from pooler.callback_modules.data_models import PayloadCommitAPIRequest
 from pooler.callback_modules.data_models import SourceChainDetails
 from pooler.callback_modules.helpers import AuditProtocolCommandsHelper
 from pooler.callback_modules.helpers import CallbackAsyncWorker
@@ -155,67 +154,17 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         queued_epochs = list()
         # checks for any previously queued epochs, returns a list of such epochs in increasing order of blockheights
         if 'test' not in SETTINGS_ENV:
-            dag_verifier_settings = settings.audit_protocol_engine.dag_verifier
             project_id = f'uniswap_pairContract_{stream}_{current_epoch.contract}_{settings.namespace}'
             fall_behind_reset_threshold = settings.rpc.skip_epoch_threshold_blocks
-            last_processed_epoch = await self._redis_conn.get(epoch_detector_last_processed_epoch)
-            process_past_epochs = True
-            if last_processed_epoch:
-                last_processed_epoch = json.loads(last_processed_epoch)
-                if current_epoch.begin - last_processed_epoch['end'] > fall_behind_reset_threshold:
-                    # send alert
-                    await self._client.post(
-                        url=urljoin(
-                            f'{dag_verifier_settings.service_url}:{dag_verifier_settings.issue_report_port}',
-                            '/reportIssue'
-                        ),
-                        json=SnapshotterIssue(
-                            instanceID=settings.instance_id,
-                            severity=SnapshotterIssueSeverity.medium,
-                            issueType='SNAPSHOTTING_FALLEN_BEHIND',
-                            projectID=project_id,
-                            epochs=[current_epoch.end],
-                            noOfEpochsBehind=int(
-                                (
-                                    current_epoch.begin -
-                                    last_processed_epoch['end']
-                                ) / settings.epoch.height,
-                            ),
-                            timeOfReporting=int(time.time()),
-                        ).dict(),
-                    )
-                    self._logger.warning(
-                        'Project {} | Epoch processing has fallen behind by more than {} blocks, '
-                        'alert sent to DAG Verifier | Last processed epoch: {} | Current epoch: {}',
-                        project_id, fall_behind_reset_threshold, last_processed_epoch, current_epoch,
-                    )
-                    process_past_epochs = False
-
             failed_query_epochs = await self._redis_conn.lpop(failed_query_epochs_key)
             while failed_query_epochs:
                 epoch_broadcast: PowerloomCallbackProcessMessage = PowerloomCallbackProcessMessage.parse_raw(
                     failed_query_epochs.decode('utf-8'),
                 )
-                if not process_past_epochs:
-                    self._logger.warning(
-                        'Current epoch {} has passed the threshold since the last processed epoch {} | '
-                        'Discarding all enqueued epochs from past processing | Current discard: {}',
-                        current_epoch,
-                        last_processed_epoch,
-                        epoch_broadcast,
-                    )
-                    await self._redis_conn.rpush(
-                        discarded_query_epochs_key,
-                        epoch_broadcast.json(),
-                    )
-                    continue
                 if current_epoch.begin - epoch_broadcast.end > fall_behind_reset_threshold:
                     # send alert
                     await self._client.post(
-                        url=urljoin(
-                            f'{dag_verifier_settings.service_url}:{dag_verifier_settings.issue_report_port}',
-                            '/reportIssue'
-                        ),
+                        url=settings.issue_report_url,
                         json=SnapshotterIssue(
                             instanceID=settings.instance_id,
                             severity=SnapshotterIssueSeverity.medium,
