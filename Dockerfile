@@ -8,9 +8,9 @@ COPY poetry.lock .
 COPY pyproject.toml .
 RUN poetry install
 EXPOSE 8002
-EXPOSE 9090
+#EXPOSE 9090
 COPY . .
-RUN poetry run python -m pooler.init_rabbitmq
-CMD chmod +x init_process.sh
+#RUN poetry run python -m pooler.init_rabbitmq
+CMD chmod +x ./init_processes.sh
 #RUN pm2 start pm2.config.js && pm2 logs --lines 100
-#CMD ./init_process.sh
+#RUN ./init_processes.sh
