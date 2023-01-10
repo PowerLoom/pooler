@@ -11,8 +11,8 @@ from uniswap_functions import provide_async_redis_conn_insta
 
 def load_contracts():
     contracts = list()
-    if os.path.exists('static/cached_pair_addresses.json'):
-        with open('static/cached_pair_addresses.json', 'r', encoding='utf-8') as fp:
+    if os.path.exists('pooler/static/cached_pair_addresses.json'):
+        with open('pooler/static/cached_pair_addresses.json', 'r', encoding='utf-8') as fp:
             # the file contains an array of pair contract addresses
             contracts = json.load(fp)
             return contracts

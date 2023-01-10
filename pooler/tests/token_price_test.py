@@ -29,7 +29,7 @@ def read_json_file(file_path: str):
 
 router_contract_abi = read_json_file(settings.uniswap_contract_abis.router)
 pair_contract_abi = read_json_file(settings.uniswap_contract_abis.pair_contract)
-all_contracts = read_json_file('static/cached_pair_addresses.json')
+all_contracts = read_json_file('pooler/static/cached_pair_addresses.json')
 
 
 async def get_token_price_at_block_height(

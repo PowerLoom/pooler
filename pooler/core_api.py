@@ -28,6 +28,7 @@ from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 from pooler.utils.redis.redis_conn import RedisPoolCache
 from pooler.utils.redis.redis_keys import uniswap_pair_cached_recent_logs
 from pooler.utils.redis.redis_keys import uniswap_pair_contract_tokens_addresses
+from pooler.utils.redis.redis_keys import uniswap_tokens_pair_map
 from pooler.utils.redis.redis_keys import uniswap_V2_daily_stats_at_blockheight
 from pooler.utils.redis.redis_keys import uniswap_v2_daily_stats_snapshot_zset
 from pooler.utils.redis.redis_keys import uniswap_V2_snapshot_at_blockheight
@@ -215,9 +216,9 @@ async def get_pair_contract_from_tokens(
     token0_normalized = to_checksum_address(token0)
     token1_normalized = to_checksum_address(token1)
     pair_return = None
-    pair1 = await redis_conn.hget(redis_keys.uniswap_tokens_pair_map, f'{token0_normalized}-{token1_normalized}')
+    pair1 = await redis_conn.hget(uniswap_tokens_pair_map, f'{token0_normalized}-{token1_normalized}')
     if not pair1:
-        pair2 = await redis_conn.hget(redis_keys.uniswap_tokens_pair_map, f'{token1_normalized}-{token0_normalized}')
+        pair2 = await redis_conn.hget(uniswap_tokens_pair_map, f'{token1_normalized}-{token0_normalized}')
         if pair2:
             pair_return = pair2
     elif pair1.decode('utf-8') == '0x0000000000000000000000000000000000000000':
@@ -401,11 +402,11 @@ async def get_v2_pairs_at_block_height(
     redis_conn: aioredis.Redis = request.app.state.redis_pool
 
     snapshot_data = await redis_conn.get(
-        name=redis_keys.uniswap_V2_snapshot_at_blockheight.format(block_height),
+        name=uniswap_V2_snapshot_at_blockheight.format(block_height),
     )
 
     latest_payload = await redis_conn.zrangebyscore(
-        name=redis_keys.uniswap_V2_summarized_snapshots_zset,
+        name=uniswap_V2_summarized_snapshots_zset,
         min=block_height,
         max=block_height,
         withscores=False,
@@ -668,7 +669,7 @@ async def get_v2_tokens_recent_logs(
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
     pair_tokens_addresses = {}
-    all_pair_contracts = read_json_file('static/cached_pair_addresses.json', rest_logger)
+    all_pair_contracts = read_json_file('pooler/static/cached_pair_addresses.json', rest_logger)
     redis_conn = await request.app.state.redis_pool
 
     # get pair's token addresses ( pair -> token0, token1)
