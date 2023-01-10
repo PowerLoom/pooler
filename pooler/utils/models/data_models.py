@@ -1,3 +1,4 @@
+from typing import Dict
 from typing import List
 
 from pydantic import BaseModel
@@ -82,3 +83,17 @@ class EpochInfo(BaseModel):
     chainId: int
     epochStartBlockHeight: int
     epochEndBlockHeight: int
+
+
+class ProjectRegistrationRequest(BaseModel):
+    projectIDs: List[str]
+
+
+class IndexingRegistrationData(BaseModel):
+    projectID: str
+    indexerConfig: Dict
+
+
+class ProjectRegistrationRequestForIndexing(BaseModel):
+    projects: List[IndexingRegistrationData]
+    namespace: str
