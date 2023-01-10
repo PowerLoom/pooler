@@ -15,11 +15,11 @@ registration_logger = logger.bind(
 
 
 def main():
-    if not os.path.exists('static/cached_pair_addresses.json'):
+    if not os.path.exists('pooler/static/cached_pair_addresses.json'):
         registration_logger.error('No cached pair addresses found. Exiting.')
         return
     namespace = settings.namespace
-    f = open('static/cached_pair_addresses.json', 'r')
+    f = open('pooler/static/cached_pair_addresses.json', 'r')
     all_pairs = json.loads(f.read())
 
     if len(all_pairs) <= 0:

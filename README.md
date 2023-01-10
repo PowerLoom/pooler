@@ -9,7 +9,7 @@
   - [Generate settings.json](#generate-settingsjson)
     - [Required](#required)
     - [Optional](#optional)
-  - [Populate `static/cached_pair_addresses.json`](#populate-staticcached_pair_addressesjson)
+  - [Populate `pooler/static/cached_pair_addresses.json`](#populate-staticcached_pair_addressesjson)
   - [Set up Env variables](#set-up-env-variables)
 - [Starting all Processes](#starting-all-processes)
 - [Monitoring and Debugging](#monitoring-and-debugging)
@@ -96,12 +96,12 @@ Here are the steps you need to get started with `settings.json`.
 - We've provided the `ipfs_url` by default but if you want to run your own IPFS node, you  can add that URL here
 - RabbitMq and Redis should work out of the box with the default config but if it doesn't, you can update the config in `rabbitmq` and `redis` keys respectively.
 - Update the `host` and `port` keys if you want to run the service on some other port
-### Populate `static/cached_pair_addresses.json`
+### Populate `pooler/static/cached_pair_addresses.json`
 
-Copy over [`static/cached_pair_addresses.example.json`](static/cached_pair_addresses.example.json) to `static/cached_pair_addresses.json`
+Copy over [`static/cached_pair_addresses.example.json`](static/cached_pair_addresses.example.json) to `pooler/static/cached_pair_addresses.json`
 
 ```
-cp static/cached_pair_addresses.example.json static/cached_pair_addresses.json
+cp static/cached_pair_addresses.example.json pooler/static/cached_pair_addresses.json
 ```
 
 These are the pair contracts on Uniswap v2 or other forks of it that will be tracked for the following in this example implementation.
