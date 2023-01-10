@@ -10,4 +10,4 @@ temp/*
 uniswapTokenData
 test.py
 pooler/static/cached_pair_addresses.json
-auth/auth_settings.json
+pooler/auth/settings/auth_settings.json
