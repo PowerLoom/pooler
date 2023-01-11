@@ -1,1 +1,1 @@
-docker build --network host -t powerloom-pooler .
+docker build -t powerloom-pooler .
