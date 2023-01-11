@@ -46,3 +46,4 @@ class SnapshotterIssue(BaseModel):
     timeOfReporting: int
     noOfEpochsBehind: Optional[int]
     extra: Optional[dict]
+    serviceName: str

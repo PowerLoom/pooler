@@ -204,6 +204,7 @@ class EpochDetectorProcess(multiprocessing.Process):
                                 ) / settings.epoch.height,
                             ),
                             timeOfReporting=int(wall_time()),
+                            serviceName=f'Pooler|EpochDetector'
                         ).dict(),
                     )
                     self._logger.warning(

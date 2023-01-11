@@ -172,6 +172,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                             projectID=project_id,
                             epochs=[epoch_broadcast.end],
                             timeOfReporting=int(time.time()),
+                            serviceName=f'Pooler|CallbackProcessor|{stream}'
                         ).dict(),
                     )
                     await self._redis_conn.rpush(
