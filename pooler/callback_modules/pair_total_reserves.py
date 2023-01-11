@@ -5,6 +5,7 @@ import os
 import queue
 import signal
 import time
+import redis
 from signal import SIGINT
 from signal import SIGQUIT
 from signal import SIGTERM
@@ -16,7 +17,6 @@ from typing import Tuple
 from typing import Union
 from uuid import uuid4
 
-import redis
 from aio_pika import IncomingMessage
 from eth_utils import keccak
 from httpx import AsyncClient
@@ -26,6 +26,8 @@ from httpx import Timeout
 from pydantic import ValidationError
 from setproctitle import setproctitle
 
+from pooler.callback_modules.data_models import SnapshotterIssue
+from pooler.callback_modules.data_models import SnapshotterIssueSeverity
 from pooler.callback_modules.data_models import PayloadCommitAPIRequest
 from pooler.callback_modules.data_models import SourceChainDetails
 from pooler.callback_modules.helpers import AuditProtocolCommandsHelper
@@ -44,11 +46,13 @@ from pooler.utils.rabbitmq_helpers import RabbitmqSelectLoopInteractor
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 from pooler.utils.redis.redis_conn import create_redis_conn
 from pooler.utils.redis.redis_conn import REDIS_CONN_CONF
+from pooler.utils.redis.redis_keys import epoch_detector_last_processed_epoch
 from pooler.utils.redis.redis_keys import uniswap_cb_broadcast_processing_logs_zset
 from pooler.utils.redis.redis_keys import uniswap_discarded_query_pair_total_reserves_epochs_redis_q_f
 from pooler.utils.redis.redis_keys import uniswap_discarded_query_pair_trade_volume_epochs_redis_q_f
 from pooler.utils.redis.redis_keys import uniswap_failed_query_pair_total_reserves_epochs_redis_q_f
 from pooler.utils.redis.redis_keys import uniswap_failed_query_pair_trade_volume_epochs_redis_q_f
+
 
 SETTINGS_ENV = os.getenv('ENV_FOR_DYNACONF', 'development')
 
@@ -141,6 +145,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
     async def _prepare_epochs(
             self,
             failed_query_epochs_key: str,
+            stream: str,
             discarded_query_epochs_key: str,
             current_epoch: PowerloomCallbackProcessMessage,
             snapshot_name: str,
@@ -149,17 +154,43 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         queued_epochs = list()
         # checks for any previously queued epochs, returns a list of such epochs in increasing order of blockheights
         if 'test' not in SETTINGS_ENV:
+            project_id = f'uniswap_pairContract_{stream}_{current_epoch.contract}_{settings.namespace}'
+            fall_behind_reset_threshold = settings.rpc.skip_epoch_threshold_blocks
             failed_query_epochs = await self._redis_conn.lpop(failed_query_epochs_key)
             while failed_query_epochs:
                 epoch_broadcast: PowerloomCallbackProcessMessage = PowerloomCallbackProcessMessage.parse_raw(
                     failed_query_epochs.decode('utf-8'),
                 )
-                self._logger.info(
-                    'Found queued epoch against which snapshot construction for pair contract\'s '
-                    '{} failed earlier: {}',
-                    snapshot_name, epoch_broadcast,
-                )
-                queued_epochs.append(epoch_broadcast)
+                if current_epoch.begin - epoch_broadcast.end > fall_behind_reset_threshold:
+                    # send alert
+                    await self._client.post(
+                        url=settings.issue_report_url,
+                        json=SnapshotterIssue(
+                            instanceID=settings.instance_id,
+                            severity=SnapshotterIssueSeverity.medium,
+                            issueType='SKIP_QUEUED_EPOCH',
+                            projectID=project_id,
+                            epochs=[epoch_broadcast.end],
+                            timeOfReporting=int(time.time()),
+                            serviceName=f'Pooler|CallbackProcessor|{stream}'
+                        ).dict(),
+                    )
+                    await self._redis_conn.rpush(
+                        discarded_query_epochs_key,
+                        epoch_broadcast.json(),
+                    )
+                    self._logger.warning(
+                        'Project {} | QUEUED Epoch {} processing has fallen behind by more than {} blocks, '
+                        'alert sent to DAG Verifier | Discarding queued epoch',
+                        project_id, epoch_broadcast, fall_behind_reset_threshold,
+                    )
+                else:
+                    self._logger.info(
+                        'Found queued epoch against which snapshot construction for pair contract\'s '
+                        '{} failed earlier: {}',
+                        snapshot_name, epoch_broadcast,
+                    )
+                    queued_epochs.append(epoch_broadcast)
                 # uniswap_failed_query_pair_total_reserves_epochs_redis_q_f.format(current_epoch.contract)
                 failed_query_epochs = await self._redis_conn.lpop(failed_query_epochs_key)
         else:
@@ -178,18 +209,19 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 continuity = False
                 break
         if not continuity:
+            # mark others as discarded
+            discarded_epochs = queued_epochs[:-1]
             # pop off current epoch added to end of this list
-            queued_epochs = queued_epochs[:-1]
+            queued_epochs = [queued_epochs[-1]]
             self._logger.info(
                 'Recording epochs as discarded during snapshot construction stage for {}: {}',
                 snapshot_name, queued_epochs,
             )
-            for x in queued_epochs:
+            for x in discarded_epochs:
                 await self._redis_conn.rpush(
                     discarded_query_epochs_key,
                     x.json(),
                 )
-
         return queued_epochs
 
     async def _construct_pair_reserves_epoch_snapshot_data(
@@ -209,6 +241,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             current_epoch=msg_obj,
             snapshot_name='pair reserves',
             failed_query_epochs_l=past_failed_epochs,
+            stream='pair_total_reserves',
         )
 
         results_map = await self._map_processed_epochs_to_adapters(
@@ -294,6 +327,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             current_epoch=msg_obj,
             snapshot_name='trade volume and fees',
             failed_query_epochs_l=past_failed_epochs,
+            stream='trade_volume',
         )
 
         results_map = await self._map_processed_epochs_to_adapters(
@@ -482,7 +516,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         self_unique_id = str(uuid4())
         # cur_task.add_done_callback()
         try:
-            msg_obj = PowerloomCallbackProcessMessage.parse_raw(message.body)
+            msg_obj: PowerloomCallbackProcessMessage = PowerloomCallbackProcessMessage.parse_raw(message.body)
         except ValidationError as e:
             self._logger.opt(exception=True).error(
                 'Bad message structure of callback in processor for total pair reserves: {}', e,
@@ -504,13 +538,6 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         self._logger.debug(
             'Got epoch to process for calculating total reserves for pair: {}', msg_obj,
         )
-
-        self._logger.debug(
-            'Got aiohttp session cache. Attempting to snapshot total reserves data in epoch {}...',
-            msg_obj,
-        )
-
-        # TODO: refactor to accommodate multiple snapshots being generated from queued epochs
         pair_total_reserves_epoch_snapshot_map = await self._construct_pair_reserves_epoch_snapshot_data(
             msg_obj=msg_obj, enqueue_on_failure=True, past_failed_epochs=[],
         )
