@@ -7,6 +7,16 @@ sleep 10
 echo 'initializing queues..';
 poetry run python -m pooler.init_rabbitmq
 
+echo 'waiting to register projects...';
+
+sleep 10;
+
+echo 'registering projects...';
+
+poetry run python -m pooler.register_projects
+
+sleep 10;
+
 pm2 start pm2.config.js
 
 # Waiting for other processes to start
