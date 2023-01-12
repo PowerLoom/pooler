@@ -77,8 +77,10 @@
         "archive_nodes": [],
         "force_archive_blocks": 100,
         "retry": 1,
-        "request_time_out": 5
+        "request_time_out": 5,
+        "skip_epoch_threshold_blocks": 30
     },
+    "issue_report_url": "http://localhost:9030/reportIssue",
     "rlimit": {
         "file_descriptors": 2048
     },

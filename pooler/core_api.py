@@ -24,6 +24,7 @@ from pooler.auth.helpers.redis_conn import RedisPoolCache as AuthRedisPoolCache
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.file_utils import read_json_file
+from pooler.utils.redis import redis_keys
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 from pooler.utils.redis.redis_conn import RedisPoolCache
 from pooler.utils.redis.redis_keys import uniswap_pair_cached_recent_logs
@@ -849,27 +850,6 @@ async def get_v2_tokens(
         }
     else:
         return data
-
-
-def create_v2_token_snapshot(data):
-    data.sort(key=sort_on_liquidity, reverse=True)
-    tokens_snapshot = []
-    # for i in range(len(data)):
-    for i, token_data in enumerate(data):
-        tokens_snapshot.append({
-            'index': i,
-            'contract_address': token_data['contractAddress'],
-            'name': token_data['name'],
-            'symbol': token_data['symbol'],
-            'liquidity': f"US${round(abs(token_data['liquidityUSD'])):,}",
-            'volume_24h': f"US${round(abs(token_data['tradeVolumeUSD_24h'])):,}",
-            'volume_7d': f"US${round(abs(token_data['tradeVolumeUSD_7d']))}",
-            'price': f"US${round(abs(token_data['price']), 5):,}",
-            'price_change_24h': f"{round(token_data['priceChangePercent_24h'], 2)}%",
-            'block_height': int(token_data['block_height']),
-            'block_timestamp': int(token_data['block_timestamp']),
-        })
-    return tokens_snapshot
 
 
 def create_v2_token_snapshot(data):

@@ -9,16 +9,18 @@ from functools import wraps
 from signal import SIGINT
 from signal import SIGQUIT
 from signal import SIGTERM
-from time import sleep
+from time import sleep, time as wall_time
 
 import redis
 import requests
 from setproctitle import setproctitle
-
+from httpx import Client, Limits
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.exceptions import GenericExitOnSignal
 from pooler.utils.models.data_models import EpochInfo
+from pooler.callback_modules.data_models import SnapshotterIssue
+from pooler.callback_modules.data_models import SnapshotterIssueSeverity
 from pooler.utils.models.message_models import SystemEpochStatusReport
 from pooler.utils.rabbitmq_helpers import RabbitmqThreadedSelectLoopInteractor
 from pooler.utils.redis.redis_conn import create_redis_conn
@@ -77,6 +79,10 @@ def rabbitmq_and_redis_cleanup(fn):
 
 
 class EpochDetectorProcess(multiprocessing.Process):
+    _rabbitmq_thread: threading.Thread
+    _rabbitmq_queue: queue.Queue
+    _httpx_client: Client
+
     def __init__(self, name, **kwargs):
         """
         Initializes a new instance of the `EpochDetectorProcess` class.
@@ -114,7 +120,7 @@ class EpochDetectorProcess(multiprocessing.Process):
     def _broadcast_epoch(self, epoch: dict):
         """Broadcast epoch to the RabbitMQ queue and save update in redis."""
         report_obj = SystemEpochStatusReport(**epoch)
-        self._logger.info('Broadcasting  epoch for callbacks: {}', report_obj)
+        self._logger.info('Broadcasting epoch for callbacks: {}', report_obj)
         brodcast_msg = (report_obj.json().encode('utf-8'), self._exchange, self._routing_key)
         self._rabbitmq_queue.put(brodcast_msg)
         self._last_processed_epoch = epoch
@@ -132,6 +138,11 @@ class EpochDetectorProcess(multiprocessing.Process):
 
     @rabbitmq_and_redis_cleanup
     def run(self):
+        self._httpx_client = Client(
+            limits=Limits(
+                max_connections=20, max_keepalive_connections=20
+            )
+        )
         """
         The entry point for the process.
         """
@@ -152,9 +163,12 @@ class EpochDetectorProcess(multiprocessing.Process):
                     )
                     sleep(settings.consensus.polling_interval)
                     continue
-            except Exception as E:
+            except Exception as e:
                 self._logger.error(
-                    f'Unable to fetch current epoch, ERROR: {E}, sleeping for {settings.consensus.polling_interval} seconds.',
+                    'Unable to fetch current epoch, ERROR: {}, '
+                    'sleeping for {settings.consensus.polling_interval} seconds.',
+                    e,
+                    settings.consensus.polling_interval
                 )
                 sleep(settings.consensus.polling_interval)
                 continue
@@ -173,7 +187,33 @@ class EpochDetectorProcess(multiprocessing.Process):
                     self._last_processed_epoch = json.loads(last_processed_epoch_data)
 
             if self._last_processed_epoch:
-                if self._last_processed_epoch['end'] == current_epoch['end']:
+                if current_epoch['begin'] - self._last_processed_epoch['end'] > settings.rpc.skip_epoch_threshold_blocks:
+                    # send alert
+                    self._httpx_client.post(
+                        url=settings.issue_report_url,
+                        json=SnapshotterIssue(
+                            instanceID=settings.instance_id,
+                            severity=SnapshotterIssueSeverity.medium,
+                            issueType='SNAPSHOTTING_FALLEN_BEHIND',
+                            projectID='*',
+                            epochs=[current_epoch['end']],
+                            noOfEpochsBehind=int(
+                                (
+                                    current_epoch['begin'] -
+                                    self._last_processed_epoch['end']
+                                ) / settings.epoch.height,
+                            ),
+                            timeOfReporting=int(wall_time()),
+                            serviceName=f'Pooler|EpochDetector'
+                        ).dict(),
+                    )
+                    self._logger.warning(
+                        'Epoch processing has fallen behind by more than {} blocks, '
+                        'alert sent to DAG Verifier | Last processed epoch: {} | Current epoch: {}',
+                        settings.rpc.skip_epoch_threshold_blocks, self._last_processed_epoch, current_epoch,
+                    )
+
+                elif self._last_processed_epoch['end'] == current_epoch['end']:
                     self._logger.debug(
                         'Last processed epoch is same as current epoch, Sleeping for {} seconds...', settings.consensus.polling_interval,
                     )
@@ -181,18 +221,13 @@ class EpochDetectorProcess(multiprocessing.Process):
                     continue
 
                 else:
-                    fall_behind_reset_threshold = settings.consensus.fall_behind_reset_num_blocks
-                    if current_epoch['end'] - self._last_processed_epoch['end'] > fall_behind_reset_threshold:
-                        # TODO: build automatic clean slate procedure, for now just issuing warning on every new epoch fetch
-                        self._logger.error(
-                            'Epochs are falling behind by more than {} blocks, consider reset state to continue.', fall_behind_reset_threshold,
-                        )
-                        raise GenericExitOnSignal
                     epoch_height = current_epoch['end'] - current_epoch['begin'] + 1
-
                     if self._last_processed_epoch['end'] > current_epoch['end']:
                         self._logger.warning(
-                            'Last processed epoch end is greater than current epoch end, something is wrong. Please consider resetting the state.',
+                            'Last processed epoch end {} is greater than current epoch end {}, '
+                            'something is wrong. '
+                            'Please consider resetting the state.',
+                            self._last_processed_epoch, current_epoch,
                         )
                         raise GenericExitOnSignal
 
