@@ -175,7 +175,8 @@ class EpochDetectorProcess(multiprocessing.Process):
             epoch_info = EpochInfo(**response.json())
             current_epoch = {
                 'begin': epoch_info.epochStartBlockHeight,
-                'end': epoch_info.epochEndBlockHeight, 'broadcast_id': str(uuid.uuid4()),
+                'end': epoch_info.epochEndBlockHeight,
+                'broadcast_id': str(uuid.uuid4()),
             }
             self._logger.info('Current epoch: {}', current_epoch)
 
@@ -209,9 +210,13 @@ class EpochDetectorProcess(multiprocessing.Process):
                     )
                     self._logger.warning(
                         'Epoch processing has fallen behind by more than {} blocks, '
-                        'alert sent to DAG Verifier | Last processed epoch: {} | Current epoch: {}',
+                        'alert sent to DAG Verifier | Last processed epoch: {} | Current epoch: {} | '
+                        'Will sleep now for {} seconds after broadcasting current epoch',
                         settings.rpc.skip_epoch_threshold_blocks, self._last_processed_epoch, current_epoch,
+                        settings.consensus.sleep_secs_between_chunks
                     )
+                    self._broadcast_epoch(current_epoch)
+                    sleep(settings.consensus.sleep_secs_between_chunks)
 
                 elif self._last_processed_epoch['end'] == current_epoch['end']:
                     self._logger.debug(
