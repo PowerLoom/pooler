@@ -11,6 +11,7 @@ EXPOSE 8002
 #EXPOSE 9090
 COPY . .
 #RUN poetry run python -m pooler.init_rabbitmq
+CMD chmod +x ./snapshotter_autofill.sh
 CMD chmod +x ./init_processes.sh
 #RUN pm2 start pm2.config.js && pm2 logs --lines 100
 #RUN ./init_processes.sh

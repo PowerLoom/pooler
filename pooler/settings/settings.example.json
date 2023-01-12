@@ -1,7 +1,7 @@
 {
     "namespace": "relevant-namespace",
     "core_api": {
-        "host": "127.0.0.1",
+        "host": "0.0.0.0",
         "port": 8002,
         "auth": {
             "enabled": false,
@@ -59,19 +59,15 @@
         "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
         "0x956f47f50a910163d8bf957cf5846d573e7f87ca"
     ],
-    "ipfs_url": "/ip4/127.0.0.1/tcp/5001",
+    "ipfs_url": "/dns/host.docker.internal/tcp/5001",
     "uniswap_functions": {
         "retrial_attempts": 5
     },
     "rpc": {
         "full_nodes": [
             {
-                "url": "https://rpc-public-bck.maticvigil.com/v1/****",
-                "rate_limit": "100000000/day;20000/minute;2500/second"
-            },
-            {
-                "url": "https://rpc-mainnet.maticvigil.com/v1/****",
-                "rate_limit": "100000000/day;20000/minute;2500/second"
+                "url": "https://rpc-url",
+                "rate_limit": "10000000/day;2000/minute;100/second"
             }
         ],
         "archive_nodes": [],
@@ -80,7 +76,7 @@
         "request_time_out": 5,
         "skip_epoch_threshold_blocks": 30
     },
-    "issue_report_url": "http://localhost:9030/reportIssue",
+    "issue_report_url": "http://host.docker.internal:9030/reportIssue",
     "rlimit": {
         "file_descriptors": 2048
     },
@@ -102,7 +98,7 @@
     "rabbitmq": {
         "user": "guest",
         "password": "guest",
-        "host": "localhost",
+        "host": "host.docker.internal",
         "port": 5672,
         "setup": {
             "core": {
@@ -117,19 +113,19 @@
     },
 
     "audit_protocol_engine": {
-        "url": "http://127.0.0.1:9000",
+        "url": "http://host.docker.internal:9000",
         "retry": 5,
         "skip_anchor_proof":true
     },
     "consensus":{
-        "url": "http://localhost:9030",
+        "url": "https://consensus-url",
         "epoch_tracker_path": "/currentEpoch",
         "polling_interval":15,
         "fall_behind_reset_num_blocks":1000,
         "sleep_secs_between_chunks":60
     },
     "redis": {
-        "host": "127.0.0.1",
+        "host": "host.docker.internal",
         "port": 6379,
         "db": 0,
         "password": null,
@@ -137,13 +133,13 @@
         "cluster_mode": false
     },
     "redis_reader": {
-        "host": "127.0.0.1",
+        "host": "host.docker.internal",
         "port": 6379,
         "db": 0,
         "password": null
     },
     "webhook_listener": {
-        "host": "127.0.0.1",
+        "host": "host.docker.internal",
         "port": 9090,
         "root": "https://pooler-callback.com",
         "commit_confirmation_callback_path": "commit_confirm"
