@@ -411,8 +411,19 @@ def batch_eth_call_on_block_range(rpc_endpoint, abi_dict, function_name, contrac
             request_id += 1
 
     rpc_response = []
-    response = requests.post(url=rpc_endpoint, json=rpc_query)
-    response = response.json()
+    try:
+        response = requests.post(url=rpc_endpoint, json=rpc_query)
+        response = response.json()
+    except Exception as e:
+        raise RPCException(
+            request={
+                contract_address: contract_address, function_name: function_name,
+                'params': params, 'from_block': from_block, 'to_block': to_block,
+            },
+            response=None, underlying_exception=e,
+            extra_info=f'RPC_BATCH_ETH_CALL_ERROR: {str(e)}',
+        )
+
     response_exceptions = list(
         map(
             lambda r: r, filter(
@@ -468,8 +479,18 @@ def batch_eth_get_block(rpc_endpoint, from_block, to_block):
         })
         request_id += 1
 
-    response = requests.post(url=rpc_endpoint, json=rpc_query)
-    response = response.json()
+    try:
+        response = requests.post(url=rpc_endpoint, json=rpc_query)
+        response = response.json()
+    except Exception as e:
+        raise RPCException(
+            request={
+                'from_block': from_block, 'to_block': to_block,
+            },
+            response=None, underlying_exception=e,
+            extra_info=f'RPC_BATCH_ETH_CALL_ERROR: {str(e)}',
+        )
+
     response_exceptions = list(
         map(
             lambda r: r, filter(
