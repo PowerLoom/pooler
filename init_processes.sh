@@ -1,12 +1,5 @@
 #!/bin/bash
 
-# Waiting for other processes to start
-echo 'waiting for other services..';
-sleep 10
-
-echo 'initializing queues..';
-poetry run python -m pooler.init_rabbitmq
-
 echo 'waiting to register projects...';
 
 sleep 10;

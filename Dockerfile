@@ -1,17 +1,22 @@
 FROM nikolaik/python-nodejs:python3.9-nodejs18-bullseye
-RUN python -v
-RUN pip -v
-RUN node -v
+
+# Install the PM2 process manager for Node.js
 RUN npm install pm2 -g
-RUN pm2 ls
-COPY poetry.lock .
-COPY pyproject.toml .
-RUN poetry install
-EXPOSE 8002
-#EXPOSE 9090
+
+# Copy the application's dependencies files
+COPY poetry.lock pyproject.toml ./
+
+# Install the Python dependencies
+RUN poetry install --no-dev
+
+# Copy the rest of the application's files
 COPY . .
-#RUN poetry run python -m pooler.init_rabbitmq
-CMD chmod +x ./snapshotter_autofill.sh
-CMD chmod +x ./init_processes.sh
-#RUN pm2 start pm2.config.js && pm2 logs --lines 100
-#RUN ./init_processes.sh
+
+# Make the shell scripts executable
+RUN chmod +x ./snapshotter_autofill.sh ./init_processes.sh
+
+# Expose the port that the application will listen on
+EXPOSE 8002
+
+# Start the application using PM2
+CMD pm2 start pm2.config.js && pm2 logs --lines 100
