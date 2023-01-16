@@ -17,6 +17,7 @@ RUN chmod +x ./snapshotter_autofill.sh ./init_processes.sh
 
 # Expose the port that the application will listen on
 EXPOSE 8002
+# EXPOSE 9090
 
 # Start the application using PM2
-CMD pm2 start pm2.config.js && pm2 logs --lines 100
+# CMD pm2 start pm2.config.js && pm2 logs --lines 100
