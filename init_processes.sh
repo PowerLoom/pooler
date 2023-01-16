@@ -2,7 +2,7 @@
 
 echo 'waiting to register projects...';
 
-sleep 10;
+sleep 30;
 
 echo 'registering projects...';
 
