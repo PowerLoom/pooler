@@ -5,6 +5,7 @@ import os
 import queue
 import signal
 import time
+from functools import wraps
 from signal import SIGINT
 from signal import SIGQUIT
 from signal import SIGTERM
@@ -55,6 +56,42 @@ from pooler.utils.redis.redis_keys import uniswap_failed_query_pair_trade_volume
 
 
 SETTINGS_ENV = os.getenv('ENV_FOR_DYNACONF', 'development')
+
+
+def notify_on_task_failure(fn):
+    @wraps(fn)
+    async def wrapped(*args, **kwargs):
+        try:
+            result = await fn(*args, **kwargs)
+
+        except Exception as e:
+
+            if 'msg_obj' in kwargs:
+                msg_obj = kwargs['msg_obj']
+                if isinstance(msg_obj, PowerloomCallbackProcessMessage):
+                    contract = msg_obj.contract
+                    project_id = f'uniswap_pairContract_*_{contract}_{settings.namespace}'
+
+            async with AsyncClient() as client:
+                await client.post(
+                    url=settings.issue_report_url,
+                    json=SnapshotterIssue(
+                        instanceID=settings.instance_id,
+                        severity=SnapshotterIssueSeverity.medium,
+                        issueType='MISSED_SNAPSHOT',
+                        projectID=project_id if project_id else '*',
+                        timeOfReporting=int(time.time()),
+                        extra={'issueDetails': f'Error : {e}'},
+                        serviceName=f'Pooler|PairTotalReservesProcessor',
+                    ).dict(),
+                )
+            logger.opt(exception=True).error(f'Error in {fn.__name__}: {e}')
+
+            result = None
+        finally:
+            return result
+
+    return wrapped
 
 
 class PairTotalReservesProcessor(CallbackAsyncWorker):
@@ -511,6 +548,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                         mapping={json.dumps(update_log): int(time.time())},
                     )
 
+    @notify_on_task_failure
     async def _pair_total_reserves_processor_task(self, msg_obj: PowerloomCallbackProcessMessage):
         self._logger.debug('Processing total pair reserves callback: {}', msg_obj)
 
