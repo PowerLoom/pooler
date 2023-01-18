@@ -477,23 +477,11 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                         mapping={json.dumps(update_log): int(time.time())},
                     )
 
-    async def _on_rabbitmq_message(self, message: IncomingMessage):
-        await message.ack()
+    async def _pair_total_reserves_processor_task(self, msg_obj: PowerloomCallbackProcessMessage):
+        self._logger.debug('Processing total pair reserves callback: {}', msg_obj)
+
         self_unique_id = str(uuid4())
-        # cur_task.add_done_callback()
-        try:
-            msg_obj = PowerloomCallbackProcessMessage.parse_raw(message.body)
-        except ValidationError as e:
-            self._logger.opt(exception=True).error(
-                'Bad message structure of callback in processor for total pair reserves: {}', e,
-            )
-            return
-        except Exception as e:
-            self._logger.opt(exception=True).error(
-                'Unexpected message structure of callback in processor for total pair reserves: {}',
-                e,
-            )
-            return
+
         cur_task: asyncio.Task = asyncio.current_task(asyncio.get_running_loop())
         cur_task.set_name(f'aio_pika.consumer|PairTotalReservesProcessor|{msg_obj.contract}')
         self._running_callback_tasks[self_unique_id] = cur_task
@@ -505,12 +493,6 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             'Got epoch to process for calculating total reserves for pair: {}', msg_obj,
         )
 
-        self._logger.debug(
-            'Got aiohttp session cache. Attempting to snapshot total reserves data in epoch {}...',
-            msg_obj,
-        )
-
-        # TODO: refactor to accommodate multiple snapshots being generated from queued epochs
         pair_total_reserves_epoch_snapshot_map = await self._construct_pair_reserves_epoch_snapshot_data(
             msg_obj=msg_obj, enqueue_on_failure=True, past_failed_epochs=[],
         )
@@ -521,6 +503,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             snapshot_name='pair token reserves',
             epoch_snapshot_map=pair_total_reserves_epoch_snapshot_map,
         )
+
         # prepare trade volume snapshot
         trade_vol_epoch_snapshot_map = await self._construct_trade_volume_epoch_snapshot_data(
             msg_obj=msg_obj, enqueue_on_failure=True, past_failed_epochs=[],
@@ -534,6 +517,25 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         )
 
         del self._running_callback_tasks[self_unique_id]
+
+    async def _on_rabbitmq_message(self, message: IncomingMessage):
+        await message.ack()
+
+        try:
+            msg_obj: PowerloomCallbackProcessMessage = PowerloomCallbackProcessMessage.parse_raw(message.body)
+        except ValidationError as e:
+            self._logger.opt(exception=True).error(
+                'Bad message structure of callback in processor for total pair reserves: {}', e,
+            )
+            return
+        except Exception as e:
+            self._logger.opt(exception=True).error(
+                'Unexpected message structure of callback in processor for total pair reserves: {}',
+                e,
+            )
+            return
+
+        asyncio.ensure_future(self._pair_total_reserves_processor_task(msg_obj=msg_obj))
 
     def run(self):
         setproctitle(self.name)
