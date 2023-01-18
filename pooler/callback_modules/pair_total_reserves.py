@@ -60,20 +60,23 @@ SETTINGS_ENV = os.getenv('ENV_FOR_DYNACONF', 'development')
 
 def notify_on_task_failure(fn):
     @wraps(fn)
-    async def wrapped(*args, **kwargs):
+    async def wrapper(self, *args, **kwargs):
         try:
-            result = await fn(*args, **kwargs)
+            await fn(self, *args, **kwargs)
 
         except Exception as e:
+            # Logging the error trace
+            logger.opt(exception=True).error(f'Error: {e}')
 
-            if 'msg_obj' in kwargs:
-                msg_obj = kwargs['msg_obj']
-                if isinstance(msg_obj, PowerloomCallbackProcessMessage):
-                    contract = msg_obj.contract
-                    project_id = f'uniswap_pairContract_*_{contract}_{settings.namespace}'
+            # Sending the error details to the issue reporting service
+            try:
+                if 'msg_obj' in kwargs:
+                    msg_obj = kwargs['msg_obj']
+                    if isinstance(msg_obj, PowerloomCallbackProcessMessage):
+                        contract = msg_obj.contract
+                        project_id = f'uniswap_pairContract_*_{contract}_{settings.namespace}'
 
-            async with AsyncClient() as client:
-                await client.post(
+                await self._client.post(
                     url=settings.issue_report_url,
                     json=SnapshotterIssue(
                         instanceID=settings.instance_id,
@@ -82,16 +85,14 @@ def notify_on_task_failure(fn):
                         projectID=project_id if project_id else '*',
                         timeOfReporting=int(time.time()),
                         extra={'issueDetails': f'Error : {e}'},
-                        serviceName=f'Pooler|PairTotalReservesProcessor',
+                        serviceName='Pooler|PairTotalReservesProcessor',
                     ).dict(),
                 )
-            logger.opt(exception=True).error(f'Error in {fn.__name__}: {e}')
+            except Exception as err:
+                # Logging the error trace if service is not able to report issue
+                logger.opt(exception=True).error(f'Error: {err}')
 
-            result = None
-        finally:
-            return result
-
-    return wrapped
+    return wrapper
 
 
 class PairTotalReservesProcessor(CallbackAsyncWorker):
