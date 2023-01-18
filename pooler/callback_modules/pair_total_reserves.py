@@ -5,7 +5,6 @@ import os
 import queue
 import signal
 import time
-import redis
 from signal import SIGINT
 from signal import SIGQUIT
 from signal import SIGTERM
@@ -17,6 +16,7 @@ from typing import Tuple
 from typing import Union
 from uuid import uuid4
 
+import redis
 from aio_pika import IncomingMessage
 from eth_utils import keccak
 from httpx import AsyncClient
@@ -26,9 +26,9 @@ from httpx import Timeout
 from pydantic import ValidationError
 from setproctitle import setproctitle
 
+from pooler.callback_modules.data_models import PayloadCommitAPIRequest
 from pooler.callback_modules.data_models import SnapshotterIssue
 from pooler.callback_modules.data_models import SnapshotterIssueSeverity
-from pooler.callback_modules.data_models import PayloadCommitAPIRequest
 from pooler.callback_modules.data_models import SourceChainDetails
 from pooler.callback_modules.helpers import AuditProtocolCommandsHelper
 from pooler.callback_modules.helpers import CallbackAsyncWorker
@@ -172,7 +172,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                             projectID=project_id,
                             epochs=[epoch_broadcast.end],
                             timeOfReporting=int(time.time()),
-                            serviceName=f'Pooler|CallbackProcessor|{stream}'
+                            serviceName=f'Pooler|CallbackProcessor|{stream}',
                         ).dict(),
                     )
                     await self._redis_conn.rpush(
@@ -511,23 +511,10 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                         mapping={json.dumps(update_log): int(time.time())},
                     )
 
-    async def _on_rabbitmq_message(self, message: IncomingMessage):
-        await message.ack()
+    async def _pair_total_reserves_processor_task(self, msg_obj: PowerloomCallbackProcessMessage):
+        self._logger.debug('Processing total pair reserves callback: {}', msg_obj)
+
         self_unique_id = str(uuid4())
-        # cur_task.add_done_callback()
-        try:
-            msg_obj: PowerloomCallbackProcessMessage = PowerloomCallbackProcessMessage.parse_raw(message.body)
-        except ValidationError as e:
-            self._logger.opt(exception=True).error(
-                'Bad message structure of callback in processor for total pair reserves: {}', e,
-            )
-            return
-        except Exception as e:
-            self._logger.opt(exception=True).error(
-                'Unexpected message structure of callback in processor for total pair reserves: {}',
-                e,
-            )
-            return
         cur_task: asyncio.Task = asyncio.current_task(asyncio.get_running_loop())
         cur_task.set_name(f'aio_pika.consumer|PairTotalReservesProcessor|{msg_obj.contract}')
         self._running_callback_tasks[self_unique_id] = cur_task
@@ -548,6 +535,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             snapshot_name='pair token reserves',
             epoch_snapshot_map=pair_total_reserves_epoch_snapshot_map,
         )
+
         # prepare trade volume snapshot
         trade_vol_epoch_snapshot_map = await self._construct_trade_volume_epoch_snapshot_data(
             msg_obj=msg_obj, enqueue_on_failure=True, past_failed_epochs=[],
@@ -561,6 +549,25 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         )
 
         del self._running_callback_tasks[self_unique_id]
+
+    async def _on_rabbitmq_message(self, message: IncomingMessage):
+        await message.ack()
+
+        try:
+            msg_obj: PowerloomCallbackProcessMessage = PowerloomCallbackProcessMessage.parse_raw(message.body)
+        except ValidationError as e:
+            self._logger.opt(exception=True).error(
+                'Bad message structure of callback in processor for total pair reserves: {}', e,
+            )
+            return
+        except Exception as e:
+            self._logger.opt(exception=True).error(
+                'Unexpected message structure of callback in processor for total pair reserves: {}',
+                e,
+            )
+            return
+
+        asyncio.ensure_future(self._pair_total_reserves_processor_task(msg_obj=msg_obj))
 
     def run(self):
         setproctitle(self.name)
