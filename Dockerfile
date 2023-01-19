@@ -19,5 +19,7 @@ RUN chmod +x ./snapshotter_autofill.sh ./init_processes.sh
 EXPOSE 8002
 # EXPOSE 9090
 
+RUN pm2 install pm2-logrotate && pm2 set pm2-logrotate:compress true && pm2 set pm2-logrotate:retain 7
+
 # Start the application using PM2
 # CMD pm2 start pm2.config.js && pm2 logs --lines 100
