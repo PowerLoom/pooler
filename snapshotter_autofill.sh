@@ -23,7 +23,7 @@ echo "Got UUID: ${UUID}"
 cp pooler/settings/settings.example.json pooler/settings/settings.json
 
 export namespace=docker-UNISWAPV2-ph15-prod
-export consensus_url=https://phase15-consensus.powerloom.io
+export consensus_url=https://offchain-consensus-api.powerloom.io
 
 echo $namespace
 echo $consensus_url
