@@ -5,7 +5,7 @@ import os
 import queue
 import signal
 import time
-import redis
+from functools import wraps
 from signal import SIGINT
 from signal import SIGQUIT
 from signal import SIGTERM
@@ -17,6 +17,7 @@ from typing import Tuple
 from typing import Union
 from uuid import uuid4
 
+import redis
 from aio_pika import IncomingMessage
 from eth_utils import keccak
 from httpx import AsyncClient
@@ -26,9 +27,9 @@ from httpx import Timeout
 from pydantic import ValidationError
 from setproctitle import setproctitle
 
+from pooler.callback_modules.data_models import PayloadCommitAPIRequest
 from pooler.callback_modules.data_models import SnapshotterIssue
 from pooler.callback_modules.data_models import SnapshotterIssueSeverity
-from pooler.callback_modules.data_models import PayloadCommitAPIRequest
 from pooler.callback_modules.data_models import SourceChainDetails
 from pooler.callback_modules.helpers import AuditProtocolCommandsHelper
 from pooler.callback_modules.helpers import CallbackAsyncWorker
@@ -55,6 +56,43 @@ from pooler.utils.redis.redis_keys import uniswap_failed_query_pair_trade_volume
 
 
 SETTINGS_ENV = os.getenv('ENV_FOR_DYNACONF', 'development')
+
+
+def notify_on_task_failure(fn):
+    @wraps(fn)
+    async def wrapper(self, *args, **kwargs):
+        try:
+            await fn(self, *args, **kwargs)
+
+        except Exception as e:
+            # Logging the error trace
+            logger.opt(exception=True).error(f'Error: {e}')
+
+            # Sending the error details to the issue reporting service
+            try:
+                if 'msg_obj' in kwargs:
+                    msg_obj = kwargs['msg_obj']
+                    if isinstance(msg_obj, PowerloomCallbackProcessMessage):
+                        contract = msg_obj.contract
+                        project_id = f'uniswap_pairContract_*_{contract}_{settings.namespace}'
+
+                await self._client.post(
+                    url=settings.issue_report_url,
+                    json=SnapshotterIssue(
+                        instanceID=settings.instance_id,
+                        severity=SnapshotterIssueSeverity.medium,
+                        issueType='MISSED_SNAPSHOT',
+                        projectID=project_id if project_id else '*',
+                        timeOfReporting=int(time.time()),
+                        extra={'issueDetails': f'Error : {e}'},
+                        serviceName='Pooler|PairTotalReservesProcessor',
+                    ).dict(),
+                )
+            except Exception as err:
+                # Logging the error trace if service is not able to report issue
+                logger.opt(exception=True).error(f'Error: {err}')
+
+    return wrapper
 
 
 class PairTotalReservesProcessor(CallbackAsyncWorker):
@@ -172,7 +210,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                             projectID=project_id,
                             epochs=[epoch_broadcast.end],
                             timeOfReporting=int(time.time()),
-                            serviceName=f'Pooler|CallbackProcessor|{stream}'
+                            serviceName=f'Pooler|CallbackProcessor|{stream}',
                         ).dict(),
                     )
                     await self._redis_conn.rpush(
@@ -511,23 +549,11 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                         mapping={json.dumps(update_log): int(time.time())},
                     )
 
-    async def _on_rabbitmq_message(self, message: IncomingMessage):
-        await message.ack()
+    @notify_on_task_failure
+    async def _pair_total_reserves_processor_task(self, msg_obj: PowerloomCallbackProcessMessage):
+        self._logger.debug('Processing total pair reserves callback: {}', msg_obj)
+
         self_unique_id = str(uuid4())
-        # cur_task.add_done_callback()
-        try:
-            msg_obj: PowerloomCallbackProcessMessage = PowerloomCallbackProcessMessage.parse_raw(message.body)
-        except ValidationError as e:
-            self._logger.opt(exception=True).error(
-                'Bad message structure of callback in processor for total pair reserves: {}', e,
-            )
-            return
-        except Exception as e:
-            self._logger.opt(exception=True).error(
-                'Unexpected message structure of callback in processor for total pair reserves: {}',
-                e,
-            )
-            return
         cur_task: asyncio.Task = asyncio.current_task(asyncio.get_running_loop())
         cur_task.set_name(f'aio_pika.consumer|PairTotalReservesProcessor|{msg_obj.contract}')
         self._running_callback_tasks[self_unique_id] = cur_task
@@ -548,6 +574,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             snapshot_name='pair token reserves',
             epoch_snapshot_map=pair_total_reserves_epoch_snapshot_map,
         )
+
         # prepare trade volume snapshot
         trade_vol_epoch_snapshot_map = await self._construct_trade_volume_epoch_snapshot_data(
             msg_obj=msg_obj, enqueue_on_failure=True, past_failed_epochs=[],
@@ -561,6 +588,25 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         )
 
         del self._running_callback_tasks[self_unique_id]
+
+    async def _on_rabbitmq_message(self, message: IncomingMessage):
+        await message.ack()
+
+        try:
+            msg_obj: PowerloomCallbackProcessMessage = PowerloomCallbackProcessMessage.parse_raw(message.body)
+        except ValidationError as e:
+            self._logger.opt(exception=True).error(
+                'Bad message structure of callback in processor for total pair reserves: {}', e,
+            )
+            return
+        except Exception as e:
+            self._logger.opt(exception=True).error(
+                'Unexpected message structure of callback in processor for total pair reserves: {}',
+                e,
+            )
+            return
+
+        asyncio.ensure_future(self._pair_total_reserves_processor_task(msg_obj=msg_obj))
 
     def run(self):
         setproctitle(self.name)
