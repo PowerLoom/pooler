@@ -55,13 +55,13 @@ def main():
         indexer_registration_data.append(
             IndexingRegistrationData(
                 projectID=f'uniswap_pairContract_pair_total_reserves_{addr}_{namespace}',
-                indexerConfig={'series': ['24h', '7d']},
+                indexerConfig={'series': ['0']},
             ),
         )
         indexer_registration_data.append(
             IndexingRegistrationData(
                 projectID=f'uniswap_pairContract_trade_volume_{addr}_{namespace}',
-                indexerConfig={'series': ['0']},
+                indexerConfig={'series': ['24h', '7d']},
             ),
         )
 
