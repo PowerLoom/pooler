@@ -20,13 +20,14 @@ echo "Got RPC URL: ${RPC_URL}"
 
 echo "Got UUID: ${UUID}"
 
+echo "Got CONSENSUS_URL: ${CONSENSUS_URL}"
 cp pooler/settings/settings.example.json pooler/settings/settings.json
 
-export namespace=docker-UNISWAPV2-ph15-prod
-export consensus_url=https://offchain-consensus-api.powerloom.io
+export namespace=UNISWAPV2-ph15-prod
+export consensus_url="${CONSENSUS_URL:-https://offchain-consensus-api.powerloom.io}"
 
-echo $namespace
-echo $consensus_url
+echo "Using Namespace: ${namespace}"
+echo "Using CONSENSUS_URL: ${consensus_url}"
 
 sed -i "s|relevant-namespace|$namespace|" pooler/settings/settings.json
 
