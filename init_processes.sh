@@ -1,12 +1,8 @@
 #!/bin/bash
 
-echo 'waiting to register projects...';
-
-sleep 30;
-
 echo 'registering projects...';
 
-poetry run python -m pooler.register_projects
+poetry run python -m pooler.register_projects || exit 1
 
 sleep 10;
 
