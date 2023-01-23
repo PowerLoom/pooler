@@ -134,6 +134,12 @@ async def delete_request_data(
     _ = await redis_conn.delete(key=request_info_key)
 
 
+# Health check endpoint that returns 200 OK
+@app.get('/health')
+async def health_check():
+    return {'status': 'OK'}
+
+
 @app.get('/snapshots/{pair_contract_address:str}')
 async def get_past_snapshots(
         request: Request,
