@@ -1,16 +1,11 @@
 #!/bin/bash
 
-echo 'waiting to register projects...';
-
-sleep 30;
+echo 'starting processes...';
+pm2 start pm2.config.js
 
 echo 'registering projects...';
+poetry run python -m pooler.register_projects || exit 1
 
-poetry run python -m pooler.register_projects
-
-sleep 10;
-
-pm2 start pm2.config.js
 
 # Waiting for other processes to start
 echo 'waiting for processes to start..';
