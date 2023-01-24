@@ -19,7 +19,7 @@ registration_logger = logger.bind(
     module=f'PowerLoom|RegisterProjects:{settings.namespace}-{settings.instance_id}',
 )
 
-RETRY_COUNT = 5
+RETRY_COUNT = 2
 
 # Define custom execption for retrying
 
