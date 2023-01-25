@@ -59,7 +59,7 @@
         "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
         "0x956f47f50a910163d8bf957cf5846d573e7f87ca"
     ],
-    "ipfs_url": "/dns/host.docker.internal/tcp/5001",
+    "ipfs_url": "/dns/ipfs/tcp/5001",
     "uniswap_functions": {
         "retrial_attempts": 5
     },
@@ -76,7 +76,7 @@
         "request_time_out": 5,
         "skip_epoch_threshold_blocks": 30
     },
-    "issue_report_url": "http://host.docker.internal:9030/reportIssue",
+    "issue_report_url": "http://audit-protocol:9030/reportIssue",
     "rlimit": {
         "file_descriptors": 2048
     },
@@ -98,7 +98,7 @@
     "rabbitmq": {
         "user": "guest",
         "password": "guest",
-        "host": "host.docker.internal",
+        "host": "rabbitmq",
         "port": 5672,
         "setup": {
             "core": {
@@ -113,7 +113,7 @@
     },
 
     "audit_protocol_engine": {
-        "url": "http://host.docker.internal:9000",
+        "url": "http://audit-protocol:9000",
         "retry": 5,
         "skip_anchor_proof":true
     },
@@ -125,7 +125,7 @@
         "sleep_secs_between_chunks":60
     },
     "redis": {
-        "host": "host.docker.internal",
+        "host": "redis",
         "port": 6379,
         "db": 0,
         "password": null,
@@ -133,7 +133,7 @@
         "cluster_mode": false
     },
     "redis_reader": {
-        "host": "host.docker.internal",
+        "host": "redis",
         "port": 6379,
         "db": 0,
         "password": null
