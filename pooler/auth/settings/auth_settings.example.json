@@ -1,6 +1,6 @@
 {
   "redis": {
-      "host": "host.docker.internal",
+      "host": "redis",
       "port": 6379,
       "db": 0,
       "password": null
