@@ -141,7 +141,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 fetch_timestamp=True,
             )
         except Exception as exc:
-            self._logger.error(
+            self._logger.opt(exception=True).error(
                 f'Pair-Reserves function failed for epoch: {min_chain_height}-{max_chain_height} | error_msg:{exc}',
             )
             # if querying fails, we are going to ensure it is recorded for future processing

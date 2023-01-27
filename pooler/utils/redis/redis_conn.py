@@ -1,5 +1,4 @@
 import contextlib
-import logging
 from functools import wraps
 
 import redis
@@ -69,10 +68,10 @@ def provide_redis_conn(fn):
             return fn(*args, **kwargs)
         else:
             connection_pool = redis.BlockingConnectionPool(**REDIS_CONN_CONF)
-            # logging.debug('Created Redis connection Pool')
+
             with create_redis_conn(connection_pool) as redis_obj:
                 kwargs[arg_conn] = redis_obj
-                logging.debug('Returning after populating redis connection object')
+                logger.debug('Returning after populating redis connection object')
                 return fn(*args, **kwargs)
     return wrapper
 

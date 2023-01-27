@@ -114,6 +114,7 @@ async def check_rpc_rate_limit(
             key_bits,
             redis_conn,
             rate_limit_lua_script_shas,
+            limit_incr_by,
         )
     except Exception as exc:
         logger.opt(exception=True).error(
@@ -122,9 +123,11 @@ async def check_rpc_rate_limit(
         raise
 
     if not can_request:
-        raise RPCException(
+        exc = RPCException(
             request=request_payload,
             response={}, underlying_exception=None,
             extra_info=error_msg,
         )
+        logger.trace('Rate limit hit, raising exception {}', str(exc))
+        raise exc
     return can_request

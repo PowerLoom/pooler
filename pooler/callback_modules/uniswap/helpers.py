@@ -3,12 +3,17 @@ import json
 from functools import partial
 
 from redis import asyncio as aioredis
+from tenacity import retry
+from tenacity import retry_if_exception_type
+from tenacity import stop_after_attempt
+from tenacity import wait_random_exponential
 from web3 import Web3
 
 from pooler.callback_modules.uniswap.constants import erc20_abi
 from pooler.callback_modules.uniswap.constants import global_w3_client
 from pooler.callback_modules.uniswap.constants import pair_contract_abi
 from pooler.settings.config import settings
+from pooler.utils.default_logger import format_exception
 from pooler.utils.default_logger import logger
 from pooler.utils.redis.rate_limiter import check_rpc_rate_limit
 from pooler.utils.redis.redis_conn import provide_async_redis_conn_insta
@@ -17,7 +22,10 @@ from pooler.utils.redis.redis_keys import uniswap_pair_contract_tokens_addresses
 from pooler.utils.redis.redis_keys import uniswap_pair_contract_tokens_data
 from pooler.utils.redis.redis_keys import uniswap_tokens_pair_map
 from pooler.utils.rpc_helper import batch_eth_get_block
+from pooler.utils.rpc_helper import inject_web3_provider_first_run
+from pooler.utils.rpc_helper import inject_web3_provider_on_exception
 from pooler.utils.rpc_helper import RPCException
+
 
 helper_logger = logger.bind(module='PowerLoom|Uniswap|Helpers')
 
@@ -76,6 +84,14 @@ async def get_pair(
     return pair
 
 
+@inject_web3_provider_first_run
+@retry(
+    reraise=True,
+    retry=retry_if_exception_type(RPCException),
+    wait=wait_random_exponential(multiplier=1, max=10),
+    stop=stop_after_attempt(settings.uniswap_functions.retrial_attempts),
+    before_sleep=inject_web3_provider_on_exception,
+)
 async def get_pair_metadata(
     pair_address,
     loop: asyncio.AbstractEventLoop,
@@ -117,12 +133,29 @@ async def get_pair_metadata(
                 error_msg={
                     'msg': 'exhausted_api_key_rate_limit inside uniswap_functions get_pair_metadata fn',
                 },
-                logger=helper_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1,
+                logger=helper_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=2,
             )
-            token0Addr, token1Addr = web3_provider['web3_client'].batch_call([
-                pair_contract_obj.functions.token0(),
-                pair_contract_obj.functions.token1(),
-            ])
+
+            try:
+                token0Addr, token1Addr = web3_provider['web3_client'].batch_call([
+                    pair_contract_obj.functions.token0(),
+                    pair_contract_obj.functions.token1(),
+                ])
+            except Exception as e:
+                helper_logger.error(
+                    f'error while getting token0 and token1 addresses for pair {pair_address} - {e}',
+                )
+                exc = RPCException(
+                    request={'pair_address': pair_address, 'token0': token0Addr, 'token1': token1Addr},
+                    response=e, underlying_exception=e,
+                    extra_info={'msg': format_exception(e)},
+                )
+
+                helper_logger.opt(lazy=True).trace(
+                    f'error while getting token0 and token1 addresses for pair {pair_address}'
+                    ' - {err}', err=lambda: str(exc),
+                )
+                raise exc
 
             await redis_conn.hset(
                 name=uniswap_pair_contract_tokens_addresses.format(pair_address),
@@ -181,20 +214,36 @@ async def get_pair_metadata(
                 error_msg={
                     'msg': 'exhausted_api_key_rate_limit inside uniswap_functions get_pair_metadata fn',
                 },
-                logger=helper_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1,
+                logger=helper_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=4,
             )
-            if maker_token1:
-                [token0_name, token0_symbol, token0_decimals, token1_decimals] = web3_provider['web3_client'].batch_call(
-                    tasks,
+            try:
+                if maker_token1:
+                    [token0_name, token0_symbol, token0_decimals, token1_decimals] = web3_provider['web3_client'].batch_call(
+                        tasks,
+                    )
+                elif maker_token0:
+                    [token0_decimals, token1_name, token1_symbol, token1_decimals] = web3_provider['web3_client'].batch_call(
+                        tasks,
+                    )
+                else:
+                    [
+                        token0_name, token0_symbol, token0_decimals, token1_name, token1_symbol, token1_decimals,
+                    ] = web3_provider['web3_client'].batch_call(tasks)
+            except Exception as e:
+                helper_logger.error(
+                    f'error while getting token0 and token1 metadata for pair {pair_address} - {e}',
                 )
-            elif maker_token0:
-                [token0_decimals, token1_name, token1_symbol, token1_decimals] = web3_provider['web3_client'].batch_call(
-                    tasks,
+
+                exc = RPCException(
+                    request={'pair_address': pair_address, 'token0': token0Addr, 'token1': token1Addr},
+                    response=e, underlying_exception=e,
+                    extra_info={'msg': format_exception(e)},
                 )
-            else:
-                [
-                    token0_name, token0_symbol, token0_decimals, token1_name, token1_symbol, token1_decimals,
-                ] = web3_provider['web3_client'].batch_call(tasks)
+                helper_logger.opt(lazy=True).trace(
+                    f'error while getting token0 and token1 addresses for pair {pair_address}'
+                    ' - {err}', err=lambda: str(exc),
+                )
+                raise exc
 
             await redis_conn.hset(
                 name=uniswap_pair_contract_tokens_data.format(pair_address),
@@ -270,7 +319,7 @@ async def get_block_details_in_block_range(
             parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], redis_conn=redis_conn,
             request_payload={'from_block': from_block, 'to_block': to_block},
             error_msg={'msg': 'exhausted_api_key_rate_limit inside get_block_details_in_block_range'},
-            logger=helper_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas,
+            logger=helper_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=to_block - from_block + 1,
         )
         rpc_batch_block_details = batch_eth_get_block(
             rpc_endpoint=web3_provider.get(
@@ -312,9 +361,13 @@ async def get_block_details_in_block_range(
 
         return block_details_dict
 
-    except Exception as err:
+    except Exception as e:
+        helper_logger.opt(exception=True, lazy=True).trace(
+            'Unable to fetch block details, error_msg:{err}', err=lambda: format_exception(e),
+        )
+
         raise RPCException(
             request={'from_block': from_block, 'to_block': to_block},
-            response=err, underlying_exception=err,
-            extra_info={'msg': str(err)},
-        ) from err
+            response=e, underlying_exception=e,
+            extra_info={'msg': str(e)},
+        ) from e

@@ -15,9 +15,9 @@ from web3 import Web3
 from web3._utils.events import get_event_data
 
 from pooler.settings.config import settings
+from pooler.utils.default_logger import format_exception
 from pooler.utils.default_logger import logger
 from pooler.utils.models.message_models import RPCNodesObject
-
 # setup logging
 rpc_logger = logger.bind(module='PowerLoom|NodeRPCHelper')
 
@@ -415,14 +415,16 @@ def batch_eth_call_on_block_range(rpc_endpoint, abi_dict, function_name, contrac
         response = requests.post(url=rpc_endpoint, json=rpc_query)
         response = response.json()
     except Exception as e:
-        raise RPCException(
+        exc = RPCException(
             request={
                 contract_address: contract_address, function_name: function_name,
                 'params': params, 'from_block': from_block, 'to_block': to_block,
             },
             response=None, underlying_exception=e,
-            extra_info=f'RPC_BATCH_ETH_CALL_ERROR: {str(e)}',
+            extra_info=f'RPC_BATCH_ETH_CALL_ERROR: {format_exception(e)}',
         )
+        rpc_logger.trace('Error in batch_eth_call_on_block_range, error {}', str(exc))
+        raise exc
 
     response_exceptions = list(
         map(
@@ -435,7 +437,7 @@ def batch_eth_call_on_block_range(rpc_endpoint, abi_dict, function_name, contrac
     ) if isinstance(response, list) else response
 
     if len(response_exceptions) > 0:
-        raise RPCException(
+        exc = RPCException(
             request={
                 contract_address: contract_address, function_name: function_name,
                 'params': params, 'from_block': from_block, 'to_block': to_block,
@@ -443,6 +445,8 @@ def batch_eth_call_on_block_range(rpc_endpoint, abi_dict, function_name, contrac
             response=response_exceptions, underlying_exception=None,
             extra_info=f'RPC_BATCH_ETH_CALL_ERRORS: {str(response_exceptions)}',
         )
+        rpc_logger.trace('Error in batch_eth_call_on_block_range, error {}', str(exc))
+        raise exc
     else:
         response = response if isinstance(response, list) else [response]
         for result in response:
@@ -483,13 +487,15 @@ def batch_eth_get_block(rpc_endpoint, from_block, to_block):
         response = requests.post(url=rpc_endpoint, json=rpc_query)
         response = response.json()
     except Exception as e:
-        raise RPCException(
+        exc = RPCException(
             request={
                 'from_block': from_block, 'to_block': to_block,
             },
             response=None, underlying_exception=e,
-            extra_info=f'RPC_BATCH_ETH_CALL_ERROR: {str(e)}',
+            extra_info=f'RPC_BATCH_ETH_CALL_ERROR: {format_exception(e)}',
         )
+        rpc_logger.trace('Error in batch_eth_get_block, error {}', str(exc))
+        raise exc
 
     response_exceptions = list(
         map(
@@ -500,11 +506,14 @@ def batch_eth_get_block(rpc_endpoint, from_block, to_block):
     )
 
     if len(response_exceptions) > 0:
-        raise RPCException(
+
+        exc = RPCException(
             request={'from_block': from_block, 'to_block': to_block},
             response=response_exceptions, underlying_exception=None,
             extra_info=f'RPC_BATCH_ETH_GET_BLOCK_ERRORS: {str(response_exceptions)}',
         )
+        rpc_logger.trace('Error in batch_eth_get_block, error {}', str(exc))
+        raise exc
 
     return response
 
@@ -521,12 +530,24 @@ def get_event_sig_and_abi(event_signatures, event_abis):
 
 
 def get_events_logs(web3Provider, contract_address, toBlock, fromBlock, topics, event_abi):
-    event_log = web3Provider.eth.get_logs({
-        'address': Web3.toChecksumAddress(contract_address),
-        'toBlock': toBlock,
-        'fromBlock': fromBlock,
-        'topics': topics,
-    })
+    try:
+        event_log = web3Provider.eth.get_logs({
+            'address': Web3.toChecksumAddress(contract_address),
+            'toBlock': toBlock,
+            'fromBlock': fromBlock,
+            'topics': topics,
+        })
+    except Exception as e:
+        exc = RPCException(
+            request={
+                'contract_address': contract_address, 'toBlock': toBlock,
+                'fromBlock': fromBlock, 'topics': topics,
+            },
+            response=None, underlying_exception=e,
+            extra_info=f'RPC_GET_EVENT_LOGS_ERROR: {format_exception(e)}',
+        )
+        rpc_logger.trace('Error in get_events_logs, error {}', str(exc))
+        raise exc
 
     codec: ABICodec = web3Provider.codec
     all_events = []

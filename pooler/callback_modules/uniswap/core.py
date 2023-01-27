@@ -18,6 +18,7 @@ from pooler.callback_modules.uniswap.helpers import get_pair_metadata
 from pooler.callback_modules.uniswap.pricing import get_eth_price_usd
 from pooler.callback_modules.uniswap.pricing import get_token_price_in_block_range
 from pooler.settings.config import settings
+from pooler.utils.default_logger import format_exception
 from pooler.utils.default_logger import logger
 from pooler.utils.models.data_models import epoch_event_trade_data
 from pooler.utils.models.data_models import event_trade_data
@@ -106,14 +107,18 @@ async def get_pair_reserves(
                 'from_block': from_block, 'to_block': to_block,
             },
             error_msg={'msg': 'exhausted_api_key_rate_limit inside get_pair_reserves'},
-            logger=core_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1,
+            logger=core_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=to_block - from_block + 1,
         )
         reserves_array = batch_eth_call_on_block_range(
             rpc_endpoint=web3_provider.get('rpc_url'), abi_dict=pair_abi_dict, function_name='getReserves',
             contract_address=pair_address, from_block=from_block, to_block=to_block,
         )
         if not reserves_array:
-            raise RPCException(
+            core_logger.trace(
+                'Unable to fetch reserves for pair: {}, from block: {}, to block: {} got {} from RPC',
+                pair_address, from_block, to_block, reserves_array,
+            )
+            exc = RPCException(
                 request={
                     'contract': pair_address,
                     'from_block': from_block, 'to_block': to_block,
@@ -156,8 +161,9 @@ async def get_pair_reserves(
         )
         return pair_reserves_arr
     except Exception as exc:
-        core_logger.opt(exception=True).error(
-            'error at get_pair_reserves fn, retrying..., error_msg: {}',
+        core_logger.opt(exception=True, lazy=True).trace(
+            'error at get_pair_reserves fn, retrying..., error_msg: {err}',
+            err=lambda: format_exception(exc),
         )
         raise RPCException(
             request={'contract': pair_address, 'from_block': from_block, 'to_block': to_block},
@@ -344,7 +350,7 @@ async def get_pair_trade_volume(
             error_msg={
                 'msg': 'exhausted_api_key_rate_limit inside uniswap_functions get async trade volume',
             },
-            logger=core_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1,
+            logger=core_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=max_chain_height - min_chain_height + 1,
         )
         events_log = await ev_loop.run_in_executor(func=pfunc_get_event_logs, executor=None)
 
@@ -450,7 +456,10 @@ async def get_pair_trade_volume(
         epoch_trade_logs.update({'timestamp': max_block_timestamp})
         return epoch_trade_logs
     except Exception as exc:
-        core_logger.opt(exception=True).error('error at get_pair_trade_volume fn: {}', exc)
+        core_logger.opt(exception=True, lazy=True).trace(
+            'error at get_pair_trade_volume fn: {err}',
+            err=lambda: format_exception(exc),
+        )
         raise RPCException(
             request={
                 'contract': data_source_contract_address,

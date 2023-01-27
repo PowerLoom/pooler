@@ -12,6 +12,7 @@ from pooler.callback_modules.uniswap.constants import tokens_decimals
 from pooler.callback_modules.uniswap.helpers import get_pair
 from pooler.callback_modules.uniswap.helpers import get_pair_metadata
 from pooler.settings.config import settings
+from pooler.utils.default_logger import format_exception
 from pooler.utils.default_logger import logger
 from pooler.utils.redis.rate_limiter import check_rpc_rate_limit
 from pooler.utils.redis.redis_conn import provide_async_redis_conn_insta
@@ -87,7 +88,7 @@ async def get_eth_price_usd(
             usdt_eth_pair_metadata['token0']['address'],
         ) == Web3.toChecksumAddress(settings.contract_addresses.USDT) else 1
 
-        # we are making single batch call here:
+        # we're making multiple batch calls here
         await check_rpc_rate_limit(
             parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1],
             redis_conn=redis_conn, request_payload={
@@ -96,7 +97,9 @@ async def get_eth_price_usd(
             error_msg={
                 'msg': 'exhausted_api_key_rate_limit inside uniswap_functions get eth usd price fn',
             },
-            logger=pricing_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1,
+            logger=pricing_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=(
+                to_block - from_block + 1
+            ) * 3,
         )
 
         # create dictionary of ABI {function_name -> {signature, abi, input, output}}
@@ -206,7 +209,7 @@ async def get_token_pair_price_and_white_token_reserves(
         error_msg={
             'msg': 'exhausted_api_key_rate_limit inside uniswap_functions get_token_pair_based_price fn',
         },
-        logger=pricing_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1,
+        logger=pricing_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=to_block - from_block + 1,
     )
 
     # get white
@@ -217,6 +220,12 @@ async def get_token_pair_price_and_white_token_reserves(
     )
 
     if len(pair_reserves_list) < to_block - (from_block - 1):
+        pricing_logger.trace(
+            'Unable to get pair price and white token reserves'
+            'from_block: {}, to_block: {}, pair_reserves_list: {}',
+            from_block, to_block, pair_reserves_list,
+        )
+
         raise RPCException(
             request={'from_block': from_block, 'to_block': to_block},
             response=pair_reserves_list, underlying_exception=None,
@@ -268,7 +277,7 @@ async def get_token_derived_eth(
         error_msg={
             'msg': 'exhausted_api_key_rate_limit inside uniswap_functions get_token_derived_eth fn',
         },
-        logger=pricing_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1,
+        logger=pricing_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=to_block - from_block + 1,
     )
 
     # get white
@@ -286,6 +295,11 @@ async def get_token_derived_eth(
     )
 
     if len(token_derived_eth_list) < to_block - (from_block - 1):
+        pricing_logger.trace(
+            'Unable to get token derived eth'
+            'from_block: {}, to_block: {}, token_derived_eth_list: {}',
+            from_block, to_block, token_derived_eth_list,
+        )
         raise RPCException(
             request={'from_block': from_block, 'to_block': to_block},
             response=token_derived_eth_list, underlying_exception=None,
@@ -436,8 +450,9 @@ async def get_token_price_in_block_range(
         return token_price_dict
 
     except Exception as err:
-        pricing_logger.error(
-            f"Error while calculating price of token: {token_metadata['symbol']} | {token_metadata['address']} | err: {str(err)}",
+        pricing_logger.opt(exception=True, lazy=True).trace(
+            f"Error while calculating price of token: {token_metadata['symbol']} | {token_metadata['address']}"
+            '| err: {err}', err=lambda: format_exception(err),
         )
         raise RPCException(
             request={
