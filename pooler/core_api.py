@@ -977,7 +977,7 @@ async def get_v2_tokens_data_by_block(
 
 @app.get('/v1/api/v2-daily-stats')
 @app.get('/v2-daily-stats')
-async def get_v2_pairs_daily_stats(
+async def get_v2_daily_stats(
         request: Request,
         response: Response,
         rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
