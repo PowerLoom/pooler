@@ -31,7 +31,7 @@ class RequestException(Exception):
 @retry(
     reraise=True,
     retry=retry_if_exception_type(RequestException),
-    wait=wait_random_exponential(multiplier=2, min=4, max=128),
+    wait=wait_random_exponential(multiplier=2, max=128),
     stop=stop_after_attempt(RETRY_COUNT),
 )
 def register_projects(all_projects: List[str]):
@@ -53,7 +53,7 @@ def register_projects(all_projects: List[str]):
 @retry(
     reraise=True,
     retry=retry_if_exception_type(RequestException),
-    wait=wait_random_exponential(multiplier=2, min=4, max=128),
+    wait=wait_random_exponential(multiplier=2, max=128),
     stop=stop_after_attempt(RETRY_COUNT),
 )
 def register_projects_for_indexing(data: ProjectRegistrationRequestForIndexing):

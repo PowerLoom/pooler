@@ -42,7 +42,7 @@ core_logger = logger.bind(module='PowerLoom|UniswapCore')
 @retry(
     reraise=True,
     retry=retry_if_exception_type(RPCException),
-    wait=wait_random_exponential(multiplier=1, max=10),
+    wait=wait_random_exponential(multiplier=2, max=10),
     stop=stop_after_attempt(settings.uniswap_functions.retrial_attempts),
     before_sleep=inject_web3_provider_on_exception,
 )
@@ -126,6 +126,7 @@ async def get_pair_reserves(
                 response=reserves_array, underlying_exception=None,
                 extra_info={'msg': f'Error: failed to retrieve pair reserves from RPC'},
             )
+            raise exc
 
         core_logger.debug(f'Total reserves fetched getReserves results: {pair_address}')
         token0_decimals = pair_per_token_metadata['token0']['decimals']
@@ -274,7 +275,7 @@ def extract_trade_volume_log(event_name, log, pair_per_token_metadata, token0_pr
 @retry(
     reraise=True,
     retry=retry_if_exception_type(RPCException),
-    wait=wait_random_exponential(multiplier=1, max=10),
+    wait=wait_random_exponential(multiplier=2, max=10),
     stop=stop_after_attempt(settings.uniswap_functions.retrial_attempts),
     before_sleep=inject_web3_provider_on_exception,
 )

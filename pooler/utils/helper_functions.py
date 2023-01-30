@@ -79,16 +79,17 @@ async def make_post_call_async(url: str, params: dict, session: aiohttp.ClientSe
             return response
         else:
             msg = f'Failed to make request {params}. Got status response from {url}: {response_status_code}'
-            logger.debug(msg)
             logger.trace(msg)
 
-            raise RPCException(
+            exc = RPCException(
                 request=params, response=response, underlying_exception=None,
                 extra_info={'msg': msg, 'tag': tag},
             )
+            logger.opt(exception=True).trace('Error {}', str(exc))
+            raise exc
+
     except aiohttp.ClientResponseError as terr:
         msg = 'aiohttp error occurred while making async post call'
-        logger.debug(msg)
         logger.opt(exception=True, lazy=True).trace('Error {err}', err=lambda: format_exception(terr))
         raise RPCException(
             request=params, response=response, underlying_exception=terr,
@@ -96,7 +97,6 @@ async def make_post_call_async(url: str, params: dict, session: aiohttp.ClientSe
         )
     except Exception as e:
         msg = 'Exception occurred while making async post call'
-        logger.debug(msg)
         logger.opt(exception=True, lazy=True).trace('Error {err}', err=lambda: format_exception(e))
         raise RPCException(
             request=params, response=response, underlying_exception=e,

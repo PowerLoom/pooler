@@ -88,7 +88,7 @@ async def get_pair(
 @retry(
     reraise=True,
     retry=retry_if_exception_type(RPCException),
-    wait=wait_random_exponential(multiplier=1, max=10),
+    wait=wait_random_exponential(multiplier=2, max=10),
     stop=stop_after_attempt(settings.uniswap_functions.retrial_attempts),
     before_sleep=inject_web3_provider_on_exception,
 )
@@ -142,9 +142,6 @@ async def get_pair_metadata(
                     pair_contract_obj.functions.token1(),
                 ])
             except Exception as e:
-                helper_logger.error(
-                    f'error while getting token0 and token1 addresses for pair {pair_address} - {e}',
-                )
                 exc = RPCException(
                     request={'pair_address': pair_address, 'token0': token0Addr, 'token1': token1Addr},
                     response=e, underlying_exception=e,
@@ -230,10 +227,6 @@ async def get_pair_metadata(
                         token0_name, token0_symbol, token0_decimals, token1_name, token1_symbol, token1_decimals,
                     ] = web3_provider['web3_client'].batch_call(tasks)
             except Exception as e:
-                helper_logger.error(
-                    f'error while getting token0 and token1 metadata for pair {pair_address} - {e}',
-                )
-
                 exc = RPCException(
                     request={'pair_address': pair_address, 'token0': token0Addr, 'token1': token1Addr},
                     response=e, underlying_exception=e,
