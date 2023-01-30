@@ -12,8 +12,8 @@ from signal import SIGTERM
 from time import sleep
 from time import time as wall_time
 
+import httpx
 import redis
-import requests
 from httpx import Client
 from httpx import Limits
 from setproctitle import setproctitle
@@ -159,7 +159,7 @@ class EpochDetectorProcess(multiprocessing.Process):
 
         while True:
             try:
-                response = requests.get(consensus_epoch_tracker_url)
+                response = httpx.get(url=consensus_epoch_tracker_url)
                 if response.status_code != 200:
                     self._logger.error(
                         'Error while fetching current epoch data: {}', response.status_code,

@@ -3,7 +3,7 @@ import json
 import os
 import time
 
-import requests
+import httpx
 from rich.console import Console
 from rich.table import Table
 from uniswap_functions import get_pair_trade_volume
@@ -305,8 +305,8 @@ async def verify_trade_volume_calculations(loop, pair_contract, timePeriod, star
             current_time,
         ) + ',\\n    timestamp_gte: ' + str(from_time) + "\\n  }) {\\n    id,\\n    timestamp,\\n    amountUSD,\\n    logIndex,\\n    amount0In,\\n    amount0Out,\\n    amount1Out,\\n    amount1In\\n  }\\n}\\n\",\"variables\":null}"
         headers = {'Content-Type': 'text/plain'}
-        response = requests.request(
-            'POST', uniswap_url, headers=headers, data=uniswap_payload, timeout=30,
+        response = httpx.post(
+            url=uniswap_url, headers=headers, data=uniswap_payload, timeout=30,
         )
         if response.status_code == 200:
             total_trades_in_usd = 0.0
@@ -380,8 +380,8 @@ async def generate_trade_volume_report(loop, pair_contract_address, time_period,
         return
 
     # get start and end block for give timeperiod using powerloom public api
-    response = requests.request(
-        'GET', 'https://uniswapv2-staging.powerloom.io//api/v1/api/v2-pairs',
+    response = httpx.get(
+        url='https://uniswapv2-staging.powerloom.io//api/v1/api/v2-pairs',
         headers={'Content-Type': 'text/plain'}, data={}, timeout=30,
     )
     if response.status_code == 200:

@@ -151,6 +151,11 @@ class UniswapFunctions(BaseModel):
     retrial_attempts: int
 
 
+class Logs(BaseModel):
+    trace_enabled: bool
+    write_to_files: bool
+
+
 class Settings(BaseModel):
     namespace: str
     core_api: CoreAPI
@@ -174,3 +179,4 @@ class Settings(BaseModel):
     redis: Redis
     redis_reader: RedisReader
     webhook_listener: WebhookListener
+    logs: Logs

@@ -143,5 +143,9 @@
         "port": 9090,
         "root": "https://pooler-callback.com",
         "commit_confirmation_callback_path": "commit_confirm"
+    },
+    "logs": {
+        "trace_enabled": false,
+        "write_to_files": true
     }
 }

@@ -5,7 +5,7 @@ from functools import wraps
 from itertools import repeat
 
 import eth_abi
-import requests
+import httpx
 from async_limits import parse_many as limit_parse_many
 from eth_abi.codec import ABICodec
 from eth_utils import keccak
@@ -95,12 +95,12 @@ class ConstructRPC:
             for _url in rpc_urls:
                 try:
                     retry[_url] += 1
-                    r = requests.post(_url, json=q_s, timeout=5)
+                    r = httpx.post(url=_url, json=q_s, timeout=5)
                     json_response = r.json()
                 except (
-                    requests.exceptions.Timeout,
-                    requests.exceptions.ConnectionError,
-                    requests.exceptions.HTTPError,
+                    httpx.TimeoutException,
+                    httpx.ConnectError,
+                    httpx.HTTPStatusError,
                 ):
                     pass
                 except Exception:
@@ -412,7 +412,7 @@ def batch_eth_call_on_block_range(rpc_endpoint, abi_dict, function_name, contrac
 
     rpc_response = []
     try:
-        response = requests.post(url=rpc_endpoint, json=rpc_query)
+        response = httpx.post(url=rpc_endpoint, json=rpc_query)
         response = response.json()
     except Exception as e:
         exc = RPCException(
@@ -484,7 +484,7 @@ def batch_eth_get_block(rpc_endpoint, from_block, to_block):
         request_id += 1
 
     try:
-        response = requests.post(url=rpc_endpoint, json=rpc_query)
+        response = httpx.post(url=rpc_endpoint, json=rpc_query)
         response = response.json()
     except Exception as e:
         exc = RPCException(

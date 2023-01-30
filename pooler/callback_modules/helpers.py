@@ -9,7 +9,7 @@ from urllib.parse import urljoin
 from uuid import uuid4
 
 import aio_pika
-import requests
+import httpx
 from aio_pika import IncomingMessage
 from aio_pika.pool import Pool
 from eth_utils import keccak
@@ -189,7 +189,7 @@ class AuditProtocolCommandsHelper:
     def set_commit_callback_url(cls, pair_contract_address, stream, redis_conn: aioredis.Redis):
         project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.namespace}'
         if not redis_conn.sismember(f'uniswap:{settings.namespace}:callbackURLSetFor', project_id):
-            r = requests.post(
+            r = httpx.post(
                 url=urljoin(
                     settings.audit_protocol_engine.url,
                     f'/{project_id}/confirmations/callback',
@@ -225,11 +225,11 @@ class AuditProtocolCommandsHelper:
                         raise attempt.retry_state.outcome.exception()
                     else:
                         raise Exception(
-                            f'Failed audit protocol engine call with status code: {response_status_code} and response: {response}'
+                            f'Failed audit protocol engine call with status code: {response_status_code} and response: {response}',
                         )
                 else:
                     raise Exception(
-                        f'Failed audit protocol engine call with status code: {response_status_code} and response: {response}'
+                        f'Failed audit protocol engine call with status code: {response_status_code} and response: {response}',
                     )
 
 

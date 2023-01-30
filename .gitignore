@@ -2,7 +2,6 @@
 .python-version
 settings.json
 __pycache__/
-logs/
 .idea/
 .DS_Store
 screenlog*

@@ -3,7 +3,7 @@ import sys
 from functools import wraps
 
 import aiohttp
-import requests
+import httpx
 
 from pooler.settings.config import settings
 from pooler.utils.default_logger import format_exception
@@ -16,18 +16,18 @@ logger = logger.bind(module='PowerLoom|HelperFunctions')
 def make_post_call(url: str, params: dict):
     try:
         logger.debug('Making post call to {}: {}', url, params)
-        response = requests.post(url, json=params)
+        response = httpx.post(url=url, json=params)
         if response.status_code == 200:
             return response.json()
         else:
             msg = f'Failed to make request {params}. Got status response from {url}: {response.status_code}'
             return None
     except (
-            requests.exceptions.Timeout,
-            requests.exceptions.ConnectTimeout,
-            requests.exceptions.ReadTimeout,
-            requests.exceptions.RequestException,
-            requests.exceptions.ConnectionError,
+            httpx.TimeoutException,
+            httpx.ConnectTimeout,
+            httpx.ReadTimeout,
+            httpx.RequestError,
+            httpx.ConnectError,
     ) as terr:
         logger.debug('Error occurred while making the post call.')
         logger.opt(exception=True, lazy=True).error('Error {err}', err=lambda: format_exception(terr))

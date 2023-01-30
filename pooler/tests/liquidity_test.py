@@ -2,7 +2,7 @@ import asyncio
 import json
 import os
 
-import requests
+import httpx
 from redis import asyncio as aioredis
 from uniswap_functions import get_pair_reserves
 from uniswap_functions import load_rate_limiter_scripts
@@ -33,8 +33,8 @@ def fetch_liquidityUSD_graph(pair_address, block_num):
     ) + "}) {\\n reserveUSD \\n token0 { \\n     symbol \\n } \\n token1 { \\n      symbol \\n    }\\n  } \\n }\" }"
     print(uniswap_payload)
     headers = {'Content-Type': 'application/plain'}
-    response = requests.request(
-        'POST', uniswap_url, headers=headers,
+    response = httpx.post(
+        url=uniswap_url, headers=headers,
         data=uniswap_payload, timeout=30,
     )
     if response.status_code == 200:

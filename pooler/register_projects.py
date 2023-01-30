@@ -2,7 +2,7 @@ import json
 import os
 from typing import List
 
-import requests
+import httpx
 from tenacity import retry
 from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
@@ -36,7 +36,7 @@ class RequestException(Exception):
 )
 def register_projects(all_projects: List[str]):
     try:
-        r = requests.post(
+        r = httpx.post(
             url=settings.audit_protocol_engine.url + '/registerProjects',
             json=ProjectRegistrationRequest(projectIDs=all_projects).dict(),
         )
@@ -58,7 +58,7 @@ def register_projects(all_projects: List[str]):
 )
 def register_projects_for_indexing(data: ProjectRegistrationRequestForIndexing):
     try:
-        r = requests.post(
+        r = httpx.post(
             url=settings.audit_protocol_engine.url + '/registerProjectsForIndexing',
             json=data.dict(),
         )
