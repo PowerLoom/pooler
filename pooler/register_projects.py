@@ -8,6 +8,7 @@ from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
 
+from pooler.settings.config import projects
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.models.data_models import IndexingRegistrationData
@@ -74,12 +75,8 @@ def register_projects_for_indexing(data: ProjectRegistrationRequestForIndexing):
 
 
 def main():
-    if not os.path.exists('pooler/static/cached_pair_addresses.json'):
-        registration_logger.error('No cached pair addresses found. Exiting.')
-        return
     namespace = settings.namespace
-    f = open('pooler/static/cached_pair_addresses.json', 'r')
-    all_pairs = json.loads(f.read())
+    all_pairs = [project.contract for project in projects if project.enabled]
 
     if len(all_pairs) <= 0:
         registration_logger.error('No cached pair addresses found. Exiting.')

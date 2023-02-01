@@ -11,6 +11,7 @@ import typer
 from pooler.init_rabbitmq import create_rabbitmq_conn
 from pooler.init_rabbitmq import processhub_command_publish
 from pooler.process_hub_core import PROC_STR_ID_TO_CLASS_MAP
+from pooler.settings.config import projects
 from pooler.settings.config import settings
 from pooler.utils.file_utils import read_json_file
 from pooler.utils.models.message_models import ProcessHubCommand
@@ -161,7 +162,7 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
     dag_chain_height = dag_chain_height if dag_chain_height > -1 else '-inf'
 
     r = redis.Redis(**REDIS_CONN_CONF, single_connection_client=True)
-    pair_contracts = read_json_file('pooler/static/cached_pair_addresses.json')
+    pair_contracts = [project.contract for project in projects if project.enabled]
     pair_projects = [
         'projectID:uniswap_pairContract_trade_volume_{}_' + settings.namespace + ':{}',
         'projectID:uniswap_pairContract_pair_total_reserves_{}_' + settings.namespace + ':{}',

@@ -1,3 +1,4 @@
+from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Union
@@ -156,6 +157,33 @@ class Logs(BaseModel):
     write_to_files: bool
 
 
+class ProjectConfigPaths(BaseModel):
+    projects_path: str
+    projects_config_path: str
+
+
+class Project(BaseModel):
+    contract: str
+    enabled: bool
+
+
+class Projects(BaseModel):
+    projects: List[Project]
+
+
+class ProjectConfig(BaseModel):
+    abi_path: str
+    dependencies: dict
+
+
+class ProjectConfigCreate(BaseModel):
+    __root__: Dict[str, ProjectConfig]
+
+
+class ProjectsConfig(BaseModel):
+    config: ProjectConfigCreate
+
+
 class Settings(BaseModel):
     namespace: str
     core_api: CoreAPI
@@ -180,3 +208,4 @@ class Settings(BaseModel):
     redis_reader: RedisReader
     webhook_listener: WebhookListener
     logs: Logs
+    project_config_paths: ProjectConfigPaths

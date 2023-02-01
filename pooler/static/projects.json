@@ -1,0 +1,12 @@
+{
+    "projects": [
+        {
+            "contract": "0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc",
+            "enabled": true
+        },
+        {
+            "contract": "0x470e8de2ebaef52014a47cb5e6af86884947f08c",
+            "enabled": true
+        }
+    ]
+}

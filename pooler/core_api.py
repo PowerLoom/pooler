@@ -21,6 +21,7 @@ from pooler.auth.helpers.helpers import incr_success_calls_count
 from pooler.auth.helpers.helpers import inject_rate_limit_fail_response
 from pooler.auth.helpers.helpers import rate_limit_auth_check
 from pooler.auth.helpers.redis_conn import RedisPoolCache as AuthRedisPoolCache
+from pooler.settings.config import projects
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.file_utils import read_json_file
@@ -676,7 +677,7 @@ async def get_v2_tokens_recent_logs(
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
     pair_tokens_addresses = {}
-    all_pair_contracts = read_json_file('pooler/static/cached_pair_addresses.json', rest_logger)
+    all_pair_contracts = [project.contract for project in projects if project.enabled]
     redis_conn = await request.app.state.redis_pool
 
     # get pair's token addresses ( pair -> token0, token1)

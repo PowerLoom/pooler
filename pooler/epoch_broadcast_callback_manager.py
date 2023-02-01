@@ -10,6 +10,7 @@ from signal import SIGTERM
 import redis
 from setproctitle import setproctitle
 
+from pooler.settings.config import projects
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.rabbitmq_helpers import RabbitmqSelectLoopInteractor
@@ -24,11 +25,7 @@ def append_epoch_context(msg_json: dict):
     if injected_contract:
         msg_json['contracts'] = [injected_contract.lower()]
         return
-    contracts = list()
-    if os.path.exists('pooler/static/cached_pair_addresses.json'):
-        with open('pooler/static/cached_pair_addresses.json', 'r') as fp:
-            # the file contains an array of pair contract addresses
-            contracts = json.load(fp)
+    contracts = [project.contract for project in projects if project.enabled]
     msg_json['contracts'] = contracts
 
 

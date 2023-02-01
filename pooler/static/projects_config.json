@@ -1,0 +1,16 @@
+{
+    "config": {
+        "0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc": {
+            "abi_path": "pooler/static/abis/IERC20.json",
+            "dependencies": {
+
+            }
+        },
+        "0x470e8de2ebaef52014a47cb5e6af86884947f08c": {
+            "abi_path": "pooler/static/abis/IERC20.json",
+            "dependencies": {
+
+            }
+        }
+    }
+}
