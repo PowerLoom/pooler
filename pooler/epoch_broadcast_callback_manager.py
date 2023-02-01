@@ -20,15 +20,6 @@ from pooler.utils.redis.redis_keys import powerloom_broadcast_id_zset
 from pooler.utils.redis.redis_keys import uniswap_cb_broadcast_processing_logs_zset
 
 
-def append_epoch_context(msg_json: dict):
-    injected_contract = os.getenv('EPOCH_CONTEXT_INJECT')
-    if injected_contract:
-        msg_json['contracts'] = [injected_contract.lower()]
-        return
-    contracts = [project.contract for project in projects if project.enabled]
-    msg_json['contracts'] = contracts
-
-
 class EpochCallbackManager(Process):
     def __init__(self, name, **kwargs):
         Process.__init__(self, name=name, **kwargs)
@@ -49,7 +40,6 @@ class EpochCallbackManager(Process):
     def _epoch_broadcast_callback(self, dont_use_ch, method, properties, body):
         broadcast_json = json.loads(body)
         self._logger.debug('Got epoch broadcast: {}', broadcast_json)
-        append_epoch_context(broadcast_json)
 
         callback_exchange_name = f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}'
         with create_redis_conn(self._connection_pool) as r:

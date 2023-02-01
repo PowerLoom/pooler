@@ -15,10 +15,11 @@ from pydantic import ValidationError
 from setproctitle import setproctitle
 
 from pooler.callback_modules.uniswap.core import warm_up_cache_for_snapshot_constructors
+from pooler.settings.config import projects
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
-from pooler.utils.models.message_models import PowerloomCallbackEpoch
 from pooler.utils.models.message_models import PowerloomCallbackProcessMessage
+from pooler.utils.models.message_models import SystemEpochStatusReport
 from pooler.utils.rabbitmq_helpers import RabbitmqSelectLoopInteractor
 from pooler.utils.redis.redis_conn import create_redis_conn
 from pooler.utils.redis.redis_conn import REDIS_CONN_CONF
@@ -68,7 +69,7 @@ class ProcessorDistributor(multiprocessing.Process):
             'Got processed epoch to distribute among processors for total reserves of a pair: {}', body,
         )
         try:
-            msg_obj: PowerloomCallbackEpoch = PowerloomCallbackEpoch.parse_raw(body)
+            msg_obj: PowerloomCallbackEpoch = SystemEpochStatusReport.parse_raw(body)
         except ValidationError:
             self._logger.opt(exception=True).error('Bad message structure of epoch callback')
             return
@@ -78,8 +79,8 @@ class ProcessorDistributor(multiprocessing.Process):
 
         # warm-up cache before constructing snapshots
         self.ev_loop.run_until_complete(self._warm_up_cache_for_epoch_data(msg_obj=msg_obj))
-
-        for contract in msg_obj.contracts:
+        contracts = [project.contract for project in projects if project.enabled]
+        for contract in contracts:
             contract = contract.lower()
             pair_total_reserves_process_unit = PowerloomCallbackProcessMessage(
                 begin=msg_obj.begin,
