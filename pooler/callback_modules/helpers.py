@@ -9,12 +9,10 @@ from urllib.parse import urljoin
 from uuid import uuid4
 
 import aio_pika
-import httpx
 from aio_pika import IncomingMessage
 from aio_pika.pool import Pool
 from eth_utils import keccak
 from httpx import AsyncClient
-from loguru import logger
 from redis import asyncio as aioredis
 from setproctitle import setproctitle
 from tenacity import AsyncRetrying
@@ -46,163 +44,6 @@ async def get_rabbitmq_channel(connection_pool) -> aio_pika.Channel:
 
 
 class AuditProtocolCommandsHelper:
-    @classmethod
-    async def set_diff_rule_for_pair_reserves(
-            cls, pair_contract_address, session: AsyncClient,
-            redis_conn: aioredis.Redis, stream='pair_total_reserves',
-    ):
-        project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.namespace}'
-        if not await redis_conn.sismember(f'uniswap:diffRuleSetFor:{settings.namespace}', project_id):
-            """ Setup diffRules for this market"""
-            # retry below call given at settings.audit_protocol_engine.RETRY
-            async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(settings.audit_protocol_engine.retry)):
-                with attempt:
-                    response_obj = await session.post(
-                        url=urljoin(
-                            settings.audit_protocol_engine.url,
-                            f'/{project_id}/diffRules',
-                        ),
-                        json={
-                            'rules': [
-                                {
-                                    'ruleType': 'ignore',
-                                    'field': 'chainHeightRange',
-                                    'fieldType': 'map',
-                                    'ignoreMemberFields': ['begin', 'end'],
-                                },
-                                {
-                                    'ruleType': 'compare',
-                                    'field': 'token0Reserves',
-                                    'fieldType': 'map',
-                                    'operation': 'listSlice',
-                                    'memberFields': -1,
-                                },
-                                {
-                                    'ruleType': 'compare',
-                                    'field': 'token1Reserves',
-                                    'fieldType': 'map',
-                                    'operation': 'listSlice',
-                                    'memberFields': -1,
-                                },
-
-                                {
-                                    'ruleType': 'ignore',
-                                    'field': 'broadcast_id',
-                                    'fieldType': 'str',
-                                },
-
-                                {
-                                    'ruleType': 'ignore',
-                                    'field': 'timestamp',
-                                    'fieldType': 'float',
-                                },
-                            ],
-                        },
-                    )
-                    response_status_code = response_obj.status_code
-                    response = response_obj.json() or {}
-                    helper_logger.debug(
-                        'Response code on setting diff rule on audit protocol: {}', response_status_code,
-                    )
-                    if response_status_code in range(200, 300):
-                        await redis_conn.sadd(f'uniswap:diffRuleSetFor:{settings.namespace}', project_id)
-                        return {'message': f'success status code: {response_status_code}', 'response': response}
-                    elif response_status_code == 500 or response_status_code == 502:
-                        return {
-                            'message': f'failed with status code: {response_status_code}', 'response': response,
-                        }  # ignore 500 and 502 errors
-                    else:
-                        raise Exception(
-                            'Failed audit protocol engine call with status code: {} and response: {}'.format(
-                                response_status_code, response,
-                            ),
-                        )
-
-    @classmethod
-    async def set_diff_rule_for_trade_volume(
-            cls, pair_contract_address, session: AsyncClient,
-            redis_conn: aioredis.Redis = None, stream='trade_volume',
-
-    ):
-        project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.namespace}'
-        if not await redis_conn.sismember(f'uniswap:diffRuleSetFor:{settings.namespace}', project_id):
-            """ Setup diffRules for this market"""
-            # retry below call given at settings.audit_protocol_engine.RETRY
-            async for attempt in AsyncRetrying(reraise=True, stop=stop_after_attempt(settings.audit_protocol_engine.retry)):
-                with attempt:
-                    response_obj = await session.post(
-                        url=urljoin(
-                            settings.audit_protocol_engine.url,
-                            f'/{project_id}/diffRules',
-                        ),
-                        json={
-                            'rules': [
-                                {
-                                    'ruleType': 'ignore',
-                                    'field': 'chainHeightRange',
-                                    'fieldType': 'map',
-                                    'ignoreMemberFields': ['begin', 'end'],
-                                },
-                                {
-                                    'ruleType': 'ignore',
-                                    'field': 'broadcast_id',
-                                    'fieldType': 'str',
-                                },
-                                {
-                                    'ruleType': 'ignore',
-                                    'field': 'timestamp',
-                                    'fieldType': 'float',
-                                },
-                                {
-                                    'ruleType': 'ignore',
-                                    'field': 'events',
-                                    'fieldType': 'float',
-                                },
-                                {
-                                    'ruleType': 'ignore',
-                                    'field': 'recent_logs',
-                                    'fieldType': 'float',
-                                },
-                            ],
-                        },
-                    )
-                    response_status_code = response_obj.status_code
-                    response = response_obj.json() or {}
-                    helper_logger.debug(
-                        'Response code on setting diff rule on audit protocol: {}', response_status_code,
-                    )
-                    if response_status_code in range(200, 300):
-                        await redis_conn.sadd(f'uniswap:diffRuleSetFor:{settings.namespace}', project_id)
-                        return {'message': f'success status code: {response_status_code}', 'response': response}
-                    elif response_status_code == 500 or response_status_code == 502:
-                        return {
-                            'message': f'failed with status code: {response_status_code}', 'response': response,
-                        }  # ignore 500 and 502 errors
-                    else:
-                        raise Exception(
-                            'Failed audit protocol engine call with status code: {} and response: {}'.format(
-                                response_status_code, response,
-                            ),
-                        )
-
-    @classmethod
-    def set_commit_callback_url(cls, pair_contract_address, stream, redis_conn: aioredis.Redis):
-        project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.namespace}'
-        if not redis_conn.sismember(f'uniswap:{settings.namespace}:callbackURLSetFor', project_id):
-            r = httpx.post(
-                url=urljoin(
-                    settings.audit_protocol_engine.url,
-                    f'/{project_id}/confirmations/callback',
-                ),
-                json={
-                    'callbackURL': urljoin(
-                        settings.webhook_listener.root,
-                        settings.webhook_listener.commit_confirmation_callback_path,
-                    ),
-                },
-            )
-            if r.status_code in range(200, 300):
-                redis_conn.sadd(f'uniswap:{settings.namespace}:callbackURLSetFor', project_id)
 
     @classmethod
     async def commit_payload(cls, report_payload: PayloadCommitAPIRequest, session: AsyncClient):
