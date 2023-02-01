@@ -1,5 +1,3 @@
-import json
-import os
 from typing import List
 
 import httpx
@@ -11,9 +9,7 @@ from tenacity import wait_random_exponential
 from pooler.settings.config import projects
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
-from pooler.utils.models.data_models import IndexingRegistrationData
 from pooler.utils.models.data_models import ProjectRegistrationRequest
-from pooler.utils.models.data_models import ProjectRegistrationRequestForIndexing
 
 
 registration_logger = logger.bind(
@@ -51,74 +47,21 @@ def register_projects(all_projects: List[str]):
         raise RequestException
 
 
-@retry(
-    reraise=True,
-    retry=retry_if_exception_type(RequestException),
-    wait=wait_random_exponential(multiplier=2, max=128),
-    stop=stop_after_attempt(RETRY_COUNT),
-)
-def register_projects_for_indexing(data: ProjectRegistrationRequestForIndexing):
-    try:
-        r = httpx.post(
-            url=settings.audit_protocol_engine.url + '/registerProjectsForIndexing',
-            json=data.dict(),
-        )
-
-    except:
-        raise RequestException
-
-    if r.status_code == 200:
-        registration_logger.info('Successfully registered projects for indexing with audit protocol.')
-    else:
-        registration_logger.error('Failed to register projects for indexing with audit protocol.')
-        raise RequestException
-
-
 def main():
     namespace = settings.namespace
-    all_pairs = [project.contract for project in projects if project.enabled]
+    all_projects = [project for project in projects if project.enabled]
 
-    if len(all_pairs) <= 0:
-        registration_logger.error('No cached pair addresses found. Exiting.')
+    if len(all_projects) <= 0:
+        registration_logger.error('No projects found. Exiting.')
         return
 
-    registration_logger.info(f'Found {len(all_pairs)} pairs to register with audit protocol.')
+    registration_logger.info(f'Found {len(all_projects)} pairs to register with audit protocol.')
 
-    all_projects = []
-    for contract in all_pairs:
-        pair_reserve_template = f'uniswap_pairContract_pair_total_reserves_{contract}_{namespace}'
-        pair_trade_volume_template = f'uniswap_pairContract_trade_volume_{contract}_{namespace}'
-        all_projects.append(pair_reserve_template)
-        all_projects.append(pair_trade_volume_template)
+    project_names = []
+    for project in all_projects:
+        project_names.append(f'{project.contract}_{project.action}_{namespace}')
 
-    all_projects.append(f'uniswap_V2PairsSummarySnapshot_{namespace}')
-    all_projects.append(f'uniswap_V2TokensSummarySnapshot_{namespace}')
-    all_projects.append(f'uniswap_V2DailyStatsSnapshot_{namespace}')
-
-    register_projects(all_projects)
-
-    indexer_registration_data = []
-    for contract in all_pairs:
-        addr = contract.lower()
-        indexer_registration_data.append(
-            IndexingRegistrationData(
-                projectID=f'uniswap_pairContract_pair_total_reserves_{addr}_{namespace}',
-                indexerConfig={'series': ['0']},
-            ),
-        )
-        indexer_registration_data.append(
-            IndexingRegistrationData(
-                projectID=f'uniswap_pairContract_trade_volume_{addr}_{namespace}',
-                indexerConfig={'series': ['24h', '7d']},
-            ),
-        )
-
-    data = ProjectRegistrationRequestForIndexing(
-        projects=indexer_registration_data,
-        namespace=settings.namespace,
-    )
-
-    register_projects_for_indexing(data)
+    register_projects(project_names)
 
 
 if __name__ == '__main__':

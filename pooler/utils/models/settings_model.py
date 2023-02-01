@@ -165,6 +165,7 @@ class ProjectConfigPaths(BaseModel):
 class Project(BaseModel):
     contract: str
     enabled: bool
+    action: str
 
 
 class Projects(BaseModel):
