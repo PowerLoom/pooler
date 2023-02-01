@@ -11,6 +11,9 @@ poetry run python -m pooler.register_projects || exit 1
 echo 'waiting for processes to start..';
 sleep 10
 
+poetry run python -m pooler.processhub_cmd start ProcessorDistributor
+sleep 3
+
 poetry run python -m pooler.processhub_cmd start EpochCallbackManager
 sleep 3
 

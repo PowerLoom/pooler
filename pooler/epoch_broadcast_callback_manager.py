@@ -38,9 +38,11 @@ class EpochCallbackManager(Process):
             self._callback_q_config = json.load(f)
         self.rabbitmq_interactor = None
         self._shutdown_initiated = False
+        self._project_actions = set([project.action for project in projects])
 
     # TODO: to make a tryly async consumer, define the work bit in here and let it run as a thread
     #       use self._rmq_callback_threads to monitor, join and clean up launched 'works'
+
     def _epoch_broadcast_callback_work(self):
         pass
 

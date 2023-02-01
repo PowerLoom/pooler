@@ -19,6 +19,7 @@ import redis
 from setproctitle import setproctitle
 
 from pooler.epoch_broadcast_callback_manager import EpochCallbackManager
+from pooler.processor_distributor import ProcessorDistributor
 from pooler.settings.config import settings
 from pooler.system_epoch_detector import EpochDetectorProcess
 from pooler.utils.default_logger import logger
@@ -37,6 +38,11 @@ PROC_STR_ID_TO_CLASS_MAP = {
     'SystemEpochDetector': {
         'class': EpochDetectorProcess,
         'name': 'PowerLoom|SystemEpochDetector',
+        'target': None,
+    },
+    'ProcessorDistributor': {
+        'class': ProcessorDistributor,
+        'name': 'PowerLoom|ProcessorDistributor',
         'target': None,
     },
 }
