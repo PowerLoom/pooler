@@ -1,9 +1,4 @@
 {
-  "callback_topics": {
-    "pair_total_reserves": {
-      "sub_topics": ["processor"]
-    }
-  },
   "callback_workers": {
     "pair_total_reserves": [
       {

@@ -33,10 +33,6 @@ class ProcessorDistributor(multiprocessing.Process):
         self._q = queue.Queue()
         self._rabbitmq_interactor = None
         self._shutdown_initiated = False
-        # logger.add(
-        #     sink='logs/' + self._unique_id + '_{time}.log', rotation='20MB', retention=20, compression='gz'
-        # )
-        # setup_loguru_intercept()
 
     async def _warm_up_cache_for_epoch_data(self, msg_obj: PowerloomCallbackProcessMessage):
         """
@@ -61,15 +57,12 @@ class ProcessorDistributor(multiprocessing.Process):
         return None
 
     def _distribute_callbacks(self, dont_use_ch, method, properties, body):
-        # following check avoids processing messages meant for routing keys for sub workers
-        # for eg: 'powerloom-backend-callback.pair_total_reserves.seeder'
-        if 'pair_total_reserves' not in method.routing_key or method.routing_key.split('.')[1] != 'pair_total_reserves':
-            return
+
         self._logger.debug(
             'Got processed epoch to distribute among processors for total reserves of a pair: {}', body,
         )
         try:
-            msg_obj: PowerloomCallbackEpoch = SystemEpochStatusReport.parse_raw(body)
+            msg_obj: SystemEpochStatusReport = SystemEpochStatusReport.parse_raw(body)
         except ValidationError:
             self._logger.opt(exception=True).error('Bad message structure of epoch callback')
             return
@@ -79,9 +72,9 @@ class ProcessorDistributor(multiprocessing.Process):
 
         # warm-up cache before constructing snapshots
         self.ev_loop.run_until_complete(self._warm_up_cache_for_epoch_data(msg_obj=msg_obj))
-        contracts = [project.contract for project in projects if project.enabled]
-        for contract in contracts:
-            contract = contract.lower()
+        enabled_projects = [project for project in projects if project.enabled]
+        for project in enabled_projects:
+            contract = project.contract.lower()
             pair_total_reserves_process_unit = PowerloomCallbackProcessMessage(
                 begin=msg_obj.begin,
                 end=msg_obj.end,
@@ -89,8 +82,8 @@ class ProcessorDistributor(multiprocessing.Process):
                 broadcast_id=msg_obj.broadcast_id,
             )
             self._rabbitmq_interactor.enqueue_msg_delivery(
-                exchange=f'{settings.rabbitmq.setup.callbacks.exchange}.subtopics:{settings.namespace}',
-                routing_key=f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.pair_total_reserves_worker.processor',
+                exchange=f'{settings.rabbitmq.setup.callbacks.exchange}.workers:{settings.namespace}',
+                routing_key=f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.{project.action}_worker',
                 msg_body=pair_total_reserves_process_unit.json(),
             )
             self._logger.debug(
@@ -101,8 +94,8 @@ class ProcessorDistributor(multiprocessing.Process):
             'update': {
                 'action': 'RabbitMQ.Publish',
                 'info': {
-                    'routing_key': f'powerloom-backend-callback:{settings.namespace}.pair_total_reserves_worker.processor',
-                    'exchange': f'{settings.rabbitmq.setup.callbacks.exchange}.subtopics:{settings.namespace}',
+                    'routing_key': f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.{project.action}_worker',
+                    'exchange': f'{settings.rabbitmq.setup.callbacks.exchange}.workers:{settings.namespace}',
                     'msg': msg_obj.dict(),
                 },
             },

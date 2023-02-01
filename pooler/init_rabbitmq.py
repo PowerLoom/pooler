@@ -1,8 +1,7 @@
-import json
-
 import aio_pika
 import pika
 
+from pooler.settings.config import projects
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 
@@ -51,9 +50,6 @@ def processhub_command_publish(ch: pika.adapters.blocking_connection.BlockingCha
 
 
 def init_callback_queue(ch: pika.adapters.blocking_connection.BlockingChannel) -> None:
-    callback_q_conf_path = f'{settings.rabbitmq.setup.callbacks.path}{settings.rabbitmq.setup.callbacks.config}'
-    with open(callback_q_conf_path, 'r') as f:
-        callback_q_config = json.load(f)
     callback_exchange_name = f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}'
     # exchange declaration for top level callback modules to listen in on
     ch.exchange_declare(exchange=callback_exchange_name, exchange_type='topic', durable=True)
@@ -69,13 +65,15 @@ def init_callback_queue(ch: pika.adapters.blocking_connection.BlockingChannel) -
         exchange_name=callback_exchange_name,
     )
     # for internal worker distribution by top level callback modules
-    sub_topic_exchange_name = f'{settings.rabbitmq.setup.callbacks.exchange}.subtopics:{settings.namespace}'
-    ch.exchange_declare(exchange=sub_topic_exchange_name, exchange_type='direct', durable=True)
-    for topic in callback_q_config['callback_topics'].keys():
-        for sub_topic in callback_q_config['callback_topics'][topic]['sub_topics']:
-            sub_topic_routing_key = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.{topic}_worker.{sub_topic}'
-            queue_name = f'powerloom-backend-cb-{topic}-{sub_topic}:{settings.namespace}:{settings.instance_id}'
-            init_queue(ch, queue_name, sub_topic_routing_key, sub_topic_exchange_name)
+    project_actions = set([project.action for project in projects if project.enabled])
+
+    workers_exchange_name = f'{settings.rabbitmq.setup.callbacks.exchange}.workers:{settings.namespace}'
+    ch.exchange_declare(exchange=workers_exchange_name, exchange_type='direct', durable=True)
+
+    for action in project_actions:
+        topic_routing_key = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.{action}_worker'
+        queue_name = f'powerloom-backend-cb-{action}:{settings.namespace}:{settings.instance_id}'
+        init_queue(ch, queue_name, topic_routing_key, workers_exchange_name)
 
 
 def init_queue(ch: pika.adapters.blocking_connection.BlockingChannel, queue_name: str, routing_key: str, exchange_name: str) -> None:

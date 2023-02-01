@@ -85,8 +85,8 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
     def __init__(self, name: str, **kwargs: dict) -> None:
         super(PairTotalReservesProcessor, self).__init__(
             name=name,
-            rmq_q=f'powerloom-backend-cb-pair_total_reserves-processor:{settings.namespace}:{settings.instance_id}',
-            rmq_routing=f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.pair_total_reserves_worker.processor',
+            rmq_q=f'powerloom-backend-cb-pair_total_reserves:{settings.namespace}:{settings.instance_id}',
+            rmq_routing=f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.pair_total_reserves_worker',
             **kwargs,
         )
         self._rate_limiting_lua_scripts = dict()

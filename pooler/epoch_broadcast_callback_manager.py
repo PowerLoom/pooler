@@ -1,5 +1,4 @@
 import json
-import os
 import signal
 import time
 from multiprocessing import Process
@@ -23,10 +22,6 @@ from pooler.utils.redis.redis_keys import uniswap_cb_broadcast_processing_logs_z
 class EpochCallbackManager(Process):
     def __init__(self, name, **kwargs):
         Process.__init__(self, name=name, **kwargs)
-        callback_q_conf_path = f'{settings.rabbitmq.setup.callbacks.path}{settings.rabbitmq.setup.callbacks.config}'
-        with open(callback_q_conf_path, 'r') as f:
-            # TODO: code the callback modules rabbitmq queue setup into pydantic model
-            self._callback_q_config = json.load(f)
         self.rabbitmq_interactor = None
         self._shutdown_initiated = False
         self._project_actions = set([project.action for project in projects])
@@ -43,9 +38,9 @@ class EpochCallbackManager(Process):
 
         callback_exchange_name = f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}'
         with create_redis_conn(self._connection_pool) as r:
-            for topic in self._callback_q_config['callback_topics'].keys():
+            for action in self._project_actions:
                 # send epoch context to third party worker modules as registered
-                routing_key = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.{topic}'
+                routing_key = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.{action}'
                 self.rabbitmq_interactor.enqueue_msg_delivery(
                     exchange=callback_exchange_name,
                     routing_key=routing_key,
