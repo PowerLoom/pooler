@@ -18,12 +18,12 @@ from httpx import Client
 from httpx import Limits
 from setproctitle import setproctitle
 
-from pooler.callback_modules.data_models import SnapshotterIssue
-from pooler.callback_modules.data_models import SnapshotterIssueSeverity
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.exceptions import GenericExitOnSignal
 from pooler.utils.models.data_models import EpochInfo
+from pooler.utils.models.data_models import SnapshotterIssue
+from pooler.utils.models.data_models import SnapshotterIssueSeverity
 from pooler.utils.models.message_models import SystemEpochStatusReport
 from pooler.utils.rabbitmq_helpers import RabbitmqThreadedSelectLoopInteractor
 from pooler.utils.redis.redis_conn import create_redis_conn

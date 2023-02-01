@@ -19,16 +19,16 @@ from httpx import Timeout
 from pydantic import ValidationError
 from setproctitle import setproctitle
 
-from pooler.callback_modules.data_models import PayloadCommitAPIRequest
-from pooler.callback_modules.data_models import SnapshotterIssue
-from pooler.callback_modules.data_models import SnapshotterIssueSeverity
-from pooler.callback_modules.data_models import SourceChainDetails
-from pooler.callback_modules.helpers import AuditProtocolCommandsHelper
-from pooler.callback_modules.helpers import CallbackAsyncWorker
 from pooler.callback_modules.uniswap.core import get_pair_reserves
 from pooler.callback_modules.uniswap.core import get_pair_trade_volume
 from pooler.settings.config import settings
+from pooler.utils.callback_helpers import AuditProtocolCommandsHelper
+from pooler.utils.callback_helpers import CallbackAsyncWorker
 from pooler.utils.default_logger import logger
+from pooler.utils.models.data_models import PayloadCommitAPIRequest
+from pooler.utils.models.data_models import SnapshotterIssue
+from pooler.utils.models.data_models import SnapshotterIssueSeverity
+from pooler.utils.models.data_models import SourceChainDetails
 from pooler.utils.models.message_models import EpochBase
 from pooler.utils.models.message_models import PowerloomCallbackProcessMessage
 from pooler.utils.models.message_models import UniswapPairTotalReservesSnapshot

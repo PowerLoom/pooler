@@ -19,9 +19,9 @@ from tenacity import AsyncRetrying
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
 
-from pooler.callback_modules.data_models import PayloadCommitAPIRequest
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
+from pooler.utils.models.data_models import PayloadCommitAPIRequest
 from pooler.utils.redis.redis_conn import RedisPoolCache
 
 # setup logger
