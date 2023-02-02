@@ -9,6 +9,7 @@ from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
 from web3 import Web3
 
+from pooler.callback_modules.settings.config import settings as worker_settings
 from pooler.callback_modules.uniswap.constants import erc20_abi
 from pooler.callback_modules.uniswap.constants import global_w3_client
 from pooler.callback_modules.uniswap.constants import pair_contract_abi
@@ -89,7 +90,7 @@ async def get_pair(
     reraise=True,
     retry=retry_if_exception_type(RPCException),
     wait=wait_random_exponential(multiplier=2, max=10),
-    stop=stop_after_attempt(settings.uniswap_functions.retrial_attempts),
+    stop=stop_after_attempt(worker_settings.uniswap_functions.retrial_attempts),
     before_sleep=inject_web3_provider_on_exception,
 )
 async def get_pair_metadata(
@@ -187,7 +188,7 @@ async def get_pair_metadata(
             # special case to handle maker token
             maker_token0 = None
             maker_token1 = None
-            if(Web3.toChecksumAddress(settings.contract_addresses.MAKER) == Web3.toChecksumAddress(token0Addr)):
+            if(Web3.toChecksumAddress(worker_settings.contract_addresses.MAKER) == Web3.toChecksumAddress(token0Addr)):
                 token0_name = get_maker_pair_data('name')
                 token0_symbol = get_maker_pair_data('symbol')
                 maker_token0 = True
@@ -196,7 +197,7 @@ async def get_pair_metadata(
                 tasks.append(token0.functions.symbol())
             tasks.append(token0.functions.decimals())
 
-            if(Web3.toChecksumAddress(settings.contract_addresses.MAKER) == Web3.toChecksumAddress(token1Addr)):
+            if(Web3.toChecksumAddress(worker_settings.contract_addresses.MAKER) == Web3.toChecksumAddress(token1Addr)):
                 token1_name = get_maker_pair_data('name')
                 token1_symbol = get_maker_pair_data('symbol')
                 maker_token1 = True

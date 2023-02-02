@@ -9,6 +9,7 @@ from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
 from web3 import Web3
 
+from pooler.callback_modules.settings.config import settings as worker_settings
 from pooler.callback_modules.uniswap.constants import global_w3_client
 from pooler.callback_modules.uniswap.constants import pair_contract_abi
 from pooler.callback_modules.uniswap.constants import UNISWAP_EVENTS_ABI
@@ -17,7 +18,6 @@ from pooler.callback_modules.uniswap.helpers import get_block_details_in_block_r
 from pooler.callback_modules.uniswap.helpers import get_pair_metadata
 from pooler.callback_modules.uniswap.pricing import get_eth_price_usd
 from pooler.callback_modules.uniswap.pricing import get_token_price_in_block_range
-from pooler.settings.config import settings
 from pooler.utils.default_logger import format_exception
 from pooler.utils.default_logger import logger
 from pooler.utils.models.data_models import epoch_event_trade_data
@@ -43,7 +43,7 @@ core_logger = logger.bind(module='PowerLoom|UniswapCore')
     reraise=True,
     retry=retry_if_exception_type(RPCException),
     wait=wait_random_exponential(multiplier=2, max=10),
-    stop=stop_after_attempt(settings.uniswap_functions.retrial_attempts),
+    stop=stop_after_attempt(worker_settings.uniswap_functions.retrial_attempts),
     before_sleep=inject_web3_provider_on_exception,
 )
 async def get_pair_reserves(
@@ -276,7 +276,7 @@ def extract_trade_volume_log(event_name, log, pair_per_token_metadata, token0_pr
     reraise=True,
     retry=retry_if_exception_type(RPCException),
     wait=wait_random_exponential(multiplier=2, max=10),
-    stop=stop_after_attempt(settings.uniswap_functions.retrial_attempts),
+    stop=stop_after_attempt(worker_settings.uniswap_functions.retrial_attempts),
     before_sleep=inject_web3_provider_on_exception,
 )
 async def get_pair_trade_volume(

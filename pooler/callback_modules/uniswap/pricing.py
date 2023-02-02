@@ -4,6 +4,7 @@ import json
 from redis import asyncio as aioredis
 from web3 import Web3
 
+from pooler.callback_modules.settings.config import settings as worker_settings
 from pooler.callback_modules.uniswap.constants import factory_contract_obj
 from pooler.callback_modules.uniswap.constants import global_w3_client
 from pooler.callback_modules.uniswap.constants import pair_contract_abi
@@ -59,19 +60,19 @@ async def get_eth_price_usd(
         # fetch metadata to find order of each token in given pairs
         dai_eth_pair_metadata, usdc_eth_pair_metadata, usdt_eth_pair_metadata = await asyncio.gather(
             get_pair_metadata(
-                pair_address=settings.contract_addresses.DAI_WETH_PAIR,
+                pair_address=worker_settings.contract_addresses.DAI_WETH_PAIR,
                 loop=loop,
                 redis_conn=redis_conn,
                 rate_limit_lua_script_shas=rate_limit_lua_script_shas,
             ),
             get_pair_metadata(
-                pair_address=settings.contract_addresses.USDC_WETH_PAIR,
+                pair_address=worker_settings.contract_addresses.USDC_WETH_PAIR,
                 loop=loop,
                 redis_conn=redis_conn,
                 rate_limit_lua_script_shas=rate_limit_lua_script_shas,
             ),
             get_pair_metadata(
-                pair_address=settings.contract_addresses.USDT_WETH_PAIR,
+                pair_address=worker_settings.contract_addresses.USDT_WETH_PAIR,
                 loop=loop,
                 redis_conn=redis_conn,
                 rate_limit_lua_script_shas=rate_limit_lua_script_shas,
@@ -80,13 +81,13 @@ async def get_eth_price_usd(
         # check if stable it token0 or token1
         dai_token_order = 0 if Web3.toChecksumAddress(
             dai_eth_pair_metadata['token0']['address'],
-        ) == Web3.toChecksumAddress(settings.contract_addresses.DAI) else 1
+        ) == Web3.toChecksumAddress(worker_settings.contract_addresses.DAI) else 1
         usdc_token_order = 0 if Web3.toChecksumAddress(
             usdc_eth_pair_metadata['token0']['address'],
-        ) == Web3.toChecksumAddress(settings.contract_addresses.USDC) else 1
+        ) == Web3.toChecksumAddress(worker_settings.contract_addresses.USDC) else 1
         usdt_token_order = 0 if Web3.toChecksumAddress(
             usdt_eth_pair_metadata['token0']['address'],
-        ) == Web3.toChecksumAddress(settings.contract_addresses.USDT) else 1
+        ) == Web3.toChecksumAddress(worker_settings.contract_addresses.USDT) else 1
 
         # we're making multiple batch calls here
         await check_rpc_rate_limit(
@@ -108,15 +109,15 @@ async def get_eth_price_usd(
         # NOTE: We can further optimize below call by batching them all, but that would be a large batch call for RPC node
         dai_eth_pair_reserves_list = batch_eth_call_on_block_range(
             rpc_endpoint=web3_provider.get('rpc_url'), abi_dict=pair_abi_dict, function_name='getReserves',
-            contract_address=settings.contract_addresses.DAI_WETH_PAIR, from_block=from_block, to_block=to_block,
+            contract_address=worker_settings.contract_addresses.DAI_WETH_PAIR, from_block=from_block, to_block=to_block,
         )
         usdc_eth_pair_reserves_list = batch_eth_call_on_block_range(
             rpc_endpoint=web3_provider.get('rpc_url'), abi_dict=pair_abi_dict, function_name='getReserves',
-            contract_address=settings.contract_addresses.USDC_WETH_PAIR, from_block=from_block, to_block=to_block,
+            contract_address=worker_settings.contract_addresses.USDC_WETH_PAIR, from_block=from_block, to_block=to_block,
         )
         eth_usdt_pair_reserves_list = batch_eth_call_on_block_range(
             rpc_endpoint=web3_provider.get('rpc_url'), abi_dict=pair_abi_dict, function_name='getReserves',
-            contract_address=settings.contract_addresses.USDT_WETH_PAIR, from_block=from_block, to_block=to_block,
+            contract_address=worker_settings.contract_addresses.USDT_WETH_PAIR, from_block=from_block, to_block=to_block,
         )
 
         block_count = 0
@@ -264,7 +265,7 @@ async def get_token_derived_eth(
 ):
     token_derived_eth_dict = dict()
 
-    if Web3.toChecksumAddress(white_token_metadata['address']) == Web3.toChecksumAddress(settings.contract_addresses.WETH):
+    if Web3.toChecksumAddress(white_token_metadata['address']) == Web3.toChecksumAddress(worker_settings.contract_addresses.WETH):
         # set derived eth as 1 if token is weth
         for block_num in range(from_block, to_block + 1):
             token_derived_eth_dict[block_num] = 1
@@ -284,12 +285,12 @@ async def get_token_derived_eth(
     router_abi_dict = contract_abi_dict(router_contract_abi)
     token_derived_eth_list = batch_eth_call_on_block_range(
         rpc_endpoint=web3_provider.get('rpc_url'), abi_dict=router_abi_dict, function_name='getAmountsOut',
-        contract_address=settings.contract_addresses.iuniswap_v2_router, from_block=from_block,
+        contract_address=worker_settings.contract_addresses.iuniswap_v2_router, from_block=from_block,
         to_block=to_block, params=[
             10 ** int(white_token_metadata['decimals']),
             [
                 Web3.toChecksumAddress(white_token_metadata['address']),
-                Web3.toChecksumAddress(settings.contract_addresses.WETH),
+                Web3.toChecksumAddress(worker_settings.contract_addresses.WETH),
             ],
         ],
     )
@@ -355,7 +356,7 @@ async def get_token_price_in_block_range(
                 }
                 return price_dict
 
-        if Web3.toChecksumAddress(token_metadata['address']) == Web3.toChecksumAddress(settings.contract_addresses.WETH):
+        if Web3.toChecksumAddress(token_metadata['address']) == Web3.toChecksumAddress(worker_settings.contract_addresses.WETH):
             token_price_dict = await get_eth_price_usd(
                 loop=loop, from_block=from_block, to_block=to_block, web3_provider=web3_provider,
                 redis_conn=redis_conn, rate_limit_lua_script_shas=rate_limit_lua_script_shas,
@@ -363,7 +364,7 @@ async def get_token_price_in_block_range(
         else:
             token_eth_price_dict = dict()
 
-            for white_token in settings.uniswap_v2_whitelist:
+            for white_token in worker_settings.uniswap_v2_whitelist:
                 white_token = Web3.toChecksumAddress(white_token)
                 pairAddress = await get_pair(
                     factory_contract_obj, white_token, token_metadata['address'],
