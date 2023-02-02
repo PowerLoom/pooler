@@ -675,7 +675,7 @@ async def get_v2_tokens_recent_logs(
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
     pair_tokens_addresses = {}
-    all_pair_contracts = [project.contract for project in enabled_projects]
+    all_pair_contracts = enabled_projects
     redis_conn = await request.app.state.redis_pool
 
     # get pair's token addresses ( pair -> token0, token1)

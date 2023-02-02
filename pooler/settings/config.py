@@ -16,6 +16,4 @@ projects_config = ProjectsConfig(**projects_config_dict).config
 enabled_projects = []
 
 for project_config in projects_config:
-    for project in project_config.projects:
-        if project.enabled:
-            enabled_projects.append(project)
+    enabled_projects.extend(project_config.projects)

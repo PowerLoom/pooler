@@ -80,30 +80,26 @@ def main():
     project_names = []
     for project_config in projects_config:
         for project in project_config.projects:
-            if project.enabled:
-                project_names.append(f'{project_config.project_type}_{project.contract}_{namespace}')
+            project_names.append(f'{project_config.project_type}_{project.lower()}_{namespace}')
 
     registration_logger.info(f'Registered {len(project_names)} pairs to register with audit protocol.')
 
     project_names.append(f'uniswap_V2PairsSummarySnapshot_{namespace}')
     project_names.append(f'uniswap_V2TokensSummarySnapshot_{namespace}')
     project_names.append(f'uniswap_V2DailyStatsSnapshot_{namespace}')
-    print(project_names)
     register_projects(project_names)
 
     indexer_registration_data = []
     for project_config in projects_config:
         for project in project_config.projects:
-            if project.enabled:
-                indexer_registration_data.append(
-                    IndexingRegistrationData(
-                        projectID=f'{project_config.project_type}_{project.contract.lower()}_{namespace}',
-                        indexerConfig={'series': ['0']}
-                        if 'reserves' in project_config.project_type else {'series': ['24h', '7d']},
-                    ),
-                )
+            indexer_registration_data.append(
+                IndexingRegistrationData(
+                    projectID=f'{project_config.project_type}_{project.lower()}_{namespace}',
+                    indexerConfig={'series': ['0']}
+                    if 'reserves' in project_config.project_type else {'series': ['24h', '7d']},
+                ),
+            )
 
-    print(indexer_registration_data)
     data = ProjectRegistrationRequestForIndexing(
         projects=indexer_registration_data,
         namespace=settings.namespace,

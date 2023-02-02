@@ -161,7 +161,7 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
     dag_chain_height = dag_chain_height if dag_chain_height > -1 else '-inf'
 
     r = redis.Redis(**REDIS_CONN_CONF, single_connection_client=True)
-    pair_contracts = [project.contract for project in enabled_projects]
+    pair_contracts = enabled_projects
     pair_projects = [
         'projectID:uniswap_pairContract_trade_volume_{}_' + settings.namespace + ':{}',
         'projectID:uniswap_pairContract_pair_total_reserves_{}_' + settings.namespace + ':{}',

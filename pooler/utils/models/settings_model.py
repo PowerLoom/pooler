@@ -120,11 +120,6 @@ class Logs(BaseModel):
     write_to_files: bool
 
 
-class Project(BaseModel):
-    contract: str
-    enabled: bool
-
-
 class CallBackWorkerConfig(BaseModel):
     module: str
     class_name: str
@@ -134,7 +129,7 @@ class CallBackWorkerConfig(BaseModel):
 
 class ProjectConfig(BaseModel):
     project_type: str
-    projects: List[Project]
+    projects: List[str]
     workers: List[CallBackWorkerConfig]
 
 

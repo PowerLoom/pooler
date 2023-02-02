@@ -74,9 +74,8 @@ class ProcessorDistributor(multiprocessing.Process):
         self.ev_loop.run_until_complete(self._warm_up_cache_for_epoch_data(msg_obj=msg_obj))
         for project_config in projects_config:
             type_ = project_config.project_type
-            enabled_projects = [project for project in project_config.projects if project.enabled]
-            for project in enabled_projects:
-                contract = project.contract.lower()
+            for project in project_config.projects:
+                contract = project.lower()
                 process_unit = PowerloomCallbackProcessMessage(
                     begin=msg_obj.begin,
                     end=msg_obj.end,
