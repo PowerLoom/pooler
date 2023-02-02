@@ -9,7 +9,7 @@ from signal import SIGTERM
 import redis
 from setproctitle import setproctitle
 
-from pooler.settings.config import projects
+from pooler.settings.config import projects_config
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.rabbitmq_helpers import RabbitmqSelectLoopInteractor
@@ -24,7 +24,7 @@ class EpochCallbackManager(Process):
         Process.__init__(self, name=name, **kwargs)
         self.rabbitmq_interactor = None
         self._shutdown_initiated = False
-        self._project_actions = set([project.action for project in projects])
+        self._project_types = set([project_config.project_type for project_config in projects_config])
 
     # TODO: to make a tryly async consumer, define the work bit in here and let it run as a thread
     #       use self._rmq_callback_threads to monitor, join and clean up launched 'works'
@@ -38,9 +38,9 @@ class EpochCallbackManager(Process):
 
         callback_exchange_name = f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}'
         with create_redis_conn(self._connection_pool) as r:
-            for action in self._project_actions:
+            for type_ in self._project_types:
                 # send epoch context to third party worker modules as registered
-                routing_key = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.{action}'
+                routing_key = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.{type_}'
                 self.rabbitmq_interactor.enqueue_msg_delivery(
                     exchange=callback_exchange_name,
                     routing_key=routing_key,

@@ -1,4 +1,3 @@
-from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Union
@@ -52,10 +51,6 @@ class QueueConfig(BaseModel):
     num_instances: int
 
 
-class ModuleQueuesConfig(BaseModel):
-    pair_total_reserves: QueueConfig
-
-
 class Epoch(BaseModel):
     height: int
     head_offset: int
@@ -68,8 +63,6 @@ class RabbitMQExchange(BaseModel):
 
 class RabbitMQCallbacks(BaseModel):
     exchange: str
-    path: str
-    config: str
 
 
 class RabbitMQSetup(BaseModel):
@@ -157,32 +150,26 @@ class Logs(BaseModel):
     write_to_files: bool
 
 
-class ProjectConfigPaths(BaseModel):
-    projects_path: str
-    projects_config_path: str
-
-
 class Project(BaseModel):
     contract: str
     enabled: bool
-    action: str
 
 
-class Projects(BaseModel):
-    projects: List[Project]
+class CallBackWorkerConfig(BaseModel):
+    module: str
+    class_name: str
+    name: str
+    num_instances: Optional[int] = 1
 
 
 class ProjectConfig(BaseModel):
-    abi_path: str
-    dependencies: dict
-
-
-class ProjectConfigCreate(BaseModel):
-    __root__: Dict[str, ProjectConfig]
+    project_type: str
+    projects: List[Project]
+    workers: List[CallBackWorkerConfig]
 
 
 class ProjectsConfig(BaseModel):
-    config: ProjectConfigCreate
+    config: List[ProjectConfig]
 
 
 class Settings(BaseModel):
@@ -200,7 +187,6 @@ class Settings(BaseModel):
     uniswap_contract_abis: UniswapContractAbis
     contract_addresses: ContractAddresses
     uniswap_v2_whitelist: List[str]
-    module_queues_config: ModuleQueuesConfig
     epoch: Epoch
     rabbitmq: RabbitMQ
     audit_protocol_engine: AuditProtocolEngine
@@ -209,4 +195,4 @@ class Settings(BaseModel):
     redis_reader: RedisReader
     webhook_listener: WebhookListener
     logs: Logs
-    project_config_paths: ProjectConfigPaths
+    projects_config_path: str

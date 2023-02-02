@@ -20,6 +20,7 @@ from setproctitle import setproctitle
 
 from pooler.epoch_broadcast_callback_manager import EpochCallbackManager
 from pooler.processor_distributor import ProcessorDistributor
+from pooler.settings.config import projects_config
 from pooler.settings.config import settings
 from pooler.system_epoch_detector import EpochDetectorProcess
 from pooler.utils.default_logger import logger
@@ -46,11 +47,6 @@ PROC_STR_ID_TO_CLASS_MAP = {
         'target': None,
     },
 }
-
-with open('pooler/callback_modules/module_queues_config.json', 'r', encoding='utf-8') as f:
-    contents = json.load(f)
-
-CALLBACK_WORKERS_MAP = contents['callback_workers']
 
 
 class ProcessHubCore(Process):
@@ -85,29 +81,31 @@ class ProcessHubCore(Process):
                             callback_worker_class = k
                             callback_worker_name = worker_process_details['id']
                             callback_worker_unique_id = unique_id
-                            for each_cb_worker_module_file, worker_type_list in CALLBACK_WORKERS_MAP.items():
+
+                            for project_config in projects_config:
                                 self._logger.debug(
                                     'Searching callback workers specified in module {} for worker class {} details',
-                                    each_cb_worker_module_file, callback_worker_class,
+                                    project_config.project_type, callback_worker_class,
                                 )
-                                if type(worker_type_list) is list:
-                                    gen = (
-                                        x for x in worker_type_list if x['class'] == callback_worker_class
+                                gen = (
+                                    worker for worker in project_config.workers if worker.class_name == callback_worker_class
+                                )
+
+                                worker_details = next(gen, None)
+                                if worker_details:
+
+                                    callback_worker_module_file = worker_details.module_name
+                                    self._logger.debug(
+                                        'Found callback worker process initiation name {} for worker class {}',
+                                        callback_worker_name, worker_details.class_name,
                                     )
-                                    worker_details = next(gen, None)
-                                    if worker_details:
-                                        callback_worker_module_file = each_cb_worker_module_file
-                                        self._logger.debug(
-                                            'Found callback worker process initiation name {} for worker class {}',
-                                            callback_worker_name, callback_worker_class,
-                                        )
-                                        break
+                                    break
 
                 if callback_worker_module_file and callback_worker_class and callback_worker_name \
                         and callback_worker_unique_id:
                     worker_class = getattr(
                         importlib.import_module(
-                            f'callback_modules.{callback_worker_module_file}',
+                            callback_worker_module_file,
                         ),
                         callback_worker_class,
                     )
@@ -200,41 +198,29 @@ class ProcessHubCore(Process):
         for signame in [SIGINT, SIGTERM, SIGQUIT, SIGCHLD]:
             signal(signame, self.signal_handler)
 
-        for callback_worker_file, worker_list in CALLBACK_WORKERS_MAP.items():
+        for project_config in projects_config:
             self._logger.debug('=' * 80)
-            self._logger.debug('Launching workers for functionality {}', callback_worker_file)
-            for each_worker in worker_list:
-                # print(each_worker)
+            self._logger.debug('Launching workers for project type {}', project_config.project_type)
+            for worker in project_config.workers:
                 worker_class = getattr(
-                    importlib.import_module(
-                        f'pooler.callback_modules.{callback_worker_file}',
-                    ), each_worker['class'],
+                    importlib.import_module(worker.module), worker.class_name,
                 )
-                worker_count = None
+                worker_count = worker.num_instances
 
-                # check if there is settings-config for workers
-                if each_worker.get('class', '') == 'PairTotalReservesProcessor':
-                    worker_count = settings.module_queues_config.pair_total_reserves.num_instances
-
-                # else if settings-config doesn't exist then use module_queues_config
-                if not worker_count:
-                    worker_count = each_worker.get('num_instances', 1)
-
-                self._spawned_cb_processes_map[each_worker['class']] = dict()
+                self._spawned_cb_processes_map[worker.class_name] = dict()
                 for _ in range(worker_count):
                     unique_id = str(uuid.uuid4())[:5]
-                    unique_name = f'{each_worker["name"]}:{settings.namespace}:{settings.instance_id}' + '-' + unique_id
+                    unique_name = f'{worker.name}:{settings.namespace}:{settings.instance_id}' + '-' + unique_id
                     worker_obj: Process = worker_class(name=unique_name)
                     worker_obj.start()
-                    self._spawned_cb_processes_map[each_worker['class']].update(
+                    self._spawned_cb_processes_map[worker.class_name].update(
                         {unique_id: {'id': unique_name, 'process': worker_obj}},
                     )
                     self._logger.debug(
                         'Process Hub Core launched process {} for callback worker {} with PID: {}',
-                        unique_name, each_worker['class'], worker_obj.pid,
+                        unique_name, worker.class_name, worker_obj.pid,
                     )
 
-                # self._spawned_processes_map[each_worker['name']] = worker_obj
             self._logger.debug('=' * 80)
         self._logger.debug('Starting Internal Process State reporter for Process Hub Core...')
         self._reporter_thread = Thread(target=self.internal_state_reporter)

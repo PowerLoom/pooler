@@ -15,7 +15,7 @@ from pydantic import ValidationError
 from setproctitle import setproctitle
 
 from pooler.callback_modules.uniswap.core import warm_up_cache_for_snapshot_constructors
-from pooler.settings.config import projects
+from pooler.settings.config import projects_config
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.models.message_models import PowerloomCallbackProcessMessage
@@ -72,39 +72,41 @@ class ProcessorDistributor(multiprocessing.Process):
 
         # warm-up cache before constructing snapshots
         self.ev_loop.run_until_complete(self._warm_up_cache_for_epoch_data(msg_obj=msg_obj))
-        enabled_projects = [project for project in projects if project.enabled]
-        for project in enabled_projects:
-            contract = project.contract.lower()
-            pair_total_reserves_process_unit = PowerloomCallbackProcessMessage(
-                begin=msg_obj.begin,
-                end=msg_obj.end,
-                contract=contract,
-                broadcast_id=msg_obj.broadcast_id,
-            )
-            self._rabbitmq_interactor.enqueue_msg_delivery(
-                exchange=f'{settings.rabbitmq.setup.callbacks.exchange}.workers:{settings.namespace}',
-                routing_key=f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.{project.action}_worker',
-                msg_body=pair_total_reserves_process_unit.json(),
-            )
-            self._logger.debug(
-                f'Sent out epoch to be processed by worker to calculate total reserves for pair contract: {pair_total_reserves_process_unit}',
-            )
-        update_log = {
-            'worker': self.name,
-            'update': {
-                'action': 'RabbitMQ.Publish',
-                'info': {
-                    'routing_key': f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.{project.action}_worker',
-                    'exchange': f'{settings.rabbitmq.setup.callbacks.exchange}.workers:{settings.namespace}',
-                    'msg': msg_obj.dict(),
+        for project_config in projects_config:
+            type_ = project_config.project_type
+            enabled_projects = [project for project in project_config.projects if project.enabled]
+            for project in enabled_projects:
+                contract = project.contract.lower()
+                process_unit = PowerloomCallbackProcessMessage(
+                    begin=msg_obj.begin,
+                    end=msg_obj.end,
+                    contract=contract,
+                    broadcast_id=msg_obj.broadcast_id,
+                )
+                self._rabbitmq_interactor.enqueue_msg_delivery(
+                    exchange=f'{settings.rabbitmq.setup.callbacks.exchange}.workers:{settings.namespace}',
+                    routing_key=f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.{type_}_worker',
+                    msg_body=process_unit.json(),
+                )
+                self._logger.debug(
+                    f'Sent out epoch to be processed by worker to calculate total reserves for pair contract: {process_unit}',
+                )
+            update_log = {
+                'worker': self.name,
+                'update': {
+                    'action': 'RabbitMQ.Publish',
+                    'info': {
+                        'routing_key': f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.{type_}_worker',
+                        'exchange': f'{settings.rabbitmq.setup.callbacks.exchange}.workers:{settings.namespace}',
+                        'msg': msg_obj.dict(),
+                    },
                 },
-            },
-        }
-        with create_redis_conn(self._connection_pool) as r:
-            r.zadd(
-                uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
-                {json.dumps(update_log): int(time.time())},
-            )
+            }
+            with create_redis_conn(self._connection_pool) as r:
+                r.zadd(
+                    uniswap_cb_broadcast_processing_logs_zset.format(msg_obj.broadcast_id),
+                    {json.dumps(update_log): int(time.time())},
+                )
         self._rabbitmq_interactor._channel.basic_ack(delivery_tag=method.delivery_tag)
 
     def _exit_signal_handler(self, signum, sigframe):

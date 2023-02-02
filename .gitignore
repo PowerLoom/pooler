@@ -8,5 +8,5 @@ screenlog*
 temp/*
 uniswapTokenData
 test.py
-pooler/static/cached_pair_addresses.json
+pooler/static/projects.json
 pooler/auth/settings/auth_settings.json

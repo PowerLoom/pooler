@@ -6,7 +6,7 @@ from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
 
-from pooler.settings.config import projects
+from pooler.settings.config import projects_config
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.models.data_models import ProjectRegistrationRequest
@@ -49,17 +49,17 @@ def register_projects(all_projects: List[str]):
 
 def main():
     namespace = settings.namespace
-    all_projects = [project for project in projects if project.enabled]
-
-    if len(all_projects) <= 0:
+    if not projects_config:
         registration_logger.error('No projects found. Exiting.')
         return
 
-    registration_logger.info(f'Found {len(all_projects)} pairs to register with audit protocol.')
-
     project_names = []
-    for project in all_projects:
-        project_names.append(f'{project.contract}_{project.action}_{namespace}')
+    for project_config in projects_config:
+        for project in project_config.projects:
+            if project.enabled:
+                project_names.append(f'{project.contract}_{project_config.project_type}_{namespace}')
+
+    registration_logger.info(f'Registered {len(project_names)} pairs to register with audit protocol.')
 
     register_projects(project_names)
 

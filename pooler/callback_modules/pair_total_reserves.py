@@ -83,10 +83,11 @@ def notify_on_task_failure(fn):
 
 class PairTotalReservesProcessor(CallbackAsyncWorker):
     def __init__(self, name: str, **kwargs: dict) -> None:
+        self._stream = 'pair_total_reserves'
         super(PairTotalReservesProcessor, self).__init__(
             name=name,
             rmq_q=f'powerloom-backend-cb-pair_total_reserves:{settings.namespace}:{settings.instance_id}',
-            rmq_routing=f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.pair_total_reserves_worker',
+            rmq_routing=f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.{self._stream}_worker',
             **kwargs,
         )
         self._rate_limiting_lua_scripts = dict()
@@ -265,7 +266,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             current_epoch=msg_obj,
             snapshot_name='pair reserves',
             failed_query_epochs_l=past_failed_epochs,
-            stream='pair_total_reserves',
+            stream=self._stream,
         )
 
         results_map = await self._map_processed_epochs_to_adapters(
@@ -555,7 +556,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         )
 
         await self._send_audit_payload_commit_service(
-            audit_stream='pair_total_reserves',
+            audit_stream=self._stream,
             original_epoch=msg_obj,
             snapshot_name='pair token reserves',
             epoch_snapshot_map=pair_total_reserves_epoch_snapshot_map,

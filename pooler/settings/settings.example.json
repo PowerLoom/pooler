@@ -85,11 +85,6 @@
         "archival": 180,
         "connection_init": 2
     },
-    "module_queues_config":{
-        "pair_total_reserves": {
-            "num_instances": 16
-        }
-    },
     "epoch": {
         "height": 10,
         "head_offset": 2,
@@ -105,9 +100,7 @@
                 "exchange": "powerloom-backend"
             },
             "callbacks": {
-                "exchange": "powerloom-backend-callbacks",
-                "path": "pooler/callback_modules/",
-                "config": "module_queues_config.json"
+                "exchange": "powerloom-backend-callbacks"
             }
         }
     },
@@ -148,8 +141,5 @@
         "trace_enabled": false,
         "write_to_files": true
     },
-    "project_config_paths": {
-        "projects_path": "pooler/static/projects.json",
-        "projects_config_path": "pooler/static/projects_config.json"
-    }
+    "projects_config_path": "pooler/static/projects.json"
 }
