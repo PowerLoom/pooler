@@ -1,21 +1,39 @@
 {
   "config": [{
-    "project_type": "pair_total_reserves",
-    "projects": [{
-        "contract": "0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc",
-        "enabled": true
-      },
-      {
-        "contract": "0x470e8de2ebaef52014a47cb5e6af86884947f08c",
-        "enabled": true
-      }
-    ],
-    "workers": [{
-      "module": "pooler.callback_modules.pair_total_reserves",
-      "class_name": "PairTotalReservesProcessor",
-      "name": "PowerLoom|UniswapPooler|Callbacks|PairTotalReservesProcessor",
-      "num_instances": 8
-    }]
-
-  }]
+      "project_type": "uniswap_pairContract_pair_total_reserves",
+      "projects": [{
+          "contract": "0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc",
+          "enabled": true
+        },
+        {
+          "contract": "0x470e8de2ebaef52014a47cb5e6af86884947f08c",
+          "enabled": true
+        }
+      ],
+      "workers": [{
+        "module": "pooler.callback_modules.pair_total_reserves",
+        "class_name": "PairTotalReservesProcessor",
+        "name": "PowerLoom|UniswapPooler|Callbacks|PairTotalReservesProcessor",
+        "num_instances": 8
+      }]
+    },
+    {
+      "project_type": "uniswap_pairContract_trade_volume",
+      "projects": [{
+          "contract": "0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc",
+          "enabled": true
+        },
+        {
+          "contract": "0x470e8de2ebaef52014a47cb5e6af86884947f08c",
+          "enabled": true
+        }
+      ],
+      "workers": [{
+        "module": "pooler.callback_modules.trade_volume",
+        "class_name": "TradeVolumeProcessor",
+        "name": "PowerLoom|UniswapPooler|Callbacks|TradeVolumeProcessor",
+        "num_instances": 8
+      }]
+    }
+  ]
 }

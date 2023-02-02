@@ -18,7 +18,7 @@ from httpx import Timeout
 from pydantic import ValidationError
 from setproctitle import setproctitle
 
-from pooler.callback_modules.uniswap.core import get_pair_reserves
+from pooler.callback_modules.uniswap.core import get_pair_trade_volume
 from pooler.callback_modules.utils import notify_on_task_failure
 from pooler.settings.config import settings
 from pooler.utils.callback_helpers import AuditProtocolCommandsHelper
@@ -29,20 +29,21 @@ from pooler.utils.models.data_models import SnapshotterIssueSeverity
 from pooler.utils.models.data_models import SourceChainDetails
 from pooler.utils.models.message_models import EpochBase
 from pooler.utils.models.message_models import PowerloomCallbackProcessMessage
-from pooler.utils.models.message_models import UniswapPairTotalReservesSnapshot
+from pooler.utils.models.message_models import UniswapTradesSnapshot
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 from pooler.utils.redis.redis_keys import uniswap_cb_broadcast_processing_logs_zset
-from pooler.utils.redis.redis_keys import uniswap_discarded_query_pair_total_reserves_epochs_redis_q_f
+from pooler.utils.redis.redis_keys import uniswap_discarded_query_pair_trade_volume_epochs_redis_q_f
 from pooler.utils.redis.redis_keys import uniswap_failed_query_pair_total_reserves_epochs_redis_q_f
+from pooler.utils.redis.redis_keys import uniswap_failed_query_pair_trade_volume_epochs_redis_q_f
 
 
 SETTINGS_ENV = os.getenv('ENV_FOR_DYNACONF', 'development')
 
 
-class PairTotalReservesProcessor(CallbackAsyncWorker):
+class TradeVolumeProcessor(CallbackAsyncWorker):
     def __init__(self, name: str, **kwargs: dict) -> None:
-        self._stream = 'uniswap_pairContract_pair_total_reserves'
-        super(PairTotalReservesProcessor, self).__init__(
+        self._stream = 'uniswap_pairContract_trade_volume'
+        super(TradeVolumeProcessor, self).__init__(
             name=name,
             rmq_q=f'powerloom-backend-cb-{self._stream}:{settings.namespace}:{settings.instance_id}',
             rmq_routing=f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.{self._stream}_worker',
@@ -61,69 +62,6 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             follow_redirects=False,
             transport=self._async_transport,
         )
-
-    async def _fetch_token_reserves_on_chain(
-            self,
-            min_chain_height: int,
-            max_chain_height: int,
-            data_source_contract_address: str,
-    ) -> Optional[Dict[str, Union[int, float]]]:
-        epoch_reserves_snapshot_map_token0 = dict()
-        epoch_reserves_snapshot_map_token1 = dict()
-        epoch_usd_reserves_snapshot_map_token0 = dict()
-        epoch_usd_reserves_snapshot_map_token1 = dict()
-        max_block_timestamp = int(time.time())
-        try:
-            # TODO: web3 object should be available within callback worker instance
-            #  instead of being a global object in uniswap functions module. Not a good design pattern.
-            pair_reserve_total = await get_pair_reserves(
-                loop=asyncio.get_running_loop(),
-                rate_limit_lua_script_shas=self._rate_limiting_lua_scripts,
-                pair_address=data_source_contract_address,
-                from_block=min_chain_height,
-                to_block=max_chain_height,
-                redis_conn=self._redis_conn,
-                fetch_timestamp=True,
-            )
-        except Exception as exc:
-            self._logger.opt(exception=True).error(
-                f'Pair-Reserves function failed for epoch: {min_chain_height}-{max_chain_height} | error_msg:{exc}',
-            )
-            # if querying fails, we are going to ensure it is recorded for future processing
-            return None
-        else:
-            for block_num in range(min_chain_height, max_chain_height + 1):
-
-                block_pair_total_reserves = pair_reserve_total.get(block_num)
-                fetch_ts = True if block_num == max_chain_height else False
-
-                epoch_reserves_snapshot_map_token0[f'block{block_num}'] = block_pair_total_reserves['token0']
-                epoch_reserves_snapshot_map_token1[f'block{block_num}'] = block_pair_total_reserves['token1']
-                epoch_usd_reserves_snapshot_map_token0[f'block{block_num}'] = block_pair_total_reserves['token0USD']
-                epoch_usd_reserves_snapshot_map_token1[f'block{block_num}'] = block_pair_total_reserves['token1USD']
-
-                if fetch_ts:
-                    if not block_pair_total_reserves.get('timestamp', None):
-                        self._logger.error(
-                            'Could not fetch timestamp against max block height in epoch {} - {}'
-                            'to calculate pair reserves for contract {}. '
-                            'Using current time stamp for snapshot construction',
-                            data_source_contract_address, min_chain_height, max_chain_height,
-                        )
-                    else:
-                        max_block_timestamp = block_pair_total_reserves.get('timestamp')
-            pair_total_reserves_snapshot = UniswapPairTotalReservesSnapshot(
-                **{
-                    'token0Reserves': epoch_reserves_snapshot_map_token0,
-                    'token1Reserves': epoch_reserves_snapshot_map_token1,
-                    'token0ReservesUSD': epoch_usd_reserves_snapshot_map_token0,
-                    'token1ReservesUSD': epoch_usd_reserves_snapshot_map_token1,
-                    'chainHeightRange': EpochBase(begin=min_chain_height, end=max_chain_height),
-                    'timestamp': max_block_timestamp,
-                    'contract': data_source_contract_address,
-                },
-            )
-            return pair_total_reserves_snapshot
 
     async def _prepare_epochs(
             self,
@@ -207,38 +145,6 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 )
         return queued_epochs
 
-    async def _construct_pair_reserves_epoch_snapshot_data(
-            self,
-            msg_obj: PowerloomCallbackProcessMessage,
-            past_failed_epochs: Optional[List],
-            enqueue_on_failure: bool = False,
-    ):
-        # check for enqueued failed query epochs
-        epochs = await self._prepare_epochs(
-            failed_query_epochs_key=uniswap_failed_query_pair_total_reserves_epochs_redis_q_f.format(
-                msg_obj.contract,
-            ),
-            discarded_query_epochs_key=uniswap_discarded_query_pair_total_reserves_epochs_redis_q_f.format(
-                msg_obj.contract,
-            ),
-            current_epoch=msg_obj,
-            snapshot_name='pair reserves',
-            failed_query_epochs_l=past_failed_epochs,
-            stream=self._stream,
-        )
-
-        results_map = await self._map_processed_epochs_to_adapters(
-            epochs=epochs,
-            cb_fn_async=self._fetch_token_reserves_on_chain,
-            enqueue_on_failure=enqueue_on_failure,
-            data_source_contract_address=msg_obj.contract,
-            failed_query_redis_key=uniswap_failed_query_pair_total_reserves_epochs_redis_q_f.format(
-                msg_obj.contract,
-            ),
-            transformation_lambdas=[],
-        )
-        return results_map
-
     async def _map_processed_epochs_to_adapters(
         self,
         epochs: List[PowerloomCallbackProcessMessage],
@@ -294,6 +200,73 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 )] = each_result
         return results_map
 
+    async def _construct_trade_volume_epoch_snapshot_data(
+            self,
+            msg_obj: PowerloomCallbackProcessMessage,
+            past_failed_epochs: Optional[List],
+            enqueue_on_failure: bool = False,
+    ):
+        epochs = await self._prepare_epochs(
+            failed_query_epochs_key=uniswap_failed_query_pair_trade_volume_epochs_redis_q_f.format(
+                msg_obj.contract,
+            ),
+            discarded_query_epochs_key=uniswap_discarded_query_pair_trade_volume_epochs_redis_q_f.format(
+                msg_obj.contract,
+            ),
+            current_epoch=msg_obj,
+            snapshot_name='trade volume and fees',
+            failed_query_epochs_l=past_failed_epochs,
+            stream=self._stream,
+        )
+
+        results_map = await self._map_processed_epochs_to_adapters(
+            epochs=epochs,
+            cb_fn_async=get_pair_trade_volume,
+            enqueue_on_failure=enqueue_on_failure,
+            data_source_contract_address=msg_obj.contract,
+            failed_query_redis_key=uniswap_failed_query_pair_total_reserves_epochs_redis_q_f.format(
+                msg_obj.contract,
+            ),
+            transformation_lambdas=[self.transform_processed_epoch_to_trade_volume],
+            rate_limit_lua_script_shas=self._rate_limiting_lua_scripts,
+        )
+        return results_map
+
+    def transform_processed_epoch_to_trade_volume(
+            self,
+            trade_vol_processed_snapshot,
+            data_source_contract_address,
+            epoch_begin,
+            epoch_end,
+    ):
+        self._logger.debug('Trade volume processed snapshot: {}', trade_vol_processed_snapshot)
+
+        # Set effective trade volume at top level
+        total_trades_in_usd = trade_vol_processed_snapshot['Trades']['totalTradesUSD']
+        total_fee_in_usd = trade_vol_processed_snapshot['Trades']['totalFeeUSD']
+        total_token0_vol = trade_vol_processed_snapshot['Trades']['token0TradeVolume']
+        total_token1_vol = trade_vol_processed_snapshot['Trades']['token1TradeVolume']
+        total_token0_vol_usd = trade_vol_processed_snapshot['Trades']['token0TradeVolumeUSD']
+        total_token1_vol_usd = trade_vol_processed_snapshot['Trades']['token1TradeVolumeUSD']
+
+        max_block_timestamp = trade_vol_processed_snapshot.get('timestamp')
+        trade_vol_processed_snapshot.pop('timestamp', None)
+        trade_volume_snapshot = UniswapTradesSnapshot(
+            **dict(
+                contract=data_source_contract_address,
+                chainHeightRange=EpochBase(begin=epoch_begin, end=epoch_end),
+                timestamp=max_block_timestamp,
+                totalTrade=float(f'{total_trades_in_usd: .6f}'),
+                totalFee=float(f'{total_fee_in_usd: .6f}'),
+                token0TradeVolume=float(f'{total_token0_vol: .6f}'),
+                token1TradeVolume=float(f'{total_token1_vol: .6f}'),
+                token0TradeVolumeUSD=float(f'{total_token0_vol_usd: .6f}'),
+                token1TradeVolumeUSD=float(f'{total_token1_vol_usd: .6f}'),
+                events=trade_vol_processed_snapshot,
+            ),
+        )
+        return trade_volume_snapshot
+
     async def _update_broadcast_processing_status(self, broadcast_id, update_state):
         await self._redis_conn.hset(
             uniswap_cb_broadcast_processing_logs_zset.format(self.name),
@@ -308,7 +281,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             snapshot_name,
             epoch_snapshot_map: Dict[
                 Tuple[int, int],
-                Union[UniswapPairTotalReservesSnapshot, None],
+                Union[UniswapTradesSnapshot, None],
             ],
     ):
 
@@ -442,15 +415,16 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         self._logger.debug(
             'Got epoch to process for calculating total reserves for pair: {}', msg_obj,
         )
-        pair_total_reserves_epoch_snapshot_map = await self._construct_pair_reserves_epoch_snapshot_data(
+        # prepare trade volume snapshot
+        trade_vol_epoch_snapshot_map = await self._construct_trade_volume_epoch_snapshot_data(
             msg_obj=msg_obj, enqueue_on_failure=True, past_failed_epochs=[],
         )
 
         await self._send_audit_payload_commit_service(
             audit_stream=self._stream,
             original_epoch=msg_obj,
-            snapshot_name='pair token reserves',
-            epoch_snapshot_map=pair_total_reserves_epoch_snapshot_map,
+            snapshot_name='trade volume and fees',
+            epoch_snapshot_map=trade_vol_epoch_snapshot_map,
         )
 
         del self._running_callback_tasks[self_unique_id]
@@ -479,4 +453,4 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         # setup_loguru_intercept()
         # TODO: initialize web3 object here
         # self._logger.debug('Launching epochs summation actor for total reserves of pairs...')
-        super(PairTotalReservesProcessor, self).run()
+        super(TradeVolumeProcessor, self).run()
