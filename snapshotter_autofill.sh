@@ -37,10 +37,9 @@ sed -i "s|generated-uuid|$UUID|" pooler/settings/settings.json
 
 sed -i "s|https://consensus-url|$consensus_url|" pooler/settings/settings.json
 
-#rm pooler/settings/settings.json.old
-
 cp pooler/auth/settings/auth_settings.example.json pooler/auth/settings/auth_settings.json
 
 cp pooler/static/projects.example.json pooler/static/projects.json
+cp pooler/callback_modules/settings/settings.example.json pooler/callback_modules/settings/settings.json
 
 echo 'settings has been populated!'
