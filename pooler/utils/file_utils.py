@@ -9,7 +9,10 @@ from loguru import logger
 default_logger = logger.bind(module='PowerLoom|FileUtils')
 
 
-def read_json_file(file_path: str, logger: logger = default_logger) -> Optional[dict]:
+def read_json_file(
+    file_path: str,
+    logger: logger = default_logger,
+) -> Optional[dict]:
     """Read given json file and return its content as a dictionary."""
     try:
         f_ = open(file_path, 'r', encoding='utf-8')
@@ -22,7 +25,12 @@ def read_json_file(file_path: str, logger: logger = default_logger) -> Optional[
         return json_data
 
 
-def write_json_file(directory: str, file_name: str, data: Any, logger: logger = logger) -> None:
+def write_json_file(
+    directory: str,
+    file_name: str,
+    data: Any,
+    logger: logger = logger,
+) -> None:
     try:
         file_path = directory + file_name
         if not os.path.exists(directory):

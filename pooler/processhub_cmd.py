@@ -24,7 +24,6 @@ app = typer.Typer()
 
 @app.command()
 def pidStatus(connections: bool = False):
-
     def print_formatted_status(process_name, pid):
         try:
             process = psutil.Process(pid=pid)
@@ -35,12 +34,16 @@ def pidStatus(connections: bool = False):
             print(f'\t file descriptors: {process.num_fds()}')
             print(f'\t memory: {process.memory_info()}')
             print(f'\t cpu: {process.cpu_times()}')
-            print(f"\t number of connections: {len(process.connections(kind='inet'))}")
+            print(
+                f"\t number of connections: {len(process.connections(kind='inet'))}",
+            )
             if connections:
-                print(f"\t number of connections: {process.connections(kind='inet')}")
+                print(
+                    f"\t number of connections: {process.connections(kind='inet')}",
+                )
             print('\n')
         except Exception as err:
-            if(type(err).__name__ == 'NoSuchProcess'):
+            if type(err).__name__ == 'NoSuchProcess':
                 print(f'{pid} - NoSuchProcess')
                 print(f'\t name: {process_name}\n')
             else:
@@ -48,11 +51,13 @@ def pidStatus(connections: bool = False):
 
     r = redis.Redis(**REDIS_CONN_CONF, single_connection_client=True)
     print('\n')
-    for k, v in r.hgetall(name=f'powerloom:uniswap:{settings.namespace}:{settings.instance_id}:Processes').items():
+    for k, v in r.hgetall(
+        name=f'powerloom:uniswap:{settings.namespace}:{settings.instance_id}:Processes',
+    ).items():
         key = k.decode('utf-8')
         value = v.decode('utf-8')
 
-        if(key == 'callback_workers'):
+        if key == 'callback_workers':
             value = json.loads(value)
             for i, j in value.items():
                 print_formatted_status(j['id'], int(j['pid']))
@@ -73,7 +78,9 @@ def broadcastStatus(elapsed_time: int, verbose: Optional[bool] = False):
         max=cur_ts,
         withscores=True,
     )
-    print(f'\n=====> {len(res_)} broadcastId exists in last {elapsed_time} secs\n')
+    print(
+        f'\n=====> {len(res_)} broadcastId exists in last {elapsed_time} secs\n',
+    )
     for k, v in res_:
         key = k.decode('utf-8')
         value = v
@@ -81,8 +88,10 @@ def broadcastStatus(elapsed_time: int, verbose: Optional[bool] = False):
         typer.echo(
             typer.style(
                 '\t timestamp: ',
-                fg=typer.colors.MAGENTA, bold=True,
-            ) + f'{value}\n',
+                fg=typer.colors.MAGENTA,
+                bold=True,
+            ) +
+            f'{value}\n',
         )
         logs = r.zrangebyscore(
             name=uniswap_cb_broadcast_processing_logs_zset.format(f'{key}'),
@@ -112,9 +121,11 @@ def broadcastStatus(elapsed_time: int, verbose: Optional[bool] = False):
                     contracts_len = len(i['update']['info']['msg']['contracts'])
                     typer.echo(
                         typer.style(
-                            '\t worker: ', fg=typer.colors.MAGENTA,
+                            '\t worker: ',
+                            fg=typer.colors.MAGENTA,
                             bold=True,
-                        ) + f"{i['worker']}",
+                        ) +
+                        f"{i['worker']}",
                     )
                     typer.echo(
                         typer.style('\t action: ', fg=typer.colors.MAGENTA, bold=True) +
@@ -137,14 +148,19 @@ def broadcastStatus(elapsed_time: int, verbose: Optional[bool] = False):
             for i, j in sub_actions.items():
                 typer.echo(
                     typer.style(
-                        f'\t {i}: ', fg=typer.colors.MAGENTA, bold=True,
-                    ) + f'{str(j)}',
+                        f'\t {i}: ',
+                        fg=typer.colors.MAGENTA,
+                        bold=True,
+                    ) +
+                    f'{str(j)}',
                 )
             print('\n')
             if verbose:
                 for i, j in failure_info.items():
                     if len(j) > 0:
-                        typer.secho(f'\t Failure in {i} : ', fg=typer.colors.RED, bold=True)
+                        typer.secho(
+                            f'\t Failure in {i} : ', fg=typer.colors.RED, bold=True,
+                        )
                         for k in j:
                             typer.secho(
                                 json.dumps(k, sort_keys=True, indent=4),
@@ -157,14 +173,15 @@ def broadcastStatus(elapsed_time: int, verbose: Optional[bool] = False):
 
 @app.command()
 def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
-
     dag_chain_height = dag_chain_height if dag_chain_height > -1 else '-inf'
 
     r = redis.Redis(**REDIS_CONN_CONF, single_connection_client=True)
     pair_contracts = enabled_projects
     pair_projects = [
         'projectID:uniswap_pairContract_trade_volume_{}_' + settings.namespace + ':{}',
-        'projectID:uniswap_pairContract_pair_total_reserves_{}_' + settings.namespace + ':{}',
+        'projectID:uniswap_pairContract_pair_total_reserves_{}_' +
+        settings.namespace +
+        ':{}',
     ]
     total_zsets = {}
     total_issue_count = {
@@ -176,8 +193,13 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
     project_heights = r.hgetall(uniswap_projects_dag_verifier_status)
     if project_heights:
         for _, value in project_heights.items():
-            if int(value.decode('utf-8')) > total_issue_count['CURRENT_DAG_CHAIN_HEIGHT']:
-                total_issue_count['CURRENT_DAG_CHAIN_HEIGHT'] = int(value.decode('utf-8'))
+            if (
+                int(value.decode('utf-8')) >
+                total_issue_count['CURRENT_DAG_CHAIN_HEIGHT']
+            ):
+                total_issue_count['CURRENT_DAG_CHAIN_HEIGHT'] = int(
+                    value.decode('utf-8'),
+                )
 
     def get_zset_data(key, min, max, pair_address):
         res = r.zrangebyscore(
@@ -197,25 +219,39 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
 
         # add tentative and current block height
         if tentative_block_height:
-            tentative_block_height = int(
-                tentative_block_height.decode(
-                    'utf-8',
-                ),
-            ) if type(tentative_block_height) is bytes else int(tentative_block_height)
+            tentative_block_height = (
+                int(
+                    tentative_block_height.decode(
+                        'utf-8',
+                    ),
+                )
+                if type(tentative_block_height) is bytes
+                else int(tentative_block_height)
+            )
         else:
             tentative_block_height = None
         if block_height:
-            block_height = int(
-                block_height.decode('utf-8'),
-            ) if type(block_height) is bytes else int(block_height)
+            block_height = (
+                int(
+                    block_height.decode('utf-8'),
+                )
+                if type(block_height) is bytes
+                else int(block_height)
+            )
         else:
             block_height = None
-        key_based_issue_stats['CURRENT_LAG_IN_DAG_CHAIN_HEIGHT'] = tentative_block_height - \
-            block_height if tentative_block_height and block_height else None
-        if key_based_issue_stats['CURRENT_LAG_IN_DAG_CHAIN_HEIGHT'] != None:
-            total_issue_count['LAG_EXIST_IN_DAG_CHAIN'] = key_based_issue_stats['CURRENT_LAG_IN_DAG_CHAIN_HEIGHT'] if key_based_issue_stats[
-                'CURRENT_LAG_IN_DAG_CHAIN_HEIGHT'
-            ] > total_issue_count['LAG_EXIST_IN_DAG_CHAIN'] else total_issue_count['LAG_EXIST_IN_DAG_CHAIN']
+        key_based_issue_stats['CURRENT_LAG_IN_DAG_CHAIN_HEIGHT'] = (
+            tentative_block_height - block_height
+            if tentative_block_height and block_height
+            else None
+        )
+        if key_based_issue_stats['CURRENT_LAG_IN_DAG_CHAIN_HEIGHT']:
+            total_issue_count['LAG_EXIST_IN_DAG_CHAIN'] = (
+                key_based_issue_stats['CURRENT_LAG_IN_DAG_CHAIN_HEIGHT']
+                if key_based_issue_stats['CURRENT_LAG_IN_DAG_CHAIN_HEIGHT'] >
+                total_issue_count['LAG_EXIST_IN_DAG_CHAIN']
+                else total_issue_count['LAG_EXIST_IN_DAG_CHAIN']
+            )
 
         if res:
             # parse zset entry
@@ -231,7 +267,10 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
 
                 # create/add issue entry in "KEY BASED" issue structure
                 if not entry['issueType'] + '_ISSUE_COUNT' in key_based_issue_stats:
-                    key_based_issue_stats[entry['issueType'] + '_ISSUE_COUNT'] = 0
+                    key_based_issue_stats[
+                        entry['issueType'] +
+                        '_ISSUE_COUNT'
+                    ] = 0
                 if not entry['issueType'] + '_BLOCKS' in key_based_issue_stats:
                     key_based_issue_stats[entry['issueType'] + '_BLOCKS'] = 0
 
@@ -243,16 +282,25 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
                     total_issue_count[entry['issueType'] + '_BLOCKS'] += 1
                     key_based_issue_stats[entry['issueType'] + '_BLOCKS'] += 1
                 else:
-                    total_issue_count[entry['issueType'] + '_BLOCKS'] += entry['missingBlockHeightEnd'] - \
-                        entry['missingBlockHeightStart'] + 1
-                    key_based_issue_stats[
-                        entry['issueType'] +
-                        '_BLOCKS'
-                    ] += entry['missingBlockHeightEnd'] - entry['missingBlockHeightStart'] + 1
+                    total_issue_count[entry['issueType'] + '_BLOCKS'] += (
+                        entry['missingBlockHeightEnd'] -
+                        entry['missingBlockHeightStart'] +
+                        1
+                    )
+                    key_based_issue_stats[entry['issueType'] + '_BLOCKS'] += (
+                        entry['missingBlockHeightEnd'] -
+                        entry['missingBlockHeightStart'] +
+                        1
+                    )
 
                 # store latest dag block height for projectId
-                if entry['dagBlockHeight'] > key_based_issue_stats['CURRENT_DAG_CHAIN_HEIGHT']:
-                    key_based_issue_stats['CURRENT_DAG_CHAIN_HEIGHT'] = entry['dagBlockHeight']
+                if (
+                    entry['dagBlockHeight'] >
+                    key_based_issue_stats['CURRENT_DAG_CHAIN_HEIGHT']
+                ):
+                    key_based_issue_stats['CURRENT_DAG_CHAIN_HEIGHT'] = entry[
+                        'dagBlockHeight'
+                    ]
 
                 parsed_res.append(entry)
             res = parsed_res
@@ -274,7 +322,9 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
         for project in projects:
             for addr in contracts:
                 zset_key = project.format(addr, 'dagChainGaps')
-                total_zsets[zset_key] = get_zset_data(project, dag_chain_height, '+inf', addr)
+                total_zsets[zset_key] = get_zset_data(
+                    project, dag_chain_height, '+inf', addr,
+                )
 
     gather_all_zset(pair_contracts, pair_projects)
 
@@ -302,7 +352,9 @@ def listBroadcasts(elapsed_time: int):
     """
     r = redis.Redis(**REDIS_CONN_CONF, single_connection_client=True)
     typer.secho(
-        '=' * 20 + f'Broadcasts sent out in last {elapsed_time} seconds' + '=' * 20, fg=typer.colors.CYAN,
+        '=' * 20 +
+        f'Broadcasts sent out in last {elapsed_time} seconds' + '=' * 20,
+        fg=typer.colors.CYAN,
     )
     now = datetime.now()
     cur_ts = int(time.time())
@@ -316,7 +368,8 @@ def listBroadcasts(elapsed_time: int):
         broadcast_id = broadcast_id.decode('utf-8')
         occurrence = datetime.fromtimestamp(occurrence)
         typer.echo(
-            '-' * 40 + f'\nBroadcast ID: {broadcast_id}\t{timeago.format(occurrence, now)}',
+            '-' * 40 +
+            f'\nBroadcast ID: {broadcast_id}\t{timeago.format(occurrence, now)}',
         )
         typer.secho(broadcast_id, fg=typer.colors.YELLOW)
         typer.echo('-' * 40)
@@ -330,7 +383,8 @@ def start(ctx: typer.Context, process_str_id: str):
     if process_str_id not in PROC_STR_ID_TO_CLASS_MAP.keys():
         typer.secho(
             'Unknown Process identifier supplied. Check list with listProcesses command',
-            err=True, fg=typer.colors.RED,
+            err=True,
+            fg=typer.colors.RED,
         )
         return
     kwargs = dict()
@@ -346,26 +400,35 @@ def start(ctx: typer.Context, process_str_id: str):
     )
     processhub_command_publish(ch, proc_hub_cmd.json())
     typer.secho(
-        f'Sent command to ProcessHubCore to launch process {process_str_id} | Command: {proc_hub_cmd.json()}', fg=typer.colors.YELLOW,
+        f'Sent command to ProcessHubCore to launch process {process_str_id} | Command: {proc_hub_cmd.json()}',
+        fg=typer.colors.YELLOW,
     )
 
 
 @app.command()
 def stop(
-        process_str_id: str = typer.Argument(...),
-        pid: bool = typer.Option(
-            False, help='Using this flag allows you to pass a process ID instead of the name',
-        ),
+    process_str_id: str = typer.Argument(...),
+    pid: bool = typer.Option(
+        False,
+        help='Using this flag allows you to pass a process ID instead of the name',
+    ),
 ):
     if not pid:
-        if process_str_id not in PROC_STR_ID_TO_CLASS_MAP.keys() and process_str_id != 'self':
+        if (
+            process_str_id not in PROC_STR_ID_TO_CLASS_MAP.keys() and
+            process_str_id != 'self'
+        ):
             typer.secho(
                 'Unknown Process identifier supplied. Check list with listProcesses command',
-                err=True, fg=typer.colors.RED,
+                err=True,
+                fg=typer.colors.RED,
             )
             return
         else:
-            typer.secho('Creating RabbitMQ connection...', fg=typer.colors.GREEN)
+            typer.secho(
+                'Creating RabbitMQ connection...',
+                fg=typer.colors.GREEN,
+            )
             c = create_rabbitmq_conn()
             typer.secho('Opening RabbitMQ channel...', fg=typer.colors.GREEN)
             ch = c.channel()
@@ -375,7 +438,8 @@ def stop(
             )
             processhub_command_publish(ch, proc_hub_cmd.json())
             typer.secho(
-                f'Sent command to ProcessHubCore to stop process {process_str_id} | Command: {proc_hub_cmd.json()}', fg=typer.colors.YELLOW,
+                f'Sent command to ProcessHubCore to stop process {process_str_id} | Command: {proc_hub_cmd.json()}',
+                fg=typer.colors.YELLOW,
             )
     else:
         process_str_id = int(process_str_id)
@@ -389,7 +453,8 @@ def stop(
         )
         processhub_command_publish(ch, proc_hub_cmd.json())
         typer.secho(
-            f'Sent command to ProcessHubCore to stop process PID {process_str_id}', fg=typer.colors.YELLOW,
+            f'Sent command to ProcessHubCore to stop process PID {process_str_id}',
+            fg=typer.colors.YELLOW,
         )
 
 

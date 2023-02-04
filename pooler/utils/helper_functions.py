@@ -20,17 +20,22 @@ def make_post_call(url: str, params: dict):
         if response.status_code == 200:
             return response.json()
         else:
-            msg = f'Failed to make request {params}. Got status response from {url}: {response.status_code}'
+            msg = (
+                f'Failed to make request {params}. Got status response from'
+                f' {url}: {response.status_code}'
+            )
             return None
     except (
-            httpx.TimeoutException,
-            httpx.ConnectTimeout,
-            httpx.ReadTimeout,
-            httpx.RequestError,
-            httpx.ConnectError,
+        httpx.TimeoutException,
+        httpx.ConnectTimeout,
+        httpx.ReadTimeout,
+        httpx.RequestError,
+        httpx.ConnectError,
     ) as terr:
         logger.debug('Error occurred while making the post call.')
-        logger.opt(exception=True, lazy=True).error('Error {err}', err=lambda: format_exception(terr))
+        logger.opt(exception=True, lazy=True).error(
+            'Error {err}', err=lambda: format_exception(terr),
+        )
         return None
 
 
@@ -57,7 +62,9 @@ class RPCException(Exception):
 
 
 # TODO: support basic failover and/or load balanced calls that use the list of URLs. Introduce in rpc_helper.py
-async def make_post_call_async(url: str, params: dict, session: aiohttp.ClientSession, tag: int):
+async def make_post_call_async(
+    url: str, params: dict, session: aiohttp.ClientSession, tag: int,
+):
     try:
         message = f'Making async post call to {url}: {params}'
         logger.debug(message)
@@ -66,7 +73,9 @@ async def make_post_call_async(url: str, params: dict, session: aiohttp.ClientSe
         # per request timeout instead of configuring a client session wide timeout
         # from reported issue https://github.com/aio-libs/aiohttp/issues/3203
         async with session.post(
-            url=url, json=params, timeout=aiohttp.ClientTimeout(
+            url=url,
+            json=params,
+            timeout=aiohttp.ClientTimeout(
                 total=None,
                 sock_read=settings.timeouts.archival,
                 sock_connect=settings.timeouts.connection_init,
@@ -78,11 +87,16 @@ async def make_post_call_async(url: str, params: dict, session: aiohttp.ClientSe
             response.update({'tag': tag})
             return response
         else:
-            msg = f'Failed to make request {params}. Got status response from {url}: {response_status_code}'
+            msg = (
+                f'Failed to make request {params}. Got status response from'
+                f' {url}: {response_status_code}'
+            )
             logger.trace(msg)
 
             exc = RPCException(
-                request=params, response=response, underlying_exception=None,
+                request=params,
+                response=response,
+                underlying_exception=None,
                 extra_info={'msg': msg, 'tag': tag},
             )
             logger.opt(exception=True).trace('Error {}', str(exc))
@@ -90,16 +104,24 @@ async def make_post_call_async(url: str, params: dict, session: aiohttp.ClientSe
 
     except aiohttp.ClientResponseError as terr:
         msg = 'aiohttp error occurred while making async post call'
-        logger.opt(exception=True, lazy=True).trace('Error {err}', err=lambda: format_exception(terr))
+        logger.opt(exception=True, lazy=True).trace(
+            'Error {err}', err=lambda: format_exception(terr),
+        )
         raise RPCException(
-            request=params, response=response, underlying_exception=terr,
+            request=params,
+            response=response,
+            underlying_exception=terr,
             extra_info={'msg': msg, 'tag': tag},
         )
     except Exception as e:
         msg = 'Exception occurred while making async post call'
-        logger.opt(exception=True, lazy=True).trace('Error {err}', err=lambda: format_exception(e))
+        logger.opt(exception=True, lazy=True).trace(
+            'Error {err}', err=lambda: format_exception(e),
+        )
         raise RPCException(
-            request=params, response=response, underlying_exception=e,
+            request=params,
+            response=response,
+            underlying_exception=e,
             extra_info={'msg': msg, 'tag': tag},
         )
 
@@ -125,12 +147,23 @@ def cleanup_children_procs(fn):
             #     logger.error(f'killing process: {p.name()}')
             #     p.kill()
             logger.error('Waiting on spawned callback workers to join...')
-            for worker_class_name, unique_worker_entries in self._spawned_cb_processes_map.items():
-                for worker_unique_id, worker_unique_process_details in unique_worker_entries.items():
+            for (
+                worker_class_name,
+                unique_worker_entries,
+            ) in self._spawned_cb_processes_map.items():
+                for (
+                    worker_unique_id,
+                    worker_unique_process_details,
+                ) in unique_worker_entries.items():
                     if worker_unique_process_details['process'].pid:
                         logger.error(
-                            'Waiting on spawned callback worker {} | Unique ID {} | PID {}  to join...',
-                            worker_class_name, worker_unique_id, worker_unique_process_details['process'].pid,
+                            (
+                                'Waiting on spawned callback worker {} | Unique'
+                                ' ID {} | PID {}  to join...'
+                            ),
+                            worker_class_name,
+                            worker_unique_id,
+                            worker_unique_process_details['process'].pid,
                         )
                         worker_unique_process_details['process'].join()
 
@@ -138,13 +171,23 @@ def cleanup_children_procs(fn):
                 'Waiting on spawned core workers to join... {}',
                 self._spawned_processes_map,
             )
-            for worker_class_name, unique_worker_entries in self._spawned_processes_map.items():
-                logger.error('spawned Process Pid to wait on {}', unique_worker_entries.pid)
+            for (
+                worker_class_name,
+                unique_worker_entries,
+            ) in self._spawned_processes_map.items():
+                logger.error(
+                    'spawned Process Pid to wait on {}',
+                    unique_worker_entries.pid,
+                )
                 # internal state reporter might set proc_id_map[k] = -1
                 if unique_worker_entries != -1:
                     logger.error(
-                        'Waiting on spawned core worker {} | PID {}  to join...',
-                        worker_class_name, unique_worker_entries.pid,
+                        (
+                            'Waiting on spawned core worker {} | PID {}  to'
+                            ' join...'
+                        ),
+                        worker_class_name,
+                        unique_worker_entries.pid,
                     )
                     unique_worker_entries.join()
             logger.error('Finished waiting for all children...now can exit.')
@@ -153,6 +196,7 @@ def cleanup_children_procs(fn):
             self._reporter_thread.join()
             sys.exit(0)
             # sys.exit(0)
+
     return wrapper
 
 

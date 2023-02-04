@@ -15,14 +15,20 @@ from tenacity import wait_random_exponential
 
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
+
 # setup logging
 logger = logger.bind(module='PowerLoom|RabbitmqHelpers')
 
 
 def log_retry_callback(retry_state: RetryCallState) -> bool:
-    print('In rabbitmq reconnection helper decorator. attempt number: ', retry_state.attempt_number)
-    return isinstance(retry_state.outcome.exception(), pika.exceptions.AMQPError) and \
+    print(
+        'In rabbitmq reconnection helper decorator. attempt number: ',
+        retry_state.attempt_number,
+    )
+    return (
+        isinstance(retry_state.outcome.exception(), pika.exceptions.AMQPError) and
         retry_state.attempt_number < 5
+    )
 
 
 def resume_on_rabbitmq_fail(fn) -> Any:
@@ -30,12 +36,14 @@ def resume_on_rabbitmq_fail(fn) -> Any:
     def wrapper(*args, **kwargs):
         ret = None
         for attempt in Retrying(
-            reraise=True, wait=wait_random_exponential(multiplier=1, max=60),
+            reraise=True,
+            wait=wait_random_exponential(multiplier=1, max=60),
             retry=log_retry_callback,
         ):
             with attempt:
                 ret = fn(*args, **kwargs)
         return ret
+
     return wrapper
 
 
@@ -55,10 +63,16 @@ class RabbitmqSelectLoopInteractor(object):
     messages that have been sent and if they've been confirmed by RabbitMQ.
 
     """
+
     # interval at which the select loop polls to push out new notifications
     PUBLISH_INTERVAL = 0.1
 
-    def __init__(self, consume_queue_name=None, consume_callback=None, consumer_worker_name=''):
+    def __init__(
+        self,
+        consume_queue_name=None,
+        consume_callback=None,
+        consumer_worker_name='',
+    ):
         """Setup the example publisher object, passing in the URL we will use
         to connect to RabbitMQ.
         """
@@ -93,8 +107,12 @@ class RabbitmqSelectLoopInteractor(object):
 
         """
         logger.info(
-            '{}: RabbitMQ select loop interactor: Creating RabbitMQ select ioloop connection to {}',
-            self._consumer_worker_name, (settings.rabbitmq.host, settings.rabbitmq.port),
+            (
+                '{}: RabbitMQ select loop interactor: Creating RabbitMQ select'
+                ' ioloop connection to {}'
+            ),
+            self._consumer_worker_name,
+            (settings.rabbitmq.host, settings.rabbitmq.port),
         )
         return pika.SelectConnection(
             parameters=pika.ConnectionParameters(
@@ -135,8 +153,12 @@ class RabbitmqSelectLoopInteractor(object):
 
         """
         logger.error(
-            '{}: RabbitMQ select loop interactor: Connection open failed, reopening in 5 seconds: {}',
-            self._consumer_worker_name, err,
+            (
+                '{}: RabbitMQ select loop interactor: Connection open failed,'
+                ' reopening in 5 seconds: {}'
+            ),
+            self._consumer_worker_name,
+            err,
         )
         self._connection.ioloop.call_later(5, self._connection.ioloop.stop)
 
@@ -154,17 +176,27 @@ class RabbitmqSelectLoopInteractor(object):
         if self._stopping:
             self._connection.ioloop.stop()
         else:
-            if ('200' and 'Normal shutdown' in reason.__repr__()) or ('SelfExitException' in reason.__repr__()):
+            if ('200' and 'Normal shutdown' in reason.__repr__()) or (
+                'SelfExitException' in reason.__repr__()
+            ):
                 logger.warning(
-                    '{}: RabbitMQ select loop interactor: Connection closed: {}',
-                    self._consumer_worker_name, reason,
+                    ('{}: RabbitMQ select loop interactor: Connection' ' closed: {}'),
+                    self._consumer_worker_name,
+                    reason,
                 )
             else:
                 logger.warning(
-                    '{}: RabbitMQ select loop interactor: Connection closed, reopening in 5 seconds: {}',
-                    self._consumer_worker_name, reason,
+                    (
+                        '{}: RabbitMQ select loop interactor: Connection'
+                        ' closed, reopening in 5 seconds: {}'
+                    ),
+                    self._consumer_worker_name,
+                    reason,
                 )
-                self._connection.ioloop.call_later(5, self._connection.ioloop.stop)
+                self._connection.ioloop.call_later(
+                    5,
+                    self._connection.ioloop.stop,
+                )
 
     def open_channel(self):
         """This method will open a new channel with RabbitMQ by issuing the
@@ -174,7 +206,8 @@ class RabbitmqSelectLoopInteractor(object):
 
         """
         logger.info(
-            '{}: RabbitMQ select loop interactor: Creating a new channel', self._consumer_worker_name,
+            '{}: RabbitMQ select loop interactor: Creating a new channel',
+            self._consumer_worker_name,
         )
         self._connection.channel(on_open_callback=self.on_channel_open)
 
@@ -204,8 +237,12 @@ class RabbitmqSelectLoopInteractor(object):
                 )
         except Exception as err:
             logger.opt(exception=True).error(
-                '{}: RabbitMQ select loop interactor: Failed on_channel_open hook with error_msg: {}',
-                self._consumer_worker_name, str(err),
+                (
+                    '{}: RabbitMQ select loop interactor: Failed'
+                    ' on_channel_open hook with error_msg: {}'
+                ),
+                self._consumer_worker_name,
+                str(err),
             )
             # must be raised back to caller to be handled there
             raise err
@@ -216,7 +253,7 @@ class RabbitmqSelectLoopInteractor(object):
 
         """
         logger.info(
-            '{}: RabbitMQ select loop interactor: Adding channel close callback',
+            ('{}: RabbitMQ select loop interactor: Adding channel close' ' callback'),
             self._consumer_worker_name,
         )
         self._channel.add_on_close_callback(self.on_channel_closed)
@@ -234,25 +271,37 @@ class RabbitmqSelectLoopInteractor(object):
         """
         logger.warning(
             '{}: RabbitMQ select loop interactor: Channel {} was closed: {}',
-            self._consumer_worker_name, channel, reason,
+            self._consumer_worker_name,
+            channel,
+            reason,
         )
         self._channel = None
         try:
             self._connection.close()
         except Exception as e:
-            if isinstance(e, pika.exceptions.ConnectionWrongStateError) and\
-                    'Illegal close' in e.__repr__() and 'connection state=CLOSED' in e.__repr__():
+            if (
+                isinstance(e, pika.exceptions.ConnectionWrongStateError) and
+                'Illegal close' in e.__repr__() and
+                'connection state=CLOSED' in e.__repr__()
+            ):
                 logger.error(
-                    '{}: RabbitMQ select loop interactor: Tried closing connection '
-                    'that was already closed on channel close callback. Exception: {}. Will close ioloop now.',
+                    (
+                        '{}: RabbitMQ select loop interactor: Tried closing'
+                        ' connection that was already closed on channel close'
+                        ' callback. Exception: {}. Will close ioloop now.'
+                    ),
                     self._consumer_worker_name,
                     e,
                 )
             else:
                 logger.opt(exception=True).error(
-                    '{}: RabbitMQ select loop interactor: Exception closing connection '
-                    'on channel close callback: {}. Will close ioloop now.',
-                    self._consumer_worker_name, e,
+                    (
+                        '{}: RabbitMQ select loop interactor: Exception closing'
+                        ' connection on channel close callback: {}. Will close'
+                        ' ioloop now.'
+                    ),
+                    self._consumer_worker_name,
+                    e,
                 )
             self._connection.ioloop.stop()
 
@@ -262,7 +311,11 @@ class RabbitmqSelectLoopInteractor(object):
 
         """
         logger.info(
-            '{}: RabbitMQ select loop interactor: Issuing consumer related RPC commands', self._consumer_worker_name,
+            (
+                '{}: RabbitMQ select loop interactor: Issuing consumer related'
+                ' RPC commands'
+            ),
+            self._consumer_worker_name,
         )
         self.enable_delivery_confirmations()
         self.schedule_next_message()
@@ -279,7 +332,11 @@ class RabbitmqSelectLoopInteractor(object):
 
         """
         logger.info(
-            '{}: RabbitMQ select loop interactor: Issuing Confirm.Select RPC command', self._consumer_worker_name,
+            (
+                '{}: RabbitMQ select loop interactor: Issuing Confirm.Select'
+                ' RPC command'
+            ),
+            self._consumer_worker_name,
         )
         self._channel.confirm_delivery(self.on_delivery_confirmation)
 
@@ -298,8 +355,13 @@ class RabbitmqSelectLoopInteractor(object):
         """
         confirmation_type = method_frame.method.NAME.split('.')[1].lower()
         logger.info(
-            '{}: RabbitMQ select loop interactor: Received {} for delivery tag: {}',
-            self._consumer_worker_name, confirmation_type, method_frame.method.delivery_tag,
+            (
+                '{}: RabbitMQ select loop interactor: Received {} for delivery'
+                ' tag: {}'
+            ),
+            self._consumer_worker_name,
+            confirmation_type,
+            method_frame.method.delivery_tag,
         )
         if confirmation_type == 'ack':
             self._acked += 1
@@ -307,16 +369,26 @@ class RabbitmqSelectLoopInteractor(object):
             self._nacked += 1
         self._deliveries.remove(method_frame.method.delivery_tag)
         logger.info(
-            '{}: RabbitMQ select loop interactor: Published {} messages, {} have yet to be confirmed, '
-            '{} were acked and {} were nacked', self._consumer_worker_name, self._message_number,
-            len(self._deliveries), self._acked, self._nacked,
+            (
+                '{}: RabbitMQ select loop interactor: Published {} messages, {}'
+                ' have yet to be confirmed, {} were acked and {} were nacked'
+            ),
+            self._consumer_worker_name,
+            self._message_number,
+            len(self._deliveries),
+            self._acked,
+            self._nacked,
         )
 
     def enqueue_msg_delivery(self, exchange, routing_key, msg_body):
         # NOTE: if used in a multi threaded/multi processing context, this will introduce a race condition given that
         #       publish_message() may try to read the queued messages map while it is being concurrently updated by
         #       another process/thread
-        self.queued_messages[str(uuid.uuid4())] = [msg_body, exchange, routing_key]
+        self.queued_messages[str(uuid.uuid4())] = [
+            msg_body,
+            exchange,
+            routing_key,
+        ]
 
     def schedule_next_message(self):
         """If we are not closing our connection to RabbitMQ, schedule another
@@ -353,9 +425,15 @@ class RabbitmqSelectLoopInteractor(object):
                 msg_info = self.queued_messages[unique_id]
                 msg, exchange, routing_key = msg_info
                 logger.debug(
-                    '{}: RabbitMQ select loop interactor: Got queued message body to send to exchange {} '
-                    'via routing key {}: {}',
-                    self._consumer_worker_name, exchange, routing_key, msg,
+                    (
+                        '{}: RabbitMQ select loop interactor: Got queued'
+                        ' message body to send to exchange {} via routing key'
+                        ' {}: {}'
+                    ),
+                    self._consumer_worker_name,
+                    exchange,
+                    routing_key,
+                    msg,
                 )
                 properties = pika.BasicProperties(
                     delivery_mode=2,
@@ -371,31 +449,49 @@ class RabbitmqSelectLoopInteractor(object):
                 self._message_number += 1
                 self._deliveries.append(self._message_number)
                 logger.info(
-                    '{}: RabbitMQ select loop interactor: Published message # {} to exchange {} via routing key {}: {}',
-                    self._consumer_worker_name, self._message_number, exchange, routing_key, msg,
+                    (
+                        '{}: RabbitMQ select loop interactor: Published message'
+                        ' # {} to exchange {} via routing key {}: {}'
+                    ),
+                    self._consumer_worker_name,
+                    self._message_number,
+                    exchange,
+                    routing_key,
+                    msg,
                 )
                 pushed_outputs.append(unique_id)
             self.queued_messages = {
-                k: self.queued_messages[k] for k in self.queued_messages if k not in pushed_outputs
+                k: self.queued_messages[k]
+                for k in self.queued_messages
+                if k not in pushed_outputs
             }
         except Exception as err:
             logger.opt(exception=True).error(
-                '{}: RabbitMQ select loop interactor: Error while publishing message to rabbitmq error_msg: '
-                '{}, exchange: {}, routing_key: {}, msg: {}',
-                self._consumer_worker_name, str(err), exchange, routing_key, msg,
+                (
+                    '{}: RabbitMQ select loop interactor: Error while'
+                    ' publishing message to rabbitmq error_msg: {}, exchange:'
+                    ' {}, routing_key: {}, msg: {}'
+                ),
+                self._consumer_worker_name,
+                str(err),
+                exchange,
+                routing_key,
+                msg,
             )
         finally:
             self.schedule_next_message()
 
     def run(self):
-        """Run the example code by connecting and then starting the IOLoop.
-
-        """
+        """Run the example code by connecting and then starting the IOLoop."""
         attempt = 1
         while not self._stopping:
             logger.info(
-                '{}: RabbitMQ interactor select ioloop runner starting | Attempt # {}',
-                self._consumer_worker_name, attempt,
+                (
+                    '{}: RabbitMQ interactor select ioloop runner starting |'
+                    ' Attempt # {}'
+                ),
+                self._consumer_worker_name,
+                attempt,
             )
             self._connection = None
             self._deliveries = []
@@ -405,8 +501,12 @@ class RabbitmqSelectLoopInteractor(object):
             self._connection = self.connect()
             self._connection.ioloop.start()
             logger.info(
-                '{}: RabbitMQ interactor select ioloop exited in runner loop | Attempt # {}',
-                self._consumer_worker_name, attempt,
+                (
+                    '{}: RabbitMQ interactor select ioloop exited in runner'
+                    ' loop | Attempt # {}'
+                ),
+                self._consumer_worker_name,
+                attempt,
             )
             attempt += 1
         logger.info(
@@ -445,7 +545,10 @@ class RabbitmqSelectLoopInteractor(object):
         will invoke when a message is fully received.
         """
         logger.info(
-            '{}: RabbitMQ select loop interactor: Issuing consumer related RPC commands',
+            (
+                '{}: RabbitMQ select loop interactor: Issuing consumer related'
+                ' RPC commands'
+            ),
             self._consumer_worker_name,
         )
         self.add_on_cancel_callback()
@@ -464,7 +567,10 @@ class RabbitmqSelectLoopInteractor(object):
         on_consumer_cancelled will be invoked by pika.
         """
         logger.info(
-            '{}: RabbitMQ select loop interactor: Adding consumer cancellation callback',
+            (
+                '{}: RabbitMQ select loop interactor: Adding consumer'
+                ' cancellation callback'
+            ),
             self._consumer_worker_name,
         )
         self._channel.add_on_cancel_callback(self.on_consumer_cancelled)
@@ -476,7 +582,8 @@ class RabbitmqSelectLoopInteractor(object):
         """
         logger.info(
             '{}: Consumer was cancelled remotely, shutting down: {}',
-            self._consumer_worker_name, method_frame,
+            self._consumer_worker_name,
+            method_frame,
         )
         if self._channel:
             self._channel.close()
@@ -487,11 +594,15 @@ class RabbitmqSelectLoopInteractor(object):
         """
         if self._channel:
             logger.info(
-                '{}: RabbitMQ select loop interactor: Sending a Basic.Cancel RPC command to RabbitMQ',
+                (
+                    '{}: RabbitMQ select loop interactor: Sending a'
+                    ' Basic.Cancel RPC command to RabbitMQ'
+                ),
                 self._consumer_worker_name,
             )
             cb = functools.partial(
-                self.on_cancelok, userdata=self._consumer_tag,
+                self.on_cancelok,
+                userdata=self._consumer_tag,
             )
             self._channel.basic_cancel(self._consumer_tag, cb)
 
@@ -505,8 +616,12 @@ class RabbitmqSelectLoopInteractor(object):
         """
         self._consuming = False
         logger.info(
-            '{}: RabbitMQ select loop interactor: RabbitMQ acknowledged the cancellation of the consumer: {}',
-            self._consumer_worker_name, userdata,
+            (
+                '{}: RabbitMQ select loop interactor: RabbitMQ acknowledged the'
+                ' cancellation of the consumer: {}'
+            ),
+            self._consumer_worker_name,
+            userdata,
         )
         self.close_channel()
 
@@ -545,10 +660,17 @@ class RabbitmqThreadedSelectLoopInteractor(object):
     messages that have been sent and if they've been confirmed by RabbitMQ.
 
     """
+
     # interval at which the select loop polls to push out new notifications
     PUBLISH_INTERVAL = 0.01
 
-    def __init__(self, publish_queue: queue.Queue, consume_queue_name=None, consume_callback=None, consumer_worker_name=''):
+    def __init__(
+        self,
+        publish_queue: queue.Queue,
+        consume_queue_name=None,
+        consume_callback=None,
+        consumer_worker_name='',
+    ):
         """Setup the example publisher object, passing in the URL we will use
         to connect to RabbitMQ.
         """
@@ -612,7 +734,9 @@ class RabbitmqThreadedSelectLoopInteractor(object):
         :param pika.SelectConnection _unused_connection: The connection
 
         """
-        self._logger.info('RabbitMQ threaded select loop interactor: Connection opened')
+        self._logger.info(
+            'RabbitMQ threaded select loop interactor: Connection opened',
+        )
         self.open_channel()
 
     def on_connection_open_error(self, _unused_connection, err):
@@ -624,7 +748,11 @@ class RabbitmqThreadedSelectLoopInteractor(object):
 
         """
         self._logger.error(
-            'RabbitMQ threaded select loop interactor: Connection open failed, reopening in 5 seconds: {}', err,
+            (
+                'RabbitMQ threaded select loop interactor: Connection open'
+                ' failed, reopening in 5 seconds: {}'
+            ),
+            err,
         )
         self._connection.ioloop.call_later(5, self._connection.ioloop.stop)
 
@@ -642,17 +770,25 @@ class RabbitmqThreadedSelectLoopInteractor(object):
         if self._stopping:
             self._connection.ioloop.stop()
         else:
-            if ('200' and 'Normal shutdown' in reason.__repr__()) or ('SelfExitException' in reason.__repr__()):
+            if ('200' and 'Normal shutdown' in reason.__repr__()) or (
+                'SelfExitException' in reason.__repr__()
+            ):
                 self._logger.warning(
                     'RabbitMQ select loop interactor: Connection closed: {}',
                     reason,
                 )
             else:
                 self._logger.warning(
-                    'RabbitMQ select loop interactor: Connection closed, reopening in 5 seconds: {}',
+                    (
+                        'RabbitMQ select loop interactor: Connection closed,'
+                        ' reopening in 5 seconds: {}'
+                    ),
                     reason,
                 )
-                self._connection.ioloop.call_later(5, self._connection.ioloop.stop)
+                self._connection.ioloop.call_later(
+                    5,
+                    self._connection.ioloop.stop,
+                )
 
     def open_channel(self):
         """This method will open a new channel with RabbitMQ by issuing the
@@ -661,7 +797,9 @@ class RabbitmqThreadedSelectLoopInteractor(object):
         will be invoked.
 
         """
-        self._logger.info('RabbitMQ threaded select loop interactor: Creating a new channel')
+        self._logger.info(
+            'RabbitMQ threaded select loop interactor: Creating a new channel',
+        )
         self._connection.channel(on_open_callback=self.on_channel_open)
 
     def on_channel_open(self, channel):
@@ -673,7 +811,9 @@ class RabbitmqThreadedSelectLoopInteractor(object):
         :param pika.channel.Channel channel: The channel object
 
         """
-        self._logger.info('RabbitMQ threaded select loop interactor: Channel opened')
+        self._logger.info(
+            'RabbitMQ threaded select loop interactor: Channel opened',
+        )
         self._channel = channel
         self.add_on_channel_close_callback()
         # self.setup_exchange(self.exchange)
@@ -691,7 +831,10 @@ class RabbitmqThreadedSelectLoopInteractor(object):
 
         """
         self._logger.info(
-            'RabbitMQ threaded select loop interactor: Adding channel close callback',
+            (
+                'RabbitMQ threaded select loop interactor: Adding channel close'
+                ' callback'
+            ),
         )
         self._channel.add_on_close_callback(self.on_channel_closed)
 
@@ -707,23 +850,34 @@ class RabbitmqThreadedSelectLoopInteractor(object):
 
         """
         self._logger.warning(
-            'RabbitMQ threaded select loop interactor: Channel {} was closed: {}', channel, reason,
+            ('RabbitMQ threaded select loop interactor: Channel {} was' ' closed: {}'),
+            channel,
+            reason,
         )
         self._channel = None
         try:
             self._connection.close()
         except Exception as e:
-            if isinstance(e, pika.exceptions.ConnectionWrongStateError) and\
-                    'Illegal close' in e.__repr__() and 'connection state=CLOSED' in e.__repr__():
+            if (
+                isinstance(e, pika.exceptions.ConnectionWrongStateError) and
+                'Illegal close' in e.__repr__() and
+                'connection state=CLOSED' in e.__repr__()
+            ):
                 self._logger.error(
-                    'RabbitMQ threaded select loop interactor: Tried closing connection '
-                    'that was already closed on channel close callback. Exception: {}. Will close ioloop now.',
+                    (
+                        'RabbitMQ threaded select loop interactor: Tried'
+                        ' closing connection that was already closed on channel'
+                        ' close callback. Exception: {}. Will close ioloop now.'
+                    ),
                     e,
                 )
             else:
                 self._logger.opt(exception=True).error(
-                    'RabbitMQ threaded select loop interactor: Exception closing connection '
-                    'on channel close callback: {}. Will close ioloop now.',
+                    (
+                        'RabbitMQ threaded select loop interactor: Exception'
+                        ' closing connection on channel close callback: {}.'
+                        ' Will close ioloop now.'
+                    ),
                     e,
                 )
                 # because on_connection_closed callback would not be reached
@@ -743,7 +897,8 @@ class RabbitmqThreadedSelectLoopInteractor(object):
         # Note: using functools.partial is not required, it is demonstrating
         # how arbitrary data can be passed to the callback when it is called
         cb = functools.partial(
-            self.on_exchange_declareok, userdata=exchange_name,
+            self.on_exchange_declareok,
+            userdata=exchange_name,
         )
         self._channel.exchange_declare(
             exchange=exchange_name,
@@ -772,7 +927,8 @@ class RabbitmqThreadedSelectLoopInteractor(object):
         """
         self._logger.info('Declaring queue {}', queue_name)
         self._channel.queue_declare(
-            queue=queue_name, callback=self.on_queue_declareok,
+            queue=queue_name,
+            callback=self.on_queue_declareok,
         )
 
     def on_queue_declareok(self, _unused_frame):
@@ -786,7 +942,9 @@ class RabbitmqThreadedSelectLoopInteractor(object):
 
         """
         self._logger.info(
-            'Binding {} to {} with {}', self.exchange, self.QUEUE,
+            'Binding {} to {} with {}',
+            self.exchange,
+            self.QUEUE,
             self.ROUTING_KEY,
         )
         self._channel.queue_bind(
@@ -811,7 +969,10 @@ class RabbitmqThreadedSelectLoopInteractor(object):
 
         """
         self._logger.info(
-            'RabbitMQ threaded select loop interactor: Issuing consumer related RPC commands',
+            (
+                'RabbitMQ threaded select loop interactor: Issuing consumer'
+                ' related RPC commands'
+            ),
         )
         self.enable_delivery_confirmations()
         self.schedule_next_message()
@@ -828,7 +989,10 @@ class RabbitmqThreadedSelectLoopInteractor(object):
 
         """
         self._logger.info(
-            'RabbitMQ threaded select loop interactor: Issuing Confirm.Select RPC command',
+            (
+                'RabbitMQ threaded select loop interactor: Issuing'
+                ' Confirm.Select RPC command'
+            ),
         )
         self._channel.confirm_delivery(self.on_delivery_confirmation)
 
@@ -847,7 +1011,11 @@ class RabbitmqThreadedSelectLoopInteractor(object):
         """
         confirmation_type = method_frame.method.NAME.split('.')[1].lower()
         self._logger.info(
-            'RabbitMQ threaded select loop interactor: Received {} for delivery tag: {}', confirmation_type,
+            (
+                'RabbitMQ threaded select loop interactor: Received {} for'
+                ' delivery tag: {}'
+            ),
+            confirmation_type,
             method_frame.method.delivery_tag,
         )
         if confirmation_type == 'ack':
@@ -856,9 +1024,15 @@ class RabbitmqThreadedSelectLoopInteractor(object):
             self._nacked += 1
         self._deliveries.remove(method_frame.method.delivery_tag)
         self._logger.info(
-            'RabbitMQ threaded select loop interactor: Published {} messages, {} have yet to be confirmed, '
-            '{} were acked and {} were nacked', self._message_number,
-            len(self._deliveries), self._acked, self._nacked,
+            (
+                'RabbitMQ threaded select loop interactor: Published {}'
+                ' messages, {} have yet to be confirmed, {} were acked and {}'
+                ' were nacked'
+            ),
+            self._message_number,
+            len(self._deliveries),
+            self._acked,
+            self._nacked,
         )
 
     def schedule_next_message(self, interval=PUBLISH_INTERVAL):
@@ -878,7 +1052,10 @@ class RabbitmqThreadedSelectLoopInteractor(object):
         """
         if self._channel is None or not self._channel.is_open:
             self._logger.error(
-                'RabbitMQ threaded select loop interactor: Not proceeding with publish queue checks',
+                (
+                    'RabbitMQ threaded select loop interactor: Not proceeding'
+                    ' with publish queue checks'
+                ),
             )
             return
         # check for queued messages
@@ -891,8 +1068,14 @@ class RabbitmqThreadedSelectLoopInteractor(object):
             else:
                 msg, exchange, routing_key = new_msg
                 self._logger.debug(
-                    'RabbitMQ threaded select loop interactor: Got queued message body to send to exchange {} via routing key {}: {}',
-                    exchange, routing_key, msg,
+                    (
+                        'RabbitMQ threaded select loop interactor: Got queued'
+                        ' message body to send to exchange {} via routing key'
+                        ' {}: {}'
+                    ),
+                    exchange,
+                    routing_key,
+                    msg,
                 )
                 properties = pika.BasicProperties(
                     delivery_mode=2,
@@ -908,8 +1091,14 @@ class RabbitmqThreadedSelectLoopInteractor(object):
                 self._message_number += 1
                 self._deliveries.append(self._message_number)
                 self._logger.info(
-                    'RabbitMQ threaded select loop interactor: Published message # {} to exchange {} via routing key {}: {}',
-                    self._message_number, exchange, routing_key, msg,
+                    (
+                        'RabbitMQ threaded select loop interactor: Published'
+                        ' message # {} to exchange {} via routing key {}: {}'
+                    ),
+                    self._message_number,
+                    exchange,
+                    routing_key,
+                    msg,
                 )
                 self._publish_queue.task_done()
             finally:
@@ -918,7 +1107,6 @@ class RabbitmqThreadedSelectLoopInteractor(object):
                     break
 
     def run(self):
-
         self._logger = logger.bind(module='PowerLoom|RabbitmqHelpers')
 
         while not self._stopping:
@@ -938,13 +1126,17 @@ class RabbitmqThreadedSelectLoopInteractor(object):
 
         """
         if self._channel is not None:
-            self._logger.info('RabbitMQ threaded select loop interactor: Closing the channel')
+            self._logger.info(
+                'RabbitMQ threaded select loop interactor: Closing the channel',
+            )
             self._channel.close()
 
     def close_connection(self):
         """This method closes the connection to RabbitMQ."""
         if self._connection is not None:
-            self._logger.info('RabbitMQ threaded select loop interactor: Closing connection')
+            self._logger.info(
+                'RabbitMQ threaded select loop interactor: Closing connection',
+            )
             self._connection.close()
 
     def start_consuming(self, queue_name, consume_cb, auto_ack=False):
@@ -957,7 +1149,10 @@ class RabbitmqThreadedSelectLoopInteractor(object):
         will invoke when a message is fully received.
         """
         self._logger.info(
-            'RabbitMQ threaded select loop interactor: Issuing consumer related RPC commands',
+            (
+                'RabbitMQ threaded select loop interactor: Issuing consumer'
+                ' related RPC commands'
+            ),
         )
         self.add_on_cancel_callback()
         self._consumer_tag = self._channel.basic_consume(
@@ -975,7 +1170,10 @@ class RabbitmqThreadedSelectLoopInteractor(object):
         on_consumer_cancelled will be invoked by pika.
         """
         self._logger.info(
-            'RabbitMQ threaded select loop interactor: Adding consumer cancellation callback',
+            (
+                'RabbitMQ threaded select loop interactor: Adding consumer'
+                ' cancellation callback'
+            ),
         )
         self._channel.add_on_cancel_callback(self.on_consumer_cancelled)
 
@@ -985,7 +1183,10 @@ class RabbitmqThreadedSelectLoopInteractor(object):
         :param pika.frame.Method method_frame: The Basic.Cancel frame
         """
         self._logger.info(
-            'RabbitMQ threaded select loop interactor: Consumer was cancelled remotely, shutting down: {}',
+            (
+                'RabbitMQ threaded select loop interactor: Consumer was'
+                ' cancelled remotely, shutting down: {}'
+            ),
             method_frame,
         )
         if self._channel:
@@ -997,10 +1198,14 @@ class RabbitmqThreadedSelectLoopInteractor(object):
         """
         if self._channel:
             self._logger.info(
-                'RabbitMQ threaded select loop interactor: Sending a Basic.Cancel RPC command to RabbitMQ',
+                (
+                    'RabbitMQ threaded select loop interactor: Sending a'
+                    ' Basic.Cancel RPC command to RabbitMQ'
+                ),
             )
             cb = functools.partial(
-                self.on_cancelok, userdata=self._consumer_tag,
+                self.on_cancelok,
+                userdata=self._consumer_tag,
             )
             self._channel.basic_cancel(self._consumer_tag, cb)
 
@@ -1014,7 +1219,10 @@ class RabbitmqThreadedSelectLoopInteractor(object):
         """
         self._consuming = False
         self._logger.info(
-            'RabbitMQ threaded select loop interactor: RabbitMQ acknowledged the cancellation of the consumer: {}',
+            (
+                'RabbitMQ threaded select loop interactor: RabbitMQ'
+                ' acknowledged the cancellation of the consumer: {}'
+            ),
             userdata,
         )
         self.close_channel()
@@ -1028,8 +1236,11 @@ class RabbitmqThreadedSelectLoopInteractor(object):
             self._stopping = True
             # try flushing out all queued messages
             self._logger.info(
-                'RabbitMQ threaded select loop interactor: attempting to send out queued messages before stopping ioloop '
-                'and disconnecting',
+                (
+                    'RabbitMQ threaded select loop interactor: attempting to'
+                    ' send out queued messages before stopping ioloop and'
+                    ' disconnecting'
+                ),
             )
             try:
                 self.publish_message(flush=True)

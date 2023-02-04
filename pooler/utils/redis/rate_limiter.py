@@ -49,6 +49,7 @@ SCRIPT_SET_EXPIRE = """
 
 # # # END RATE LIMITER LUA SCRIPTS
 
+
 # needs to be run only once
 async def load_rate_limiter_scripts(redis_conn: aioredis.Redis):
     script_clear_keys_sha = await redis_conn.script_load(SCRIPT_CLEAR_KEYS)
@@ -60,11 +61,11 @@ async def load_rate_limiter_scripts(redis_conn: aioredis.Redis):
 
 
 async def generic_rate_limiter(
-        parsed_limits: List[RateLimitItem],
-        key_bits: list,
-        redis_conn: aioredis.Redis,
-        rate_limit_lua_script_shas=None,
-        limit_incr_by=1,
+    parsed_limits: List[RateLimitItem],
+    key_bits: list,
+    redis_conn: aioredis.Redis,
+    rate_limit_lua_script_shas=None,
+    limit_incr_by=1,
 ):
     """
     return: tuple of (can_request, retry_after in case of false can_request, violated rate limit string if applicable)
@@ -81,33 +82,40 @@ async def generic_rate_limiter(
         # if rate limit checks out then we call
         try:
             if await custom_limiter.hit(each_lim, limit_incr_by, *[key_bits]) is False:
-                window_stats = await custom_limiter.get_window_stats(each_lim, key_bits)
+                window_stats = await custom_limiter.get_window_stats(
+                    each_lim,
+                    key_bits,
+                )
                 reset_in = 1 + window_stats[0]
                 # if you need information on back offs
                 retry_after = reset_in - int(time.time())
                 return False, retry_after, str(each_lim)
         except (
-                redis.exceptions.ConnectionError, redis.exceptions.TimeoutError,
-                redis.exceptions.ResponseError,
+            redis.exceptions.ConnectionError,
+            redis.exceptions.TimeoutError,
+            redis.exceptions.ResponseError,
         ) as exc:
             raise Exception from exc
     return True, 0, ''
 
 
 async def check_rpc_rate_limit(
-        parsed_limits: list,
-        app_id,
-        redis_conn: aioredis.Redis,
-        request_payload,
-        error_msg,
-        logger,
-        rate_limit_lua_script_shas=None,
-        limit_incr_by=1,
+    parsed_limits: list,
+    app_id,
+    redis_conn: aioredis.Redis,
+    request_payload,
+    error_msg,
+    logger,
+    rate_limit_lua_script_shas=None,
+    limit_incr_by=1,
 ):
     """
-        rate limiter for rpc calls
+    rate limiter for rpc calls
     """
-    key_bits = [app_id, 'eth_call']  # TODO: add unique elements that can identify a request
+    key_bits = [
+        app_id,
+        'eth_call',
+    ]  # TODO: add unique elements that can identify a request
     try:
         can_request, retry_after, violated_limit = await generic_rate_limiter(
             parsed_limits,
@@ -118,14 +126,19 @@ async def check_rpc_rate_limit(
         )
     except Exception as exc:
         logger.opt(exception=True).error(
-            'Caught exception on rate limiter operations: {} | Bypassing rate limit check ', exc,
+            (
+                'Caught exception on rate limiter operations: {} | Bypassing'
+                ' rate limit check '
+            ),
+            exc,
         )
         raise
 
     if not can_request:
         exc = RPCException(
             request=request_payload,
-            response={}, underlying_exception=None,
+            response={},
+            underlying_exception=None,
             extra_info=error_msg,
         )
         logger.trace('Rate limit hit, raising exception {}', str(exc))

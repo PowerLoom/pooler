@@ -43,13 +43,13 @@ def get_maker_pair_data(prop):
 
 async def get_pair(
     factory_contract_obj,
-    token0, token1,
+    token0,
+    token1,
     loop: asyncio.AbstractEventLoop,
     redis_conn: aioredis.Redis,
     rate_limit_lua_script_shas,
     web3_provider=global_w3_client,
 ):
-
     # check if pair cache exists
     pair_address_cache = await redis_conn.hget(
         uniswap_tokens_pair_map,
@@ -67,10 +67,19 @@ async def get_pair(
         ).call,
     )
     await check_rpc_rate_limit(
-        parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], redis_conn=redis_conn,
+        parsed_limits=web3_provider.get('rate_limit', []),
+        app_id=web3_provider.get('rpc_url').split('/')[-1],
+        redis_conn=redis_conn,
         request_payload={'token0': token0, 'token1': token1},
-        error_msg={'msg': 'exhausted_api_key_rate_limit inside uniswap_functions get_pair fn'},
-        logger=helper_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=1,
+        error_msg={
+            'msg': (
+                'exhausted_api_key_rate_limit inside uniswap_functions'
+                ' get_pair fn'
+            ),
+        },
+        logger=helper_logger,
+        rate_limit_lua_script_shas=rate_limit_lua_script_shas,
+        limit_incr_by=1,
     )
     pair = await loop.run_in_executor(func=pair_func, executor=None)
 
@@ -78,7 +87,9 @@ async def get_pair(
     await redis_conn.hset(
         name=uniswap_tokens_pair_map,
         mapping={
-            f'{Web3.toChecksumAddress(token0)}-{Web3.toChecksumAddress(token1)}': Web3.toChecksumAddress(pair),
+            f'{Web3.toChecksumAddress(token0)}-{Web3.toChecksumAddress(token1)}': Web3.toChecksumAddress(
+                pair,
+            ),
         },
     )
 
@@ -101,16 +112,23 @@ async def get_pair_metadata(
     web3_provider=global_w3_client,
 ):
     """
-        returns information on the tokens contained within a pair contract - name, symbol, decimals of token0 and token1
-        also returns pair symbol by concatenating {token0Symbol}-{token1Symbol}
+    returns information on the tokens contained within a pair contract - name, symbol, decimals of token0 and token1
+    also returns pair symbol by concatenating {token0Symbol}-{token1Symbol}
     """
     try:
         pair_address = Web3.toChecksumAddress(pair_address)
 
         # check if cache exist
-        pair_token_addresses_cache, pair_tokens_data_cache = await asyncio.gather(
-            redis_conn.hgetall(uniswap_pair_contract_tokens_addresses.format(pair_address)),
-            redis_conn.hgetall(uniswap_pair_contract_tokens_data.format(pair_address)),
+        (
+            pair_token_addresses_cache,
+            pair_tokens_data_cache,
+        ) = await asyncio.gather(
+            redis_conn.hgetall(
+                uniswap_pair_contract_tokens_addresses.format(pair_address),
+            ),
+            redis_conn.hgetall(
+                uniswap_pair_contract_tokens_data.format(pair_address),
+            ),
         )
 
         # parse addresses cache or call eth rpc
@@ -129,34 +147,55 @@ async def get_pair_metadata(
                 abi=pair_contract_abi,
             )
             await check_rpc_rate_limit(
-                parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url', '').split('/')[-1],
-                redis_conn=redis_conn, request_payload={'pair_address': pair_address},
+                parsed_limits=web3_provider.get('rate_limit', []),
+                app_id=web3_provider.get('rpc_url', '').split('/')[-1],
+                redis_conn=redis_conn,
+                request_payload={'pair_address': pair_address},
                 error_msg={
-                    'msg': 'exhausted_api_key_rate_limit inside uniswap_functions get_pair_metadata fn',
+                    'msg': (
+                        'exhausted_api_key_rate_limit inside uniswap_functions'
+                        ' get_pair_metadata fn'
+                    ),
                 },
-                logger=helper_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=2,
+                logger=helper_logger,
+                rate_limit_lua_script_shas=rate_limit_lua_script_shas,
+                limit_incr_by=2,
             )
 
             try:
-                token0Addr, token1Addr = web3_provider['web3_client'].batch_call([
-                    pair_contract_obj.functions.token0(),
-                    pair_contract_obj.functions.token1(),
-                ])
+                token0Addr, token1Addr = web3_provider[
+                    'web3_client'
+                ].batch_call(
+                    [
+                        pair_contract_obj.functions.token0(),
+                        pair_contract_obj.functions.token1(),
+                    ],
+                )
             except Exception as e:
                 exc = RPCException(
-                    request={'pair_address': pair_address, 'token0': token0Addr, 'token1': token1Addr},
-                    response=e, underlying_exception=e,
+                    request={
+                        'pair_address': pair_address,
+                        'token0': token0Addr,
+                        'token1': token1Addr,
+                    },
+                    response=e,
+                    underlying_exception=e,
                     extra_info={'msg': format_exception(e)},
                 )
 
                 helper_logger.opt(lazy=True).trace(
-                    f'error while getting token0 and token1 addresses for pair {pair_address}'
-                    ' - {err}', err=lambda: str(exc),
+                    (
+                        'error while getting token0 and token1 addresses for'
+                        f' pair {pair_address} - {{err}}'
+                    ),
+                    err=lambda: str(exc),
                 )
                 raise exc
 
             await redis_conn.hset(
-                name=uniswap_pair_contract_tokens_addresses.format(pair_address),
+                name=uniswap_pair_contract_tokens_addresses.format(
+                    pair_address,
+                ),
                 mapping={
                     'token0Addr': token0Addr,
                     'token1Addr': token1Addr,
@@ -176,10 +215,18 @@ async def get_pair_metadata(
 
         # parse token data cache or call eth rpc
         if pair_tokens_data_cache:
-            token0_decimals = pair_tokens_data_cache[b'token0_decimals'].decode('utf-8')
-            token1_decimals = pair_tokens_data_cache[b'token1_decimals'].decode('utf-8')
-            token0_symbol = pair_tokens_data_cache[b'token0_symbol'].decode('utf-8')
-            token1_symbol = pair_tokens_data_cache[b'token1_symbol'].decode('utf-8')
+            token0_decimals = pair_tokens_data_cache[b'token0_decimals'].decode(
+                'utf-8',
+            )
+            token1_decimals = pair_tokens_data_cache[b'token1_decimals'].decode(
+                'utf-8',
+            )
+            token0_symbol = pair_tokens_data_cache[b'token0_symbol'].decode(
+                'utf-8',
+            )
+            token1_symbol = pair_tokens_data_cache[b'token1_symbol'].decode(
+                'utf-8',
+            )
             token0_name = pair_tokens_data_cache[b'token0_name'].decode('utf-8')
             token1_name = pair_tokens_data_cache[b'token1_name'].decode('utf-8')
         else:
@@ -188,7 +235,9 @@ async def get_pair_metadata(
             # special case to handle maker token
             maker_token0 = None
             maker_token1 = None
-            if(Web3.toChecksumAddress(worker_settings.contract_addresses.MAKER) == Web3.toChecksumAddress(token0Addr)):
+            if Web3.toChecksumAddress(
+                worker_settings.contract_addresses.MAKER,
+            ) == Web3.toChecksumAddress(token0Addr):
                 token0_name = get_maker_pair_data('name')
                 token0_symbol = get_maker_pair_data('symbol')
                 maker_token0 = True
@@ -197,7 +246,9 @@ async def get_pair_metadata(
                 tasks.append(token0.functions.symbol())
             tasks.append(token0.functions.decimals())
 
-            if(Web3.toChecksumAddress(worker_settings.contract_addresses.MAKER) == Web3.toChecksumAddress(token1Addr)):
+            if Web3.toChecksumAddress(
+                worker_settings.contract_addresses.MAKER,
+            ) == Web3.toChecksumAddress(token1Addr):
                 token1_name = get_maker_pair_data('name')
                 token1_symbol = get_maker_pair_data('symbol')
                 maker_token1 = True
@@ -207,35 +258,65 @@ async def get_pair_metadata(
             tasks.append(token1.functions.decimals())
 
             await check_rpc_rate_limit(
-                parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url', '').split('/')[-1], redis_conn=redis_conn,
+                parsed_limits=web3_provider.get('rate_limit', []),
+                app_id=web3_provider.get('rpc_url', '').split('/')[-1],
+                redis_conn=redis_conn,
                 request_payload={'pair_address': pair_address},
                 error_msg={
-                    'msg': 'exhausted_api_key_rate_limit inside uniswap_functions get_pair_metadata fn',
+                    'msg': (
+                        'exhausted_api_key_rate_limit inside uniswap_functions'
+                        ' get_pair_metadata fn'
+                    ),
                 },
-                logger=helper_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=4,
+                logger=helper_logger,
+                rate_limit_lua_script_shas=rate_limit_lua_script_shas,
+                limit_incr_by=4,
             )
             try:
                 if maker_token1:
-                    [token0_name, token0_symbol, token0_decimals, token1_decimals] = web3_provider['web3_client'].batch_call(
+                    [
+                        token0_name,
+                        token0_symbol,
+                        token0_decimals,
+                        token1_decimals,
+                    ] = web3_provider['web3_client'].batch_call(
                         tasks,
                     )
                 elif maker_token0:
-                    [token0_decimals, token1_name, token1_symbol, token1_decimals] = web3_provider['web3_client'].batch_call(
+                    [
+                        token0_decimals,
+                        token1_name,
+                        token1_symbol,
+                        token1_decimals,
+                    ] = web3_provider['web3_client'].batch_call(
                         tasks,
                     )
                 else:
                     [
-                        token0_name, token0_symbol, token0_decimals, token1_name, token1_symbol, token1_decimals,
+                        token0_name,
+                        token0_symbol,
+                        token0_decimals,
+                        token1_name,
+                        token1_symbol,
+                        token1_decimals,
                     ] = web3_provider['web3_client'].batch_call(tasks)
             except Exception as e:
                 exc = RPCException(
-                    request={'pair_address': pair_address, 'token0': token0Addr, 'token1': token1Addr},
-                    response=e, underlying_exception=e,
+                    request={
+                        'pair_address': pair_address,
+                        'token0': token0Addr,
+                        'token1': token1Addr,
+                    },
+                    response=e,
+                    underlying_exception=e,
                     extra_info={'msg': format_exception(e)},
                 )
                 helper_logger.opt(lazy=True).trace(
-                    f'error while getting token0 and token1 addresses for pair {pair_address}'
-                    ' - {err}', err=lambda: str(exc),
+                    (
+                        'error while getting token0 and token1 addresses for'
+                        f' pair {pair_address} - {{err}}'
+                    ),
+                    err=lambda: str(exc),
                 )
                 raise exc
 
@@ -272,7 +353,10 @@ async def get_pair_metadata(
     except Exception as err:
         # this will be retried in next cycle
         helper_logger.opt(exception=True).error(
-            f'RPC error while fetcing metadata for pair {pair_address}, error_msg:{err}',
+            (
+                f'RPC error while fetcing metadata for pair {pair_address},'
+                f' error_msg:{err}'
+            ),
         )
         raise err
 
@@ -286,11 +370,10 @@ async def get_block_details_in_block_range(
     web3_provider=global_w3_client,
 ):
     """
-        Fetch block-details for a range of block number or a single block
+    Fetch block-details for a range of block number or a single block
 
     """
     try:
-
         if from_block != 'latest' and to_block != 'latest':
             cached_details = await redis_conn.zrangebyscore(
                 name=cached_block_details_at_height,
@@ -299,28 +382,46 @@ async def get_block_details_in_block_range(
             )
 
             # check if we have cached value for each block number
-            if cached_details and len(cached_details) == to_block - (from_block - 1):
+            if cached_details and len(cached_details) == to_block - (
+                from_block - 1
+            ):
                 cached_details = {
                     json.loads(
                         block_detail.decode(
                             'utf-8',
                         ),
-                    )['number']: json.loads(block_detail.decode('utf-8')) for block_detail in cached_details
+                    )[
+                        'number'
+                    ]: json.loads(block_detail.decode('utf-8'))
+                    for block_detail in cached_details
                 }
                 return cached_details
 
         await check_rpc_rate_limit(
-            parsed_limits=web3_provider.get('rate_limit', []), app_id=web3_provider.get('rpc_url').split('/')[-1], redis_conn=redis_conn,
+            parsed_limits=web3_provider.get('rate_limit', []),
+            app_id=web3_provider.get('rpc_url').split('/')[-1],
+            redis_conn=redis_conn,
             request_payload={'from_block': from_block, 'to_block': to_block},
-            error_msg={'msg': 'exhausted_api_key_rate_limit inside get_block_details_in_block_range'},
-            logger=helper_logger, rate_limit_lua_script_shas=rate_limit_lua_script_shas, limit_incr_by=to_block - from_block + 1,
+            error_msg={
+                'msg': (
+                    'exhausted_api_key_rate_limit inside'
+                    ' get_block_details_in_block_range'
+                ),
+            },
+            logger=helper_logger,
+            rate_limit_lua_script_shas=rate_limit_lua_script_shas,
+            limit_incr_by=to_block - from_block + 1,
         )
         rpc_batch_block_details = batch_eth_get_block(
             rpc_endpoint=web3_provider.get(
                 'rpc_url',
-            ), from_block=from_block, to_block=to_block,
+            ),
+            from_block=from_block,
+            to_block=to_block,
         )
-        rpc_batch_block_details = rpc_batch_block_details if rpc_batch_block_details else []
+        rpc_batch_block_details = (
+            rpc_batch_block_details if rpc_batch_block_details else []
+        )
 
         block_details_dict = dict()
         redis_cache_mapping = dict()
@@ -357,11 +458,13 @@ async def get_block_details_in_block_range(
 
     except Exception as e:
         helper_logger.opt(exception=True, lazy=True).trace(
-            'Unable to fetch block details, error_msg:{err}', err=lambda: format_exception(e),
+            'Unable to fetch block details, error_msg:{err}',
+            err=lambda: format_exception(e),
         )
 
         raise RPCException(
             request={'from_block': from_block, 'to_block': to_block},
-            response=e, underlying_exception=e,
+            response=e,
+            underlying_exception=e,
             extra_info={'msg': str(e)},
         ) from e

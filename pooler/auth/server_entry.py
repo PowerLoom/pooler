@@ -43,10 +43,9 @@ async def startup_boilerplate():
 
 @app.post('/user')
 async def create_update_user(
-        request: Request,
-        user_cu_request: AppOwnerModel,
-        response: Response,
-
+    request: Request,
+    user_cu_request: AppOwnerModel,
+    response: Response,
 ):
     """
     can be used for both creating a new entity or updating an entity's information in the redis htable
@@ -57,7 +56,10 @@ async def create_update_user(
             all_users_set(),
             user_cu_request.email,
         )
-        if not await redis_conn.sismember(all_users_set(), user_cu_request.email):
+        if not await redis_conn.sismember(
+            all_users_set(),
+            user_cu_request.email,
+        ):
             user_cu_request.next_reset_at = int(time.time()) + 86400
         user_details = user_cu_request.dict()
         await redis_conn.hset(
@@ -73,10 +75,10 @@ async def create_update_user(
 
 @app.post('/user/{email}/api_key')
 async def add_api_key(
-        api_key_request: AddApiKeyRequest,
-        email: str,
-        request: Request,
-        response: Response,
+    api_key_request: AddApiKeyRequest,
+    email: str,
+    request: Request,
+    response: Response,
 ):
     redis_conn: aioredis.Redis = request.app.state.redis_pool
     if not await redis_conn.sismember(all_users_set(), email):
@@ -92,28 +94,38 @@ async def add_api_key(
 
 @app.delete('/user/{email}/api_key')
 async def revoke_api_key(
-        api_key_request: AddApiKeyRequest,
-        email: str,
-        request: Request,
-        response: Response,
+    api_key_request: AddApiKeyRequest,
+    email: str,
+    request: Request,
+    response: Response,
 ):
     redis_conn: aioredis.Redis = request.app.state.redis_pool
     if not await redis_conn.sismember(all_users_set(), email):
         return {'success': False, 'error': 'User does not exists'}
 
-    if not await redis_conn.sismember(user_active_api_keys_set(email), api_key_request.api_key):
+    if not await redis_conn.sismember(
+        user_active_api_keys_set(email),
+        api_key_request.api_key,
+    ):
         return {'success': False, 'error': 'API key not active'}
-    elif await redis_conn.sismember(user_revoked_api_keys_set(email), api_key_request.api_key):
+    elif await redis_conn.sismember(
+        user_revoked_api_keys_set(email),
+        api_key_request.api_key,
+    ):
         return {'success': False, 'error': 'API key already revoked'}
-    await redis_conn.smove(user_active_api_keys_set(email), user_revoked_api_keys_set(email), api_key_request.api_key)
+    await redis_conn.smove(
+        user_active_api_keys_set(email),
+        user_revoked_api_keys_set(email),
+        api_key_request.api_key,
+    )
     return {'success': True}
 
 
 @app.get('/user/{email}')
 async def get_user_details(
-        request: Request,
-        response: Response,
-        email: str,
+    request: Request,
+    response: Response,
+    email: str,
 ):
     redis_conn: aioredis.Redis = request.app.state.redis_pool
 
@@ -121,24 +133,27 @@ async def get_user_details(
     if not all_details:
         return {'success': False, 'error': 'User does not exists'}
 
-    active_api_keys = await redis_conn.smembers(name=user_active_api_keys_set(email))
-    revoked_api_keys = await redis_conn.smembers(name=user_revoked_api_keys_set(email))
+    active_api_keys = await redis_conn.smembers(
+        name=user_active_api_keys_set(email),
+    )
+    revoked_api_keys = await redis_conn.smembers(
+        name=user_revoked_api_keys_set(email),
+    )
 
     return {
         'success': True,
-        'data':
-            UserAllDetailsResponse(
-                **{k.decode('utf-8'): v.decode('utf-8') for k, v in all_details.items()},
-                active_api_keys=[x.decode('utf-8') for x in active_api_keys],
-                revoked_api_keys=[x.decode('utf-8') for x in revoked_api_keys],
-            ).dict(),
+        'data': UserAllDetailsResponse(
+            **{k.decode('utf-8'): v.decode('utf-8') for k, v in all_details.items()},
+            active_api_keys=[x.decode('utf-8') for x in active_api_keys],
+            revoked_api_keys=[x.decode('utf-8') for x in revoked_api_keys],
+        ).dict(),
     }
 
 
 @app.get('/users')
 async def get_all_users(
-        request: Request,
-        response: Response,
+    request: Request,
+    response: Response,
 ):
     redis_conn: aioredis.Redis = request.app.state.redis_pool
     all_users = await redis_conn.smembers(all_users_set())

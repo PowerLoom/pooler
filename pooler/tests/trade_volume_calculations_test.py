@@ -10,8 +10,6 @@ from uniswap_functions import get_pair_trade_volume
 from uniswap_functions import load_rate_limiter_scripts
 from web3 import Web3
 
-from pooler.settings.config import settings
-from pooler.utils.clean_slate import redis_cleanup_pooler_namespace
 from pooler.utils.ipfs_async import client as ipfs_client
 from pooler.utils.redis.redis_conn import provide_async_redis_conn_insta
 
@@ -46,8 +44,12 @@ def write_json_file(directory: str, file_name: str, data):
 def pretty_relative_time(time_diff_secs):
     weeks_per_month = 365.242 / 12 / 7
     intervals = [
-        ('minute', 60), ('hour', 60), ('day', 24), ('week', 7),
-        ('month', weeks_per_month), ('year', 12),
+        ('minute', 60),
+        ('hour', 60),
+        ('day', 24),
+        ('week', 7),
+        ('month', weeks_per_month),
+        ('year', 12),
     ]
 
     unit, number = 'second', abs(time_diff_secs)
@@ -58,7 +60,10 @@ def pretty_relative_time(time_diff_secs):
             break
         unit, number = new_unit, new_number
     shown_num = int(number)
-    return '{} {}'.format(shown_num, unit + (' ago' if shown_num == 1 else 's ago'))
+    return '{} {}'.format(
+        shown_num,
+        unit + (' ago' if shown_num == 1 else 's ago'),
+    )
 
 
 async def get_dag_cid_output(dag_cid):
@@ -75,7 +80,13 @@ async def get_payload_cid_output(cid):
     return json.loads(out.decode('utf-8'))
 
 
-def generate_logs_analysis(directory_path, uniswap_logs_path, powerloom_logs_path, common_logs_path, extra_logs_path):
+def generate_logs_analysis(
+    directory_path,
+    uniswap_logs_path,
+    powerloom_logs_path,
+    common_logs_path,
+    extra_logs_path,
+):
     uniswap_data = read_json_file(directory_path, uniswap_logs_path)
     powerloom_data = read_json_file(directory_path, powerloom_logs_path)
 
@@ -101,19 +112,21 @@ def generate_logs_analysis(directory_path, uniswap_logs_path, powerloom_logs_pat
         for uniswap_log in uniswap_data:
             # print(powerloom_log["transactionHash"], uniswap_log['id'])
             if powerloom_log['transactionHash'].lower() in uniswap_log['id'].lower():
-                # if format(powerloom_log["trade_amount_usd"], ".2f") != format(float(uniswap_log["amountUSD"]), ".2f"):
-                #     print(powerloom_log["transactionHash"], "\ntimestamp: ", uniswap_log["timestamp"], "\nblock number : ", powerloom_log["blockNumber"], "\nrpc trade volume: ", powerloom_log["trade_amount_usd"],"\n uniswap api trade volume : ",  uniswap_log["amountUSD"], "\n\n")
                 log_matched = True
-                common_logs.append({
-                    'powerloom': powerloom_log,
-                    'uniswap': uniswap_log,
-                })
+                common_logs.append(
+                    {
+                        'powerloom': powerloom_log,
+                        'uniswap': uniswap_log,
+                    },
+                )
                 break
 
         if not log_matched:
-            extra_logs.append({
-                'powerloom': powerloom_log,
-            })
+            extra_logs.append(
+                {
+                    'powerloom': powerloom_log,
+                },
+            )
 
     write_json_file(directory_path, common_logs_path, common_logs)
     write_json_file(directory_path, extra_logs_path, extra_logs)
@@ -125,12 +138,18 @@ def calculate_common_log_stats(directory_path, file_path):
     powerloom_total_trade_volume = 0
     uniswap_total_trade_volume = 0
     for obj in data:
-        powerloom_total_trade_volume += int(float(obj['powerloom']['trade_amount_usd']))
+        powerloom_total_trade_volume += int(
+            float(obj['powerloom']['trade_amount_usd']),
+        )
         uniswap_total_trade_volume += int(float(obj['uniswap']['amountUSD']))
 
     table = Table(
-        title='[bold magenta]Trade volume calculated from event logs that were found common in indexers:[/bold magenta]',
-        show_header=True, header_style='bold magenta',
+        title=(
+            '[bold magenta]Trade volume calculated from event logs that were'
+            ' found common in indexers:[/bold magenta]'
+        ),
+        show_header=True,
+        header_style='bold magenta',
     )
     table.add_column('Powerloom indexer', justify='center', min_width=30)
     table.add_column('Uniswap indexer', justify='center', min_width=30)
@@ -141,21 +160,34 @@ def calculate_common_log_stats(directory_path, file_path):
     console.print(table)
 
 
-def calculate_extra_log_stats(directory_path, file_path, uniswap_url, uniswap_payload):
+def calculate_extra_log_stats(
+    directory_path,
+    file_path,
+    uniswap_url,
+    uniswap_payload,
+):
     data = read_json_file(directory_path, file_path)
 
     powerloom_total_trade_volume = 0
     uniswap_total_trade_volume = 0
     for obj in data:
         if 'powerloom' in obj:
-            powerloom_total_trade_volume += int(float(obj['powerloom']['trade_amount_usd']))
+            powerloom_total_trade_volume += int(
+                float(obj['powerloom']['trade_amount_usd']),
+            )
         if 'uniswap' in obj:
-            uniswap_total_trade_volume += int(float(obj['uniswap']['amountUSD']))
+            uniswap_total_trade_volume += int(
+                float(obj['uniswap']['amountUSD']),
+            )
 
     if powerloom_total_trade_volume > 0 or uniswap_total_trade_volume > 0:
         table = Table(
-            title='[bold red]Trade volume calculated from event logs which are not common in indexers:[/bold red]',
-            show_header=True, header_style='bold magenta',
+            title=(
+                '[bold red]Trade volume calculated from event logs which are'
+                ' not common in indexers:[/bold red]'
+            ),
+            show_header=True,
+            header_style='bold magenta',
         )
         table.add_column('Powerloom indexer', justify='center', min_width=30)
         table.add_column('Uniswap indexer', justify='center', min_width=30)
@@ -168,17 +200,25 @@ def calculate_extra_log_stats(directory_path, file_path, uniswap_url, uniswap_pa
 
     if powerloom_total_trade_volume > 0 or uniswap_total_trade_volume > 0:
         console.print(
-            f'\n\t [bold magenta]Uncommon event logs file path:[bold magenta] {directory_path+file_path}',
+            (
+                '\n\t [bold magenta]Uncommon event logs file path:[bold'
+                f' magenta] {directory_path+file_path}'
+            ),
         )
-        console.print(f'\n\t [bold magenta]uniswap_url:[bold magenta] {uniswap_url}')
-        console.print(f'\n\t [bold magenta]uniswap_payload:[bold magenta] {uniswap_payload}')
+        console.print(
+            f'\n\t [bold magenta]uniswap_url:[bold magenta] {uniswap_url}',
+        )
+        console.print(
+            '\n\t [bold magenta]uniswap_payload:[bold magenta]' f' {uniswap_payload}',
+        )
 
 
 async def verify_trade_volume_cids(data_cid, time_period):
-
     data = await get_payload_cid_output(data_cid)
 
-    time_period = 'trade_volume_24h_cids' if time_period == '24h' else 'trade_volume_7d_cids'
+    time_period = (
+        'trade_volume_24h_cids' if time_period == '24h' else 'trade_volume_7d_cids'
+    )
     trade_volume_cids = data['resultant'][time_period]
     total_trade_volume_usd = 0
 
@@ -193,27 +233,34 @@ async def verify_trade_volume_cids(data_cid, time_period):
         3000: 'bafyreid5gtgr73rgyyzbxuwuz6js2ke4kk23s7tdwcixwfuldshciyb5ua',
     }
 
-    while (trade_volume_cids['oldest_dag_cid'] != dag_cid):
+    while trade_volume_cids['oldest_dag_cid'] != dag_cid:
         dag_block_data = await get_dag_cid_output(dag_cid)
 
         payload_cid = dag_block_data['data']['cid']['/']
         payload_data = await get_payload_cid_output(payload_cid)
 
-        raw_event_logs.append({
-            'logs': payload_data['events']['Swap']['logs'] + payload_data['events']['Mint']['logs'] + payload_data['events']['Burn']['logs'],
-            'totalTrade': payload_data['totalTrade'],
-            'totalFee': payload_data['totalFee'],
-            'token0TradeVolume': payload_data['token0TradeVolume'],
-            'token1TradeVolume': payload_data['token1TradeVolume'],
-            'token0TradeVolumeUSD': payload_data['token0TradeVolumeUSD'],
-            'token1TradeVolumeUSD': payload_data['token1TradeVolumeUSD'],
-        })
+        raw_event_logs.append(
+            {
+                'logs': payload_data['events']['Swap']['logs'] +
+                payload_data['events']['Mint']['logs'] +
+                payload_data['events']['Burn']['logs'],
+                'totalTrade': payload_data['totalTrade'],
+                'totalFee': payload_data['totalFee'],
+                'token0TradeVolume': payload_data['token0TradeVolume'],
+                'token1TradeVolume': payload_data['token1TradeVolume'],
+                'token0TradeVolumeUSD': payload_data['token0TradeVolumeUSD'],
+                'token1TradeVolumeUSD': payload_data['token1TradeVolumeUSD'],
+            },
+        )
 
         total_trade_volume_usd += float(payload_data['totalTrade'])
 
         if dag_block_count % 500 == 0:
             console.print(
-                f'[bold magenta]processed {dag_block_count} dag blocks..[/bold magenta]',
+                (
+                    f'[bold magenta]processed {dag_block_count} dag'
+                    ' blocks..[/bold magenta]'
+                ),
             )
 
         if dag_block_data['prevCid'] is None:
@@ -222,18 +269,35 @@ async def verify_trade_volume_cids(data_cid, time_period):
             dag_cid = dag_block_data['prevCid']['/']
         dag_block_count += 1
 
-    console.print(f'[bold magenta] Total dag blocks: {dag_block_count}[/bold magenta]')
+    console.print(
+        f'[bold magenta] Total dag blocks: {dag_block_count}[/bold magenta]',
+    )
     write_json_file('./temp/', 'powerloom_snapshot_data.json', raw_event_logs)
     return total_trade_volume_usd
 
 
 @provide_async_redis_conn_insta
-async def verify_trade_volume_calculations(loop, pair_contract, timePeriod, start_block, end_block, start_block_timestamp, end_block_timestamp, pair_contract_cid, debug_logs, redis_conn=None):
-
+async def verify_trade_volume_calculations(
+    loop,
+    pair_contract,
+    timePeriod,
+    start_block,
+    end_block,
+    start_block_timestamp,
+    end_block_timestamp,
+    pair_contract_cid,
+    debug_logs,
+    redis_conn=None,
+):
     # set timestamps
-    current_time = end_block_timestamp if isinstance(
-        end_block_timestamp, int,
-    ) else int(time.time())
+    current_time = (
+        end_block_timestamp
+        if isinstance(
+            end_block_timestamp,
+            int,
+        )
+        else int(time.time())
+    )
     if isinstance(start_block_timestamp, int):
         from_time = start_block_timestamp
     elif timePeriod == '7d':
@@ -253,7 +317,10 @@ async def verify_trade_volume_calculations(loop, pair_contract, timePeriod, star
 
     # create batch of block-range to fetch event logs
     console.print(
-        f'[bright_cyan]Call RPC to fetch event logs in block range:[bright_cyan] {start_block} - {end_block}',
+        (
+            '[bright_cyan]Call RPC to fetch event logs in block'
+            f' range:[bright_cyan] {start_block} - {end_block}'
+        ),
     )
     for i in range(start_block, end_block, batch_size):
         start = end = 0
@@ -296,17 +363,35 @@ async def verify_trade_volume_calculations(loop, pair_contract, timePeriod, star
     }
 
     # Fetch trade volume data from *** UNISWAP GRAPH API ***
-    console.print('\n[bright_cyan]Fetching uniswap subgraph data...[/bright_cyan]')
+    console.print(
+        '\n[bright_cyan]Fetching uniswap subgraph data...[/bright_cyan]',
+    )
     uniswap_url = 'https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v2'
     skip = 0
     trade_volume_data['uniswap_trade_volume'] = 0
-    while(True):
-        uniswap_payload = "{\"query\":\"{\\n  swaps(orderBy: timestamp, orderDirection: desc, first: 1000, skip: " + str(skip) + " where:{\\n    pair: \\\"" + str(pair_contract) + "\\\",\\n    timestamp_lte: " + str(
-            current_time,
-        ) + ',\\n    timestamp_gte: ' + str(from_time) + "\\n  }) {\\n    id,\\n    timestamp,\\n    amountUSD,\\n    logIndex,\\n    amount0In,\\n    amount0Out,\\n    amount1Out,\\n    amount1In\\n  }\\n}\\n\",\"variables\":null}"
+    while True:
+        uniswap_payload = (
+            '{"query":"{\\n  swaps(orderBy: timestamp, orderDirection: desc,'
+            ' first: 1000, skip: ' +
+            str(skip) +
+            ' where:{\\n    pair: \\"' +
+            str(pair_contract) +
+            '\\",\\n    timestamp_lte: ' +
+            str(
+                current_time,
+            ) +
+            ',\\n    timestamp_gte: ' +
+            str(from_time) +
+            '\\n  }) {\\n    id,\\n    timestamp,\\n    amountUSD,\\n   '
+            ' logIndex,\\n    amount0In,\\n    amount0Out,\\n   '
+            ' amount1Out,\\n    amount1In\\n  }\\n}\\n","variables":null}'
+        )
         headers = {'Content-Type': 'text/plain'}
         response = httpx.post(
-            url=uniswap_url, headers=headers, data=uniswap_payload, timeout=30,
+            url=uniswap_url,
+            headers=headers,
+            data=uniswap_payload,
+            timeout=30,
         )
         if response.status_code == 200:
             total_trades_in_usd = 0.0
@@ -324,16 +409,15 @@ async def verify_trade_volume_calculations(loop, pair_contract, timePeriod, star
             print('Error fetching data from uniswap THE GRAPH')
             trade_volume_data['uniswap_trade_volume'] = None
 
-    # Fetch trade volume data from Powerloom IPFS snapshots
-    # console.print("\n[bright_cyan]Calculating trade volume using powerloom ipfs snapshot:[/bright_cyan]")
-    # powerloom_snapshot_result = await verify_trade_volume_cids(pair_contract_cid, timePeriod)
-    # console.print("\n[bold magenta]pair_contract:[/bold magenta]", f"[bold bright_cyan]{pair_contract}[/bold bright_cyan]\n")
-
     # PRINT RESULTS
     print('\n')
     table = Table(
-        title=f'[bold magenta]{timePeriod} Trade volume calculated by each indexer:[/bold magenta]',
-        show_header=True, header_style='bold magenta',
+        title=(
+            f'[bold magenta]{timePeriod} Trade volume calculated by each'
+            ' indexer:[/bold magenta]'
+        ),
+        show_header=True,
+        header_style='bold magenta',
     )
     # table.add_column("Powerloom IPFS snapshot", justify="center")
     table.add_column('Powerloom RPC functions', justify='center')
@@ -355,8 +439,16 @@ async def verify_trade_volume_calculations(loop, pair_contract, timePeriod, star
         extra_logs_path = 'extra_logs.json'
 
         # write resulting logs to temporary file
-        write_json_file(temp_directory, uniswap_logs_path, debug_trade_logs['uniswap'])
-        write_json_file(temp_directory, powerloom_logs_path, debug_trade_logs['powerloom'])
+        write_json_file(
+            temp_directory,
+            uniswap_logs_path,
+            debug_trade_logs['uniswap'],
+        )
+        write_json_file(
+            temp_directory,
+            powerloom_logs_path,
+            debug_trade_logs['powerloom'],
+        )
         generate_logs_analysis(
             temp_directory,
             uniswap_logs_path,
@@ -367,14 +459,20 @@ async def verify_trade_volume_calculations(loop, pair_contract, timePeriod, star
         calculate_common_log_stats(temp_directory, common_logs_path)
         print('\n')
         calculate_extra_log_stats(
-            temp_directory, extra_logs_path,
-            uniswap_url, uniswap_payload,
+            temp_directory,
+            extra_logs_path,
+            uniswap_url,
+            uniswap_payload,
         )
         print('\n\n')
 
 
-async def generate_trade_volume_report(loop, pair_contract_address, time_period, debug_logs):
-
+async def generate_trade_volume_report(
+    loop,
+    pair_contract_address,
+    time_period,
+    debug_logs,
+):
     if time_period not in ['24h', '7d']:
         console.print('\n [bold red] Invalid time period[/bold red]')
         return
@@ -382,12 +480,16 @@ async def generate_trade_volume_report(loop, pair_contract_address, time_period,
     # get start and end block for give timeperiod using powerloom public api
     response = httpx.get(
         url='https://uniswapv2-staging.powerloom.io//api/v1/api/v2-pairs',
-        headers={'Content-Type': 'text/plain'}, data={}, timeout=30,
+        headers={'Content-Type': 'text/plain'},
+        data={},
+        timeout=30,
     )
     if response.status_code == 200:
         response = json.loads(response.text)
     else:
-        console.print('\n [bold red] Powerloom /v2-pairs api failed to respond[/bold red]')
+        console.print(
+            '\n [bold red] Powerloom /v2-pairs api failed to respond[/bold red]',
+        )
         return
 
     start_block = response.get(f'begin_block_height_{time_period}')
@@ -398,12 +500,24 @@ async def generate_trade_volume_report(loop, pair_contract_address, time_period,
     # find cid for given pair_contract and timeperiod
     pair_contract_cid = None
     for contract_obj in response.get('data'):
-        if Web3.toChecksumAddress(contract_obj.get('contractAddress')) == Web3.toChecksumAddress(pair_contract_address):
+        if Web3.toChecksumAddress(
+            contract_obj.get('contractAddress'),
+        ) == Web3.toChecksumAddress(pair_contract_address):
             pair_contract_cid = contract_obj.get(f'cid_volume_{time_period}')
             break
 
     # call trade volume helpers and uniswap subgraph api
-    await verify_trade_volume_calculations(loop, pair_contract_address, time_period, start_block, end_block, start_block_timestamp, end_block_timestamp, pair_contract_cid, debug_logs)
+    await verify_trade_volume_calculations(
+        loop,
+        pair_contract_address,
+        time_period,
+        start_block,
+        end_block,
+        start_block_timestamp,
+        end_block_timestamp,
+        pair_contract_cid,
+        debug_logs,
+    )
 
 
 if __name__ == '__main__':

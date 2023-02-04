@@ -24,7 +24,9 @@ if __name__ == '__main__':
     end_time = datetime.now()
 
     print(f'\n\n{data}\n')
-    print(f'time taken to fetch price in epoch range: {start_time} - {end_time}')
+    print(
+        f'time taken to fetch price in epoch range: {start_time} - {end_time}',
+    )
 
     rate_limit_lua_script_shas = dict()
     loop = asyncio.get_event_loop()
@@ -32,7 +34,9 @@ if __name__ == '__main__':
     data = loop.run_until_complete(
         get_pair_trade_volume(
             rate_limit_lua_script_shas,
-            data_source_contract_address='0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc',
+            data_source_contract_address=(
+                '0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc'
+            ),
             min_chain_height=toBlock - 10,
             max_chain_height=toBlock,
             fetch_timestamp=True,
@@ -41,4 +45,6 @@ if __name__ == '__main__':
     )
     end_time = datetime.now()
     print(f'\n\n{data}\n')
-    print(f'time taken to fetch price in epoch range: {start_time} - {end_time}')
+    print(
+        f'time taken to fetch price in epoch range: {start_time} - {end_time}',
+    )

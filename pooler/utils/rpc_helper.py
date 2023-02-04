@@ -18,6 +18,7 @@ from pooler.settings.config import settings
 from pooler.utils.default_logger import format_exception
 from pooler.utils.default_logger import logger
 from pooler.utils.models.message_models import RPCNodesObject
+
 # setup logging
 rpc_logger = logger.bind(module='PowerLoom|NodeRPCHelper')
 
@@ -80,14 +81,19 @@ class ConstructRPC:
         self._network_id = network_id
         self._querystring = {'id': network_id, 'jsonrpc': '2.0'}
 
-    def sync_post_json_rpc(self, procedure, rpc_nodes: RPCNodesObject, params=None):
+    def sync_post_json_rpc(
+        self, procedure, rpc_nodes: RPCNodesObject, params=None,
+    ):
         q_s = self.construct_one_timeRPC(procedure=procedure, params=params)
         rpc_urls = rpc_nodes.NODES
         retry = dict(zip(rpc_urls, repeat(0)))
         while True:
             if all(val == rpc_nodes.RETRY_LIMIT for val in retry.values()):
                 rpc_logger.error(
-                    'Retry limit reached for all RPC endpoints. Following request',
+                    (
+                        'Retry limit reached for all RPC endpoints. Following'
+                        ' request'
+                    ),
                 )
                 rpc_logger.error('{}', q_s)
                 rpc_logger.error('{}', retry)
@@ -106,13 +112,17 @@ class ConstructRPC:
                 except Exception:
                     pass
                 else:
-                    if procedure == 'eth_getBlockByNumber' and not json_response['result']:
+                    if (
+                        procedure == 'eth_getBlockByNumber' and
+                        not json_response['result']
+                    ):
                         continue
                     return json_response
 
     def rpc_eth_blocknumber(self, rpc_nodes: RPCNodesObject):
         rpc_response = self.sync_post_json_rpc(
-            procedure='eth_blockNumber', rpc_nodes=rpc_nodes,
+            procedure='eth_blockNumber',
+            rpc_nodes=rpc_nodes,
         )
         try:
             new_blocknumber = int(rpc_response['result'], 16)
@@ -124,7 +134,8 @@ class ConstructRPC:
     @auto_retry(tries=2, exc=BailException)
     def rpc_eth_getblock_by_number(self, blocknum, rpc_nodes):
         rpc_response = self.sync_post_json_rpc(
-            procedure='eth_getBlockByNumber', rpc_nodes=rpc_nodes,
+            procedure='eth_getBlockByNumber',
+            rpc_nodes=rpc_nodes,
             params=[hex(blocknum), False],
         )
         try:
@@ -161,7 +172,8 @@ class ConstructRPC:
             process_name = multiprocessing.current_process().name
             rpc_logger.debug(
                 '{1}: Unexpected JSON RPC response: {0}'.format(
-                    rpc_response, process_name,
+                    rpc_response,
+                    process_name,
                 ),
             )
             raise
@@ -181,7 +193,8 @@ class ConstructRPC:
             process_name = multiprocessing.current_process().name
             rpc_logger.debug(
                 '{1}: Unexpected JSON RPC response: {0}'.format(
-                    rpc_response, process_name,
+                    rpc_response,
+                    process_name,
                 ),
             )
             raise
@@ -232,16 +245,24 @@ def load_web3_providers_and_rate_limits(full_nodes, archive_nodes):
         count = 0
         for node in node_list:
             try:
-                web3_providers[node_type].append({
-                    'web3_client': EthereumClient(node.url),
-                    'rate_limit': limit_parse_many(node.rate_limit),
-                    'rpc_url': node.url,
-                    'index': count,
-                })
+                web3_providers[node_type].append(
+                    {
+                        'web3_client': EthereumClient(node.url),
+                        'rate_limit': limit_parse_many(node.rate_limit),
+                        'rpc_url': node.url,
+                        'index': count,
+                    },
+                )
             except Exception as exc:
-                print(f'Error while initialising one of the web3 providers, err_msg: {exc}')
+                print(
+                    'Error while initialising one of the web3 providers,'
+                    f' err_msg: {exc}',
+                )
                 rpc_logger.opt(exception=True).error(
-                    f'Error while initialising one of the web3 providers, err_msg: {exc}',
+                    (
+                        'Error while initialising one of the web3 providers,'
+                        f' err_msg: {exc}'
+                    ),
                 )
             else:
                 count += 1
@@ -263,6 +284,7 @@ def inject_web3_provider_first_run(fn):
     Decorator to inject web3 provider config based on first run.
     Here we consume web3 provider flags given to 'this' function.
     """
+
     @wraps(fn)
     async def wrapped(*args, **kwargs):
         # if web3_provider was not given then just use first full node
@@ -272,7 +294,12 @@ def inject_web3_provider_first_run(fn):
         elif kwargs['web3_provider'].get('force_archive', False):
             kwargs['web3_provider'] = GLOBAL_WEB3_PROVIDER['archive_nodes'][0]
             rpc_logger.warning(
-                f"Got force_archive flag, injected archive_node | from_block:{kwargs.get('from_block')} | to_block:{kwargs.get('to_block')} | pair_address:{kwargs.get('pair_address')}",
+                (
+                    'Got force_archive flag, injected archive_node |'
+                    f" from_block:{kwargs.get('from_block')} |"
+                    f" to_block:{kwargs.get('to_block')} |"
+                    f" pair_address:{kwargs.get('pair_address')}"
+                ),
             )
         else:
             # there is no preset flag then use first full node web3 obj
@@ -293,44 +320,77 @@ def inject_web3_provider_on_exception(retry_state):
     """
 
     # if there was an error then set web3 object depending on exception Type
-    if retry_state.outcome and isinstance(retry_state.outcome.exception(), Exception):
-
-        if any(
-            error_string in retry_state.outcome.exception().extra_info.get('msg') for error_string in [
-                'header not found',
-                'missing trie node',
-            ]
-        ) or retry_state.kwargs['web3_provider'] in GLOBAL_WEB3_PROVIDER['archive_nodes']:
-
+    if retry_state.outcome and isinstance(
+        retry_state.outcome.exception(), Exception,
+    ):
+        if (
+            any(
+                error_string
+                in retry_state.outcome.exception().extra_info.get('msg')
+                for error_string in [
+                    'header not found',
+                    'missing trie node',
+                ]
+            ) or
+            retry_state.kwargs['web3_provider']
+            in GLOBAL_WEB3_PROVIDER['archive_nodes']
+        ):
             # if current web3 provider is an archive node AND we have another archive node, then use next one
-            current_provider_index = retry_state.kwargs['web3_provider']['index']
-            if retry_state.kwargs['web3_provider'] in GLOBAL_WEB3_PROVIDER['archive_nodes'] and \
-                    current_provider_index + 1 < len(GLOBAL_WEB3_PROVIDER['archive_nodes']):
-                retry_state.kwargs['web3_provider'] = GLOBAL_WEB3_PROVIDER['archive_nodes'][current_provider_index + 1]
+            current_provider_index = retry_state.kwargs['web3_provider'][
+                'index'
+            ]
+            if retry_state.kwargs['web3_provider'] in GLOBAL_WEB3_PROVIDER[
+                'archive_nodes'
+            ] and current_provider_index + 1 < len(
+                GLOBAL_WEB3_PROVIDER['archive_nodes'],
+            ):
+                retry_state.kwargs['web3_provider'] = GLOBAL_WEB3_PROVIDER[
+                    'archive_nodes'
+                ][current_provider_index + 1]
             # else use first archive node
             else:
-                retry_state.kwargs['web3_provider'] = GLOBAL_WEB3_PROVIDER['archive_nodes'][0]
+                retry_state.kwargs['web3_provider'] = GLOBAL_WEB3_PROVIDER[
+                    'archive_nodes'
+                ][0]
 
             rpc_logger.warning(
-                f"Found exception injected archive node | exception: {retry_state.outcome.exception().extra_info.get('msg')} | function:{retry_state.fn}",
+                (
+                    'Found exception injected archive node | exception:'
+                    f" {retry_state.outcome.exception().extra_info.get('msg')} |"
+                    f' function:{retry_state.fn}'
+                ),
             )
 
         else:
             # if available use next full_node provider
-            current_provider_index = retry_state.kwargs['web3_provider']['index']
-            if current_provider_index + 1 < len(GLOBAL_WEB3_PROVIDER['full_nodes']):
-                retry_state.kwargs['web3_provider'] = GLOBAL_WEB3_PROVIDER['full_nodes'][current_provider_index + 1]
+            current_provider_index = retry_state.kwargs['web3_provider'][
+                'index'
+            ]
+            if current_provider_index + 1 < len(
+                GLOBAL_WEB3_PROVIDER['full_nodes'],
+            ):
+                retry_state.kwargs['web3_provider'] = GLOBAL_WEB3_PROVIDER[
+                    'full_nodes'
+                ][current_provider_index + 1]
             # use first full_node provider
             else:
-                retry_state.kwargs['web3_provider'] = GLOBAL_WEB3_PROVIDER['full_nodes'][0]
+                retry_state.kwargs['web3_provider'] = GLOBAL_WEB3_PROVIDER[
+                    'full_nodes'
+                ][0]
 
             rpc_logger.warning(
-                f"Found exception injected next full_node | exception: {retry_state.outcome.exception().extra_info.get('msg')} | function:{retry_state.fn}",
+                (
+                    'Found exception injected next full_node | exception:'
+                    f" {retry_state.outcome.exception().extra_info.get('msg')} |"
+                    f' function:{retry_state.fn}'
+                ),
             )
 
     else:
         # if there was no error or any flag then use first full node web3 obj
-        retry_state.kwargs['web3_provider'] = GLOBAL_WEB3_PROVIDER['full_nodes'][0]
+        retry_state.kwargs['web3_provider'] = GLOBAL_WEB3_PROVIDER[
+            'full_nodes'
+        ][0]
 
 
 def contract_abi_dict(abi):
@@ -360,54 +420,73 @@ def get_encoded_function_signature(abi_dict, function_name, params: list = []):
     encoded_signature = '0x' + keccak(text=function_signature).hex()[:8]
     if len(params) > 0:
         encoded_signature += eth_abi.encode_abi(
-            abi_dict.get(function_name)
-            ['input'], params,
+            abi_dict.get(function_name)['input'],
+            params,
         ).hex()
     return encoded_signature
 
 
-def batch_eth_call_on_block_range(rpc_endpoint, abi_dict, function_name, contract_address, from_block='latest', to_block='latest', params=[], from_address=None):
+def batch_eth_call_on_block_range(
+    rpc_endpoint,
+    abi_dict,
+    function_name,
+    contract_address,
+    from_block='latest',
+    to_block='latest',
+    params=[],
+    from_address=None,
+):
     """
     Batch call "single-function" on a contract for given block-range
 
     RPC_BATCH: for_each_block -> call_function_x
     """
 
-    from_address = from_address if from_address else Web3.toChecksumAddress(
-        '0x0000000000000000000000000000000000000000',
+    from_address = (
+        from_address
+        if from_address
+        else Web3.toChecksumAddress(
+            '0x0000000000000000000000000000000000000000',
+        )
     )
-    function_signature = get_encoded_function_signature(abi_dict, function_name, params)
+    function_signature = get_encoded_function_signature(
+        abi_dict, function_name, params,
+    )
     rpc_query = []
 
     if from_block == 'latest' and to_block == 'latest':
-        rpc_query.append({
-            'jsonrpc': '2.0',
-            'method': 'eth_call',
-            'params': [
-                {
-                    'to': Web3.toChecksumAddress(contract_address),
-                    'data': function_signature,
-                },
-                to_block,
-            ],
-            'id': '1',
-        })
-    else:
-        request_id = 1
-        for block in range(from_block, to_block + 1):
-            rpc_query.append({
+        rpc_query.append(
+            {
                 'jsonrpc': '2.0',
                 'method': 'eth_call',
                 'params': [
                     {
-                        'from': from_address,
                         'to': Web3.toChecksumAddress(contract_address),
                         'data': function_signature,
                     },
-                    hex(block),
+                    to_block,
                 ],
-                'id': f'{request_id}',
-            })
+                'id': '1',
+            },
+        )
+    else:
+        request_id = 1
+        for block in range(from_block, to_block + 1):
+            rpc_query.append(
+                {
+                    'jsonrpc': '2.0',
+                    'method': 'eth_call',
+                    'params': [
+                        {
+                            'from': from_address,
+                            'to': Web3.toChecksumAddress(contract_address),
+                            'data': function_signature,
+                        },
+                        hex(block),
+                    ],
+                    'id': f'{request_id}',
+                },
+            )
             request_id += 1
 
     rpc_response = []
@@ -417,35 +496,54 @@ def batch_eth_call_on_block_range(rpc_endpoint, abi_dict, function_name, contrac
     except Exception as e:
         exc = RPCException(
             request={
-                contract_address: contract_address, function_name: function_name,
-                'params': params, 'from_block': from_block, 'to_block': to_block,
+                contract_address: contract_address,
+                function_name: function_name,
+                'params': params,
+                'from_block': from_block,
+                'to_block': to_block,
             },
-            response=None, underlying_exception=e,
+            response=None,
+            underlying_exception=e,
             extra_info=f'RPC_BATCH_ETH_CALL_ERROR: {format_exception(e)}',
         )
-        rpc_logger.trace('Error in batch_eth_call_on_block_range, error {}', str(exc))
+        rpc_logger.trace(
+            'Error in batch_eth_call_on_block_range, error {}', str(exc),
+        )
         raise exc
 
-    response_exceptions = list(
-        map(
-            lambda r: r, filter(
-                lambda y: y.get(
-                    'error', False,
-                ), response,
+    response_exceptions = (
+        list(
+            map(
+                lambda r: r,
+                filter(
+                    lambda y: y.get(
+                        'error',
+                        False,
+                    ),
+                    response,
+                ),
             ),
-        ),
-    ) if isinstance(response, list) else response
+        )
+        if isinstance(response, list)
+        else response
+    )
 
     if len(response_exceptions) > 0:
         exc = RPCException(
             request={
-                contract_address: contract_address, function_name: function_name,
-                'params': params, 'from_block': from_block, 'to_block': to_block,
+                contract_address: contract_address,
+                function_name: function_name,
+                'params': params,
+                'from_block': from_block,
+                'to_block': to_block,
             },
-            response=response_exceptions, underlying_exception=None,
+            response=response_exceptions,
+            underlying_exception=None,
             extra_info=f'RPC_BATCH_ETH_CALL_ERRORS: {str(response_exceptions)}',
         )
-        rpc_logger.trace('Error in batch_eth_call_on_block_range, error {}', str(exc))
+        rpc_logger.trace(
+            'Error in batch_eth_call_on_block_range, error {}', str(exc),
+        )
         raise exc
     else:
         response = response if isinstance(response, list) else [response]
@@ -454,7 +552,8 @@ def batch_eth_call_on_block_range(rpc_endpoint, abi_dict, function_name, contrac
                 eth_abi.decode_abi(
                     abi_dict.get(
                         function_name,
-                    )['output'], HexBytes(result['result']),
+                    )['output'],
+                    HexBytes(result['result']),
                 ),
             )
 
@@ -472,15 +571,17 @@ def batch_eth_get_block(rpc_endpoint, from_block, to_block):
 
     request_id = 1
     for block in range(from_block, to_block + 1):
-        rpc_query.append({
-            'jsonrpc': '2.0',
-            'method': 'eth_getBlockByNumber',
-            'params': [
-                hex(block),
-                True,
-            ],
-            'id': f'{request_id}',
-        })
+        rpc_query.append(
+            {
+                'jsonrpc': '2.0',
+                'method': 'eth_getBlockByNumber',
+                'params': [
+                    hex(block),
+                    True,
+                ],
+                'id': f'{request_id}',
+            },
+        )
         request_id += 1
 
     try:
@@ -489,9 +590,11 @@ def batch_eth_get_block(rpc_endpoint, from_block, to_block):
     except Exception as e:
         exc = RPCException(
             request={
-                'from_block': from_block, 'to_block': to_block,
+                'from_block': from_block,
+                'to_block': to_block,
             },
-            response=None, underlying_exception=e,
+            response=None,
+            underlying_exception=e,
             extra_info=f'RPC_BATCH_ETH_CALL_ERROR: {format_exception(e)}',
         )
         rpc_logger.trace('Error in batch_eth_get_block, error {}', str(exc))
@@ -499,18 +602,22 @@ def batch_eth_get_block(rpc_endpoint, from_block, to_block):
 
     response_exceptions = list(
         map(
-            lambda r: r, filter(
-                lambda y: y.get('error', False), response,
+            lambda r: r,
+            filter(
+                lambda y: y.get('error', False),
+                response,
             ),
         ),
     )
 
     if len(response_exceptions) > 0:
-
         exc = RPCException(
             request={'from_block': from_block, 'to_block': to_block},
-            response=response_exceptions, underlying_exception=None,
-            extra_info=f'RPC_BATCH_ETH_GET_BLOCK_ERRORS: {str(response_exceptions)}',
+            response=response_exceptions,
+            underlying_exception=None,
+            extra_info=(
+                f'RPC_BATCH_ETH_GET_BLOCK_ERRORS: {str(response_exceptions)}'
+            ),
         )
         rpc_logger.trace('Error in batch_eth_get_block, error {}', str(exc))
         raise exc
@@ -519,31 +626,42 @@ def batch_eth_get_block(rpc_endpoint, from_block, to_block):
 
 
 def get_event_sig_and_abi(event_signatures, event_abis):
-    event_sig = ['0x' + keccak(text=sig).hex() for name, sig in event_signatures.items()]
+    event_sig = [
+        '0x' + keccak(text=sig).hex() for name, sig in event_signatures.items()
+    ]
     event_abi = {
-        '0x' + keccak(text=sig).hex(): event_abis.get(
+        '0x' +
+        keccak(text=sig).hex(): event_abis.get(
             name,
             'incorrect event name',
-        ) for name, sig in event_signatures.items()
+        )
+        for name, sig in event_signatures.items()
     }
     return event_sig, event_abi
 
 
-def get_events_logs(web3Provider, contract_address, toBlock, fromBlock, topics, event_abi):
+def get_events_logs(
+    web3Provider, contract_address, toBlock, fromBlock, topics, event_abi,
+):
     try:
-        event_log = web3Provider.eth.get_logs({
-            'address': Web3.toChecksumAddress(contract_address),
-            'toBlock': toBlock,
-            'fromBlock': fromBlock,
-            'topics': topics,
-        })
+        event_log = web3Provider.eth.get_logs(
+            {
+                'address': Web3.toChecksumAddress(contract_address),
+                'toBlock': toBlock,
+                'fromBlock': fromBlock,
+                'topics': topics,
+            },
+        )
     except Exception as e:
         exc = RPCException(
             request={
-                'contract_address': contract_address, 'toBlock': toBlock,
-                'fromBlock': fromBlock, 'topics': topics,
+                'contract_address': contract_address,
+                'toBlock': toBlock,
+                'fromBlock': fromBlock,
+                'topics': topics,
             },
-            response=None, underlying_exception=e,
+            response=None,
+            underlying_exception=e,
             extra_info=f'RPC_GET_EVENT_LOGS_ERROR: {format_exception(e)}',
         )
         rpc_logger.trace('Error in get_events_logs, error {}', str(exc))

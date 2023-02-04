@@ -12,30 +12,57 @@ from uniswap_functions import provide_async_redis_conn_insta
 def load_contracts():
     contracts = list()
     if os.path.exists('pooler/static/cached_pair_addresses.json'):
-        with open('pooler/static/cached_pair_addresses.json', 'r', encoding='utf-8') as fp:
+        with open(
+            'pooler/static/cached_pair_addresses.json',
+            'r',
+            encoding='utf-8',
+        ) as fp:
             # the file contains an array of pair contract addresses
             contracts = json.load(fp)
             return contracts
 
 
 @provide_async_redis_conn_insta
-async def fetch_liquidityUSD_rpc(pair_address, block_num, redis_conn: aioredis.Redis = None):
+async def fetch_liquidityUSD_rpc(
+    pair_address,
+    block_num,
+    redis_conn: aioredis.Redis = None,
+):
     rate_limiting_lua_scripts = await load_rate_limiter_scripts(redis_conn)
-    data = await get_pair_reserves(loop, rate_limiting_lua_scripts, pair_address, block_num, block_num, redis_conn=redis_conn)
+    data = await get_pair_reserves(
+        loop,
+        rate_limiting_lua_scripts,
+        pair_address,
+        block_num,
+        block_num,
+        redis_conn=redis_conn,
+    )
     block_pair_total_reserves = data.get(block_num)
-    return block_pair_total_reserves['token0USD'] + block_pair_total_reserves['token1USD']
+    return (
+        block_pair_total_reserves['token0USD'] +
+        block_pair_total_reserves['token1USD']
+    )
 
 
 def fetch_liquidityUSD_graph(pair_address, block_num):
     uniswap_url = 'https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v2'
-    uniswap_payload = "{\"query\":\"{\\n pair(id: \\\"" + str(pair_address) + "\\\",block:{number:" + str(
-        block_num,
-    ) + "}) {\\n reserveUSD \\n token0 { \\n     symbol \\n } \\n token1 { \\n      symbol \\n    }\\n  } \\n }\" }"
+    uniswap_payload = (
+        '{"query":"{\\n pair(id: \\"' +
+        str(pair_address) +
+        '\\",block:{number:' +
+        str(
+            block_num,
+        ) +
+        '}) {\\n reserveUSD \\n token0 { \\n     symbol \\n } \\n token1 {'
+        ' \\n      symbol \\n    }\\n  } \\n }" }'
+    )
     print(uniswap_payload)
     headers = {'Content-Type': 'application/plain'}
     response = httpx.post(
-        url=uniswap_url, headers=headers,
-        data=uniswap_payload, timeout=30,
+        url=uniswap_url,
+        headers=headers,
+        data=uniswap_payload,
+        timeout=30,
     )
     if response.status_code == 200:
         data = json.loads(response.text)
@@ -48,7 +75,7 @@ def fetch_liquidityUSD_graph(pair_address, block_num):
 
 
 async def compare_liquidity():
-    #contracts = load_contracts()
+    # contracts = load_contracts()
     total_liquidity_usd_graph = 0
     total_liquidity_usd_rpc = 0
     block_num = 16046250
@@ -58,11 +85,21 @@ async def compare_liquidity():
     for contract in contracts:
         liquidity_usd_graph = fetch_liquidityUSD_graph(contract, block_num)
         liquidity_usd_rpc = await fetch_liquidityUSD_rpc(contract, block_num)
-        print(f'Contract {contract}, liquidityUSD_graph is {liquidity_usd_graph} , liquidityUSD_rpc {liquidity_usd_rpc}, liquidityUSD difference {(liquidity_usd_rpc - liquidity_usd_graph)}')
+        print(
+            f'Contract {contract}, liquidityUSD_graph is'
+            f' {liquidity_usd_graph} , liquidityUSD_rpc {liquidity_usd_rpc},'
+            ' liquidityUSD difference'
+            f' {(liquidity_usd_rpc - liquidity_usd_graph)}',
+        )
         total_liquidity_usd_graph += liquidity_usd_graph
         total_liquidity_usd_rpc += liquidity_usd_rpc
 
-    print(f'{len(contracts)} contracts compared, liquidityUSD_rpc_total is {total_liquidity_usd_rpc}, liquidityUSD_graph_total is {total_liquidity_usd_graph}')
+    print(
+        f'{len(contracts)} contracts compared, liquidityUSD_rpc_total is'
+        f' {total_liquidity_usd_rpc}, liquidityUSD_graph_total is'
+        f' {total_liquidity_usd_graph}',
+    )
+
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()

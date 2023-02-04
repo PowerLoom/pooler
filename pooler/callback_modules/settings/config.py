@@ -1,4 +1,3 @@
-
 import json
 
 from pooler.callback_modules.settings.settings_model import Settings

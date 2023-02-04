@@ -31,9 +31,15 @@ from pooler.utils.models.message_models import EpochBase
 from pooler.utils.models.message_models import PowerloomCallbackProcessMessage
 from pooler.utils.models.message_models import UniswapPairTotalReservesSnapshot
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
-from pooler.utils.redis.redis_keys import uniswap_cb_broadcast_processing_logs_zset
-from pooler.utils.redis.redis_keys import uniswap_discarded_query_pair_total_reserves_epochs_redis_q_f
-from pooler.utils.redis.redis_keys import uniswap_failed_query_pair_total_reserves_epochs_redis_q_f
+from pooler.utils.redis.redis_keys import (
+    uniswap_cb_broadcast_processing_logs_zset,
+)
+from pooler.utils.redis.redis_keys import (
+    uniswap_discarded_query_pair_total_reserves_epochs_redis_q_f,
+)
+from pooler.utils.redis.redis_keys import (
+    uniswap_failed_query_pair_total_reserves_epochs_redis_q_f,
+)
 
 
 SETTINGS_ENV = os.getenv('ENV_FOR_DYNACONF', 'development')
@@ -51,7 +57,8 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         self._rate_limiting_lua_scripts = dict()
         self._async_transport = AsyncHTTPTransport(
             limits=Limits(
-                max_connections=100, max_keepalive_connections=50,
+                max_connections=100,
+                max_keepalive_connections=50,
                 keepalive_expiry=None,
             ),
         )
@@ -63,10 +70,10 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         )
 
     async def _fetch_token_reserves_on_chain(
-            self,
-            min_chain_height: int,
-            max_chain_height: int,
-            data_source_contract_address: str,
+        self,
+        min_chain_height: int,
+        max_chain_height: int,
+        data_source_contract_address: str,
     ) -> Optional[Dict[str, Union[int, float]]]:
         epoch_reserves_snapshot_map_token0 = dict()
         epoch_reserves_snapshot_map_token1 = dict()
@@ -87,38 +94,57 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             )
         except Exception as exc:
             self._logger.opt(exception=True).error(
-                f'Pair-Reserves function failed for epoch: {min_chain_height}-{max_chain_height} | error_msg:{exc}',
+                (
+                    'Pair-Reserves function failed for epoch:'
+                    f' {min_chain_height}-{max_chain_height} | error_msg:{exc}'
+                ),
             )
             # if querying fails, we are going to ensure it is recorded for future processing
             return None
         else:
             for block_num in range(min_chain_height, max_chain_height + 1):
-
                 block_pair_total_reserves = pair_reserve_total.get(block_num)
                 fetch_ts = True if block_num == max_chain_height else False
 
-                epoch_reserves_snapshot_map_token0[f'block{block_num}'] = block_pair_total_reserves['token0']
-                epoch_reserves_snapshot_map_token1[f'block{block_num}'] = block_pair_total_reserves['token1']
-                epoch_usd_reserves_snapshot_map_token0[f'block{block_num}'] = block_pair_total_reserves['token0USD']
-                epoch_usd_reserves_snapshot_map_token1[f'block{block_num}'] = block_pair_total_reserves['token1USD']
+                epoch_reserves_snapshot_map_token0[
+                    f'block{block_num}'
+                ] = block_pair_total_reserves['token0']
+                epoch_reserves_snapshot_map_token1[
+                    f'block{block_num}'
+                ] = block_pair_total_reserves['token1']
+                epoch_usd_reserves_snapshot_map_token0[
+                    f'block{block_num}'
+                ] = block_pair_total_reserves['token0USD']
+                epoch_usd_reserves_snapshot_map_token1[
+                    f'block{block_num}'
+                ] = block_pair_total_reserves['token1USD']
 
                 if fetch_ts:
                     if not block_pair_total_reserves.get('timestamp', None):
                         self._logger.error(
-                            'Could not fetch timestamp against max block height in epoch {} - {}'
-                            'to calculate pair reserves for contract {}. '
-                            'Using current time stamp for snapshot construction',
-                            data_source_contract_address, min_chain_height, max_chain_height,
+                            (
+                                'Could not fetch timestamp against max block'
+                                ' height in epoch {} - {}to calculate pair'
+                                ' reserves for contract {}. Using current time'
+                                ' stamp for snapshot construction'
+                            ),
+                            data_source_contract_address,
+                            min_chain_height,
+                            max_chain_height,
                         )
                     else:
-                        max_block_timestamp = block_pair_total_reserves.get('timestamp')
+                        max_block_timestamp = block_pair_total_reserves.get(
+                            'timestamp',
+                        )
             pair_total_reserves_snapshot = UniswapPairTotalReservesSnapshot(
                 **{
                     'token0Reserves': epoch_reserves_snapshot_map_token0,
                     'token1Reserves': epoch_reserves_snapshot_map_token1,
                     'token0ReservesUSD': epoch_usd_reserves_snapshot_map_token0,
                     'token1ReservesUSD': epoch_usd_reserves_snapshot_map_token1,
-                    'chainHeightRange': EpochBase(begin=min_chain_height, end=max_chain_height),
+                    'chainHeightRange': EpochBase(
+                        begin=min_chain_height, end=max_chain_height,
+                    ),
                     'timestamp': max_block_timestamp,
                     'contract': data_source_contract_address,
                 },
@@ -126,25 +152,36 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             return pair_total_reserves_snapshot
 
     async def _prepare_epochs(
-            self,
-            failed_query_epochs_key: str,
-            stream: str,
-            discarded_query_epochs_key: str,
-            current_epoch: PowerloomCallbackProcessMessage,
-            snapshot_name: str,
-            failed_query_epochs_l: Optional[List],
+        self,
+        failed_query_epochs_key: str,
+        stream: str,
+        discarded_query_epochs_key: str,
+        current_epoch: PowerloomCallbackProcessMessage,
+        snapshot_name: str,
+        failed_query_epochs_l: Optional[List],
     ) -> List[PowerloomCallbackProcessMessage]:
         queued_epochs = list()
         # checks for any previously queued epochs, returns a list of such epochs in increasing order of blockheights
         if 'test' not in SETTINGS_ENV:
-            project_id = f'{stream}_{current_epoch.contract}_{settings.namespace}'
-            fall_behind_reset_threshold = settings.rpc.skip_epoch_threshold_blocks
-            failed_query_epochs = await self._redis_conn.lpop(failed_query_epochs_key)
+            project_id = (
+                f'{stream}_{current_epoch.contract}_{settings.namespace}'
+            )
+            fall_behind_reset_threshold = (
+                settings.rpc.skip_epoch_threshold_blocks
+            )
+            failed_query_epochs = await self._redis_conn.lpop(
+                failed_query_epochs_key,
+            )
             while failed_query_epochs:
-                epoch_broadcast: PowerloomCallbackProcessMessage = PowerloomCallbackProcessMessage.parse_raw(
-                    failed_query_epochs.decode('utf-8'),
+                epoch_broadcast: PowerloomCallbackProcessMessage = (
+                    PowerloomCallbackProcessMessage.parse_raw(
+                        failed_query_epochs.decode('utf-8'),
+                    )
                 )
-                if current_epoch.begin - epoch_broadcast.end > fall_behind_reset_threshold:
+                if (
+                    current_epoch.begin - epoch_broadcast.end >
+                    fall_behind_reset_threshold
+                ):
                     # send alert
                     await self._client.post(
                         url=settings.issue_report_url,
@@ -163,26 +200,44 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                         epoch_broadcast.json(),
                     )
                     self._logger.warning(
-                        'Project {} | QUEUED Epoch {} processing has fallen behind by more than {} blocks, '
-                        'alert sent to DAG Verifier | Discarding queued epoch',
-                        project_id, epoch_broadcast, fall_behind_reset_threshold,
+                        (
+                            'Project {} | QUEUED Epoch {} processing has fallen'
+                            ' behind by more than {} blocks, alert sent to DAG'
+                            ' Verifier | Discarding queued epoch'
+                        ),
+                        project_id,
+                        epoch_broadcast,
+                        fall_behind_reset_threshold,
                     )
                 else:
                     self._logger.info(
-                        'Found queued epoch against which snapshot construction for pair contract\'s '
-                        '{} failed earlier: {}',
-                        snapshot_name, epoch_broadcast,
+                        (
+                            'Found queued epoch against which snapshot'
+                            " construction for pair contract's {} failed"
+                            ' earlier: {}'
+                        ),
+                        snapshot_name,
+                        epoch_broadcast,
                     )
                     queued_epochs.append(epoch_broadcast)
                 # uniswap_failed_query_pair_total_reserves_epochs_redis_q_f.format(current_epoch.contract)
-                failed_query_epochs = await self._redis_conn.lpop(failed_query_epochs_key)
+                failed_query_epochs = await self._redis_conn.lpop(
+                    failed_query_epochs_key,
+                )
         else:
-            queued_epochs = failed_query_epochs_l if failed_query_epochs_l else list()
+            queued_epochs = (
+                failed_query_epochs_l if failed_query_epochs_l else list()
+            )
         queued_epochs.append(current_epoch)
         # check for continuity in epochs before ordering them
         self._logger.info(
-            'Attempting to check for continuity in queued epochs to generate snapshots against pair contract\'s '
-            '{} including current epoch: {}', snapshot_name, queued_epochs,
+            (
+                'Attempting to check for continuity in queued epochs to'
+                " generate snapshots against pair contract's {} including"
+                ' current epoch: {}'
+            ),
+            snapshot_name,
+            queued_epochs,
         )
         continuity = True
         for idx, each_epoch in enumerate(queued_epochs):
@@ -197,8 +252,12 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             # pop off current epoch added to end of this list
             queued_epochs = [queued_epochs[-1]]
             self._logger.info(
-                'Recording epochs as discarded during snapshot construction stage for {}: {}',
-                snapshot_name, queued_epochs,
+                (
+                    'Recording epochs as discarded during snapshot construction'
+                    ' stage for {}: {}'
+                ),
+                snapshot_name,
+                queued_epochs,
             )
             for x in discarded_epochs:
                 await self._redis_conn.rpush(
@@ -208,10 +267,10 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         return queued_epochs
 
     async def _construct_pair_reserves_epoch_snapshot_data(
-            self,
-            msg_obj: PowerloomCallbackProcessMessage,
-            past_failed_epochs: Optional[List],
-            enqueue_on_failure: bool = False,
+        self,
+        msg_obj: PowerloomCallbackProcessMessage,
+        past_failed_epochs: Optional[List],
+        enqueue_on_failure: bool = False,
     ):
         # check for enqueued failed query epochs
         epochs = await self._prepare_epochs(
@@ -251,21 +310,29 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
     ):
         tasks_map = dict()
         for each_epoch in epochs:
-            tasks_map[(
-                each_epoch.begin,
-                each_epoch.end,
-                each_epoch.broadcast_id,
-            )] = cb_fn_async(
+            tasks_map[
+                (
+                    each_epoch.begin,
+                    each_epoch.end,
+                    each_epoch.broadcast_id,
+                )
+            ] = cb_fn_async(
                 min_chain_height=each_epoch.begin,
                 max_chain_height=each_epoch.end,
                 data_source_contract_address=data_source_contract_address,
                 **cb_kwargs,
             )
-        results = await asyncio.gather(*tasks_map.values(), return_exceptions=True)
+        results = await asyncio.gather(
+            *tasks_map.values(), return_exceptions=True,
+        )
         results_map = dict()
         for idx, each_result in enumerate(results):
             epoch_against_result = list(tasks_map.keys())[idx]
-            if isinstance(each_result, Exception) and enqueue_on_failure and 'test' not in SETTINGS_ENV:
+            if (
+                isinstance(each_result, Exception) and
+                enqueue_on_failure and
+                'test' not in SETTINGS_ENV
+            ):
                 queue_msg_obj = PowerloomCallbackProcessMessage(
                     begin=epoch_against_result[0],
                     end=epoch_against_result[1],
@@ -277,24 +344,37 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                     queue_msg_obj.json(),
                 )
                 self._logger.debug(
-                    'Enqueued epoch broadcast ID {} because reserve query failed on {} - {} | Exception: {}',
-                    queue_msg_obj.broadcast_id, epoch_against_result[0], epoch_against_result[1],
+                    (
+                        'Enqueued epoch broadcast ID {} because reserve query'
+                        ' failed on {} - {} | Exception: {}'
+                    ),
+                    queue_msg_obj.broadcast_id,
+                    epoch_against_result[0],
+                    epoch_against_result[1],
                     each_result,
                 )
-                results_map[(epoch_against_result[0], epoch_against_result[1])] = None
+                results_map[
+                    (epoch_against_result[0], epoch_against_result[1])
+                ] = None
             else:
                 for transformation in transformation_lambdas:
                     each_result = transformation(
-                        each_result, data_source_contract_address, epoch_against_result[
-                            0
-                        ], epoch_against_result[1],
+                        each_result,
+                        data_source_contract_address,
+                        epoch_against_result[0],
+                        epoch_against_result[1],
                     )
-                results_map[(
-                    epoch_against_result[0], epoch_against_result[1],
-                )] = each_result
+                results_map[
+                    (
+                        epoch_against_result[0],
+                        epoch_against_result[1],
+                    )
+                ] = each_result
         return results_map
 
-    async def _update_broadcast_processing_status(self, broadcast_id, update_state):
+    async def _update_broadcast_processing_status(
+        self, broadcast_id, update_state,
+    ):
         await self._redis_conn.hset(
             uniswap_cb_broadcast_processing_logs_zset.format(self.name),
             broadcast_id,
@@ -302,21 +382,24 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         )
 
     async def _send_audit_payload_commit_service(
-            self,
-            audit_stream,
-            original_epoch: PowerloomCallbackProcessMessage,
-            snapshot_name,
-            epoch_snapshot_map: Dict[
-                Tuple[int, int],
-                Union[UniswapPairTotalReservesSnapshot, None],
-            ],
+        self,
+        audit_stream,
+        original_epoch: PowerloomCallbackProcessMessage,
+        snapshot_name,
+        epoch_snapshot_map: Dict[
+            Tuple[int, int],
+            Union[UniswapPairTotalReservesSnapshot, None],
+        ],
     ):
-
         for each_epoch, epoch_snapshot in epoch_snapshot_map.items():
             if not epoch_snapshot:
                 self._logger.error(
-                    'No epoch snapshot to commit. Construction of snapshot failed for {} against epoch {}',
-                    snapshot_name, each_epoch,
+                    (
+                        'No epoch snapshot to commit. Construction of snapshot'
+                        ' failed for {} against epoch {}'
+                    ),
+                    snapshot_name,
+                    each_epoch,
                 )
                 # TODO: standardize/unify update log data model
                 update_log = {
@@ -325,7 +408,10 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                         'action': f'SnapshotBuild-{snapshot_name}',
                         'info': {
                             'original_epoch': original_epoch.dict(),
-                            'cur_epoch': {'begin': each_epoch[0], 'end': each_epoch[1]},
+                            'cur_epoch': {
+                                'begin': each_epoch[0],
+                                'end': each_epoch[1],
+                            },
                             'status': 'Failed',
                         },
                     },
@@ -344,7 +430,10 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                         'action': f'SnapshotBuild-{snapshot_name}',
                         'info': {
                             'original_epoch': original_epoch.dict(),
-                            'cur_epoch': {'begin': each_epoch[0], 'end': each_epoch[1]},
+                            'cur_epoch': {
+                                'begin': each_epoch[0],
+                                'end': each_epoch[1],
+                            },
                             'status': 'Success',
                             'snapshot': epoch_snapshot.dict(),
                         },
@@ -378,8 +467,12 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                     )
                 except Exception as e:
                     self._logger.opt(exception=True).error(
-                        'Exception committing snapshot to audit protocol: {} | dump: {}',
-                        epoch_snapshot, e,
+                        (
+                            'Exception committing snapshot to audit protocol:'
+                            ' {} | dump: {}'
+                        ),
+                        epoch_snapshot,
+                        e,
                     )
                     update_log = {
                         'worker': self._unique_id,
@@ -388,7 +481,10 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                             'info': {
                                 'snapshot': payload,
                                 'original_epoch': original_epoch.dict(),
-                                'cur_epoch': {'begin': each_epoch[0], 'end': each_epoch[1]},
+                                'cur_epoch': {
+                                    'begin': each_epoch[0],
+                                    'end': each_epoch[1],
+                                },
                                 'status': 'Failed',
                                 'exception': e,
                             },
@@ -403,8 +499,12 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                     )
                 else:
                     self._logger.debug(
-                        'Sent snapshot to audit protocol payload commit service: {} | Response: {}',
-                        commit_payload, r,
+                        (
+                            'Sent snapshot to audit protocol payload commit'
+                            ' service: {} | Response: {}'
+                        ),
+                        commit_payload,
+                        r,
                     )
                     update_log = {
                         'worker': self._unique_id,
@@ -413,7 +513,10 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                             'info': {
                                 'snapshot': payload,
                                 'original_epoch': original_epoch.dict(),
-                                'cur_epoch': {'begin': each_epoch[0], 'end': each_epoch[1]},
+                                'cur_epoch': {
+                                    'begin': each_epoch[0],
+                                    'end': each_epoch[1],
+                                },
                                 'status': 'Success',
                                 'response': r,
                             },
@@ -429,21 +532,34 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
 
     @notify_on_task_failure
     async def _processor_task(self, msg_obj: PowerloomCallbackProcessMessage):
-        self._logger.debug('Processing total pair reserves callback: {}', msg_obj)
+        self._logger.debug(
+            'Processing total pair reserves callback: {}', msg_obj,
+        )
 
         self_unique_id = str(uuid4())
-        cur_task: asyncio.Task = asyncio.current_task(asyncio.get_running_loop())
-        cur_task.set_name(f'aio_pika.consumer|PairTotalReservesProcessor|{msg_obj.contract}')
+        cur_task: asyncio.Task = asyncio.current_task(
+            asyncio.get_running_loop(),
+        )
+        cur_task.set_name(
+            f'aio_pika.consumer|PairTotalReservesProcessor|{msg_obj.contract}',
+        )
         self._running_callback_tasks[self_unique_id] = cur_task
 
         await self.init_redis_pool()
         if not self._rate_limiting_lua_scripts:
-            self._rate_limiting_lua_scripts = await load_rate_limiter_scripts(self._redis_conn)
+            self._rate_limiting_lua_scripts = await load_rate_limiter_scripts(
+                self._redis_conn,
+            )
         self._logger.debug(
-            'Got epoch to process for calculating total reserves for pair: {}', msg_obj,
+            'Got epoch to process for calculating total reserves for pair: {}',
+            msg_obj,
         )
-        pair_total_reserves_epoch_snapshot_map = await self._construct_pair_reserves_epoch_snapshot_data(
-            msg_obj=msg_obj, enqueue_on_failure=True, past_failed_epochs=[],
+        pair_total_reserves_epoch_snapshot_map = (
+            await self._construct_pair_reserves_epoch_snapshot_data(
+                msg_obj=msg_obj,
+                enqueue_on_failure=True,
+                past_failed_epochs=[],
+            )
         )
 
         await self._send_audit_payload_commit_service(
@@ -459,15 +575,24 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         await message.ack()
 
         try:
-            msg_obj: PowerloomCallbackProcessMessage = PowerloomCallbackProcessMessage.parse_raw(message.body)
+            msg_obj: PowerloomCallbackProcessMessage = (
+                PowerloomCallbackProcessMessage.parse_raw(message.body)
+            )
         except ValidationError as e:
             self._logger.opt(exception=True).error(
-                'Bad message structure of callback in processor for total pair reserves: {}', e,
+                (
+                    'Bad message structure of callback in processor for total'
+                    ' pair reserves: {}'
+                ),
+                e,
             )
             return
         except Exception as e:
             self._logger.opt(exception=True).error(
-                'Unexpected message structure of callback in processor for total pair reserves: {}',
+                (
+                    'Unexpected message structure of callback in processor for'
+                    ' total pair reserves: {}'
+                ),
                 e,
             )
             return

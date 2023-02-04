@@ -15,13 +15,18 @@ def interactor_wrapper_obj(rmq_q: queue.Queue):
 
 if __name__ == '__main__':
     q = queue.Queue()
-    CMD = '{"command": "start", "pid": null, "proc_str_id": "EpochCallbackManager", "init_kwargs": {}}'
+    CMD = (
+        '{"command": "start", "pid": null, "proc_str_id":'
+        ' "EpochCallbackManager", "init_kwargs": {}}'
+    )
     exchange = f'{settings.rabbitmq.setup.core.exchange}:{settings.namespace}'
     routing_key = f'processhub-commands:{settings.namespace}'
     try:
         t = threading.Thread(target=interactor_wrapper_obj, kwargs={'q': q})
         t.start()
-        i = input('1 for vanilla pika adapter publish. 2 for select loop adapter publish')
+        i = input(
+            '1 for vanilla pika adapter publish. 2 for select loop adapter' ' publish',
+        )
         i = int(i)
         if i == 1:
             c = create_rabbitmq_conn()

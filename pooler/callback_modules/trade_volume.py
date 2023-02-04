@@ -31,10 +31,18 @@ from pooler.utils.models.message_models import EpochBase
 from pooler.utils.models.message_models import PowerloomCallbackProcessMessage
 from pooler.utils.models.message_models import UniswapTradesSnapshot
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
-from pooler.utils.redis.redis_keys import uniswap_cb_broadcast_processing_logs_zset
-from pooler.utils.redis.redis_keys import uniswap_discarded_query_pair_trade_volume_epochs_redis_q_f
-from pooler.utils.redis.redis_keys import uniswap_failed_query_pair_total_reserves_epochs_redis_q_f
-from pooler.utils.redis.redis_keys import uniswap_failed_query_pair_trade_volume_epochs_redis_q_f
+from pooler.utils.redis.redis_keys import (
+    uniswap_cb_broadcast_processing_logs_zset,
+)
+from pooler.utils.redis.redis_keys import (
+    uniswap_discarded_query_pair_trade_volume_epochs_redis_q_f,
+)
+from pooler.utils.redis.redis_keys import (
+    uniswap_failed_query_pair_total_reserves_epochs_redis_q_f,
+)
+from pooler.utils.redis.redis_keys import (
+    uniswap_failed_query_pair_trade_volume_epochs_redis_q_f,
+)
 
 
 SETTINGS_ENV = os.getenv('ENV_FOR_DYNACONF', 'development')
@@ -52,7 +60,8 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
         self._rate_limiting_lua_scripts = dict()
         self._async_transport = AsyncHTTPTransport(
             limits=Limits(
-                max_connections=100, max_keepalive_connections=50,
+                max_connections=100,
+                max_keepalive_connections=50,
                 keepalive_expiry=None,
             ),
         )
@@ -64,25 +73,36 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
         )
 
     async def _prepare_epochs(
-            self,
-            failed_query_epochs_key: str,
-            stream: str,
-            discarded_query_epochs_key: str,
-            current_epoch: PowerloomCallbackProcessMessage,
-            snapshot_name: str,
-            failed_query_epochs_l: Optional[List],
+        self,
+        failed_query_epochs_key: str,
+        stream: str,
+        discarded_query_epochs_key: str,
+        current_epoch: PowerloomCallbackProcessMessage,
+        snapshot_name: str,
+        failed_query_epochs_l: Optional[List],
     ) -> List[PowerloomCallbackProcessMessage]:
         queued_epochs = list()
         # checks for any previously queued epochs, returns a list of such epochs in increasing order of blockheights
         if 'test' not in SETTINGS_ENV:
-            project_id = f'{stream}_{current_epoch.contract}_{settings.namespace}'
-            fall_behind_reset_threshold = settings.rpc.skip_epoch_threshold_blocks
-            failed_query_epochs = await self._redis_conn.lpop(failed_query_epochs_key)
+            project_id = (
+                f'{stream}_{current_epoch.contract}_{settings.namespace}'
+            )
+            fall_behind_reset_threshold = (
+                settings.rpc.skip_epoch_threshold_blocks
+            )
+            failed_query_epochs = await self._redis_conn.lpop(
+                failed_query_epochs_key,
+            )
             while failed_query_epochs:
-                epoch_broadcast: PowerloomCallbackProcessMessage = PowerloomCallbackProcessMessage.parse_raw(
-                    failed_query_epochs.decode('utf-8'),
+                epoch_broadcast: PowerloomCallbackProcessMessage = (
+                    PowerloomCallbackProcessMessage.parse_raw(
+                        failed_query_epochs.decode('utf-8'),
+                    )
                 )
-                if current_epoch.begin - epoch_broadcast.end > fall_behind_reset_threshold:
+                if (
+                    current_epoch.begin - epoch_broadcast.end >
+                    fall_behind_reset_threshold
+                ):
                     # send alert
                     await self._client.post(
                         url=settings.issue_report_url,
@@ -101,26 +121,44 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
                         epoch_broadcast.json(),
                     )
                     self._logger.warning(
-                        'Project {} | QUEUED Epoch {} processing has fallen behind by more than {} blocks, '
-                        'alert sent to DAG Verifier | Discarding queued epoch',
-                        project_id, epoch_broadcast, fall_behind_reset_threshold,
+                        (
+                            'Project {} | QUEUED Epoch {} processing has fallen'
+                            ' behind by more than {} blocks, alert sent to DAG'
+                            ' Verifier | Discarding queued epoch'
+                        ),
+                        project_id,
+                        epoch_broadcast,
+                        fall_behind_reset_threshold,
                     )
                 else:
                     self._logger.info(
-                        'Found queued epoch against which snapshot construction for pair contract\'s '
-                        '{} failed earlier: {}',
-                        snapshot_name, epoch_broadcast,
+                        (
+                            'Found queued epoch against which snapshot'
+                            " construction for pair contract's {} failed"
+                            ' earlier: {}'
+                        ),
+                        snapshot_name,
+                        epoch_broadcast,
                     )
                     queued_epochs.append(epoch_broadcast)
                 # uniswap_failed_query_pair_total_reserves_epochs_redis_q_f.format(current_epoch.contract)
-                failed_query_epochs = await self._redis_conn.lpop(failed_query_epochs_key)
+                failed_query_epochs = await self._redis_conn.lpop(
+                    failed_query_epochs_key,
+                )
         else:
-            queued_epochs = failed_query_epochs_l if failed_query_epochs_l else list()
+            queued_epochs = (
+                failed_query_epochs_l if failed_query_epochs_l else list()
+            )
         queued_epochs.append(current_epoch)
         # check for continuity in epochs before ordering them
         self._logger.info(
-            'Attempting to check for continuity in queued epochs to generate snapshots against pair contract\'s '
-            '{} including current epoch: {}', snapshot_name, queued_epochs,
+            (
+                'Attempting to check for continuity in queued epochs to'
+                " generate snapshots against pair contract's {} including"
+                ' current epoch: {}'
+            ),
+            snapshot_name,
+            queued_epochs,
         )
         continuity = True
         for idx, each_epoch in enumerate(queued_epochs):
@@ -135,8 +173,12 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
             # pop off current epoch added to end of this list
             queued_epochs = [queued_epochs[-1]]
             self._logger.info(
-                'Recording epochs as discarded during snapshot construction stage for {}: {}',
-                snapshot_name, queued_epochs,
+                (
+                    'Recording epochs as discarded during snapshot construction'
+                    ' stage for {}: {}'
+                ),
+                snapshot_name,
+                queued_epochs,
             )
             for x in discarded_epochs:
                 await self._redis_conn.rpush(
@@ -157,21 +199,29 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
     ):
         tasks_map = dict()
         for each_epoch in epochs:
-            tasks_map[(
-                each_epoch.begin,
-                each_epoch.end,
-                each_epoch.broadcast_id,
-            )] = cb_fn_async(
+            tasks_map[
+                (
+                    each_epoch.begin,
+                    each_epoch.end,
+                    each_epoch.broadcast_id,
+                )
+            ] = cb_fn_async(
                 min_chain_height=each_epoch.begin,
                 max_chain_height=each_epoch.end,
                 data_source_contract_address=data_source_contract_address,
                 **cb_kwargs,
             )
-        results = await asyncio.gather(*tasks_map.values(), return_exceptions=True)
+        results = await asyncio.gather(
+            *tasks_map.values(), return_exceptions=True,
+        )
         results_map = dict()
         for idx, each_result in enumerate(results):
             epoch_against_result = list(tasks_map.keys())[idx]
-            if isinstance(each_result, Exception) and enqueue_on_failure and 'test' not in SETTINGS_ENV:
+            if (
+                isinstance(each_result, Exception) and
+                enqueue_on_failure and
+                'test' not in SETTINGS_ENV
+            ):
                 queue_msg_obj = PowerloomCallbackProcessMessage(
                     begin=epoch_against_result[0],
                     end=epoch_against_result[1],
@@ -183,28 +233,39 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
                     queue_msg_obj.json(),
                 )
                 self._logger.debug(
-                    'Enqueued epoch broadcast ID {} because reserve query failed on {} - {} | Exception: {}',
-                    queue_msg_obj.broadcast_id, epoch_against_result[0], epoch_against_result[1],
+                    (
+                        'Enqueued epoch broadcast ID {} because reserve query'
+                        ' failed on {} - {} | Exception: {}'
+                    ),
+                    queue_msg_obj.broadcast_id,
+                    epoch_against_result[0],
+                    epoch_against_result[1],
                     each_result,
                 )
-                results_map[(epoch_against_result[0], epoch_against_result[1])] = None
+                results_map[
+                    (epoch_against_result[0], epoch_against_result[1])
+                ] = None
             else:
                 for transformation in transformation_lambdas:
                     each_result = transformation(
-                        each_result, data_source_contract_address, epoch_against_result[
-                            0
-                        ], epoch_against_result[1],
+                        each_result,
+                        data_source_contract_address,
+                        epoch_against_result[0],
+                        epoch_against_result[1],
                     )
-                results_map[(
-                    epoch_against_result[0], epoch_against_result[1],
-                )] = each_result
+                results_map[
+                    (
+                        epoch_against_result[0],
+                        epoch_against_result[1],
+                    )
+                ] = each_result
         return results_map
 
     async def _construct_trade_volume_epoch_snapshot_data(
-            self,
-            msg_obj: PowerloomCallbackProcessMessage,
-            past_failed_epochs: Optional[List],
-            enqueue_on_failure: bool = False,
+        self,
+        msg_obj: PowerloomCallbackProcessMessage,
+        past_failed_epochs: Optional[List],
+        enqueue_on_failure: bool = False,
     ):
         epochs = await self._prepare_epochs(
             failed_query_epochs_key=uniswap_failed_query_pair_trade_volume_epochs_redis_q_f.format(
@@ -227,27 +288,41 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
             failed_query_redis_key=uniswap_failed_query_pair_total_reserves_epochs_redis_q_f.format(
                 msg_obj.contract,
             ),
-            transformation_lambdas=[self.transform_processed_epoch_to_trade_volume],
+            transformation_lambdas=[
+                self.transform_processed_epoch_to_trade_volume,
+            ],
             rate_limit_lua_script_shas=self._rate_limiting_lua_scripts,
         )
         return results_map
 
     def transform_processed_epoch_to_trade_volume(
-            self,
-            trade_vol_processed_snapshot,
-            data_source_contract_address,
-            epoch_begin,
-            epoch_end,
+        self,
+        trade_vol_processed_snapshot,
+        data_source_contract_address,
+        epoch_begin,
+        epoch_end,
     ):
-        self._logger.debug('Trade volume processed snapshot: {}', trade_vol_processed_snapshot)
+        self._logger.debug(
+            'Trade volume processed snapshot: {}', trade_vol_processed_snapshot,
+        )
 
         # Set effective trade volume at top level
-        total_trades_in_usd = trade_vol_processed_snapshot['Trades']['totalTradesUSD']
+        total_trades_in_usd = trade_vol_processed_snapshot['Trades'][
+            'totalTradesUSD'
+        ]
         total_fee_in_usd = trade_vol_processed_snapshot['Trades']['totalFeeUSD']
-        total_token0_vol = trade_vol_processed_snapshot['Trades']['token0TradeVolume']
-        total_token1_vol = trade_vol_processed_snapshot['Trades']['token1TradeVolume']
-        total_token0_vol_usd = trade_vol_processed_snapshot['Trades']['token0TradeVolumeUSD']
-        total_token1_vol_usd = trade_vol_processed_snapshot['Trades']['token1TradeVolumeUSD']
+        total_token0_vol = trade_vol_processed_snapshot['Trades'][
+            'token0TradeVolume'
+        ]
+        total_token1_vol = trade_vol_processed_snapshot['Trades'][
+            'token1TradeVolume'
+        ]
+        total_token0_vol_usd = trade_vol_processed_snapshot['Trades'][
+            'token0TradeVolumeUSD'
+        ]
+        total_token1_vol_usd = trade_vol_processed_snapshot['Trades'][
+            'token1TradeVolumeUSD'
+        ]
 
         max_block_timestamp = trade_vol_processed_snapshot.get('timestamp')
         trade_vol_processed_snapshot.pop('timestamp', None)
@@ -267,7 +342,9 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
         )
         return trade_volume_snapshot
 
-    async def _update_broadcast_processing_status(self, broadcast_id, update_state):
+    async def _update_broadcast_processing_status(
+        self, broadcast_id, update_state,
+    ):
         await self._redis_conn.hset(
             uniswap_cb_broadcast_processing_logs_zset.format(self.name),
             broadcast_id,
@@ -275,21 +352,24 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
         )
 
     async def _send_audit_payload_commit_service(
-            self,
-            audit_stream,
-            original_epoch: PowerloomCallbackProcessMessage,
-            snapshot_name,
-            epoch_snapshot_map: Dict[
-                Tuple[int, int],
-                Union[UniswapTradesSnapshot, None],
-            ],
+        self,
+        audit_stream,
+        original_epoch: PowerloomCallbackProcessMessage,
+        snapshot_name,
+        epoch_snapshot_map: Dict[
+            Tuple[int, int],
+            Union[UniswapTradesSnapshot, None],
+        ],
     ):
-
         for each_epoch, epoch_snapshot in epoch_snapshot_map.items():
             if not epoch_snapshot:
                 self._logger.error(
-                    'No epoch snapshot to commit. Construction of snapshot failed for {} against epoch {}',
-                    snapshot_name, each_epoch,
+                    (
+                        'No epoch snapshot to commit. Construction of snapshot'
+                        ' failed for {} against epoch {}'
+                    ),
+                    snapshot_name,
+                    each_epoch,
                 )
                 # TODO: standardize/unify update log data model
                 update_log = {
@@ -298,7 +378,10 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
                         'action': f'SnapshotBuild-{snapshot_name}',
                         'info': {
                             'original_epoch': original_epoch.dict(),
-                            'cur_epoch': {'begin': each_epoch[0], 'end': each_epoch[1]},
+                            'cur_epoch': {
+                                'begin': each_epoch[0],
+                                'end': each_epoch[1],
+                            },
                             'status': 'Failed',
                         },
                     },
@@ -317,7 +400,10 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
                         'action': f'SnapshotBuild-{snapshot_name}',
                         'info': {
                             'original_epoch': original_epoch.dict(),
-                            'cur_epoch': {'begin': each_epoch[0], 'end': each_epoch[1]},
+                            'cur_epoch': {
+                                'begin': each_epoch[0],
+                                'end': each_epoch[1],
+                            },
                             'status': 'Success',
                             'snapshot': epoch_snapshot.dict(),
                         },
@@ -351,8 +437,12 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
                     )
                 except Exception as e:
                     self._logger.opt(exception=True).error(
-                        'Exception committing snapshot to audit protocol: {} | dump: {}',
-                        epoch_snapshot, e,
+                        (
+                            'Exception committing snapshot to audit protocol:'
+                            ' {} | dump: {}'
+                        ),
+                        epoch_snapshot,
+                        e,
                     )
                     update_log = {
                         'worker': self._unique_id,
@@ -361,7 +451,10 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
                             'info': {
                                 'snapshot': payload,
                                 'original_epoch': original_epoch.dict(),
-                                'cur_epoch': {'begin': each_epoch[0], 'end': each_epoch[1]},
+                                'cur_epoch': {
+                                    'begin': each_epoch[0],
+                                    'end': each_epoch[1],
+                                },
                                 'status': 'Failed',
                                 'exception': e,
                             },
@@ -376,8 +469,12 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
                     )
                 else:
                     self._logger.debug(
-                        'Sent snapshot to audit protocol payload commit service: {} | Response: {}',
-                        commit_payload, r,
+                        (
+                            'Sent snapshot to audit protocol payload commit'
+                            ' service: {} | Response: {}'
+                        ),
+                        commit_payload,
+                        r,
                     )
                     update_log = {
                         'worker': self._unique_id,
@@ -386,7 +483,10 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
                             'info': {
                                 'snapshot': payload,
                                 'original_epoch': original_epoch.dict(),
-                                'cur_epoch': {'begin': each_epoch[0], 'end': each_epoch[1]},
+                                'cur_epoch': {
+                                    'begin': each_epoch[0],
+                                    'end': each_epoch[1],
+                                },
                                 'status': 'Success',
                                 'response': r,
                             },
@@ -402,22 +502,35 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
 
     @notify_on_task_failure
     async def _processor_task(self, msg_obj: PowerloomCallbackProcessMessage):
-        self._logger.debug('Processing total pair reserves callback: {}', msg_obj)
+        self._logger.debug(
+            'Processing total pair reserves callback: {}', msg_obj,
+        )
 
         self_unique_id = str(uuid4())
-        cur_task: asyncio.Task = asyncio.current_task(asyncio.get_running_loop())
-        cur_task.set_name(f'aio_pika.consumer|PairTotalReservesProcessor|{msg_obj.contract}')
+        cur_task: asyncio.Task = asyncio.current_task(
+            asyncio.get_running_loop(),
+        )
+        cur_task.set_name(
+            f'aio_pika.consumer|PairTotalReservesProcessor|{msg_obj.contract}',
+        )
         self._running_callback_tasks[self_unique_id] = cur_task
 
         await self.init_redis_pool()
         if not self._rate_limiting_lua_scripts:
-            self._rate_limiting_lua_scripts = await load_rate_limiter_scripts(self._redis_conn)
+            self._rate_limiting_lua_scripts = await load_rate_limiter_scripts(
+                self._redis_conn,
+            )
         self._logger.debug(
-            'Got epoch to process for calculating total reserves for pair: {}', msg_obj,
+            'Got epoch to process for calculating total reserves for pair: {}',
+            msg_obj,
         )
         # prepare trade volume snapshot
-        trade_vol_epoch_snapshot_map = await self._construct_trade_volume_epoch_snapshot_data(
-            msg_obj=msg_obj, enqueue_on_failure=True, past_failed_epochs=[],
+        trade_vol_epoch_snapshot_map = (
+            await self._construct_trade_volume_epoch_snapshot_data(
+                msg_obj=msg_obj,
+                enqueue_on_failure=True,
+                past_failed_epochs=[],
+            )
         )
 
         await self._send_audit_payload_commit_service(
@@ -433,15 +546,24 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
         await message.ack()
 
         try:
-            msg_obj: PowerloomCallbackProcessMessage = PowerloomCallbackProcessMessage.parse_raw(message.body)
+            msg_obj: PowerloomCallbackProcessMessage = (
+                PowerloomCallbackProcessMessage.parse_raw(message.body)
+            )
         except ValidationError as e:
             self._logger.opt(exception=True).error(
-                'Bad message structure of callback in processor for total pair reserves: {}', e,
+                (
+                    'Bad message structure of callback in processor for total'
+                    ' pair reserves: {}'
+                ),
+                e,
             )
             return
         except Exception as e:
             self._logger.opt(exception=True).error(
-                'Unexpected message structure of callback in processor for total pair reserves: {}',
+                (
+                    'Unexpected message structure of callback in processor for'
+                    ' total pair reserves: {}'
+                ),
                 e,
             )
             return

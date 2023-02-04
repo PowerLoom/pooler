@@ -44,33 +44,50 @@ async def get_rabbitmq_channel(connection_pool) -> aio_pika.Channel:
 
 
 class AuditProtocolCommandsHelper:
-
     @classmethod
-    async def commit_payload(cls, report_payload: PayloadCommitAPIRequest, session: AsyncClient):
+    async def commit_payload(
+        cls, report_payload: PayloadCommitAPIRequest, session: AsyncClient,
+    ):
         async for attempt in AsyncRetrying(
-                reraise=False,
-                stop=stop_after_attempt(settings.audit_protocol_engine.retry),
-                wait=wait_random_exponential(multiplier=2, max=10),
+            reraise=False,
+            stop=stop_after_attempt(settings.audit_protocol_engine.retry),
+            wait=wait_random_exponential(multiplier=2, max=10),
         ):
             with attempt:
                 response_obj = await session.post(
-                    url=urljoin(settings.audit_protocol_engine.url, 'commit_payload'),
+                    url=urljoin(
+                        settings.audit_protocol_engine.url, 'commit_payload',
+                    ),
                     json=report_payload.dict(),
                 )
                 response_status_code = response_obj.status_code
                 response = response_obj.json() or {}
                 if response_status_code in range(200, 300):
                     return response
-                elif attempt.retry_state.attempt_number == settings.audit_protocol_engine.retry:
-                    if attempt.retry_state.outcome and attempt.retry_state.outcome.exception():
+                elif (
+                    attempt.retry_state.attempt_number ==
+                    settings.audit_protocol_engine.retry
+                ):
+                    if (
+                        attempt.retry_state.outcome and
+                        attempt.retry_state.outcome.exception()
+                    ):
                         raise attempt.retry_state.outcome.exception()
                     else:
                         raise Exception(
-                            f'Failed audit protocol engine call with status code: {response_status_code} and response: {response}',
+                            (
+                                'Failed audit protocol engine call with status'
+                                f' code: {response_status_code} and response:'
+                                f' {response}'
+                            ),
                         )
                 else:
                     raise Exception(
-                        f'Failed audit protocol engine call with status code: {response_status_code} and response: {response}',
+                        (
+                            'Failed audit protocol engine call with status'
+                            f' code: {response_status_code} and response:'
+                            f' {response}'
+                        ),
                     )
 
 
@@ -92,46 +109,69 @@ class CallbackAsyncWorker(multiprocessing.Process):
         self._shutdown_signal_received_count += 1
         if self._shutdown_signal_received_count > 1:
             self._logger.info(
-                f'Received exit signal {sig.name}. Not processing as shutdown sequence was already initiated...',
+                (
+                    f'Received exit signal {sig.name}. Not processing as'
+                    ' shutdown sequence was already initiated...'
+                ),
             )
         else:
             self._logger.info(
-                f'Received exit signal {sig.name}. Processing shutdown sequence...',
+                (
+                    f'Received exit signal {sig.name}. Processing shutdown'
+                    ' sequence...'
+                ),
             )
             # check the done or cancelled status of self._running_callback_tasks.values()
             for u_uid, t in self._running_callback_tasks.items():
                 self._logger.debug(
-                    'Shutdown handler: Checking result and status of aio_pika consumer callback task {}', t.get_name(),
+                    (
+                        'Shutdown handler: Checking result and status of'
+                        ' aio_pika consumer callback task {}'
+                    ),
+                    t.get_name(),
                 )
                 try:
                     task_result = t.result()
                 except asyncio.CancelledError:
                     self._logger.info(
-                        'Shutdown handler: aio_pika consumer callback task {} was cancelled', t.get_name(),
+                        (
+                            'Shutdown handler: aio_pika consumer callback task'
+                            ' {} was cancelled'
+                        ),
+                        t.get_name(),
                     )
                 except asyncio.InvalidStateError:
                     self._logger.info(
-                        'Shutdown handler: aio_pika consumer callback task {} result not available yet. '
-                        'Still running.',
+                        (
+                            'Shutdown handler: aio_pika consumer callback task'
+                            ' {} result not available yet. Still running.'
+                        ),
                         t.get_name(),
                     )
                 except Exception as e:
                     self._logger.info(
-                        'Shutdown handler: aio_pika consumer callback task {} raised Exception. '
-                        '{}',
-                        t.get_name(), e,
+                        (
+                            'Shutdown handler: aio_pika consumer callback task'
+                            ' {} raised Exception. {}'
+                        ),
+                        t.get_name(),
+                        e,
                     )
                 else:
                     self._logger.info(
-                        'Shutdown handler: aio_pika consumer callback task returned with result {}',
+                        (
+                            'Shutdown handler: aio_pika consumer callback task'
+                            ' returned with result {}'
+                        ),
                         t.get_name(),
                         task_result,
                     )
             # await asyncio.gather(*self._running_callback_tasks.values(), return_exceptions=True)
 
             tasks = [
-                t for t in asyncio.all_tasks(loop) if t is not
-                asyncio.current_task(loop)
+                t
+                for t in asyncio.all_tasks(loop)
+                if t is not asyncio.current_task(loop)
             ]
 
             [task.cancel() for task in tasks]
@@ -142,9 +182,12 @@ class CallbackAsyncWorker(multiprocessing.Process):
             self._logger.info('Shutdown complete.')
 
     async def _rabbitmq_consumer(self, loop):
-        self._rmq_connection_pool = Pool(get_rabbitmq_connection, max_size=5, loop=loop)
+        self._rmq_connection_pool = Pool(
+            get_rabbitmq_connection, max_size=5, loop=loop,
+        )
         self._rmq_channel_pool = Pool(
-            partial(get_rabbitmq_channel, self._rmq_connection_pool), max_size=20,
+            partial(get_rabbitmq_channel, self._rmq_connection_pool),
+            max_size=20,
             loop=loop,
         )
         async with self._rmq_channel_pool.acquire() as channel:
@@ -154,7 +197,10 @@ class CallbackAsyncWorker(multiprocessing.Process):
                 ensure=False,
             )
             self._logger.debug(
-                f'Consuming queue {self._q} with routing key {self._rmq_routing}...',
+                (
+                    f'Consuming queue {self._q} with routing key'
+                    f' {self._rmq_routing}...'
+                ),
             )
             await q_obj.consume(self._on_rabbitmq_message)
 
@@ -181,10 +227,17 @@ class CallbackAsyncWorker(multiprocessing.Process):
         signals = (signal.SIGTERM, signal.SIGINT, signal.SIGQUIT)
         for s in signals:
             ev_loop.add_signal_handler(
-                s, lambda x=s: ev_loop.create_task(self._shutdown_handler(x, ev_loop)),
+                s,
+                lambda x=s: ev_loop.create_task(
+                    self._shutdown_handler(x, ev_loop),
+                ),
             )
-        self._logger.debug(f'Starting asynchronous epoch callback worker {self._unique_id}...')
-        self._core_rmq_consumer = asyncio.ensure_future(self._rabbitmq_consumer(ev_loop))
+        self._logger.debug(
+            f'Starting asynchronous epoch callback worker {self._unique_id}...',
+        )
+        self._core_rmq_consumer = asyncio.ensure_future(
+            self._rabbitmq_consumer(ev_loop),
+        )
         try:
             ev_loop.run_forever()
         finally:
