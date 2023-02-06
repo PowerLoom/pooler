@@ -1,3 +1,4 @@
+# TODO: FIX THIS TEST, rich is causing dependency issues
 import asyncio
 import json
 import os
@@ -6,11 +7,11 @@ import time
 import httpx
 from rich.console import Console
 from rich.table import Table
-from uniswap_functions import get_pair_trade_volume
-from uniswap_functions import load_rate_limiter_scripts
 from web3 import Web3
 
+from pooler.callback_modules.uniswap.core import get_pair_trade_volume
 from pooler.utils.ipfs_async import client as ipfs_client
+from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 from pooler.utils.redis.redis_conn import provide_async_redis_conn_insta
 
 console = Console()
