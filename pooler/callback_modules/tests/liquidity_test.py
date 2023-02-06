@@ -1,25 +1,12 @@
 import asyncio
 import json
-import os
 
 import httpx
 from redis import asyncio as aioredis
-from uniswap_functions import get_pair_reserves
-from uniswap_functions import load_rate_limiter_scripts
-from uniswap_functions import provide_async_redis_conn_insta
 
-
-def load_contracts():
-    contracts = list()
-    if os.path.exists('pooler/static/cached_pair_addresses.json'):
-        with open(
-            'pooler/static/cached_pair_addresses.json',
-            'r',
-            encoding='utf-8',
-        ) as fp:
-            # the file contains an array of pair contract addresses
-            contracts = json.load(fp)
-            return contracts
+from pooler.callback_modules.uniswap.core import get_pair_reserves
+from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
+from pooler.utils.redis.redis_conn import provide_async_redis_conn_insta
 
 
 @provide_async_redis_conn_insta
@@ -75,7 +62,6 @@ def fetch_liquidityUSD_graph(pair_address, block_num):
 
 
 async def compare_liquidity():
-    # contracts = load_contracts()
     total_liquidity_usd_graph = 0
     total_liquidity_usd_rpc = 0
     block_num = 16046250

@@ -22,7 +22,7 @@ if __name__ == '__main__':
     exchange = f'{settings.rabbitmq.setup.core.exchange}:{settings.namespace}'
     routing_key = f'processhub-commands:{settings.namespace}'
     try:
-        t = threading.Thread(target=interactor_wrapper_obj, kwargs={'q': q})
+        t = threading.Thread(target=interactor_wrapper_obj, kwargs={'rmq_q': q})
         t.start()
         i = input(
             '1 for vanilla pika adapter publish. 2 for select loop adapter' ' publish',

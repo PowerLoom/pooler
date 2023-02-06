@@ -3,13 +3,14 @@ import json
 from functools import partial
 
 from redis import asyncio as aioredis
-from uniswap_functions import get_pair_metadata
-from uniswap_functions import load_rate_limiter_scripts
-from uniswap_functions import provide_async_redis_conn_insta
 from web3 import Web3
 
 from pooler.callback_modules.settings.config import settings as worker_settings
+from pooler.callback_modules.uniswap.helpers import get_pair_metadata
+from pooler.settings.config import enabled_projects
 from pooler.settings.config import settings
+from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
+from pooler.utils.redis.redis_conn import provide_async_redis_conn_insta
 
 w3 = Web3(Web3.HTTPProvider(settings.rpc.full_nodes[0].url))
 pair_address = Web3.toChecksumAddress(
@@ -35,7 +36,7 @@ router_contract_abi = read_json_file(
 pair_contract_abi = read_json_file(
     worker_settings.uniswap_contract_abis.pair_contract,
 )
-all_contracts = read_json_file('pooler/static/cached_pair_addresses.json')
+all_contracts = enabled_projects
 
 
 async def get_token_price_at_block_height(
