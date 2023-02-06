@@ -492,7 +492,7 @@ def batch_eth_call_on_block_range(
     rpc_response = []
     try:
         response = httpx.post(url=rpc_endpoint, json=rpc_query)
-        response = response.json()
+        response_data = response.json()
     except Exception as e:
         exc = RPCException(
             request={
@@ -511,6 +511,17 @@ def batch_eth_call_on_block_range(
         )
         raise exc
 
+    if response.status_code != 200:
+        raise RPCException(
+            request={
+                'from_block': from_block,
+                'to_block': to_block,
+            },
+            response=(response.status_code, response.text),
+            underlying_exception=None,
+            extra_info=f'RPC_BATCH_ETH_CALL_ERROR: {response.text}',
+        )
+
     response_exceptions = (
         list(
             map(
@@ -520,12 +531,12 @@ def batch_eth_call_on_block_range(
                         'error',
                         False,
                     ),
-                    response,
+                    response_data,
                 ),
             ),
         )
-        if isinstance(response, list)
-        else response
+        if isinstance(response_data, list)
+        else response_data
     )
 
     if len(response_exceptions) > 0:
@@ -546,7 +557,7 @@ def batch_eth_call_on_block_range(
         )
         raise exc
     else:
-        response = response if isinstance(response, list) else [response]
+        response = response_data if isinstance(response_data, list) else [response_data]
         for result in response:
             rpc_response.append(
                 eth_abi.decode_abi(
@@ -586,7 +597,7 @@ def batch_eth_get_block(rpc_endpoint, from_block, to_block):
 
     try:
         response = httpx.post(url=rpc_endpoint, json=rpc_query)
-        response = response.json()
+        response_data = response.json()
     except Exception as e:
         exc = RPCException(
             request={
@@ -595,21 +606,30 @@ def batch_eth_get_block(rpc_endpoint, from_block, to_block):
             },
             response=None,
             underlying_exception=e,
-            extra_info=f'RPC_BATCH_ETH_CALL_ERROR: {format_exception(e)}',
+            extra_info=f'RPC_BATCH_ETH_CALL_ERROR: {str(e)}',
         )
         rpc_logger.trace('Error in batch_eth_get_block, error {}', str(exc))
         raise exc
 
+    if response.status_code != 200:
+        raise RPCException(
+            request={
+                'from_block': from_block,
+                'to_block': to_block,
+            },
+            response=(response.status_code, response.text),
+            underlying_exception=None,
+            extra_info=f'RPC_BATCH_ETH_CALL_ERROR: {response.text}',
+        )
     response_exceptions = list(
         map(
             lambda r: r,
             filter(
-                lambda y: y.get('error', False),
-                response,
+                lambda y: type(y) == str or y.get('error', False),
+                response_data,
             ),
         ),
     )
-
     if len(response_exceptions) > 0:
         exc = RPCException(
             request={'from_block': from_block, 'to_block': to_block},
@@ -622,7 +642,7 @@ def batch_eth_get_block(rpc_endpoint, from_block, to_block):
         rpc_logger.trace('Error in batch_eth_get_block, error {}', str(exc))
         raise exc
 
-    return response
+    return response_data
 
 
 def get_event_sig_and_abi(event_signatures, event_abis):

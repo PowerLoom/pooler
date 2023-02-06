@@ -91,5 +91,6 @@
         "trace_enabled": false,
         "write_to_files": true
     },
-    "projects_config_path": "pooler/static/projects.json"
+    "projects_config_path": "pooler/static/projects.json",
+    "env": "<test/prod>"
 }

@@ -1,6 +1,5 @@
 import asyncio
 import json
-import os
 import time
 from typing import Callable
 from typing import Dict
@@ -40,9 +39,6 @@ from pooler.utils.redis.redis_keys import (
 from pooler.utils.redis.redis_keys import (
     uniswap_failed_query_pair_total_reserves_epochs_redis_q_f,
 )
-
-
-SETTINGS_ENV = os.getenv('ENV_FOR_DYNACONF', 'development')
 
 
 class PairTotalReservesProcessor(CallbackAsyncWorker):
@@ -162,7 +158,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
     ) -> List[PowerloomCallbackProcessMessage]:
         queued_epochs = list()
         # checks for any previously queued epochs, returns a list of such epochs in increasing order of blockheights
-        if 'test' not in SETTINGS_ENV:
+        if settings.env != 'test':
             project_id = (
                 f'{stream}_{current_epoch.contract}_{settings.namespace}'
             )
@@ -331,7 +327,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             if (
                 isinstance(each_result, Exception) and
                 enqueue_on_failure and
-                'test' not in SETTINGS_ENV
+                settings.env != 'test'
             ):
                 queue_msg_obj = PowerloomCallbackProcessMessage(
                     begin=epoch_against_result[0],
@@ -357,20 +353,21 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                     (epoch_against_result[0], epoch_against_result[1])
                 ] = None
             else:
-                for transformation in transformation_lambdas:
-                    each_result = transformation(
-                        each_result,
-                        data_source_contract_address,
-                        epoch_against_result[0],
-                        epoch_against_result[1],
-                    )
-                results_map[
-                    (
-                        epoch_against_result[0],
-                        epoch_against_result[1],
-                    )
-                ] = each_result
-        return results_map
+                if not isinstance(each_result, Exception):
+                    for transformation in transformation_lambdas:
+                        each_result = transformation(
+                            each_result,
+                            data_source_contract_address,
+                            epoch_against_result[0],
+                            epoch_against_result[1],
+                        )
+                    results_map[
+                        (
+                            epoch_against_result[0],
+                            epoch_against_result[1],
+                        )
+                    ] = each_result
+                return results_map
 
     async def _update_broadcast_processing_status(
         self, broadcast_id, update_state,

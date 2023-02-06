@@ -1,8 +1,10 @@
 import asyncio
 import uuid
 
-from pooler.callback_modules.pair_total_reserves import (
-    PairTotalReservesProcessor,
+import httpx
+
+from pooler.callback_modules.trade_volume import (
+    TradeVolumeProcessor,
 )
 from pooler.init_rabbitmq import init_exchanges_queues
 from pooler.settings.config import settings
@@ -40,7 +42,7 @@ async def test_construction_snapshot(
         epoch_begin = past_failed_query_epoch_begin
     print(failed_query_epochs)
 
-    p = PairTotalReservesProcessor(name='testDummyProcessor')
+    p = TradeVolumeProcessor(name='testDummyProcessor')
     r = await p._construct_trade_volume_epoch_snapshot_data(
         cur_epoch,
         past_failed_epochs=failed_query_epochs,
@@ -49,21 +51,22 @@ async def test_construction_snapshot(
 
 
 if __name__ == '__main__':
-    pair_contract = '0xe1573b9d29e2183b1af0e743dc2754979a40d237'
+    pair_contract = '0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5'
     init_exchanges_queues()
+    consensus_epoch_tracker_url = (
+        f'{settings.consensus.url}{settings.consensus.epoch_tracker_path}'
+    )
+    response = httpx.get(url=consensus_epoch_tracker_url)
+    if response.status_code != 200:
+        raise Exception(
+            f'Error while fetching current epoch data: {response.status_code}',
+        )
+    current_epoch = response.json()
     asyncio.run(
         test_construction_snapshot(
-            epoch_end=15798619,
-            epoch_begin=15798610,
+            epoch_end=current_epoch['epochStartBlockHeight'],
+            epoch_begin=current_epoch['epochEndBlockHeight'],
             pair_contract=pair_contract,
+            failed_queued_epochs_past=2,
         ),
     )
-    # p.run()
-    # p.join(timeout=1)
-
-    # asyncio.run(test_construction_snapshot(
-    #         21,
-    #         30,
-    #         pair_contract
-    #     )
-    # )

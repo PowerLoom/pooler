@@ -157,3 +157,4 @@ class Settings(BaseModel):
     webhook_listener: WebhookListener
     logs: Logs
     projects_config_path: str
+    env: str

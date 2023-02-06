@@ -178,7 +178,7 @@ async def get_pair_metadata(
                         'token0': token0Addr,
                         'token1': token1Addr,
                     },
-                    response=e,
+                    response=None,
                     underlying_exception=e,
                     extra_info={'msg': format_exception(e)},
                 )
@@ -307,7 +307,7 @@ async def get_pair_metadata(
                         'token0': token0Addr,
                         'token1': token1Addr,
                     },
-                    response=e,
+                    response=None,
                     underlying_exception=e,
                     extra_info={'msg': format_exception(e)},
                 )
@@ -464,7 +464,7 @@ async def get_block_details_in_block_range(
 
         raise RPCException(
             request={'from_block': from_block, 'to_block': to_block},
-            response=e,
+            response=None,
             underlying_exception=e,
             extra_info={'msg': str(e)},
         ) from e

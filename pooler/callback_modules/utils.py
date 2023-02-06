@@ -1,4 +1,3 @@
-import os
 import time
 from functools import wraps
 
@@ -7,9 +6,6 @@ from pooler.utils.default_logger import logger
 from pooler.utils.models.data_models import SnapshotterIssue
 from pooler.utils.models.data_models import SnapshotterIssueSeverity
 from pooler.utils.models.message_models import PowerloomCallbackProcessMessage
-
-
-SETTINGS_ENV = os.getenv('ENV_FOR_DYNACONF', 'development')
 
 
 def notify_on_task_failure(fn):
