@@ -24,6 +24,7 @@ from pooler.utils.models.data_models import SnapshotterIssue
 from pooler.utils.models.data_models import SnapshotterIssueSeverity
 from pooler.utils.models.message_models import EpochBase
 from pooler.utils.models.message_models import PowerloomCallbackProcessMessage
+from pooler.utils.models.message_models import UniswapPairTotalReservesSnapshot
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 from pooler.utils.redis.redis_keys import (
     uniswap_cb_broadcast_processing_logs_zset,
