@@ -5,7 +5,6 @@ from typing import Callable
 from typing import Dict
 from typing import List
 from typing import Optional
-from typing import Tuple
 from typing import Union
 from uuid import uuid4
 
@@ -20,15 +19,11 @@ from setproctitle import setproctitle
 from pooler.callback_modules.uniswap.core import get_pair_reserves
 from pooler.callback_modules.utils import notify_on_task_failure
 from pooler.settings.config import settings
-from pooler.utils.callback_helpers import AuditProtocolCommandsHelper
 from pooler.utils.callback_helpers import CallbackAsyncWorker
-from pooler.utils.models.data_models import PayloadCommitAPIRequest
 from pooler.utils.models.data_models import SnapshotterIssue
 from pooler.utils.models.data_models import SnapshotterIssueSeverity
-from pooler.utils.models.data_models import SourceChainDetails
 from pooler.utils.models.message_models import EpochBase
 from pooler.utils.models.message_models import PowerloomCallbackProcessMessage
-from pooler.utils.models.message_models import UniswapPairTotalReservesSnapshot
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 from pooler.utils.redis.redis_keys import (
     uniswap_cb_broadcast_processing_logs_zset,
@@ -377,155 +372,6 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
             broadcast_id,
             json.dumps(update_state),
         )
-
-    async def _send_audit_payload_commit_service(
-        self,
-        audit_stream,
-        original_epoch: PowerloomCallbackProcessMessage,
-        snapshot_name,
-        epoch_snapshot_map: Dict[
-            Tuple[int, int],
-            Union[UniswapPairTotalReservesSnapshot, None],
-        ],
-    ):
-        for each_epoch, epoch_snapshot in epoch_snapshot_map.items():
-            if not epoch_snapshot:
-                self._logger.error(
-                    (
-                        'No epoch snapshot to commit. Construction of snapshot'
-                        ' failed for {} against epoch {}'
-                    ),
-                    snapshot_name,
-                    each_epoch,
-                )
-                # TODO: standardize/unify update log data model
-                update_log = {
-                    'worker': self._unique_id,
-                    'update': {
-                        'action': f'SnapshotBuild-{snapshot_name}',
-                        'info': {
-                            'original_epoch': original_epoch.dict(),
-                            'cur_epoch': {
-                                'begin': each_epoch[0],
-                                'end': each_epoch[1],
-                            },
-                            'status': 'Failed',
-                        },
-                    },
-                }
-
-                await self._redis_conn.zadd(
-                    name=uniswap_cb_broadcast_processing_logs_zset.format(
-                        original_epoch.broadcast_id,
-                    ),
-                    mapping={json.dumps(update_log): int(time.time())},
-                )
-            else:
-                update_log = {
-                    'worker': self._unique_id,
-                    'update': {
-                        'action': f'SnapshotBuild-{snapshot_name}',
-                        'info': {
-                            'original_epoch': original_epoch.dict(),
-                            'cur_epoch': {
-                                'begin': each_epoch[0],
-                                'end': each_epoch[1],
-                            },
-                            'status': 'Success',
-                            'snapshot': epoch_snapshot.dict(),
-                        },
-                    },
-                }
-
-                await self._redis_conn.zadd(
-                    name=uniswap_cb_broadcast_processing_logs_zset.format(
-                        original_epoch.broadcast_id,
-                    ),
-                    mapping={json.dumps(update_log): int(time.time())},
-                )
-                source_chain_details = SourceChainDetails(
-                    chainID=settings.chain_id,
-                    epochStartHeight=each_epoch[0],
-                    epochEndHeight=each_epoch[1],
-                )
-                payload = epoch_snapshot.dict()
-                project_id = f'{audit_stream}_{original_epoch.contract}_{settings.namespace}'
-
-                commit_payload = PayloadCommitAPIRequest(
-                    projectId=project_id,
-                    payload=payload,
-                    sourceChainDetails=source_chain_details,
-                )
-
-                try:
-                    r = await AuditProtocolCommandsHelper.commit_payload(
-                        report_payload=commit_payload,
-                        session=self._client,
-                    )
-                except Exception as e:
-                    self._logger.opt(exception=True).error(
-                        (
-                            'Exception committing snapshot to audit protocol:'
-                            ' {} | dump: {}'
-                        ),
-                        epoch_snapshot,
-                        e,
-                    )
-                    update_log = {
-                        'worker': self._unique_id,
-                        'update': {
-                            'action': f'SnapshotCommit-{snapshot_name}',
-                            'info': {
-                                'snapshot': payload,
-                                'original_epoch': original_epoch.dict(),
-                                'cur_epoch': {
-                                    'begin': each_epoch[0],
-                                    'end': each_epoch[1],
-                                },
-                                'status': 'Failed',
-                                'exception': e,
-                            },
-                        },
-                    }
-
-                    await self._redis_conn.zadd(
-                        name=uniswap_cb_broadcast_processing_logs_zset.format(
-                            original_epoch.broadcast_id,
-                        ),
-                        mapping={json.dumps(update_log): int(time.time())},
-                    )
-                else:
-                    self._logger.debug(
-                        (
-                            'Sent snapshot to audit protocol payload commit'
-                            ' service: {} | Response: {}'
-                        ),
-                        commit_payload,
-                        r,
-                    )
-                    update_log = {
-                        'worker': self._unique_id,
-                        'update': {
-                            'action': f'SnapshotCommit-{snapshot_name}',
-                            'info': {
-                                'snapshot': payload,
-                                'original_epoch': original_epoch.dict(),
-                                'cur_epoch': {
-                                    'begin': each_epoch[0],
-                                    'end': each_epoch[1],
-                                },
-                                'status': 'Success',
-                                'response': r,
-                            },
-                        },
-                    }
-
-                    await self._redis_conn.zadd(
-                        name=uniswap_cb_broadcast_processing_logs_zset.format(
-                            original_epoch.broadcast_id,
-                        ),
-                        mapping={json.dumps(update_log): int(time.time())},
-                    )
 
     @notify_on_task_failure
     async def _processor_task(self, msg_obj: PowerloomCallbackProcessMessage):

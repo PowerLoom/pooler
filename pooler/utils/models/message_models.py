@@ -40,8 +40,13 @@ class ProcessHubCommand(BaseModel):
     init_kwargs: Optional[dict] = dict()
 
 
-class UniswapPairTotalReservesSnapshot(BaseModel):
+class SnapshotBase(BaseModel):
     contract: str
+    chainHeightRange: EpochBase
+    timestamp: float
+
+
+class UniswapPairTotalReservesSnapshot(SnapshotBase):
     token0Reserves: Dict[
         str,
         float,
@@ -52,8 +57,6 @@ class UniswapPairTotalReservesSnapshot(BaseModel):
     ]  # block number to corresponding total reserves
     token0ReservesUSD: Dict[str, float]
     token1ReservesUSD: Dict[str, float]
-    chainHeightRange: EpochBase
-    timestamp: float
 
 
 class logsTradeModel(BaseModel):
@@ -68,8 +71,7 @@ class UniswapTradeEvents(BaseModel):
     Trades: Dict[str, float]
 
 
-class UniswapTradesSnapshot(BaseModel):
-    contract: str
+class UniswapTradesSnapshot(SnapshotBase):
     totalTrade: float  # in USD
     totalFee: float  # in USD
     token0TradeVolume: float  # in token native decimals supply
@@ -77,5 +79,3 @@ class UniswapTradesSnapshot(BaseModel):
     token0TradeVolumeUSD: float
     token1TradeVolumeUSD: float
     events: UniswapTradeEvents
-    chainHeightRange: EpochBase
-    timestamp: float
