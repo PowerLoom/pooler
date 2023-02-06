@@ -33,11 +33,6 @@ class PowerloomCallbackProcessMessage(SystemEpochStatusReport):
     coalesced_epochs: Optional[List[EpochBase]] = None
 
 
-class RPCNodesObject(BaseModel):
-    NODES: List[str]
-    RETRY_LIMIT: int
-
-
 class ProcessHubCommand(BaseModel):
     command: str
     pid: Optional[int] = None
