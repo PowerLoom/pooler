@@ -1,7 +1,7 @@
 from math import floor
 
 from pooler.utils.ipfs_async import client as ipfs_client
-from pooler.utils.redis.redis_keys import uniswap_pair_hits_payload_data_key
+from pooler.utils.redis.redis_keys import project_hits_payload_data_key
 
 
 def v2_pair_data_unpack(prop):
@@ -43,7 +43,7 @@ async def retrieve_payload_data(
     """
     if writer_redis_conn:
         await writer_redis_conn.zincrby(
-            uniswap_pair_hits_payload_data_key,
+            project_hits_payload_data_key,
             1.0,
             payload_cid,
         )

@@ -4,6 +4,10 @@ import json
 from redis import asyncio as aioredis
 from web3 import Web3
 
+from pooler.callback_modules.redis_keys import uniswap_eth_usd_price_zset
+from pooler.callback_modules.redis_keys import (
+    uniswap_pair_cached_block_height_token_price,
+)
 from pooler.callback_modules.settings.config import settings as worker_settings
 from pooler.callback_modules.uniswap.constants import factory_contract_obj
 from pooler.callback_modules.uniswap.constants import global_w3_client
@@ -17,10 +21,6 @@ from pooler.utils.default_logger import format_exception
 from pooler.utils.default_logger import logger
 from pooler.utils.redis.rate_limiter import check_rpc_rate_limit
 from pooler.utils.redis.redis_conn import provide_async_redis_conn_insta
-from pooler.utils.redis.redis_keys import uniswap_eth_usd_price_zset
-from pooler.utils.redis.redis_keys import (
-    uniswap_pair_cached_block_height_token_price,
-)
 from pooler.utils.rpc_helper import batch_eth_call_on_block_range
 from pooler.utils.rpc_helper import contract_abi_dict
 from pooler.utils.rpc_helper import RPCException

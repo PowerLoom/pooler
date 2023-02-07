@@ -30,7 +30,7 @@ from pooler.utils.models.message_models import PowerloomCallbackProcessMessage
 from pooler.utils.models.message_models import SnapshotBase
 from pooler.utils.redis.redis_conn import RedisPoolCache
 from pooler.utils.redis.redis_keys import (
-    uniswap_cb_broadcast_processing_logs_zset,
+    cb_broadcast_processing_logs_zset,
 )
 
 # setup logger
@@ -227,7 +227,7 @@ class CallbackAsyncWorker(multiprocessing.Process):
                 }
 
                 await self._redis_conn.zadd(
-                    name=uniswap_cb_broadcast_processing_logs_zset.format(
+                    name=cb_broadcast_processing_logs_zset.format(
                         original_epoch.broadcast_id,
                     ),
                     mapping={json.dumps(update_log): int(time.time())},
@@ -250,7 +250,7 @@ class CallbackAsyncWorker(multiprocessing.Process):
                 }
 
                 await self._redis_conn.zadd(
-                    name=uniswap_cb_broadcast_processing_logs_zset.format(
+                    name=cb_broadcast_processing_logs_zset.format(
                         original_epoch.broadcast_id,
                     ),
                     mapping={json.dumps(update_log): int(time.time())},
@@ -301,7 +301,7 @@ class CallbackAsyncWorker(multiprocessing.Process):
                     }
 
                     await self._redis_conn.zadd(
-                        name=uniswap_cb_broadcast_processing_logs_zset.format(
+                        name=cb_broadcast_processing_logs_zset.format(
                             original_epoch.broadcast_id,
                         ),
                         mapping={json.dumps(update_log): int(time.time())},
@@ -333,7 +333,7 @@ class CallbackAsyncWorker(multiprocessing.Process):
                     }
 
                     await self._redis_conn.zadd(
-                        name=uniswap_cb_broadcast_processing_logs_zset.format(
+                        name=cb_broadcast_processing_logs_zset.format(
                             original_epoch.broadcast_id,
                         ),
                         mapping={json.dumps(update_log): int(time.time())},

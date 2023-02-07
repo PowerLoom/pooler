@@ -25,14 +25,10 @@ from pooler.utils.models.message_models import PowerloomCallbackProcessMessage
 from pooler.utils.models.message_models import UniswapTradesSnapshot
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 from pooler.utils.redis.redis_keys import (
-    uniswap_cb_broadcast_processing_logs_zset,
+    cb_broadcast_processing_logs_zset,
 )
-from pooler.utils.redis.redis_keys import (
-    uniswap_discarded_query_pair_trade_volume_epochs_redis_q_f,
-)
-from pooler.utils.redis.redis_keys import (
-    uniswap_failed_query_pair_trade_volume_epochs_redis_q_f,
-)
+from pooler.utils.redis.redis_keys import discarded_query_epochs_redis_q
+from pooler.utils.redis.redis_keys import failed_query_epochs_redis_q
 
 
 class TradeVolumeProcessor(CallbackAsyncWorker):
@@ -179,7 +175,7 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
         cb_fn_async,
         enqueue_on_failure,
         data_source_contract_address,
-        failed_query_redis_key,
+        failed_query_epochs_key,
         transformation_lambdas: List[Callable],
         **cb_kwargs,
     ):
@@ -215,7 +211,7 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
                     contract=data_source_contract_address,
                 )
                 await self._redis_conn.rpush(
-                    failed_query_redis_key,
+                    failed_query_epochs_key,
                     queue_msg_obj.json(),
                 )
                 self._logger.debug(
@@ -255,11 +251,11 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
         enqueue_on_failure: bool = False,
     ):
         epochs = await self._prepare_epochs(
-            failed_query_epochs_key=uniswap_failed_query_pair_trade_volume_epochs_redis_q_f.format(
-                msg_obj.contract,
+            failed_query_epochs_key=failed_query_epochs_redis_q.format(
+                self._stream, msg_obj.contract,
             ),
-            discarded_query_epochs_key=uniswap_discarded_query_pair_trade_volume_epochs_redis_q_f.format(
-                msg_obj.contract,
+            discarded_query_epochs_key=discarded_query_epochs_redis_q.format(
+                self._stream, msg_obj.contract,
             ),
             current_epoch=msg_obj,
             snapshot_name='trade volume and fees',
@@ -272,8 +268,8 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
             cb_fn_async=get_pair_trade_volume,
             enqueue_on_failure=enqueue_on_failure,
             data_source_contract_address=msg_obj.contract,
-            failed_query_redis_key=uniswap_failed_query_pair_trade_volume_epochs_redis_q_f.format(
-                msg_obj.contract,
+            failed_query_epochs_key=failed_query_epochs_redis_q.format(
+                self._stream, msg_obj.contract,
             ),
             transformation_lambdas=[
                 self.transform_processed_epoch_to_trade_volume,
@@ -333,7 +329,7 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
         self, broadcast_id, update_state,
     ):
         await self._redis_conn.hset(
-            uniswap_cb_broadcast_processing_logs_zset.format(self.name),
+            cb_broadcast_processing_logs_zset.format(self.name),
             broadcast_id,
             json.dumps(update_state),
         )

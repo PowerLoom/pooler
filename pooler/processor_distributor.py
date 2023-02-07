@@ -26,7 +26,7 @@ from pooler.utils.rabbitmq_helpers import RabbitmqSelectLoopInteractor
 from pooler.utils.redis.redis_conn import create_redis_conn
 from pooler.utils.redis.redis_conn import REDIS_CONN_CONF
 from pooler.utils.redis.redis_keys import (
-    uniswap_cb_broadcast_processing_logs_zset,
+    cb_broadcast_processing_logs_zset,
 )
 
 
@@ -128,7 +128,7 @@ class ProcessorDistributor(multiprocessing.Process):
             }
             with create_redis_conn(self._connection_pool) as r:
                 r.zadd(
-                    uniswap_cb_broadcast_processing_logs_zset.format(
+                    cb_broadcast_processing_logs_zset.format(
                         msg_obj.broadcast_id,
                     ),
                     {json.dumps(update_log): int(time.time())},

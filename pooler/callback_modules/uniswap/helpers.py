@@ -9,6 +9,9 @@ from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
 from web3 import Web3
 
+from pooler.callback_modules.redis_keys import uniswap_pair_contract_tokens_addresses
+from pooler.callback_modules.redis_keys import uniswap_pair_contract_tokens_data
+from pooler.callback_modules.redis_keys import uniswap_tokens_pair_map
 from pooler.callback_modules.settings.config import settings as worker_settings
 from pooler.callback_modules.uniswap.constants import erc20_abi
 from pooler.callback_modules.uniswap.constants import global_w3_client
@@ -19,9 +22,6 @@ from pooler.utils.default_logger import logger
 from pooler.utils.redis.rate_limiter import check_rpc_rate_limit
 from pooler.utils.redis.redis_conn import provide_async_redis_conn_insta
 from pooler.utils.redis.redis_keys import cached_block_details_at_height
-from pooler.utils.redis.redis_keys import uniswap_pair_contract_tokens_addresses
-from pooler.utils.redis.redis_keys import uniswap_pair_contract_tokens_data
-from pooler.utils.redis.redis_keys import uniswap_tokens_pair_map
 from pooler.utils.rpc_helper import batch_eth_get_block
 from pooler.utils.rpc_helper import inject_web3_provider_first_run
 from pooler.utils.rpc_helper import inject_web3_provider_on_exception

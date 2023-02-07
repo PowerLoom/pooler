@@ -15,10 +15,10 @@ from pooler.utils.default_logger import logger
 from pooler.utils.rabbitmq_helpers import RabbitmqSelectLoopInteractor
 from pooler.utils.redis.redis_conn import create_redis_conn
 from pooler.utils.redis.redis_conn import REDIS_CONN_CONF
-from pooler.utils.redis.redis_keys import powerloom_broadcast_id_zset
 from pooler.utils.redis.redis_keys import (
-    uniswap_cb_broadcast_processing_logs_zset,
+    cb_broadcast_processing_logs_zset,
 )
+from pooler.utils.redis.redis_keys import powerloom_broadcast_id_zset
 
 
 class EpochCallbackManager(Process):
@@ -67,7 +67,7 @@ class EpochCallbackManager(Process):
                     },
                 }
                 r.zadd(
-                    uniswap_cb_broadcast_processing_logs_zset.format(
+                    cb_broadcast_processing_logs_zset.format(
                         broadcast_json['broadcast_id'],
                     ),
                     {json.dumps(update_log): int(time.time())},
@@ -95,7 +95,7 @@ class EpochCallbackManager(Process):
                 )
                 [
                     r.delete(
-                        uniswap_cb_broadcast_processing_logs_zset.format(k),
+                        cb_broadcast_processing_logs_zset.format(k),
                     )
                     for k in older_broadcast_ids_dec
                 ]

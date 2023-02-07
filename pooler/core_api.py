@@ -21,20 +21,20 @@ from pooler.auth.helpers.helpers import incr_success_calls_count
 from pooler.auth.helpers.helpers import inject_rate_limit_fail_response
 from pooler.auth.helpers.helpers import rate_limit_auth_check
 from pooler.auth.helpers.redis_conn import RedisPoolCache as AuthRedisPoolCache
+from pooler.callback_modules.redis_keys import uniswap_pair_cached_recent_logs
+from pooler.callback_modules.redis_keys import uniswap_pair_contract_tokens_addresses
+from pooler.callback_modules.redis_keys import uniswap_tokens_pair_map
+from pooler.callback_modules.redis_keys import uniswap_V2_daily_stats_at_blockheight
+from pooler.callback_modules.redis_keys import uniswap_v2_daily_stats_snapshot_zset
+from pooler.callback_modules.redis_keys import uniswap_V2_snapshot_at_blockheight
+from pooler.callback_modules.redis_keys import uniswap_V2_summarized_snapshots_zset
+from pooler.callback_modules.redis_keys import uniswap_V2_tokens_at_blockheight
+from pooler.callback_modules.redis_keys import uniswap_v2_tokens_snapshot_zset
 from pooler.settings.config import enabled_projects
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 from pooler.utils.redis.redis_conn import RedisPoolCache
-from pooler.utils.redis.redis_keys import uniswap_pair_cached_recent_logs
-from pooler.utils.redis.redis_keys import uniswap_pair_contract_tokens_addresses
-from pooler.utils.redis.redis_keys import uniswap_tokens_pair_map
-from pooler.utils.redis.redis_keys import uniswap_V2_daily_stats_at_blockheight
-from pooler.utils.redis.redis_keys import uniswap_v2_daily_stats_snapshot_zset
-from pooler.utils.redis.redis_keys import uniswap_V2_snapshot_at_blockheight
-from pooler.utils.redis.redis_keys import uniswap_V2_summarized_snapshots_zset
-from pooler.utils.redis.redis_keys import uniswap_V2_tokens_at_blockheight
-from pooler.utils.redis.redis_keys import uniswap_v2_tokens_snapshot_zset
 from pooler.utils.utility_functions import number_to_abbreviated_string
 from pooler.utils.utility_functions import retrieve_payload_data
 

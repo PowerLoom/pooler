@@ -15,9 +15,9 @@ from pooler.settings.config import enabled_projects
 from pooler.settings.config import settings
 from pooler.utils.models.message_models import ProcessHubCommand
 from pooler.utils.redis.redis_conn import REDIS_CONN_CONF
+from pooler.utils.redis.redis_keys import cb_broadcast_processing_logs_zset
 from pooler.utils.redis.redis_keys import powerloom_broadcast_id_zset
-from pooler.utils.redis.redis_keys import uniswap_cb_broadcast_processing_logs_zset
-from pooler.utils.redis.redis_keys import uniswap_projects_dag_verifier_status
+from pooler.utils.redis.redis_keys import projects_dag_verifier_status
 
 app = typer.Typer()
 
@@ -94,7 +94,7 @@ def broadcastStatus(elapsed_time: int, verbose: Optional[bool] = False):
             f'{value}\n',
         )
         logs = r.zrangebyscore(
-            name=uniswap_cb_broadcast_processing_logs_zset.format(f'{key}'),
+            name=cb_broadcast_processing_logs_zset.format(f'{key}'),
             min=cur_ts - elapsed_time,
             max=cur_ts,
             withscores=True,
@@ -190,7 +190,7 @@ def dagChainStatus(dag_chain_height: int = typer.Argument(-1)):
     }
 
     # get highest dag chain height
-    project_heights = r.hgetall(uniswap_projects_dag_verifier_status)
+    project_heights = r.hgetall(projects_dag_verifier_status)
     if project_heights:
         for _, value in project_heights.items():
             if (
