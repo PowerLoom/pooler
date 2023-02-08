@@ -20,9 +20,9 @@ from pooler.utils.models.data_models import epoch_event_trade_data
 from pooler.utils.models.data_models import event_trade_data
 from pooler.utils.models.data_models import trade_data
 from pooler.utils.redis.redis_conn import provide_async_redis_conn_insta
-from pooler.utils.rpc_helper import get_contract_abi_dict
-from pooler.utils.rpc_helper import get_event_sig_and_abi
-from pooler.utils.rpc_helper import rpc_helper
+from pooler.utils.rpc import get_contract_abi_dict
+from pooler.utils.rpc import get_event_sig_and_abi
+from pooler.utils.rpc import rpc_helper
 
 core_logger = logger.bind(module='PowerLoom|UniswapCore')
 

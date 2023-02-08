@@ -89,7 +89,7 @@ class RpcHelper(object):
             redis_conn,
         )
 
-    async def _load_web3_providers_and_rate_limits(self):
+    def _load_web3_providers_and_rate_limits(self):
         if self._archive_mode:
             nodes = settings.rpc.archive_nodes
         else:
@@ -117,10 +117,9 @@ class RpcHelper(object):
             self._current_node_index = 0
             self._node_count = len(self._nodes)
 
-    async def get_current_node(self):
+    def get_current_node(self):
         if not self._initialized:
-            await self._load_rate_limit_shas()
-            await self._load_web3_providers_and_rate_limits()
+            self._load_web3_providers_and_rate_limits()
             self._initialized = True
 
         if self._current_node_index == -1:
@@ -142,6 +141,9 @@ class RpcHelper(object):
         """
         Call web3 functions in parallel
         """
+        if not self._rate_limit_lua_script_shas:
+            self._rate_limit_lua_script_shas = await self._load_rate_limit_shas()
+
         @retry(
             reraise=True,
             retry=retry_if_exception_type(RPCException),
@@ -150,7 +152,7 @@ class RpcHelper(object):
             before_sleep=self._on_node_exception,
         )
         async def f():
-            node = await self.get_current_node()
+            node = self.get_current_node()
             rpc_url = node.get('rpc_url')
 
             await check_rpc_rate_limit(
@@ -202,6 +204,9 @@ class RpcHelper(object):
 
         RPC_BATCH: for_each_block -> call_function_x
         """
+        if not self._rate_limit_lua_script_shas:
+            self._rate_limit_lua_script_shas = await self._load_rate_limit_shas()
+
         @retry(
             reraise=True,
             retry=retry_if_exception_type(RPCException),
@@ -250,7 +255,7 @@ class RpcHelper(object):
                     )
                     request_id += 1
 
-            node = await self.get_current_node()
+            node = self.get_current_node()
             rpc_url = node.get('rpc_url')
 
             await check_rpc_rate_limit(
@@ -356,6 +361,9 @@ class RpcHelper(object):
 
         RPC_BATCH: for_each_block -> eth_getBlockByNumber
         """
+        if not self._rate_limit_lua_script_shas:
+            self._rate_limit_lua_script_shas = await self._load_rate_limit_shas()
+
         @retry(
             reraise=True,
             retry=retry_if_exception_type(RPCException),
@@ -381,7 +389,7 @@ class RpcHelper(object):
                 )
                 request_id += 1
 
-            node = await self.get_current_node()
+            node = self.get_current_node()
             rpc_url = node.get('rpc_url')
 
             await check_rpc_rate_limit(
@@ -451,6 +459,9 @@ class RpcHelper(object):
     async def get_events_logs(
         self, contract_address, to_block, from_block, topics, event_abi, redis_conn=None,
     ):
+        if not self._rate_limit_lua_script_shas:
+            self._rate_limit_lua_script_shas = await self._load_rate_limit_shas()
+
         @retry(
             reraise=True,
             retry=retry_if_exception_type(RPCException),
@@ -459,7 +470,7 @@ class RpcHelper(object):
             before_sleep=self._on_node_exception,
         )
         async def f():
-            node = await self.get_current_node()
+            node = self.get_current_node()
             rpc_url = node.get('rpc_url')
 
             web3_provider = node['web3_client'].w3

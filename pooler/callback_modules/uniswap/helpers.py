@@ -16,7 +16,7 @@ from pooler.utils.default_logger import format_exception
 from pooler.utils.default_logger import logger
 from pooler.utils.redis.redis_conn import provide_async_redis_conn_insta
 from pooler.utils.redis.redis_keys import cached_block_details_at_height
-from pooler.utils.rpc_helper import rpc_helper
+from pooler.utils.rpc import rpc_helper
 
 
 helper_logger = logger.bind(module='PowerLoom|Uniswap|Helpers')

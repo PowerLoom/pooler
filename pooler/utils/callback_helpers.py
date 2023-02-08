@@ -700,6 +700,7 @@ class CallbackAsyncWorker(multiprocessing.Process, ABC):
             self._logger.debug(
                 f'Consuming queue {self._q} with routing key {self._rmq_routing}...',
             )
+            await q_obj.consume(self._on_rabbitmq_message)
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
         await message.ack()

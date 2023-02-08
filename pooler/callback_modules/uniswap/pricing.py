@@ -20,8 +20,8 @@ from pooler.utils.default_logger import format_exception
 from pooler.utils.default_logger import logger
 from pooler.utils.exceptions import RPCException
 from pooler.utils.redis.redis_conn import provide_async_redis_conn_insta
-from pooler.utils.rpc_helper import get_contract_abi_dict
-from pooler.utils.rpc_helper import rpc_helper
+from pooler.utils.rpc import get_contract_abi_dict
+from pooler.utils.rpc import rpc_helper
 
 pricing_logger = logger.bind(module='PowerLoom|Uniswap|Pricing')
 

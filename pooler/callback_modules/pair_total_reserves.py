@@ -3,6 +3,8 @@ from typing import Dict
 from typing import Optional
 from typing import Union
 
+from setproctitle import setproctitle
+
 from pooler.callback_modules.uniswap.core import get_pair_reserves
 from pooler.settings.config import settings
 from pooler.utils.callback_helpers import CallbackAsyncWorker
@@ -106,3 +108,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 },
             )
             return pair_total_reserves_snapshot
+
+    def run(self):
+        setproctitle(self.name)
+        super(PairTotalReservesProcessor, self).run()

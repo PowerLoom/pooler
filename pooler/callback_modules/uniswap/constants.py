@@ -1,16 +1,13 @@
-import asyncio
-
 from web3 import Web3
 
 from pooler.callback_modules.settings.config import settings as worker_settings
 from pooler.utils.default_logger import logger
 from pooler.utils.file_utils import read_json_file
-from pooler.utils.rpc_helper import rpc_helper
+from pooler.utils.rpc import rpc_helper
 
 constants_logger = logger.bind(module='PowerLoom|Uniswap|Constants')
 # Getting current node
-loop = asyncio.get_event_loop()
-current_node = loop.run_until_complete(rpc_helper.get_current_node())
+current_node = rpc_helper.get_current_node()
 
 # LOAD ABIs
 pair_contract_abi = read_json_file(
