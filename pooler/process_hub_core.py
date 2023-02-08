@@ -120,7 +120,7 @@ class ProcessHubCore(Process):
                                 worker_details = next(gen, None)
                                 if worker_details:
                                     callback_worker_module_file = (
-                                        worker_details.module_name
+                                        worker_details.module
                                     )
                                     self._logger.debug(
                                         (

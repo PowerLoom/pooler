@@ -686,12 +686,9 @@ class CallbackAsyncWorker(multiprocessing.Process, ABC):
         )
 
     async def _rabbitmq_consumer(self, loop):
-        self._rmq_connection_pool = Pool(
-            get_rabbitmq_connection, max_size=5, loop=loop,
-        )
+        self._rmq_connection_pool = Pool(get_rabbitmq_connection, max_size=5, loop=loop)
         self._rmq_channel_pool = Pool(
-            partial(get_rabbitmq_channel, self._rmq_connection_pool),
-            max_size=20,
+            partial(get_rabbitmq_channel, self._rmq_connection_pool), max_size=20,
             loop=loop,
         )
         async with self._rmq_channel_pool.acquire() as channel:
@@ -701,12 +698,8 @@ class CallbackAsyncWorker(multiprocessing.Process, ABC):
                 ensure=False,
             )
             self._logger.debug(
-                (
-                    f'Consuming queue {self._q} with routing key'
-                    f' {self._rmq_routing}...'
-                ),
+                f'Consuming queue {self._q} with routing key {self._rmq_routing}...',
             )
-            await q_obj.consume(self._on_rabbitmq_message)
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
         await message.ack()
@@ -750,8 +743,6 @@ class CallbackAsyncWorker(multiprocessing.Process, ABC):
             (settings.rlimit.file_descriptors, hard),
         )
         # logging.config.dictConfig(config_logger_with_namespace(self.name))
-        self._logger = logger.bind(module=self.name)
-
         ev_loop = asyncio.get_event_loop()
         signals = (signal.SIGTERM, signal.SIGINT, signal.SIGQUIT)
         for s in signals:

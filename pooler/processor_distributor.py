@@ -50,7 +50,6 @@ class ProcessorDistributor(multiprocessing.Process):
             min_chain_height = msg_obj.begin
 
             await warm_up_cache_for_snapshot_constructors(
-                loop=self.ev_loop,
                 from_block=min_chain_height,
                 to_block=max_chain_height,
             )

@@ -1,6 +1,3 @@
-import json
-from functools import wraps
-
 import eth_abi
 import httpx
 from async_limits import parse_many as limit_parse_many
@@ -8,234 +5,24 @@ from eth_abi.codec import ABICodec
 from eth_utils import keccak
 from gnosis.eth import EthereumClient
 from hexbytes import HexBytes
+from tenacity import retry
+from tenacity import retry_if_exception_type
+from tenacity import stop_after_attempt
+from tenacity import wait_random_exponential
 from web3 import Web3
 from web3._utils.events import get_event_data
 
+from pooler.callback_modules.settings.config import settings as worker_settings
 from pooler.settings.config import settings
 from pooler.utils.default_logger import format_exception
 from pooler.utils.default_logger import logger
-
-# setup logging
-rpc_logger = logger.bind(module='PowerLoom|NodeRPCHelper')
-
-
-class BailException(RuntimeError):
-    pass
+from pooler.utils.exceptions import RPCException
+from pooler.utils.redis.rate_limiter import check_rpc_rate_limit
+from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
+from pooler.utils.redis.redis_conn import provide_async_redis_conn_insta
 
 
-class MySQLConnectionError(RuntimeError):
-    pass
-
-
-class GracefulSIGTERMExit(Exception):
-    def __str__(self):
-        return 'SIGTERM Exit'
-
-    def __repr__(self):
-        return 'SIGTERM Exit'
-
-
-class GracefulSIGDeathExit(Exception):
-    def __init__(self, signal_information):
-        Exception.__init__(self)
-        self._sig = signal_information
-
-    def __str__(self):
-        return f'{self._sig} Exit'
-
-    def __repr__(self):
-        return f'{self._sig} Exit'
-
-
-def sigterm_handler(signum, frame):
-    raise GracefulSIGTERMExit
-
-
-def sigkill_handler(signum, frame):
-    raise GracefulSIGDeathExit(signum)
-
-
-class RPCException(Exception):
-    def __init__(self, request, response, underlying_exception, extra_info):
-        self.request = request
-        self.response = response
-        self.underlying_exception: Exception = underlying_exception
-        self.extra_info = extra_info
-
-    def __str__(self):
-        ret = {
-            'request': self.request,
-            'response': self.response,
-            'extra_info': self.extra_info,
-            'exception': None,
-        }
-        if isinstance(self.underlying_exception, Exception):
-            ret.update({'exception': self.underlying_exception.__str__()})
-        return json.dumps(ret)
-
-    def __repr__(self):
-        return self.__str__()
-
-
-def load_web3_providers_and_rate_limits(full_nodes, archive_nodes):
-    web3_providers = {
-        'full_nodes': list(),
-        'archive_nodes': list(),
-    }
-
-    def iterate_rpc_node(node_list, node_type):
-        count = 0
-        for node in node_list:
-            try:
-                web3_providers[node_type].append(
-                    {
-                        'web3_client': EthereumClient(node.url),
-                        'rate_limit': limit_parse_many(node.rate_limit),
-                        'rpc_url': node.url,
-                        'index': count,
-                    },
-                )
-            except Exception as exc:
-                print(
-                    'Error while initialising one of the web3 providers,'
-                    f' err_msg: {exc}',
-                )
-                rpc_logger.opt(exception=True).error(
-                    (
-                        'Error while initialising one of the web3 providers,'
-                        f' err_msg: {exc}'
-                    ),
-                )
-            else:
-                count += 1
-
-    iterate_rpc_node(full_nodes, 'full_nodes')
-    iterate_rpc_node(archive_nodes, 'archive_nodes')
-
-    return web3_providers
-
-
-GLOBAL_WEB3_PROVIDER = load_web3_providers_and_rate_limits(
-    full_nodes=settings.rpc.full_nodes,
-    archive_nodes=settings.rpc.archive_nodes,
-)
-
-
-def inject_web3_provider_first_run(fn):
-    """
-    Decorator to inject web3 provider config based on first run.
-    Here we consume web3 provider flags given to 'this' function.
-    """
-
-    @wraps(fn)
-    async def wrapped(*args, **kwargs):
-        # if web3_provider was not given then just use first full node
-        if not kwargs.get('web3_provider', False):
-            kwargs['web3_provider'] = GLOBAL_WEB3_PROVIDER['full_nodes'][0]
-        # if force_archive flag is passed then use last archive node
-        elif kwargs['web3_provider'].get('force_archive', False):
-            kwargs['web3_provider'] = GLOBAL_WEB3_PROVIDER['archive_nodes'][0]
-            rpc_logger.warning(
-                (
-                    'Got force_archive flag, injected archive_node |'
-                    f" from_block:{kwargs.get('from_block')} |"
-                    f" to_block:{kwargs.get('to_block')} |"
-                    f" pair_address:{kwargs.get('pair_address')}"
-                ),
-            )
-        else:
-            # there is no preset flag then use first full node web3 obj
-            kwargs['web3_provider'] = GLOBAL_WEB3_PROVIDER['full_nodes'][0]
-
-        try:
-            return await fn(*args, **kwargs)
-        except Exception:
-            raise
-
-    return wrapped
-
-
-def inject_web3_provider_on_exception(retry_state):
-    """
-    Tenacity retry before_sleep exception handler: to inject web3 provider config
-    based on exceptions type or error messages.
-    """
-
-    # if there was an error then set web3 object depending on exception Type
-    if retry_state.outcome and isinstance(
-        retry_state.outcome.exception(), Exception,
-    ):
-        if (
-            any(
-                error_string
-                in retry_state.outcome.exception().extra_info.get('msg')
-                for error_string in [
-                    'header not found',
-                    'missing trie node',
-                ]
-            ) or
-            retry_state.kwargs['web3_provider']
-            in GLOBAL_WEB3_PROVIDER['archive_nodes']
-        ):
-            # if current web3 provider is an archive node AND we have another archive node, then use next one
-            current_provider_index = retry_state.kwargs['web3_provider'][
-                'index'
-            ]
-            if retry_state.kwargs['web3_provider'] in GLOBAL_WEB3_PROVIDER[
-                'archive_nodes'
-            ] and current_provider_index + 1 < len(
-                GLOBAL_WEB3_PROVIDER['archive_nodes'],
-            ):
-                retry_state.kwargs['web3_provider'] = GLOBAL_WEB3_PROVIDER[
-                    'archive_nodes'
-                ][current_provider_index + 1]
-            # else use first archive node
-            else:
-                retry_state.kwargs['web3_provider'] = GLOBAL_WEB3_PROVIDER[
-                    'archive_nodes'
-                ][0]
-
-            rpc_logger.warning(
-                (
-                    'Found exception injected archive node | exception:'
-                    f" {retry_state.outcome.exception().extra_info.get('msg')} |"
-                    f' function:{retry_state.fn}'
-                ),
-            )
-
-        else:
-            # if available use next full_node provider
-            current_provider_index = retry_state.kwargs['web3_provider'][
-                'index'
-            ]
-            if current_provider_index + 1 < len(
-                GLOBAL_WEB3_PROVIDER['full_nodes'],
-            ):
-                retry_state.kwargs['web3_provider'] = GLOBAL_WEB3_PROVIDER[
-                    'full_nodes'
-                ][current_provider_index + 1]
-            # use first full_node provider
-            else:
-                retry_state.kwargs['web3_provider'] = GLOBAL_WEB3_PROVIDER[
-                    'full_nodes'
-                ][0]
-
-            rpc_logger.warning(
-                (
-                    'Found exception injected next full_node | exception:'
-                    f" {retry_state.outcome.exception().extra_info.get('msg')} |"
-                    f' function:{retry_state.fn}'
-                ),
-            )
-
-    else:
-        # if there was no error or any flag then use first full node web3 obj
-        retry_state.kwargs['web3_provider'] = GLOBAL_WEB3_PROVIDER[
-            'full_nodes'
-        ][0]
-
-
-def contract_abi_dict(abi):
+def get_contract_abi_dict(abi):
     """
     Create dictionary of ABI {function_name -> {signature, abi, input, output}}
     """
@@ -268,225 +55,6 @@ def get_encoded_function_signature(abi_dict, function_name, params: list = []):
     return encoded_signature
 
 
-def batch_eth_call_on_block_range(
-    rpc_endpoint,
-    abi_dict,
-    function_name,
-    contract_address,
-    from_block='latest',
-    to_block='latest',
-    params=[],
-    from_address=None,
-):
-    """
-    Batch call "single-function" on a contract for given block-range
-
-    RPC_BATCH: for_each_block -> call_function_x
-    """
-
-    from_address = (
-        from_address
-        if from_address
-        else Web3.toChecksumAddress(
-            '0x0000000000000000000000000000000000000000',
-        )
-    )
-    function_signature = get_encoded_function_signature(
-        abi_dict, function_name, params,
-    )
-    rpc_query = []
-
-    if from_block == 'latest' and to_block == 'latest':
-        rpc_query.append(
-            {
-                'jsonrpc': '2.0',
-                'method': 'eth_call',
-                'params': [
-                    {
-                        'to': Web3.toChecksumAddress(contract_address),
-                        'data': function_signature,
-                    },
-                    to_block,
-                ],
-                'id': '1',
-            },
-        )
-    else:
-        request_id = 1
-        for block in range(from_block, to_block + 1):
-            rpc_query.append(
-                {
-                    'jsonrpc': '2.0',
-                    'method': 'eth_call',
-                    'params': [
-                        {
-                            'from': from_address,
-                            'to': Web3.toChecksumAddress(contract_address),
-                            'data': function_signature,
-                        },
-                        hex(block),
-                    ],
-                    'id': f'{request_id}',
-                },
-            )
-            request_id += 1
-
-    rpc_response = []
-    try:
-        response = httpx.post(url=rpc_endpoint, json=rpc_query)
-        response_data = response.json()
-    except Exception as e:
-        exc = RPCException(
-            request={
-                contract_address: contract_address,
-                function_name: function_name,
-                'params': params,
-                'from_block': from_block,
-                'to_block': to_block,
-            },
-            response=None,
-            underlying_exception=e,
-            extra_info=f'RPC_BATCH_ETH_CALL_ERROR: {format_exception(e)}',
-        )
-        rpc_logger.trace(
-            'Error in batch_eth_call_on_block_range, error {}', str(exc),
-        )
-        raise exc
-
-    if response.status_code != 200:
-        raise RPCException(
-            request={
-                'from_block': from_block,
-                'to_block': to_block,
-            },
-            response=(response.status_code, response.text),
-            underlying_exception=None,
-            extra_info=f'RPC_BATCH_ETH_CALL_ERROR: {response.text}',
-        )
-
-    response_exceptions = (
-        list(
-            map(
-                lambda r: r,
-                filter(
-                    lambda y: y.get(
-                        'error',
-                        False,
-                    ),
-                    response_data,
-                ),
-            ),
-        )
-        if isinstance(response_data, list)
-        else response_data
-    )
-
-    if len(response_exceptions) > 0:
-        exc = RPCException(
-            request={
-                contract_address: contract_address,
-                function_name: function_name,
-                'params': params,
-                'from_block': from_block,
-                'to_block': to_block,
-            },
-            response=response_exceptions,
-            underlying_exception=None,
-            extra_info=f'RPC_BATCH_ETH_CALL_ERRORS: {str(response_exceptions)}',
-        )
-        rpc_logger.trace(
-            'Error in batch_eth_call_on_block_range, error {}', str(exc),
-        )
-        raise exc
-    else:
-        response = response_data if isinstance(response_data, list) else [response_data]
-        for result in response:
-            rpc_response.append(
-                eth_abi.decode_abi(
-                    abi_dict.get(
-                        function_name,
-                    )['output'],
-                    HexBytes(result['result']),
-                ),
-            )
-
-    return rpc_response
-
-
-def batch_eth_get_block(rpc_endpoint, from_block, to_block):
-    """
-    Batch call "eth_getBlockByNumber" in a range of block numbers
-
-    RPC_BATCH: for_each_block -> eth_getBlockByNumber
-    """
-
-    rpc_query = []
-
-    request_id = 1
-    for block in range(from_block, to_block + 1):
-        rpc_query.append(
-            {
-                'jsonrpc': '2.0',
-                'method': 'eth_getBlockByNumber',
-                'params': [
-                    hex(block),
-                    True,
-                ],
-                'id': f'{request_id}',
-            },
-        )
-        request_id += 1
-
-    try:
-        response = httpx.post(url=rpc_endpoint, json=rpc_query)
-        response_data = response.json()
-    except Exception as e:
-        exc = RPCException(
-            request={
-                'from_block': from_block,
-                'to_block': to_block,
-            },
-            response=None,
-            underlying_exception=e,
-            extra_info=f'RPC_BATCH_ETH_CALL_ERROR: {str(e)}',
-        )
-        rpc_logger.trace('Error in batch_eth_get_block, error {}', str(exc))
-        raise exc
-
-    if response.status_code != 200:
-        raise RPCException(
-            request={
-                'from_block': from_block,
-                'to_block': to_block,
-            },
-            response=(response.status_code, response.text),
-            underlying_exception=None,
-            extra_info=f'RPC_BATCH_ETH_CALL_ERROR: {response.text}',
-        )
-    response_exceptions = list(
-        map(
-            lambda r: r,
-            filter(
-                lambda y: type(y) == str or y.get('error', False),
-                response_data,
-            ),
-        ),
-    )
-    if len(response_exceptions) > 0:
-        exc = RPCException(
-            request={'from_block': from_block, 'to_block': to_block},
-            response=response_exceptions,
-            underlying_exception=None,
-            extra_info=(
-                f'RPC_BATCH_ETH_GET_BLOCK_ERRORS: {str(response_exceptions)}'
-            ),
-        )
-        rpc_logger.trace('Error in batch_eth_get_block, error {}', str(exc))
-        raise exc
-
-    return response_data
-
-
 def get_event_sig_and_abi(event_signatures, event_abis):
     event_sig = [
         '0x' + keccak(text=sig).hex() for name, sig in event_signatures.items()
@@ -502,38 +70,448 @@ def get_event_sig_and_abi(event_signatures, event_abis):
     return event_sig, event_abi
 
 
-def get_events_logs(
-    web3Provider, contract_address, toBlock, fromBlock, topics, event_abi,
-):
-    try:
-        event_log = web3Provider.eth.get_logs(
-            {
+class RpcHelper(object):
+    def __init__(self, archive_mode=False):
+        self._archive_mode = archive_mode
+
+        self._nodes = list()
+        self._current_node_index = -1
+        self._node_count = 0
+        self._rate_limit_lua_script_shas = None
+        self._initialized = False
+        self._logger = logger.bind(module='PowerLoom|RPCHelper')
+
+    @provide_async_redis_conn_insta
+    async def _load_rate_limit_shas(self, redis_conn=None):
+        if self._rate_limit_lua_script_shas is not None:
+            return
+        self._rate_limit_lua_script_shas = await load_rate_limiter_scripts(
+            redis_conn,
+        )
+
+    async def _load_web3_providers_and_rate_limits(self):
+        if self._archive_mode:
+            nodes = settings.rpc.archive_nodes
+        else:
+            nodes = settings.rpc.full_nodes
+
+        for node in nodes:
+            try:
+                self._nodes.append(
+                    {
+                        'web3_client': EthereumClient(node.url),
+                        'rate_limit': limit_parse_many(node.rate_limit),
+                        'rpc_url': node.url,
+                    },
+                )
+            except Exception as exc:
+
+                self._logger.opt(exception=True).error(
+                    (
+                        'Error while initialising one of the web3 providers,'
+                        f' err_msg: {exc}'
+                    ),
+                )
+
+        if self._nodes:
+            self._current_node_index = 0
+            self._node_count = len(self._nodes)
+
+    async def get_current_node(self):
+        if not self._initialized:
+            await self._load_rate_limit_shas()
+            await self._load_web3_providers_and_rate_limits()
+            self._initialized = True
+
+        if self._current_node_index == -1:
+            raise Exception('No full nodes available')
+        return self._nodes[self._current_node_index]
+
+    def _on_node_exception(self, retry_state):
+        self._current_node_index = (self._current_node_index + 1) % self._node_count
+        self._logger.warning(
+            (
+                'Found exception injected next full_node | exception:'
+                f' {retry_state.outcome.exception()} |'
+                f' function:{retry_state.fn}'
+            ),
+        )
+
+    @provide_async_redis_conn_insta
+    async def web3_call(self, tasks, redis_conn=None):
+        """
+        Call web3 functions in parallel
+        """
+        @retry(
+            reraise=True,
+            retry=retry_if_exception_type(RPCException),
+            wait=wait_random_exponential(multiplier=1, max=10),
+            stop=stop_after_attempt(worker_settings.uniswap_functions.retrial_attempts),
+            before_sleep=self._on_node_exception,
+        )
+        async def f():
+            node = await self.get_current_node()
+            rpc_url = node.get('rpc_url')
+
+            await check_rpc_rate_limit(
+                parsed_limits=node.get('rate_limit', []),
+                app_id=rpc_url.split('/')[-1],
+                redis_conn=redis_conn,
+                request_payload=tasks,
+                error_msg={
+                    'msg': 'exhausted_api_key_rate_limit inside batch_eth_call_on_block_range',
+                },
+                logger=self._logger,
+                rate_limit_lua_script_shas=self._rate_limit_lua_script_shas,
+                limit_incr_by=len(tasks),
+            )
+            try:
+                response = node['web3_client'].batch_call(tasks)
+                return response
+            except Exception as e:
+                exc = RPCException(
+                    request={},
+                    response=None,
+                    underlying_exception=e,
+                    extra_info={'msg': format_exception(e)},
+                )
+
+                self._logger.opt(lazy=True).trace(
+                    (
+                        'Error while making web3 batch call'
+                    ),
+                    err=lambda: str(exc),
+                )
+                raise exc
+        return await f()
+
+    @provide_async_redis_conn_insta
+    async def batch_eth_call_on_block_range(
+        self,
+        abi_dict,
+        function_name,
+        contract_address,
+        from_block='latest',
+        to_block='latest',
+        params=[],
+        from_address=Web3.toChecksumAddress('0x0000000000000000000000000000000000000000'),
+        redis_conn=None,
+    ):
+        """
+        Batch call "single-function" on a contract for given block-range
+
+        RPC_BATCH: for_each_block -> call_function_x
+        """
+        @retry(
+            reraise=True,
+            retry=retry_if_exception_type(RPCException),
+            wait=wait_random_exponential(multiplier=1, max=10),
+            stop=stop_after_attempt(worker_settings.uniswap_functions.retrial_attempts),
+            before_sleep=self._on_node_exception,
+        )
+        async def f():
+            function_signature = get_encoded_function_signature(
+                abi_dict, function_name, params,
+            )
+            rpc_query = []
+
+            if from_block == 'latest' and to_block == 'latest':
+                rpc_query.append(
+                    {
+                        'jsonrpc': '2.0',
+                        'method': 'eth_call',
+                        'params': [
+                            {
+                                'to': Web3.toChecksumAddress(contract_address),
+                                'data': function_signature,
+                            },
+                            to_block,
+                        ],
+                        'id': '1',
+                    },
+                )
+            else:
+                request_id = 1
+                for block in range(from_block, to_block + 1):
+                    rpc_query.append(
+                        {
+                            'jsonrpc': '2.0',
+                            'method': 'eth_call',
+                            'params': [
+                                {
+                                    'from': from_address,
+                                    'to': Web3.toChecksumAddress(contract_address),
+                                    'data': function_signature,
+                                },
+                                hex(block),
+                            ],
+                            'id': f'{request_id}',
+                        },
+                    )
+                    request_id += 1
+
+            node = await self.get_current_node()
+            rpc_url = node.get('rpc_url')
+
+            await check_rpc_rate_limit(
+                parsed_limits=node.get('rate_limit', []),
+                app_id=rpc_url.split('/')[-1],
+                redis_conn=redis_conn,
+                request_payload=rpc_query,
+                error_msg={
+                    'msg': 'exhausted_api_key_rate_limit inside batch_eth_call_on_block_range',
+                },
+                logger=self._logger,
+                rate_limit_lua_script_shas=self._rate_limit_lua_script_shas,
+                limit_incr_by=len(rpc_query),
+            )
+
+            rpc_response = []
+            try:
+                response = httpx.post(url=rpc_url, json=rpc_query)
+                response_data = response.json()
+            except Exception as e:
+                exc = RPCException(
+                    request={
+                        contract_address: contract_address,
+                        function_name: function_name,
+                        'params': params,
+                        'from_block': from_block,
+                        'to_block': to_block,
+                    },
+                    response=None,
+                    underlying_exception=e,
+                    extra_info=f'RPC_BATCH_ETH_CALL_ERROR: {format_exception(e)}',
+                )
+                self._logger.trace(
+                    'Error in batch_eth_call_on_block_range, error {}', str(exc),
+                )
+                raise exc
+
+            if response.status_code != 200:
+                raise RPCException(
+                    request={
+                        'from_block': from_block,
+                        'to_block': to_block,
+                    },
+                    response=(response.status_code, response.text),
+                    underlying_exception=None,
+                    extra_info=f'RPC_BATCH_ETH_CALL_ERROR: {response.text}',
+                )
+
+            response_exceptions = (
+                list(
+                    map(
+                        lambda r: r,
+                        filter(
+                            lambda y: y.get(
+                                'error',
+                                False,
+                            ),
+                            response_data,
+                        ),
+                    ),
+                )
+                if isinstance(response_data, list)
+                else response_data
+            )
+
+            if len(response_exceptions) > 0:
+                exc = RPCException(
+                    request={
+                        contract_address: contract_address,
+                        function_name: function_name,
+                        'params': params,
+                        'from_block': from_block,
+                        'to_block': to_block,
+                    },
+                    response=response_exceptions,
+                    underlying_exception=None,
+                    extra_info=f'RPC_BATCH_ETH_CALL_ERRORS: {str(response_exceptions)}',
+                )
+                self._logger.trace(
+                    'Error in batch_eth_call_on_block_range, error {}', str(exc),
+                )
+                raise exc
+            else:
+                response = response_data if isinstance(response_data, list) else [response_data]
+                for result in response:
+                    rpc_response.append(
+                        eth_abi.decode_abi(
+                            abi_dict.get(
+                                function_name,
+                            )['output'],
+                            HexBytes(result['result']),
+                        ),
+                    )
+
+            return rpc_response
+
+        return await f()
+
+    @provide_async_redis_conn_insta
+    async def batch_eth_get_block(self, from_block, to_block, redis_conn=None):
+        """
+        Batch call "eth_getBlockByNumber" in a range of block numbers
+
+        RPC_BATCH: for_each_block -> eth_getBlockByNumber
+        """
+        @retry(
+            reraise=True,
+            retry=retry_if_exception_type(RPCException),
+            wait=wait_random_exponential(multiplier=1, max=10),
+            stop=stop_after_attempt(worker_settings.uniswap_functions.retrial_attempts),
+            before_sleep=self._on_node_exception,
+        )
+        async def f():
+            rpc_query = []
+
+            request_id = 1
+            for block in range(from_block, to_block + 1):
+                rpc_query.append(
+                    {
+                        'jsonrpc': '2.0',
+                        'method': 'eth_getBlockByNumber',
+                        'params': [
+                            hex(block),
+                            True,
+                        ],
+                        'id': f'{request_id}',
+                    },
+                )
+                request_id += 1
+
+            node = await self.get_current_node()
+            rpc_url = node.get('rpc_url')
+
+            await check_rpc_rate_limit(
+                parsed_limits=node.get('rate_limit', []),
+                app_id=rpc_url.split('/')[-1],
+                redis_conn=redis_conn,
+                request_payload=rpc_query,
+                error_msg={
+                    'msg': 'exhausted_api_key_rate_limit inside batch_eth_get_block',
+                },
+                logger=self._logger,
+                rate_limit_lua_script_shas=self._rate_limit_lua_script_shas,
+                limit_incr_by=len(rpc_query),
+            )
+            try:
+                response = httpx.post(url=rpc_url, json=rpc_query)
+                response_data = response.json()
+            except Exception as e:
+                exc = RPCException(
+                    request={
+                        'from_block': from_block,
+                        'to_block': to_block,
+                    },
+                    response=None,
+                    underlying_exception=e,
+                    extra_info=f'RPC_BATCH_ETH_CALL_ERROR: {str(e)}',
+                )
+                self._logger.trace('Error in batch_eth_get_block, error {}', str(exc))
+                raise exc
+
+            if response.status_code != 200:
+                raise RPCException(
+                    request={
+                        'from_block': from_block,
+                        'to_block': to_block,
+                    },
+                    response=(response.status_code, response.text),
+                    underlying_exception=None,
+                    extra_info=f'RPC_BATCH_ETH_CALL_ERROR: {response.text}',
+                )
+            response_exceptions = list(
+                map(
+                    lambda r: r,
+                    filter(
+                        lambda y: type(y) == str or y.get('error', False),
+                        response_data,
+                    ),
+                ),
+            )
+            if len(response_exceptions) > 0:
+                exc = RPCException(
+                    request={'from_block': from_block, 'to_block': to_block},
+                    response=response_exceptions,
+                    underlying_exception=None,
+                    extra_info=(
+                        f'RPC_BATCH_ETH_GET_BLOCK_ERRORS: {str(response_exceptions)}'
+                    ),
+                )
+                self._logger.trace('Error in batch_eth_get_block, error {}', str(exc))
+                raise exc
+
+            return response_data
+
+        return await f()
+
+    @provide_async_redis_conn_insta
+    async def get_events_logs(
+        self, contract_address, to_block, from_block, topics, event_abi, redis_conn=None,
+    ):
+        @retry(
+            reraise=True,
+            retry=retry_if_exception_type(RPCException),
+            wait=wait_random_exponential(multiplier=1, max=10),
+            stop=stop_after_attempt(worker_settings.uniswap_functions.retrial_attempts),
+            before_sleep=self._on_node_exception,
+        )
+        async def f():
+            node = await self.get_current_node()
+            rpc_url = node.get('rpc_url')
+
+            web3_provider = node['web3_client'].w3
+
+            event_log_query = {
                 'address': Web3.toChecksumAddress(contract_address),
-                'toBlock': toBlock,
-                'fromBlock': fromBlock,
+                'toBlock': to_block,
+                'fromBlock': from_block,
                 'topics': topics,
-            },
-        )
-    except Exception as e:
-        exc = RPCException(
-            request={
-                'contract_address': contract_address,
-                'toBlock': toBlock,
-                'fromBlock': fromBlock,
-                'topics': topics,
-            },
-            response=None,
-            underlying_exception=e,
-            extra_info=f'RPC_GET_EVENT_LOGS_ERROR: {format_exception(e)}',
-        )
-        rpc_logger.trace('Error in get_events_logs, error {}', str(exc))
-        raise exc
+            }
+            await check_rpc_rate_limit(
+                parsed_limits=node.get('rate_limit', []),
+                app_id=rpc_url.split('/')[-1],
+                redis_conn=redis_conn,
+                request_payload=event_log_query,
+                error_msg={
+                    'msg': 'exhausted_api_key_rate_limit inside get_events_logs',
+                },
+                logger=self._logger,
+                rate_limit_lua_script_shas=self._rate_limit_lua_script_shas,
+                limit_incr_by=to_block - from_block + 1,
+            )
+            try:
 
-    codec: ABICodec = web3Provider.codec
-    all_events = []
-    for log in event_log:
-        abi = event_abi.get(log.topics[0].hex(), '')
-        evt = get_event_data(codec, abi, log)
-        all_events.append(evt)
+                event_log = web3_provider.eth.get_logs(
+                    event_log_query,
+                )
+            except Exception as e:
+                exc = RPCException(
+                    request={
+                        'contract_address': contract_address,
+                        'to_block': to_block,
+                        'from_block': from_block,
+                        'topics': topics,
+                    },
+                    response=None,
+                    underlying_exception=e,
+                    extra_info=f'RPC_GET_EVENT_LOGS_ERROR: {format_exception(e)}',
+                )
+                self._logger.trace('Error in get_events_logs, error {}', str(exc))
+                raise exc
 
-    return all_events
+            codec: ABICodec = web3_provider.codec
+            all_events = []
+            for log in event_log:
+                abi = event_abi.get(log.topics[0].hex(), '')
+                evt = get_event_data(codec, abi, log)
+                all_events.append(evt)
+
+            return all_events
+
+        return await f()
+
+
+rpc_helper = RpcHelper()

@@ -7,7 +7,7 @@ from async_limits.storage import AsyncRedisStorage
 from async_limits.strategies import AsyncFixedWindowRateLimiter
 from redis import asyncio as aioredis
 
-from pooler.utils.rpc_helper import RPCException
+from pooler.utils.exceptions import RPCException
 
 # Initialize rate limits when program starts
 LUA_SCRIPT_SHAS = None

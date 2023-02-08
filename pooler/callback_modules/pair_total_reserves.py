@@ -1,10 +1,7 @@
-import asyncio
 import time
 from typing import Dict
 from typing import Optional
 from typing import Union
-
-from setproctitle import setproctitle
 
 from pooler.callback_modules.uniswap.core import get_pair_reserves
 from pooler.settings.config import settings
@@ -40,12 +37,11 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         epoch_usd_reserves_snapshot_map_token0 = dict()
         epoch_usd_reserves_snapshot_map_token1 = dict()
         max_block_timestamp = int(time.time())
+
         try:
             # TODO: web3 object should be available within callback worker instance
             #  instead of being a global object in uniswap functions module. Not a good design pattern.
             pair_reserve_total = await get_pair_reserves(
-                loop=asyncio.get_running_loop(),
-                rate_limit_lua_script_shas=self._rate_limiting_lua_scripts,
                 pair_address=data_source_contract_address,
                 from_block=min_chain_height,
                 to_block=max_chain_height,
@@ -110,7 +106,3 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 },
             )
             return pair_total_reserves_snapshot
-
-    def run(self):
-        setproctitle(self.name)
-        super(PairTotalReservesProcessor, self).run()

@@ -1,5 +1,3 @@
-from setproctitle import setproctitle
-
 from pooler.callback_modules.uniswap.core import get_pair_trade_volume
 from pooler.settings.config import settings
 from pooler.utils.callback_helpers import CallbackAsyncWorker
@@ -32,7 +30,6 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
         data_source_contract_address: str,
     ):
         result = await get_pair_trade_volume(
-            rate_limit_lua_script_shas=self._rate_limiting_lua_scripts,
             data_source_contract_address=data_source_contract_address,
             min_chain_height=min_chain_height,
             max_chain_height=max_chain_height,
@@ -85,7 +82,3 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
             ),
         )
         return trade_volume_snapshot
-
-    def run(self):
-        setproctitle(self.name)
-        super(TradeVolumeProcessor, self).run()
