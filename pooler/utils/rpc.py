@@ -159,7 +159,7 @@ class RpcHelper(object):
                 parsed_limits=node.get('rate_limit', []),
                 app_id=rpc_url.split('/')[-1],
                 redis_conn=redis_conn,
-                request_payload=tasks,
+                request_payload=[task.__name__ for task in tasks],
                 error_msg={
                     'msg': 'exhausted_api_key_rate_limit inside batch_eth_call_on_block_range',
                 },
@@ -172,7 +172,7 @@ class RpcHelper(object):
                 return response
             except Exception as e:
                 exc = RPCException(
-                    request={},
+                    request=[task.__name__ for task in tasks],
                     response=None,
                     underlying_exception=e,
                     extra_info={'msg': format_exception(e)},
