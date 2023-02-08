@@ -1,5 +1,3 @@
-from setproctitle import setproctitle
-
 from pooler.callback_modules.uniswap.core import get_pair_trade_volume
 from pooler.settings.config import settings
 from pooler.utils.callback_helpers import CallbackAsyncWorker
@@ -84,7 +82,3 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
             ),
         )
         return trade_volume_snapshot
-
-    def run(self):
-        setproctitle(self.name)
-        super(TradeVolumeProcessor, self).run()

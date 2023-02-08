@@ -18,7 +18,6 @@ from pooler.callback_modules.uniswap.helpers import get_pair_metadata
 from pooler.settings.config import settings
 from pooler.utils.default_logger import format_exception
 from pooler.utils.default_logger import logger
-from pooler.utils.exceptions import RPCException
 from pooler.utils.redis.redis_conn import provide_async_redis_conn_insta
 from pooler.utils.rpc import get_contract_abi_dict
 from pooler.utils.rpc import rpc_helper
@@ -251,16 +250,10 @@ async def get_token_pair_price_and_white_token_reserves(
             pair_reserves_list,
         )
 
-        raise RPCException(
-            request={'from_block': from_block, 'to_block': to_block},
-            response=pair_reserves_list,
-            underlying_exception=None,
-            extra_info={
-                'msg': (
-                    'Token pair based price RPC batch call error:'
-                    f' {pair_reserves_list}'
-                ),
-            },
+        raise Exception(
+            'Unable to get pair price and white token reserves'
+            f'from_block: {from_block}, to_block: {to_block}, '
+            f'got result: {pair_reserves_list}',
         )
 
     index = 0
@@ -342,16 +335,11 @@ async def get_token_derived_eth(
             to_block,
             token_derived_eth_list,
         )
-        raise RPCException(
-            request={'from_block': from_block, 'to_block': to_block},
-            response=token_derived_eth_list,
-            underlying_exception=None,
-            extra_info={
-                'msg': (
-                    'Error: failed to fetch token derived eth RPC batch call'
-                    f' error: {token_derived_eth_list}'
-                ),
-            },
+
+        raise Exception(
+            'Unable to get token derived eth'
+            f'from_block: {from_block}, to_block: {to_block}, '
+            f'got result: {token_derived_eth_list}',
         )
 
     index = 0
@@ -536,13 +524,4 @@ async def get_token_price_in_block_range(
             ),
             err=lambda: format_exception(err),
         )
-        raise RPCException(
-            request={
-                'contract': token_metadata['address'],
-                'from_block': from_block,
-                'to_block': to_block,
-            },
-            response={},
-            underlying_exception=None,
-            extra_info={'msg': f'rpc error: {str(err)}'},
-        ) from err
+        raise err
