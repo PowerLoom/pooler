@@ -81,8 +81,23 @@ class RpcHelper(object):
         self._current_node_index = -1
         self._node_count = 0
         self._rate_limit_lua_script_shas = None
+        self._nodes_initialized = False
         self._initialized = False
         self._logger = logger.bind(module='PowerLoom|RPCHelper')
+        self._client = None
+        self._async_transport = None
+        self._rate_limit_lua_script_shas = None
+
+    async def _load_rate_limit_shas(self, redis_conn):
+        if self._rate_limit_lua_script_shas is not None:
+            return
+        self._rate_limit_lua_script_shas = await load_rate_limiter_scripts(
+            redis_conn,
+        )
+
+    async def _init_httpx_client(self):
+        if self._client is not None:
+            return
         self._async_transport = AsyncHTTPTransport(
             limits=Limits(
                 max_connections=100,
@@ -96,12 +111,10 @@ class RpcHelper(object):
             transport=self._async_transport,
         )
 
-    async def _load_rate_limit_shas(self, redis_conn):
-        if self._rate_limit_lua_script_shas is not None:
-            return
-        self._rate_limit_lua_script_shas = await load_rate_limiter_scripts(
-            redis_conn,
-        )
+    async def init(self, redis_conn):
+        await self._load_rate_limit_shas(redis_conn)
+        await self._init_httpx_client()
+        self._initialized = True
 
     def _load_web3_providers_and_rate_limits(self):
         if self._archive_mode:
@@ -132,9 +145,9 @@ class RpcHelper(object):
             self._node_count = len(self._nodes)
 
     def get_current_node(self):
-        if not self._initialized:
+        if not self._nodes_initialized:
             self._load_web3_providers_and_rate_limits()
-            self._initialized = True
+            self._nodes_initialized = True
 
         if self._current_node_index == -1:
             raise Exception('No full nodes available')
@@ -154,8 +167,8 @@ class RpcHelper(object):
         """
         Call web3 functions in parallel
         """
-        if not self._rate_limit_lua_script_shas:
-            self._rate_limit_lua_script_shas = await self._load_rate_limit_shas(redis_conn)
+        if not self._initialized:
+            await self.init(redis_conn)
 
         @retry(
             reraise=True,
@@ -216,8 +229,8 @@ class RpcHelper(object):
 
         RPC_BATCH: for_each_block -> call_function_x
         """
-        if not self._rate_limit_lua_script_shas:
-            self._rate_limit_lua_script_shas = await self._load_rate_limit_shas(redis_conn)
+        if not self._initialized:
+            await self.init(redis_conn)
 
         if params is None:
             params = []
@@ -375,8 +388,8 @@ class RpcHelper(object):
 
         RPC_BATCH: for_each_block -> eth_getBlockByNumber
         """
-        if not self._rate_limit_lua_script_shas:
-            self._rate_limit_lua_script_shas = await self._load_rate_limit_shas(redis_conn)
+        if not self._initialized:
+            await self.init(redis_conn)
 
         @retry(
             reraise=True,
@@ -472,8 +485,8 @@ class RpcHelper(object):
     async def get_events_logs(
         self, contract_address, to_block, from_block, topics, event_abi, redis_conn,
     ):
-        if not self._rate_limit_lua_script_shas:
-            self._rate_limit_lua_script_shas = await self._load_rate_limit_shas(redis_conn)
+        if not self._initialized:
+            await self.init(redis_conn)
 
         @retry(
             reraise=True,

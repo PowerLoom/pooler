@@ -168,19 +168,9 @@ class CallbackAsyncWorker(multiprocessing.Process, ABC):
         super(CallbackAsyncWorker, self).__init__(name=name, **kwargs)
         self._logger = logger.bind(module=self.name)
 
-        self._rate_limiting_lua_scripts = dict()
-        self._async_transport = AsyncHTTPTransport(
-            limits=Limits(
-                max_connections=100,
-                max_keepalive_connections=50,
-                keepalive_expiry=None,
-            ),
-        )
-        self._client = AsyncClient(
-            timeout=Timeout(timeout=5.0),
-            follow_redirects=False,
-            transport=self._async_transport,
-        )
+        self._rate_limiting_lua_scripts = None
+        self._client = None
+        self._async_transport = None
         self._shutdown_signal_received_count = 0
 
     @abstractproperty
@@ -296,7 +286,8 @@ class CallbackAsyncWorker(multiprocessing.Process, ABC):
         )
         self._running_callback_tasks[self_unique_id] = cur_task
 
-        await self.init_redis_pool()
+        await self.init()
+
         if not self._rate_limiting_lua_scripts:
             self._rate_limiting_lua_scripts = await load_rate_limiter_scripts(
                 self._redis_conn,
@@ -703,6 +694,7 @@ class CallbackAsyncWorker(multiprocessing.Process, ABC):
             await q_obj.consume(self._on_rabbitmq_message)
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
+
         await message.ack()
 
         try:
@@ -730,11 +722,32 @@ class CallbackAsyncWorker(multiprocessing.Process, ABC):
 
         asyncio.ensure_future(self._processor_task(msg_obj=msg_obj))
 
-    async def init_redis_pool(self):
-        if not self._aioredis_pool:
-            self._aioredis_pool = RedisPoolCache()
-            await self._aioredis_pool.populate()
-            self._redis_conn = self._aioredis_pool._aioredis_pool
+    async def _init_redis_pool(self):
+        if self._aioredis_pool is not None:
+            return
+        self._aioredis_pool = RedisPoolCache()
+        await self._aioredis_pool.populate()
+        self._redis_conn = self._aioredis_pool._aioredis_pool
+
+    async def _init_httpx_client(self):
+        if self._client is not None:
+            return
+        self._async_transport = AsyncHTTPTransport(
+            limits=Limits(
+                max_connections=100,
+                max_keepalive_connections=50,
+                keepalive_expiry=None,
+            ),
+        )
+        self._client = AsyncClient(
+            timeout=Timeout(timeout=5.0),
+            follow_redirects=False,
+            transport=self._async_transport,
+        )
+
+    async def init(self):
+        await self._init_redis_pool()
+        await self._init_httpx_client()
 
     def run(self) -> None:
         setproctitle(self._unique_id)
