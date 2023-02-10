@@ -30,9 +30,6 @@ uniswap_pair_cached_recent_logs = (
     'uniswap:pairContract:' + settings.namespace + ':{}:recentLogs'
 )
 
-uniswap_eth_usd_price_zset = (
-    'uniswap:ethBlockHeightPrice:' + settings.namespace + ':ethPriceZset'
-)
 uniswap_tokens_pair_map = (
     'uniswap:pairContract:' + settings.namespace + ':tokensPairMap'
 )

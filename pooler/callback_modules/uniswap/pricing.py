@@ -1,10 +1,8 @@
-import asyncio
 import json
 
 from redis import asyncio as aioredis
 from web3 import Web3
 
-from pooler.callback_modules.redis_keys import uniswap_eth_usd_price_zset
 from pooler.callback_modules.redis_keys import (
     uniswap_pair_cached_block_height_token_price,
 )
@@ -15,200 +13,12 @@ from pooler.callback_modules.uniswap.constants import router_contract_abi
 from pooler.callback_modules.uniswap.constants import tokens_decimals
 from pooler.callback_modules.uniswap.helpers import get_pair
 from pooler.callback_modules.uniswap.helpers import get_pair_metadata
-from pooler.settings.config import settings
 from pooler.utils.default_logger import format_exception
 from pooler.utils.default_logger import logger
-from pooler.utils.redis.redis_conn import provide_async_redis_conn_insta
 from pooler.utils.rpc import get_contract_abi_dict
 from pooler.utils.rpc import rpc_helper
-
+from pooler.utils.snapshot_utils import get_eth_price_usd
 pricing_logger = logger.bind(module='PowerLoom|Uniswap|Pricing')
-
-
-@provide_async_redis_conn_insta
-async def get_eth_price_usd(
-    from_block,
-    to_block,
-    redis_conn: aioredis.Redis = None,
-):
-    """
-    returns the price of eth in usd at a given block height
-    """
-
-    try:
-        eth_price_usd_dict = dict()
-        redis_cache_mapping = dict()
-
-        if from_block != 'latest' and to_block != 'latest':
-            cached_price_dict = await redis_conn.zrangebyscore(
-                name=uniswap_eth_usd_price_zset,
-                min=int(from_block),
-                max=int(to_block),
-            )
-            if cached_price_dict and len(cached_price_dict) == to_block - (
-                from_block - 1
-            ):
-                price_dict = {
-                    json.loads(
-                        price.decode(
-                            'utf-8',
-                        ),
-                    )[
-                        'blockHeight'
-                    ]: json.loads(price.decode('utf-8'))['price']
-                    for price in cached_price_dict
-                }
-                return price_dict
-
-        # fetch metadata to find order of each token in given pairs
-        (
-            dai_eth_pair_metadata,
-            usdc_eth_pair_metadata,
-            usdt_eth_pair_metadata,
-        ) = await asyncio.gather(
-            get_pair_metadata(
-                pair_address=worker_settings.contract_addresses.DAI_WETH_PAIR,
-                redis_conn=redis_conn,
-            ),
-            get_pair_metadata(
-                pair_address=worker_settings.contract_addresses.USDC_WETH_PAIR,
-                redis_conn=redis_conn,
-            ),
-            get_pair_metadata(
-                pair_address=worker_settings.contract_addresses.USDT_WETH_PAIR,
-                redis_conn=redis_conn,
-            ),
-        )
-        # check if stable it token0 or token1
-        dai_token_order = (
-            0
-            if Web3.toChecksumAddress(
-                dai_eth_pair_metadata['token0']['address'],
-            ) ==
-            Web3.toChecksumAddress(worker_settings.contract_addresses.DAI)
-            else 1
-        )
-        usdc_token_order = (
-            0
-            if Web3.toChecksumAddress(
-                usdc_eth_pair_metadata['token0']['address'],
-            ) ==
-            Web3.toChecksumAddress(worker_settings.contract_addresses.USDC)
-            else 1
-        )
-        usdt_token_order = (
-            0
-            if Web3.toChecksumAddress(
-                usdt_eth_pair_metadata['token0']['address'],
-            ) ==
-            Web3.toChecksumAddress(worker_settings.contract_addresses.USDT)
-            else 1
-        )
-
-        # create dictionary of ABI {function_name -> {signature, abi, input, output}}
-        pair_abi_dict = get_contract_abi_dict(pair_contract_abi)
-
-        # NOTE: We can further optimize below call by batching them all,
-        # but that would be a large batch call for RPC node
-        dai_eth_pair_reserves_list = await rpc_helper.batch_eth_call_on_block_range(
-            abi_dict=pair_abi_dict,
-            function_name='getReserves',
-            contract_address=worker_settings.contract_addresses.DAI_WETH_PAIR,
-            from_block=from_block,
-            to_block=to_block,
-        )
-        usdc_eth_pair_reserves_list = await rpc_helper.batch_eth_call_on_block_range(
-            abi_dict=pair_abi_dict,
-            function_name='getReserves',
-            contract_address=worker_settings.contract_addresses.USDC_WETH_PAIR,
-            from_block=from_block,
-            to_block=to_block,
-        )
-        eth_usdt_pair_reserves_list = await rpc_helper.batch_eth_call_on_block_range(
-            abi_dict=pair_abi_dict,
-            function_name='getReserves',
-            contract_address=worker_settings.contract_addresses.USDT_WETH_PAIR,
-            from_block=from_block,
-            to_block=to_block,
-        )
-
-        block_count = 0
-        for block_num in range(from_block, to_block + 1):
-            dai_eth_pair_dai_reserve = (
-                dai_eth_pair_reserves_list[block_count][dai_token_order] /
-                10 ** tokens_decimals['DAI']
-            )
-            dai_eth_pair_eth_reserve = (
-                dai_eth_pair_reserves_list[block_count][1 - dai_token_order] /
-                10 ** tokens_decimals['WETH']
-            )
-            dai_price = dai_eth_pair_dai_reserve / dai_eth_pair_eth_reserve
-
-            usdc_eth_pair_usdc_reserve = (
-                usdc_eth_pair_reserves_list[block_count][usdc_token_order] /
-                10 ** tokens_decimals['USDC']
-            )
-            usdc_eth_pair_eth_reserve = (
-                usdc_eth_pair_reserves_list[block_count][1 - usdc_token_order] /
-                10 ** tokens_decimals['WETH']
-            )
-            usdc_price = usdc_eth_pair_usdc_reserve / usdc_eth_pair_eth_reserve
-
-            usdt_eth_pair_usdt_reserve = (
-                eth_usdt_pair_reserves_list[block_count][usdt_token_order] /
-                10 ** tokens_decimals['USDT']
-            )
-            usdt_eth_pair_eth_reserve = (
-                eth_usdt_pair_reserves_list[block_count][1 - usdt_token_order] /
-                10 ** tokens_decimals['WETH']
-            )
-            usdt_price = usdt_eth_pair_usdt_reserve / usdt_eth_pair_eth_reserve
-
-            total_eth_liquidity = (
-                dai_eth_pair_eth_reserve +
-                usdc_eth_pair_eth_reserve +
-                usdt_eth_pair_eth_reserve
-            )
-
-            daiWeight = dai_eth_pair_eth_reserve / total_eth_liquidity
-            usdcWeight = usdc_eth_pair_eth_reserve / total_eth_liquidity
-            usdtWeight = usdt_eth_pair_eth_reserve / total_eth_liquidity
-
-            eth_price_usd = (
-                daiWeight * dai_price +
-                usdcWeight * usdc_price +
-                usdtWeight * usdt_price
-            )
-
-            eth_price_usd_dict[block_num] = float(eth_price_usd)
-            redis_cache_mapping[
-                json.dumps(
-                    {'blockHeight': block_num, 'price': float(eth_price_usd)},
-                )
-            ] = int(block_num)
-            block_count += 1
-
-        # cache price at height
-        if from_block != 'latest' and to_block != 'latest':
-            await asyncio.gather(
-                redis_conn.zadd(
-                    name=uniswap_eth_usd_price_zset,
-                    mapping=redis_cache_mapping,
-                ),
-                redis_conn.zremrangebyscore(
-                    name=uniswap_eth_usd_price_zset,
-                    min=0,
-                    max=int(from_block) - settings.epoch.height * 4,
-                ),
-            )
-
-        return eth_price_usd_dict
-
-    except Exception as err:
-        pricing_logger.opt(exception=True).error(
-            f'RPC ERROR failed to fetch ETH price, error_msg:{err}',
-        )
-        raise err
 
 
 async def get_token_pair_price_and_white_token_reserves(

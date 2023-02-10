@@ -158,3 +158,4 @@ class Settings(BaseModel):
     logs: Logs
     projects_config_path: str
     env: str
+    pair_contract_abi: str

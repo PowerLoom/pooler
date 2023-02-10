@@ -30,3 +30,7 @@ epoch_detector_last_processed_epoch = 'SystemEpochDetector:lastProcessedEpoch'
 projects_dag_verifier_status = (
     'projects:' + settings.namespace + ':dagVerificationStatus'
 )
+
+uniswap_eth_usd_price_zset = (
+    'uniswap:ethBlockHeightPrice:' + settings.namespace + ':ethPriceZset'
+)

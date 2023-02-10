@@ -22,7 +22,7 @@
         ],
         "archive_nodes": [],
         "force_archive_blocks": 100,
-        "retry": 1,
+        "retry": 5,
         "request_time_out": 5,
         "skip_epoch_threshold_blocks": 30
     },
@@ -92,5 +92,6 @@
         "write_to_files": true
     },
     "projects_config_path": "pooler/static/projects.json",
-    "env": "<test/prod>"
+    "env": "<test/prod>",
+    "pair_contract_abi": "pooler/static/abis/UniswapV2Pair.json"
 }

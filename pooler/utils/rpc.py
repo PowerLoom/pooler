@@ -12,7 +12,6 @@ from tenacity import wait_random_exponential
 from web3 import Web3
 from web3._utils.events import get_event_data
 
-from pooler.callback_modules.settings.config import settings as worker_settings
 from pooler.settings.config import settings
 from pooler.utils.default_logger import format_exception
 from pooler.utils.default_logger import logger
@@ -148,7 +147,7 @@ class RpcHelper(object):
             reraise=True,
             retry=retry_if_exception_type(RPCException),
             wait=wait_random_exponential(multiplier=1, max=10),
-            stop=stop_after_attempt(worker_settings.uniswap_functions.retrial_attempts),
+            stop=stop_after_attempt(settings.rpc.retry),
             before_sleep=self._on_node_exception,
         )
         async def f():
@@ -159,7 +158,7 @@ class RpcHelper(object):
                 parsed_limits=node.get('rate_limit', []),
                 app_id=rpc_url.split('/')[-1],
                 redis_conn=redis_conn,
-                request_payload=[task.__name__ for task in tasks],
+                request_payload=[task.fn_name for task in tasks],
                 error_msg={
                     'msg': 'exhausted_api_key_rate_limit inside batch_eth_call_on_block_range',
                 },
@@ -172,7 +171,7 @@ class RpcHelper(object):
                 return response
             except Exception as e:
                 exc = RPCException(
-                    request=[task.__name__ for task in tasks],
+                    request=[task.fn_name for task in tasks],
                     response=None,
                     underlying_exception=e,
                     extra_info={'msg': format_exception(e)},
@@ -211,7 +210,7 @@ class RpcHelper(object):
             reraise=True,
             retry=retry_if_exception_type(RPCException),
             wait=wait_random_exponential(multiplier=1, max=10),
-            stop=stop_after_attempt(worker_settings.uniswap_functions.retrial_attempts),
+            stop=stop_after_attempt(settings.rpc.retry),
             before_sleep=self._on_node_exception,
         )
         async def f():
@@ -368,7 +367,7 @@ class RpcHelper(object):
             reraise=True,
             retry=retry_if_exception_type(RPCException),
             wait=wait_random_exponential(multiplier=1, max=10),
-            stop=stop_after_attempt(worker_settings.uniswap_functions.retrial_attempts),
+            stop=stop_after_attempt(settings.rpc.retry),
             before_sleep=self._on_node_exception,
         )
         async def f():
@@ -466,7 +465,7 @@ class RpcHelper(object):
             reraise=True,
             retry=retry_if_exception_type(RPCException),
             wait=wait_random_exponential(multiplier=1, max=10),
-            stop=stop_after_attempt(worker_settings.uniswap_functions.retrial_attempts),
+            stop=stop_after_attempt(settings.rpc.retry),
             before_sleep=self._on_node_exception,
         )
         async def f():

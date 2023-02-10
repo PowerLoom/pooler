@@ -52,12 +52,7 @@ class ContractAddresses(BaseModel):
     )
 
 
-class UniswapFunctions(BaseModel):
-    retrial_attempts: int
-
-
 class Settings(BaseModel):
-    uniswap_functions: UniswapFunctions
     uniswap_contract_abis: UniswapContractAbis
     contract_addresses: ContractAddresses
     uniswap_v2_whitelist: List[str]

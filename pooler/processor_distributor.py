@@ -14,9 +14,6 @@ from eth_utils import keccak
 from pydantic import ValidationError
 from setproctitle import setproctitle
 
-from pooler.callback_modules.uniswap.core import (
-    warm_up_cache_for_snapshot_constructors,
-)
 from pooler.settings.config import projects_config
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
@@ -28,6 +25,7 @@ from pooler.utils.redis.redis_conn import REDIS_CONN_CONF
 from pooler.utils.redis.redis_keys import (
     cb_broadcast_processing_logs_zset,
 )
+from pooler.utils.snapshot_utils import warm_up_cache_for_snapshot_constructors
 
 
 class ProcessorDistributor(multiprocessing.Process):

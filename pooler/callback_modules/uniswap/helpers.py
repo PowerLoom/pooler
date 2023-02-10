@@ -1,5 +1,4 @@
 import asyncio
-import json
 
 from redis import asyncio as aioredis
 from web3 import Web3
@@ -11,11 +10,7 @@ from pooler.callback_modules.settings.config import settings as worker_settings
 from pooler.callback_modules.uniswap.constants import current_node
 from pooler.callback_modules.uniswap.constants import erc20_abi
 from pooler.callback_modules.uniswap.constants import pair_contract_abi
-from pooler.settings.config import settings
-from pooler.utils.default_logger import format_exception
 from pooler.utils.default_logger import logger
-from pooler.utils.redis.redis_conn import provide_async_redis_conn_insta
-from pooler.utils.redis.redis_keys import cached_block_details_at_height
 from pooler.utils.rpc import rpc_helper
 
 
@@ -243,85 +238,3 @@ async def get_pair_metadata(
             ),
         )
         raise err
-
-
-@provide_async_redis_conn_insta
-async def get_block_details_in_block_range(
-    from_block,
-    to_block,
-    redis_conn: aioredis.Redis = None,
-):
-    """
-    Fetch block-details for a range of block number or a single block
-
-    """
-    try:
-        if from_block != 'latest' and to_block != 'latest':
-            cached_details = await redis_conn.zrangebyscore(
-                name=cached_block_details_at_height,
-                min=int(from_block),
-                max=int(to_block),
-            )
-
-            # check if we have cached value for each block number
-            if cached_details and len(cached_details) == to_block - (
-                from_block - 1
-            ):
-                cached_details = {
-                    json.loads(
-                        block_detail.decode(
-                            'utf-8',
-                        ),
-                    )[
-                        'number'
-                    ]: json.loads(block_detail.decode('utf-8'))
-                    for block_detail in cached_details
-                }
-                return cached_details
-
-        rpc_batch_block_details = await rpc_helper.batch_eth_get_block(from_block, to_block)
-
-        rpc_batch_block_details = (
-            rpc_batch_block_details if rpc_batch_block_details else []
-        )
-
-        block_details_dict = dict()
-        redis_cache_mapping = dict()
-
-        block_num = from_block
-        for block_details in rpc_batch_block_details:
-            block_details = block_details.get('result')
-            # right now we are just storing timestamp out of all block details,
-            # edit this if you want to store something else
-            block_details = {
-                'timestamp': int(block_details.get('timestamp', None), 16),
-                'number': int(block_details.get('number', None), 16),
-            }
-
-            block_details_dict[block_num] = block_details
-            redis_cache_mapping[json.dumps(block_details)] = int(block_num)
-            block_num += 1
-
-        # add new block details and prune all block details older than latest 3 epochs
-        if from_block != 'latest' and to_block != 'latest':
-            await asyncio.gather(
-                redis_conn.zadd(
-                    name=cached_block_details_at_height,
-                    mapping=redis_cache_mapping,
-                ),
-                redis_conn.zremrangebyscore(
-                    name=cached_block_details_at_height,
-                    min=0,
-                    max=int(from_block) - settings.epoch.height * 3,
-                ),
-            )
-
-        return block_details_dict
-
-    except Exception as e:
-        helper_logger.opt(exception=True, lazy=True).trace(
-            'Unable to fetch block details, error_msg:{err}',
-            err=lambda: format_exception(e),
-        )
-
-        raise e

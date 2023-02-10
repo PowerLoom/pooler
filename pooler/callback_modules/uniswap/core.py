@@ -7,11 +7,7 @@ from web3 import Web3
 from pooler.callback_modules.uniswap.constants import pair_contract_abi
 from pooler.callback_modules.uniswap.constants import UNISWAP_EVENTS_ABI
 from pooler.callback_modules.uniswap.constants import UNISWAP_TRADE_EVENT_SIGS
-from pooler.callback_modules.uniswap.helpers import (
-    get_block_details_in_block_range,
-)
 from pooler.callback_modules.uniswap.helpers import get_pair_metadata
-from pooler.callback_modules.uniswap.pricing import get_eth_price_usd
 from pooler.callback_modules.uniswap.pricing import (
     get_token_price_in_block_range,
 )
@@ -23,6 +19,9 @@ from pooler.utils.redis.redis_conn import provide_async_redis_conn_insta
 from pooler.utils.rpc import get_contract_abi_dict
 from pooler.utils.rpc import get_event_sig_and_abi
 from pooler.utils.rpc import rpc_helper
+from pooler.utils.snapshot_utils import (
+    get_block_details_in_block_range,
+)
 
 core_logger = logger.bind(module='PowerLoom|UniswapCore')
 
@@ -466,27 +465,3 @@ async def get_pair_trade_volume(
     max_block_timestamp = max_block_details.get('timestamp', None)
     epoch_trade_logs.update({'timestamp': max_block_timestamp})
     return epoch_trade_logs
-
-
-async def warm_up_cache_for_snapshot_constructors(
-    from_block,
-    to_block,
-    redis_conn: aioredis.Redis = None,
-):
-    """
-    This function warm-up cache for uniswap helper functions. Generated cache will be used across
-    snapshot constructors or in multiple pair-contract calculations.
-    : cache block details for epoch
-    : cache ETH USD price for epoch
-    """
-    await asyncio.gather(
-        get_eth_price_usd(
-            from_block=from_block,
-            to_block=to_block,
-        ),
-        get_block_details_in_block_range(
-            from_block=from_block,
-            to_block=to_block,
-        ),
-        return_exceptions=True,
-    )
