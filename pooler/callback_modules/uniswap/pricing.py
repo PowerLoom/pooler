@@ -13,7 +13,6 @@ from pooler.callback_modules.uniswap.constants import router_contract_abi
 from pooler.callback_modules.uniswap.constants import tokens_decimals
 from pooler.callback_modules.uniswap.helpers import get_pair
 from pooler.callback_modules.uniswap.helpers import get_pair_metadata
-from pooler.utils.default_logger import format_exception
 from pooler.utils.default_logger import logger
 from pooler.utils.rpc import get_contract_abi_dict
 from pooler.utils.rpc import rpc_helper
@@ -332,6 +331,6 @@ async def get_token_price_in_block_range(
                 f" {token_metadata['symbol']} | {token_metadata['address']}|"
                 ' err: {err}'
             ),
-            err=lambda: format_exception(err),
+            err=lambda: str(err),
         )
         raise err

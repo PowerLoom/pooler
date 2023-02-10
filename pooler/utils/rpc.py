@@ -13,7 +13,6 @@ from web3 import Web3
 from web3._utils.events import get_event_data
 
 from pooler.settings.config import settings
-from pooler.utils.default_logger import format_exception
 from pooler.utils.default_logger import logger
 from pooler.utils.exceptions import RPCException
 from pooler.utils.redis.rate_limiter import check_rpc_rate_limit
@@ -174,7 +173,7 @@ class RpcHelper(object):
                     request=[task.fn_name for task in tasks],
                     response=None,
                     underlying_exception=e,
-                    extra_info={'msg': format_exception(e)},
+                    extra_info={'msg': str(e)},
                 )
 
                 self._logger.opt(lazy=True).trace(
@@ -285,7 +284,7 @@ class RpcHelper(object):
                     },
                     response=None,
                     underlying_exception=e,
-                    extra_info=f'RPC_BATCH_ETH_CALL_ERROR: {format_exception(e)}',
+                    extra_info=f'RPC_BATCH_ETH_CALL_ERROR: {str(e)}',
                 )
                 self._logger.trace(
                     'Error in batch_eth_call_on_block_range, error {}', str(exc),
@@ -507,7 +506,7 @@ class RpcHelper(object):
                     },
                     response=None,
                     underlying_exception=e,
-                    extra_info=f'RPC_GET_EVENT_LOGS_ERROR: {format_exception(e)}',
+                    extra_info=f'RPC_GET_EVENT_LOGS_ERROR: {str(e)}',
                 )
                 self._logger.trace('Error in get_events_logs, error {}', str(exc))
                 raise exc

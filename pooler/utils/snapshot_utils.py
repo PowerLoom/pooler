@@ -4,7 +4,6 @@ import json
 from redis import asyncio as aioredis
 
 from pooler.settings.config import settings
-from pooler.utils.default_logger import format_exception
 from pooler.utils.default_logger import logger
 from pooler.utils.file_utils import read_json_file
 from pooler.utils.redis.redis_conn import provide_async_redis_conn_insta
@@ -252,7 +251,7 @@ async def get_block_details_in_block_range(
     except Exception as e:
         snapshot_util_logger.opt(exception=True, lazy=True).trace(
             'Unable to fetch block details, error_msg:{err}',
-            err=lambda: format_exception(e),
+            err=lambda: str(e),
         )
 
         raise e
