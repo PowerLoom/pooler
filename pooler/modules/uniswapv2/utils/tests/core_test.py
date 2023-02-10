@@ -3,8 +3,8 @@ from datetime import datetime
 
 import httpx
 
-from pooler.callback_modules.uniswap.core import get_pair_reserves
-from pooler.callback_modules.uniswap.core import get_pair_trade_volume
+from ..core import get_pair_reserves
+from ..core import get_pair_trade_volume
 from pooler.settings.config import settings
 
 if __name__ == '__main__':

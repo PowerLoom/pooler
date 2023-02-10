@@ -3,7 +3,7 @@ from typing import Dict
 from typing import Optional
 from typing import Union
 
-from pooler.callback_modules.uniswap.core import get_pair_reserves
+from .utils.core import get_pair_reserves
 from pooler.settings.config import settings
 from pooler.utils.callback_helpers import CallbackAsyncWorker
 from pooler.utils.models.message_models import EpochBase

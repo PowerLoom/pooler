@@ -4,7 +4,7 @@ import json
 import httpx
 from redis import asyncio as aioredis
 
-from pooler.callback_modules.uniswap.core import get_pair_reserves
+from ..utils.core import get_pair_reserves
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 from pooler.utils.redis.redis_conn import provide_async_redis_conn_insta
 

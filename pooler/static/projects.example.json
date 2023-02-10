@@ -24,7 +24,7 @@
         "0xf89ce5ed65737da8440411544b0499c9fad323b2"
       ],
       "workers": [{
-        "module": "pooler.callback_modules.pair_total_reserves",
+        "module": "pooler.modules.uniswapv2.pair_total_reserves",
         "class_name": "PairTotalReservesProcessor",
         "name": "PowerLoom|UniswapPooler|Callbacks|PairTotalReservesProcessor",
         "num_instances": 6
@@ -55,7 +55,7 @@
         "0xf89ce5ed65737da8440411544b0499c9fad323b2"
       ],
       "workers": [{
-        "module": "pooler.callback_modules.trade_volume",
+        "module": "pooler.modules.uniswapv2.trade_volume",
         "class_name": "TradeVolumeProcessor",
         "name": "PowerLoom|UniswapPooler|Callbacks|TradeVolumeProcessor",
         "num_instances": 6

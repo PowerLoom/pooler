@@ -3,13 +3,13 @@ import asyncio
 from redis import asyncio as aioredis
 from web3 import Web3
 
-from pooler.callback_modules.redis_keys import uniswap_pair_contract_tokens_addresses
-from pooler.callback_modules.redis_keys import uniswap_pair_contract_tokens_data
-from pooler.callback_modules.redis_keys import uniswap_tokens_pair_map
-from pooler.callback_modules.settings.config import settings as worker_settings
-from pooler.callback_modules.uniswap.constants import current_node
-from pooler.callback_modules.uniswap.constants import erc20_abi
-from pooler.callback_modules.uniswap.constants import pair_contract_abi
+from ..redis_keys import uniswap_pair_contract_tokens_addresses
+from ..redis_keys import uniswap_pair_contract_tokens_data
+from ..redis_keys import uniswap_tokens_pair_map
+from ..settings.config import settings as worker_settings
+from .constants import current_node
+from .constants import erc20_abi
+from .constants import pair_contract_abi
 from pooler.utils.default_logger import logger
 from pooler.utils.rpc import rpc_helper
 

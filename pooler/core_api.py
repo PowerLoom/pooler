@@ -21,15 +21,6 @@ from pooler.auth.helpers.helpers import incr_success_calls_count
 from pooler.auth.helpers.helpers import inject_rate_limit_fail_response
 from pooler.auth.helpers.helpers import rate_limit_auth_check
 from pooler.auth.helpers.redis_conn import RedisPoolCache as AuthRedisPoolCache
-from pooler.callback_modules.redis_keys import uniswap_pair_cached_recent_logs
-from pooler.callback_modules.redis_keys import uniswap_pair_contract_tokens_addresses
-from pooler.callback_modules.redis_keys import uniswap_tokens_pair_map
-from pooler.callback_modules.redis_keys import uniswap_V2_daily_stats_at_blockheight
-from pooler.callback_modules.redis_keys import uniswap_v2_daily_stats_snapshot_zset
-from pooler.callback_modules.redis_keys import uniswap_V2_snapshot_at_blockheight
-from pooler.callback_modules.redis_keys import uniswap_V2_summarized_snapshots_zset
-from pooler.callback_modules.redis_keys import uniswap_V2_tokens_at_blockheight
-from pooler.callback_modules.redis_keys import uniswap_v2_tokens_snapshot_zset
 from pooler.settings.config import enabled_projects
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
@@ -51,6 +42,40 @@ SNAPSHOT_STATUS_MAP = {
     3: 'TX_CONFIRMATION_PENDING',
     4: 'TX_CONFIRMED',
 }
+
+# Redis Keys
+# TODO: Adding here just to remove dependency on callback_modules, will be removed completely
+# in the future when core_api becomes usecase independent
+uniswap_pair_contract_tokens_addresses = (
+    'uniswap:pairContract:' + settings.namespace + ':{}:PairContractTokensAddresses'
+)
+
+uniswap_V2_summarized_snapshots_zset = (
+    'uniswap:V2PairsSummarySnapshot:' + settings.namespace + ':snapshotsZset'
+)
+uniswap_V2_snapshot_at_blockheight = (
+    'uniswap:V2PairsSummarySnapshot:' + settings.namespace + ':snapshot:{}'
+)  # block_height
+uniswap_v2_daily_stats_snapshot_zset = (
+    'uniswap:V2DailyStatsSnapshot:' + settings.namespace + ':snapshotsZset'
+)
+uniswap_V2_daily_stats_at_blockheight = (
+    'uniswap:V2DailyStatsSnapshot:' + settings.namespace + ':snapshot:{}'
+)  # block_height
+uniswap_v2_tokens_snapshot_zset = (
+    'uniswap:V2TokensSummarySnapshot:' + settings.namespace + ':snapshotsZset'
+)
+uniswap_V2_tokens_at_blockheight = (
+    'uniswap:V2TokensSummarySnapshot:' + settings.namespace + ':{}'
+)  # block_height
+
+uniswap_pair_cached_recent_logs = (
+    'uniswap:pairContract:' + settings.namespace + ':{}:recentLogs'
+)
+
+uniswap_tokens_pair_map = (
+    'uniswap:pairContract:' + settings.namespace + ':tokensPairMap'
+)
 
 
 # setup logging

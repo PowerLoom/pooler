@@ -3,7 +3,7 @@ import uuid
 
 import httpx
 
-from pooler.callback_modules.trade_volume import (
+from ..trade_volume import (
     TradeVolumeProcessor,
 )
 from pooler.init_rabbitmq import init_exchanges_queues

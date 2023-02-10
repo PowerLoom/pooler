@@ -3,7 +3,7 @@ import uuid
 
 import httpx
 
-from pooler.callback_modules.pair_total_reserves import (
+from ..pair_total_reserves import (
     PairTotalReservesProcessor,
 )
 from pooler.init_rabbitmq import init_exchanges_queues

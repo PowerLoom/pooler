@@ -3,20 +3,21 @@ import json
 from redis import asyncio as aioredis
 from web3 import Web3
 
-from pooler.callback_modules.redis_keys import (
+from ..redis_keys import (
     uniswap_pair_cached_block_height_token_price,
 )
-from pooler.callback_modules.settings.config import settings as worker_settings
-from pooler.callback_modules.uniswap.constants import factory_contract_obj
-from pooler.callback_modules.uniswap.constants import pair_contract_abi
-from pooler.callback_modules.uniswap.constants import router_contract_abi
-from pooler.callback_modules.uniswap.constants import tokens_decimals
-from pooler.callback_modules.uniswap.helpers import get_pair
-from pooler.callback_modules.uniswap.helpers import get_pair_metadata
+from ..settings.config import settings as worker_settings
+from .constants import factory_contract_obj
+from .constants import pair_contract_abi
+from .constants import router_contract_abi
+from .constants import tokens_decimals
+from .helpers import get_pair
+from .helpers import get_pair_metadata
 from pooler.utils.default_logger import logger
 from pooler.utils.rpc import get_contract_abi_dict
 from pooler.utils.rpc import rpc_helper
 from pooler.utils.snapshot_utils import get_eth_price_usd
+
 pricing_logger = logger.bind(module='PowerLoom|Uniswap|Pricing')
 
 

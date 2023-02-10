@@ -1,6 +1,6 @@
 .env
 .python-version
-settings.json
+pooler/settings/settings.json
 __pycache__/
 .idea/
 .DS_Store

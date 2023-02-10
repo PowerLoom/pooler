@@ -1,4 +1,4 @@
-from pooler.callback_modules.uniswap.core import get_pair_trade_volume
+from .utils.core import get_pair_trade_volume
 from pooler.settings.config import settings
 from pooler.utils.callback_helpers import CallbackAsyncWorker
 from pooler.utils.models.message_models import EpochBase

@@ -4,11 +4,11 @@ import json
 from redis import asyncio as aioredis
 from web3 import Web3
 
-from pooler.callback_modules.uniswap.constants import pair_contract_abi
-from pooler.callback_modules.uniswap.constants import UNISWAP_EVENTS_ABI
-from pooler.callback_modules.uniswap.constants import UNISWAP_TRADE_EVENT_SIGS
-from pooler.callback_modules.uniswap.helpers import get_pair_metadata
-from pooler.callback_modules.uniswap.pricing import (
+from .constants import pair_contract_abi
+from .constants import UNISWAP_EVENTS_ABI
+from .constants import UNISWAP_TRADE_EVENT_SIGS
+from .helpers import get_pair_metadata
+from .pricing import (
     get_token_price_in_block_range,
 )
 from pooler.utils.default_logger import logger

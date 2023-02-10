@@ -5,10 +5,10 @@ from functools import partial
 from redis import asyncio as aioredis
 from web3 import Web3
 
-from pooler.callback_modules.settings.config import settings as worker_settings
-from pooler.callback_modules.uniswap.helpers import get_pair_metadata
-from pooler.settings.config import enabled_projects
-from pooler.settings.config import settings
+from ..settings.config import enabled_projects
+from ..settings.config import settings
+from ..settings.config import settings as worker_settings
+from ..utils.helpers import get_pair_metadata
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 from pooler.utils.redis.redis_conn import provide_async_redis_conn_insta
 

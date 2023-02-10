@@ -1,6 +1,6 @@
 from web3 import Web3
 
-from pooler.callback_modules.settings.config import settings as worker_settings
+from ..settings.config import settings as worker_settings
 from pooler.utils.default_logger import logger
 from pooler.utils.file_utils import read_json_file
 from pooler.utils.rpc import rpc_helper
