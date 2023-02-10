@@ -345,7 +345,7 @@ async def get_pair_trade_volume(
         UNISWAP_EVENTS_ABI,
     )
 
-    event_log = await rpc_helper.get_events_logs(
+    events_log = await rpc_helper.get_events_logs(
         **{
             'contract_address': data_source_contract_address,
             'to_block': max_chain_height,
