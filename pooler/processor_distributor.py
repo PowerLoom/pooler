@@ -9,7 +9,6 @@ from signal import SIGQUIT
 from signal import SIGTERM
 from uuid import uuid4
 
-import redis
 from eth_utils import keccak
 from pydantic import ValidationError
 from setproctitle import setproctitle
@@ -20,8 +19,7 @@ from pooler.utils.default_logger import logger
 from pooler.utils.models.message_models import PowerloomCallbackProcessMessage
 from pooler.utils.models.message_models import SystemEpochStatusReport
 from pooler.utils.rabbitmq_helpers import RabbitmqSelectLoopInteractor
-from pooler.utils.redis.redis_conn import create_redis_conn
-from pooler.utils.redis.redis_conn import REDIS_CONN_CONF
+from pooler.utils.redis.redis_conn import RedisPoolCache
 from pooler.utils.redis.redis_keys import (
     cb_broadcast_processing_logs_zset,
 )
@@ -35,6 +33,14 @@ class ProcessorDistributor(multiprocessing.Process):
         self._q = queue.Queue()
         self._rabbitmq_interactor = None
         self._shutdown_initiated = False
+        self._redis_conn = None
+        self._aioredis_pool = None
+
+    async def init_redis_pool(self):
+        if not self._aioredis_pool:
+            self._aioredis_pool = RedisPoolCache()
+            await self._aioredis_pool.populate()
+            self._redis_conn = self._aioredis_pool._aioredis_pool
 
     async def _warm_up_cache_for_epoch_data(
         self, msg_obj: PowerloomCallbackProcessMessage,
@@ -43,13 +49,15 @@ class ProcessorDistributor(multiprocessing.Process):
         Function to warm up the cache which is used across all snapshot constructors
         and/or for internal helper functions.
         """
+        if not self._redis_conn:
+            await self.init_redis_pool()
         try:
             max_chain_height = msg_obj.end
             min_chain_height = msg_obj.begin
-
             await warm_up_cache_for_snapshot_constructors(
                 from_block=min_chain_height,
                 to_block=max_chain_height,
+                redis_conn=self._redis_conn,
             )
 
         except Exception as exc:
@@ -123,13 +131,14 @@ class ProcessorDistributor(multiprocessing.Process):
                     },
                 },
             }
-            with create_redis_conn(self._connection_pool) as r:
-                r.zadd(
+            self.ev_loop.run_until_complete(
+                self._redis_conn.zadd(
                     cb_broadcast_processing_logs_zset.format(
                         msg_obj.broadcast_id,
                     ),
                     {json.dumps(update_log): int(time.time())},
-                )
+                ),
+            )
         self._rabbitmq_interactor._channel.basic_ack(
             delivery_tag=method.delivery_tag,
         )
@@ -151,7 +160,6 @@ class ProcessorDistributor(multiprocessing.Process):
             module=f'PowerLoom|Callbacks|ProcessDistributor:{settings.namespace}-{settings.instance_id}',
         )
 
-        self._connection_pool = redis.BlockingConnectionPool(**REDIS_CONN_CONF)
         queue_name = (
             f'powerloom-backend-cb:{settings.namespace}:{settings.instance_id}'
         )

@@ -49,7 +49,7 @@ async def get_pair(
         ),
     ]
 
-    result = await rpc_helper.web3_call(tasks)
+    result = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
     pair = result[0]
     # cache the pair address
     await redis_conn.hset(
@@ -108,6 +108,7 @@ async def get_pair_metadata(
                     pair_contract_obj.functions.token0(),
                     pair_contract_obj.functions.token1(),
                 ],
+                redis_conn=redis_conn,
             )
 
             await redis_conn.hset(
@@ -181,14 +182,14 @@ async def get_pair_metadata(
                     token0_symbol,
                     token0_decimals,
                     token1_decimals,
-                ] = await rpc_helper.web3_call(tasks)
+                ] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
             elif maker_token0:
                 [
                     token0_decimals,
                     token1_name,
                     token1_symbol,
                     token1_decimals,
-                ] = await rpc_helper.web3_call(tasks)
+                ] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
             else:
                 [
                     token0_name,
@@ -197,7 +198,7 @@ async def get_pair_metadata(
                     token1_name,
                     token1_symbol,
                     token1_decimals,
-                ] = await rpc_helper.web3_call(tasks)
+                ] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
 
             await redis_conn.hset(
                 name=uniswap_pair_contract_tokens_data.format(pair_address),

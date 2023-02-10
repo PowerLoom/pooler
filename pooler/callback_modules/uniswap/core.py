@@ -15,7 +15,6 @@ from pooler.utils.default_logger import logger
 from pooler.utils.models.data_models import epoch_event_trade_data
 from pooler.utils.models.data_models import event_trade_data
 from pooler.utils.models.data_models import trade_data
-from pooler.utils.redis.redis_conn import provide_async_redis_conn_insta
 from pooler.utils.rpc import get_contract_abi_dict
 from pooler.utils.rpc import get_event_sig_and_abi
 from pooler.utils.rpc import rpc_helper
@@ -26,12 +25,11 @@ from pooler.utils.snapshot_utils import (
 core_logger = logger.bind(module='PowerLoom|UniswapCore')
 
 
-@provide_async_redis_conn_insta
 async def get_pair_reserves(
     pair_address,
     from_block,
     to_block,
-    redis_conn: aioredis.Redis = None,
+    redis_conn: aioredis.Redis,
     fetch_timestamp=False,
 ):
     core_logger.debug(
@@ -103,6 +101,7 @@ async def get_pair_reserves(
         contract_address=pair_address,
         from_block=from_block,
         to_block=to_block,
+        redis_conn=redis_conn,
     )
 
     core_logger.debug(
@@ -288,12 +287,11 @@ def extract_trade_volume_log(
 
 
 # asynchronously get trades on a pair contract
-@provide_async_redis_conn_insta
 async def get_pair_trade_volume(
     data_source_contract_address,
     min_chain_height,
     max_chain_height,
-    redis_conn: aioredis.Redis = None,
+    redis_conn: aioredis.Redis,
     fetch_timestamp=True,
 ):
 
@@ -305,9 +303,9 @@ async def get_pair_trade_volume(
     if fetch_timestamp:
         try:
             block_details_dict = await get_block_details_in_block_range(
-                redis_conn=redis_conn,
                 from_block=min_chain_height,
                 to_block=max_chain_height,
+                redis_conn=redis_conn,
             )
         except Exception as err:
             core_logger.opt(exception=True).error(
@@ -354,6 +352,7 @@ async def get_pair_trade_volume(
             'from_block': min_chain_height,
             'topics': [event_sig],
             'event_abi': event_abi,
+            'redis_conn': redis_conn,
         },
     )
 

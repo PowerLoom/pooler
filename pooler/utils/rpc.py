@@ -1,10 +1,16 @@
+from typing import List
+from typing import Union
+
 import eth_abi
-import httpx
 from async_limits import parse_many as limit_parse_many
 from eth_abi.codec import ABICodec
 from eth_utils import keccak
 from gnosis.eth import EthereumClient
 from hexbytes import HexBytes
+from httpx import AsyncClient
+from httpx import AsyncHTTPTransport
+from httpx import Limits
+from httpx import Timeout
 from tenacity import retry
 from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
@@ -17,7 +23,6 @@ from pooler.utils.default_logger import logger
 from pooler.utils.exceptions import RPCException
 from pooler.utils.redis.rate_limiter import check_rpc_rate_limit
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
-from pooler.utils.redis.redis_conn import provide_async_redis_conn_insta
 
 
 def get_contract_abi_dict(abi):
@@ -39,13 +44,13 @@ def get_contract_abi_dict(abi):
     return abi_dict
 
 
-def get_encoded_function_signature(abi_dict, function_name, params: list = []):
+def get_encoded_function_signature(abi_dict, function_name, params: Union[List, None]):
     """
     get function encoded signature with params
     """
     function_signature = abi_dict.get(function_name)['signature']
     encoded_signature = '0x' + keccak(text=function_signature).hex()[:8]
-    if len(params) > 0:
+    if params:
         encoded_signature += eth_abi.encode_abi(
             abi_dict.get(function_name)['input'],
             params,
@@ -78,9 +83,20 @@ class RpcHelper(object):
         self._rate_limit_lua_script_shas = None
         self._initialized = False
         self._logger = logger.bind(module='PowerLoom|RPCHelper')
+        self._async_transport = AsyncHTTPTransport(
+            limits=Limits(
+                max_connections=100,
+                max_keepalive_connections=50,
+                keepalive_expiry=None,
+            ),
+        )
+        self._client = AsyncClient(
+            timeout=Timeout(timeout=5.0),
+            follow_redirects=False,
+            transport=self._async_transport,
+        )
 
-    @provide_async_redis_conn_insta
-    async def _load_rate_limit_shas(self, redis_conn=None):
+    async def _load_rate_limit_shas(self, redis_conn):
         if self._rate_limit_lua_script_shas is not None:
             return
         self._rate_limit_lua_script_shas = await load_rate_limiter_scripts(
@@ -134,13 +150,12 @@ class RpcHelper(object):
             ),
         )
 
-    @provide_async_redis_conn_insta
-    async def web3_call(self, tasks, redis_conn=None):
+    async def web3_call(self, tasks, redis_conn):
         """
         Call web3 functions in parallel
         """
         if not self._rate_limit_lua_script_shas:
-            self._rate_limit_lua_script_shas = await self._load_rate_limit_shas()
+            self._rate_limit_lua_script_shas = await self._load_rate_limit_shas(redis_conn)
 
         @retry(
             reraise=True,
@@ -159,7 +174,7 @@ class RpcHelper(object):
                 redis_conn=redis_conn,
                 request_payload=[task.fn_name for task in tasks],
                 error_msg={
-                    'msg': 'exhausted_api_key_rate_limit inside batch_eth_call_on_block_range',
+                    'msg': 'exhausted_api_key_rate_limit inside web3_call',
                 },
                 logger=self._logger,
                 rate_limit_lua_script_shas=self._rate_limit_lua_script_shas,
@@ -185,17 +200,16 @@ class RpcHelper(object):
                 raise exc
         return await f()
 
-    @provide_async_redis_conn_insta
     async def batch_eth_call_on_block_range(
         self,
         abi_dict,
         function_name,
         contract_address,
+        redis_conn,
         from_block='latest',
         to_block='latest',
-        params=[],
+        params: Union[List, None] = None,
         from_address=Web3.toChecksumAddress('0x0000000000000000000000000000000000000000'),
-        redis_conn=None,
     ):
         """
         Batch call "single-function" on a contract for given block-range
@@ -203,7 +217,10 @@ class RpcHelper(object):
         RPC_BATCH: for_each_block -> call_function_x
         """
         if not self._rate_limit_lua_script_shas:
-            self._rate_limit_lua_script_shas = await self._load_rate_limit_shas()
+            self._rate_limit_lua_script_shas = await self._load_rate_limit_shas(redis_conn)
+
+        if params is None:
+            params = []
 
         @retry(
             reraise=True,
@@ -230,7 +247,7 @@ class RpcHelper(object):
                             },
                             to_block,
                         ],
-                        'id': '1',
+                        'id': 1,
                     },
                 )
             else:
@@ -248,7 +265,7 @@ class RpcHelper(object):
                                 },
                                 hex(block),
                             ],
-                            'id': f'{request_id}',
+                            'id': request_id,
                         },
                     )
                     request_id += 1
@@ -271,7 +288,7 @@ class RpcHelper(object):
 
             rpc_response = []
             try:
-                response = httpx.post(url=rpc_url, json=rpc_query)
+                response = await self._client.post(url=rpc_url, json=rpc_query)
                 response_data = response.json()
             except Exception as e:
                 exc = RPCException(
@@ -352,15 +369,14 @@ class RpcHelper(object):
 
         return await f()
 
-    @provide_async_redis_conn_insta
-    async def batch_eth_get_block(self, from_block, to_block, redis_conn=None):
+    async def batch_eth_get_block(self, from_block, to_block, redis_conn):
         """
         Batch call "eth_getBlockByNumber" in a range of block numbers
 
         RPC_BATCH: for_each_block -> eth_getBlockByNumber
         """
         if not self._rate_limit_lua_script_shas:
-            self._rate_limit_lua_script_shas = await self._load_rate_limit_shas()
+            self._rate_limit_lua_script_shas = await self._load_rate_limit_shas(redis_conn)
 
         @retry(
             reraise=True,
@@ -382,7 +398,7 @@ class RpcHelper(object):
                             hex(block),
                             True,
                         ],
-                        'id': f'{request_id}',
+                        'id': request_id,
                     },
                 )
                 request_id += 1
@@ -403,7 +419,7 @@ class RpcHelper(object):
                 limit_incr_by=len(rpc_query),
             )
             try:
-                response = httpx.post(url=rpc_url, json=rpc_query)
+                response = await self._client.post(url=rpc_url, json=rpc_query)
                 response_data = response.json()
             except Exception as e:
                 exc = RPCException(
@@ -453,12 +469,11 @@ class RpcHelper(object):
 
         return await f()
 
-    @provide_async_redis_conn_insta
     async def get_events_logs(
-        self, contract_address, to_block, from_block, topics, event_abi, redis_conn=None,
+        self, contract_address, to_block, from_block, topics, event_abi, redis_conn,
     ):
         if not self._rate_limit_lua_script_shas:
-            self._rate_limit_lua_script_shas = await self._load_rate_limit_shas()
+            self._rate_limit_lua_script_shas = await self._load_rate_limit_shas(redis_conn)
 
         @retry(
             reraise=True,

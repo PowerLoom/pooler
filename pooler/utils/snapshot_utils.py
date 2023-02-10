@@ -6,7 +6,6 @@ from redis import asyncio as aioredis
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.file_utils import read_json_file
-from pooler.utils.redis.redis_conn import provide_async_redis_conn_insta
 from pooler.utils.redis.redis_keys import cached_block_details_at_height
 from pooler.utils.redis.redis_keys import uniswap_eth_usd_price_zset
 from pooler.utils.rpc import get_contract_abi_dict
@@ -35,11 +34,10 @@ pair_contract_abi = read_json_file(
 )
 
 
-@provide_async_redis_conn_insta
 async def get_eth_price_usd(
     from_block,
     to_block,
-    redis_conn: aioredis.Redis = None,
+    redis_conn: aioredis.Redis,
 ):
     """
     returns the price of eth in usd at a given block height
@@ -80,6 +78,7 @@ async def get_eth_price_usd(
             contract_address=DAI_WETH_PAIR,
             from_block=from_block,
             to_block=to_block,
+            redis_conn=redis_conn,
         )
         usdc_eth_pair_reserves_list = await rpc_helper.batch_eth_call_on_block_range(
             abi_dict=pair_abi_dict,
@@ -87,6 +86,7 @@ async def get_eth_price_usd(
             contract_address=USDC_WETH_PAIR,
             from_block=from_block,
             to_block=to_block,
+            redis_conn=redis_conn,
         )
         eth_usdt_pair_reserves_list = await rpc_helper.batch_eth_call_on_block_range(
             abi_dict=pair_abi_dict,
@@ -94,6 +94,7 @@ async def get_eth_price_usd(
             contract_address=USDT_WETH_PAIR,
             from_block=from_block,
             to_block=to_block,
+            redis_conn=redis_conn,
         )
 
         block_count = 0
@@ -175,11 +176,10 @@ async def get_eth_price_usd(
         raise err
 
 
-@provide_async_redis_conn_insta
 async def get_block_details_in_block_range(
     from_block,
     to_block,
-    redis_conn: aioredis.Redis = None,
+    redis_conn: aioredis.Redis,
 ):
     """
     Fetch block-details for a range of block number or a single block
@@ -209,7 +209,7 @@ async def get_block_details_in_block_range(
                 }
                 return cached_details
 
-        rpc_batch_block_details = await rpc_helper.batch_eth_get_block(from_block, to_block)
+        rpc_batch_block_details = await rpc_helper.batch_eth_get_block(from_block, to_block, redis_conn)
 
         rpc_batch_block_details = (
             rpc_batch_block_details if rpc_batch_block_details else []
@@ -260,7 +260,7 @@ async def get_block_details_in_block_range(
 async def warm_up_cache_for_snapshot_constructors(
     from_block,
     to_block,
-    redis_conn: aioredis.Redis = None,
+    redis_conn: aioredis.Redis,
 ):
     """
     This function warm-up cache for uniswap helper functions. Generated cache will be used across
@@ -272,10 +272,12 @@ async def warm_up_cache_for_snapshot_constructors(
         get_eth_price_usd(
             from_block=from_block,
             to_block=to_block,
+            redis_conn=redis_conn,
         ),
         get_block_details_in_block_range(
             from_block=from_block,
             to_block=to_block,
+            redis_conn=redis_conn,
         ),
         return_exceptions=True,
     )

@@ -33,6 +33,7 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
             data_source_contract_address=data_source_contract_address,
             min_chain_height=min_chain_height,
             max_chain_height=max_chain_height,
+            redis_conn=self._redis_conn,
         )
         return result
 
