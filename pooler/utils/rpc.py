@@ -524,6 +524,14 @@ class RpcHelper(object):
                 event_log = web3_provider.eth.get_logs(
                     event_log_query,
                 )
+                codec: ABICodec = web3_provider.codec
+                all_events = []
+                for log in event_log:
+                    abi = event_abi.get(log.topics[0].hex(), '')
+                    evt = get_event_data(codec, abi, log)
+                    all_events.append(evt)
+
+                return all_events
             except Exception as e:
                 exc = RPCException(
                     request={
@@ -538,15 +546,6 @@ class RpcHelper(object):
                 )
                 self._logger.trace('Error in get_events_logs, error {}', str(exc))
                 raise exc
-
-            codec: ABICodec = web3_provider.codec
-            all_events = []
-            for log in event_log:
-                abi = event_abi.get(log.topics[0].hex(), '')
-                evt = get_event_data(codec, abi, log)
-                all_events.append(evt)
-
-            return all_events
 
         return await f()
 
