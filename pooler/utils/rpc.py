@@ -3,6 +3,9 @@ from typing import List
 from typing import Union
 
 import eth_abi
+from aiohttp import ClientSession
+from aiohttp import ClientTimeout
+from aiohttp import TCPConnector
 from async_limits import parse_many as limit_parse_many
 from eth_abi.codec import ABICodec
 from eth_utils import keccak
@@ -92,6 +95,8 @@ class RpcHelper(object):
         self._client = None
         self._async_transport = None
         self._rate_limit_lua_script_shas = None
+        self._aiohttp_tcp_connector = None
+        self._web3_aiohttp_client = None
 
     async def _load_rate_limit_shas(self, redis_conn):
         if self._rate_limit_lua_script_shas is not None:
@@ -115,6 +120,16 @@ class RpcHelper(object):
             follow_redirects=False,
             transport=self._async_transport,
         )
+        if self._aiohttp_tcp_connector is not None:
+            return
+        self._aiohttp_tcp_connector = TCPConnector(
+            keepalive_timeout=300,
+            limit=1000,
+        )
+        self._web3_aiohttp_client = ClientSession(
+            connector=self._aiohttp_tcp_connector,
+            timeout=ClientTimeout(total=settings.rpc.request_time_out),
+        )
 
     async def _load_async_web3_providers(self):
         for node in self._nodes:
@@ -125,6 +140,7 @@ class RpcHelper(object):
                 modules={'eth': (AsyncEth,)},
                 middlewares=[],
             )
+            await node['web3_client_async'].provider.cache_async_session(self._web3_aiohttp_client)
 
     async def init(self, redis_conn):
         if not self._sync_nodes_initialized:
