@@ -34,6 +34,7 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
             min_chain_height=min_chain_height,
             max_chain_height=max_chain_height,
             redis_conn=self._redis_conn,
+            rpc_helper=self._rpc_helper,
         )
         return result
 

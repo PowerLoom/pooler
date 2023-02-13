@@ -3,10 +3,12 @@ from web3 import Web3
 from ..settings.config import settings as worker_settings
 from pooler.utils.default_logger import logger
 from pooler.utils.file_utils import read_json_file
-from pooler.utils.rpc import rpc_helper
+from pooler.utils.rpc import RpcHelper
 
 constants_logger = logger.bind(module='PowerLoom|Uniswap|Constants')
 # Getting current node
+
+rpc_helper = RpcHelper()
 current_node = rpc_helper.get_current_node()
 
 # LOAD ABIs

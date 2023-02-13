@@ -17,7 +17,7 @@ from pooler.utils.models.data_models import event_trade_data
 from pooler.utils.models.data_models import trade_data
 from pooler.utils.rpc import get_contract_abi_dict
 from pooler.utils.rpc import get_event_sig_and_abi
-from pooler.utils.rpc import rpc_helper
+from pooler.utils.rpc import RpcHelper
 from pooler.utils.snapshot_utils import (
     get_block_details_in_block_range,
 )
@@ -30,6 +30,7 @@ async def get_pair_reserves(
     from_block,
     to_block,
     redis_conn: aioredis.Redis,
+    rpc_helper: RpcHelper,
     fetch_timestamp=False,
 ):
     core_logger.debug(
@@ -43,6 +44,7 @@ async def get_pair_reserves(
                 from_block,
                 to_block,
                 redis_conn=redis_conn,
+                rpc_helper=rpc_helper,
             )
         except Exception as err:
             core_logger.opt(exception=True).error(
@@ -61,6 +63,7 @@ async def get_pair_reserves(
     pair_per_token_metadata = await get_pair_metadata(
         pair_address=pair_address,
         redis_conn=redis_conn,
+        rpc_helper=rpc_helper,
     )
 
     core_logger.debug(
@@ -76,6 +79,7 @@ async def get_pair_reserves(
             from_block=from_block,
             to_block=to_block,
             redis_conn=redis_conn,
+            rpc_helper=rpc_helper,
             debug_log=False,
         ),
         get_token_price_in_block_range(
@@ -83,6 +87,7 @@ async def get_pair_reserves(
             from_block=from_block,
             to_block=to_block,
             redis_conn=redis_conn,
+            rpc_helper=rpc_helper,
             debug_log=False,
         ),
     )
@@ -292,6 +297,7 @@ async def get_pair_trade_volume(
     min_chain_height,
     max_chain_height,
     redis_conn: aioredis.Redis,
+    rpc_helper: RpcHelper,
     fetch_timestamp=True,
 ):
 
@@ -306,6 +312,7 @@ async def get_pair_trade_volume(
                 from_block=min_chain_height,
                 to_block=max_chain_height,
                 redis_conn=redis_conn,
+                rpc_helper=rpc_helper,
             )
         except Exception as err:
             core_logger.opt(exception=True).error(
@@ -321,6 +328,7 @@ async def get_pair_trade_volume(
     pair_per_token_metadata = await get_pair_metadata(
         pair_address=data_source_contract_address,
         redis_conn=redis_conn,
+        rpc_helper=rpc_helper,
     )
     token0_price_map, token1_price_map = await asyncio.gather(
         get_token_price_in_block_range(
@@ -328,6 +336,7 @@ async def get_pair_trade_volume(
             from_block=min_chain_height,
             to_block=max_chain_height,
             redis_conn=redis_conn,
+            rpc_helper=rpc_helper,
             debug_log=False,
         ),
         get_token_price_in_block_range(
@@ -335,6 +344,7 @@ async def get_pair_trade_volume(
             from_block=min_chain_height,
             to_block=max_chain_height,
             redis_conn=redis_conn,
+            rpc_helper=rpc_helper,
             debug_log=False,
         ),
     )

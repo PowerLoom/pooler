@@ -9,12 +9,10 @@ from pooler.utils.file_utils import read_json_file
 from pooler.utils.redis.redis_keys import cached_block_details_at_height
 from pooler.utils.redis.redis_keys import uniswap_eth_usd_price_zset
 from pooler.utils.rpc import get_contract_abi_dict
-from pooler.utils.rpc import rpc_helper
+from pooler.utils.rpc import RpcHelper
 
 
 snapshot_util_logger = logger.bind(module='PowerLoom|Uniswap|SnapshotUtilLogger')
-
-current_node = rpc_helper.get_current_node()
 
 DAI_WETH_PAIR = '0xa478c2975ab1ea89e8196811f51a7b7ade33eb11'
 USDC_WETH_PAIR = '0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc'
@@ -38,6 +36,7 @@ async def get_eth_price_usd(
     from_block,
     to_block,
     redis_conn: aioredis.Redis,
+    rpc_helper: RpcHelper,
 ):
     """
     returns the price of eth in usd at a given block height
@@ -180,6 +179,7 @@ async def get_block_details_in_block_range(
     from_block,
     to_block,
     redis_conn: aioredis.Redis,
+    rpc_helper: RpcHelper,
 ):
     """
     Fetch block-details for a range of block number or a single block
@@ -261,6 +261,7 @@ async def warm_up_cache_for_snapshot_constructors(
     from_block,
     to_block,
     redis_conn: aioredis.Redis,
+    rpc_helper: RpcHelper,
 ):
     """
     This function warm-up cache for uniswap helper functions. Generated cache will be used across
@@ -273,11 +274,13 @@ async def warm_up_cache_for_snapshot_constructors(
             from_block=from_block,
             to_block=to_block,
             redis_conn=redis_conn,
+            rpc_helper=rpc_helper,
         ),
         get_block_details_in_block_range(
             from_block=from_block,
             to_block=to_block,
             redis_conn=redis_conn,
+            rpc_helper=rpc_helper,
         ),
         return_exceptions=True,
     )

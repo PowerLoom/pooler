@@ -83,7 +83,7 @@ class RpcHelper(object):
         self._rate_limit_lua_script_shas = None
         self._nodes_initialized = False
         self._initialized = False
-        self._logger = logger.bind(module='PowerLoom|RPCHelper')
+        self._logger = logger.bind(module='PowerLoom|RpcHelper')
         self._client = None
         self._async_transport = None
         self._rate_limit_lua_script_shas = None
@@ -548,6 +548,3 @@ class RpcHelper(object):
                 raise exc
 
         return await f()
-
-
-rpc_helper = RpcHelper()

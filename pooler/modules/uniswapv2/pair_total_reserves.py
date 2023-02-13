@@ -46,6 +46,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                 from_block=min_chain_height,
                 to_block=max_chain_height,
                 redis_conn=self._redis_conn,
+                rpc_helper=self._rpc_helper,
                 fetch_timestamp=True,
             )
         except Exception as exc:

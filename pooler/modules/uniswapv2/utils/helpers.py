@@ -11,7 +11,7 @@ from .constants import current_node
 from .constants import erc20_abi
 from .constants import pair_contract_abi
 from pooler.utils.default_logger import logger
-from pooler.utils.rpc import rpc_helper
+from pooler.utils.rpc import RpcHelper
 
 
 helper_logger = logger.bind(module='PowerLoom|Uniswap|Helpers')
@@ -32,6 +32,7 @@ async def get_pair(
     token0,
     token1,
     redis_conn: aioredis.Redis,
+    rpc_helper: RpcHelper,
 ):
     # check if pair cache exists
     pair_address_cache = await redis_conn.hget(
@@ -67,6 +68,7 @@ async def get_pair(
 async def get_pair_metadata(
     pair_address,
     redis_conn: aioredis.Redis,
+    rpc_helper: RpcHelper,
 ):
     """
     returns information on the tokens contained within a pair contract - name, symbol, decimals of token0 and token1

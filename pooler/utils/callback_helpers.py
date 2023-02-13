@@ -49,7 +49,7 @@ from pooler.utils.redis.redis_keys import (
 )
 from pooler.utils.redis.redis_keys import discarded_query_epochs_redis_q
 from pooler.utils.redis.redis_keys import failed_query_epochs_redis_q
-
+from pooler.utils.rpc import RpcHelper
 # setup logger
 helper_logger = logger.bind(module='PowerLoom|Callback|Helpers')
 
@@ -172,6 +172,7 @@ class CallbackAsyncWorker(multiprocessing.Process, ABC):
         self._client = None
         self._async_transport = None
         self._shutdown_signal_received_count = 0
+        self._rpc_helper = None
 
     @abstractproperty
     def _snapshot_name(self):
@@ -745,9 +746,15 @@ class CallbackAsyncWorker(multiprocessing.Process, ABC):
             transport=self._async_transport,
         )
 
+    async def _init_rpc_helper(self):
+        if self._rpc_helper is not None:
+            return
+        self._rpc_helper = RpcHelper()
+
     async def init(self):
         await self._init_redis_pool()
         await self._init_httpx_client()
+        await self._init_rpc_helper()
 
     def run(self) -> None:
         setproctitle(self._unique_id)

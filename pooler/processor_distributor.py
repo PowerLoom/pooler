@@ -23,6 +23,7 @@ from pooler.utils.redis.redis_conn import RedisPoolCache
 from pooler.utils.redis.redis_keys import (
     cb_broadcast_processing_logs_zset,
 )
+from pooler.utils.rpc import RpcHelper
 from pooler.utils.snapshot_utils import warm_up_cache_for_snapshot_constructors
 
 
@@ -35,12 +36,17 @@ class ProcessorDistributor(multiprocessing.Process):
         self._shutdown_initiated = False
         self._redis_conn = None
         self._aioredis_pool = None
+        self._rpc_helper = None
 
-    async def init_redis_pool(self):
+    async def _init_redis_pool(self):
         if not self._aioredis_pool:
             self._aioredis_pool = RedisPoolCache()
             await self._aioredis_pool.populate()
             self._redis_conn = self._aioredis_pool._aioredis_pool
+
+    async def _init_rpc_helper(self):
+        if not self._rpc_helper:
+            self._rpc_helper = RpcHelper()
 
     async def _warm_up_cache_for_epoch_data(
         self, msg_obj: PowerloomCallbackProcessMessage,
@@ -50,7 +56,10 @@ class ProcessorDistributor(multiprocessing.Process):
         and/or for internal helper functions.
         """
         if not self._redis_conn:
-            await self.init_redis_pool()
+            await self._init_redis_pool()
+        if not self._rpc_helper:
+            await self._init_rpc_helper()
+
         try:
             max_chain_height = msg_obj.end
             min_chain_height = msg_obj.begin
@@ -58,6 +67,7 @@ class ProcessorDistributor(multiprocessing.Process):
                 from_block=min_chain_height,
                 to_block=max_chain_height,
                 redis_conn=self._redis_conn,
+                rpc_helper=self._rpc_helper,
             )
 
         except Exception as exc:

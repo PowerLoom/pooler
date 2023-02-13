@@ -15,7 +15,7 @@ from .helpers import get_pair
 from .helpers import get_pair_metadata
 from pooler.utils.default_logger import logger
 from pooler.utils.rpc import get_contract_abi_dict
-from pooler.utils.rpc import rpc_helper
+from pooler.utils.rpc import RpcHelper
 from pooler.utils.snapshot_utils import get_eth_price_usd
 
 pricing_logger = logger.bind(module='PowerLoom|Uniswap|Pricing')
@@ -28,6 +28,7 @@ async def get_token_pair_price_and_white_token_reserves(
     pair_metadata,
     white_token,
     redis_conn,
+    rpc_helper: RpcHelper,
 ):
     """
     Function to get:
@@ -107,6 +108,7 @@ async def get_token_derived_eth(
     to_block,
     white_token_metadata,
     redis_conn,
+    rpc_helper: RpcHelper,
 ):
     token_derived_eth_dict = dict()
 
@@ -173,6 +175,7 @@ async def get_token_price_in_block_range(
     from_block,
     to_block,
     redis_conn: aioredis.Redis,
+    rpc_helper: RpcHelper,
     debug_log=True,
 ):
     """
@@ -212,6 +215,7 @@ async def get_token_price_in_block_range(
                 from_block=from_block,
                 to_block=to_block,
                 redis_conn=redis_conn,
+                rpc_helper=rpc_helper,
             )
         else:
             token_eth_price_dict = dict()
@@ -223,11 +227,13 @@ async def get_token_price_in_block_range(
                     white_token,
                     token_metadata['address'],
                     redis_conn,
+                    rpc_helper,
                 )
                 if pairAddress != '0x0000000000000000000000000000000000000000':
                     new_pair_metadata = await get_pair_metadata(
                         pair_address=pairAddress,
                         redis_conn=redis_conn,
+                        rpc_helper=rpc_helper,
                     )
                     white_token_metadata = (
                         new_pair_metadata['token0']
@@ -245,12 +251,14 @@ async def get_token_price_in_block_range(
                         pair_metadata=new_pair_metadata,
                         white_token=white_token,
                         redis_conn=redis_conn,
+                        rpc_helper=rpc_helper,
                     )
                     white_token_derived_eth_dict = await get_token_derived_eth(
                         from_block=from_block,
                         to_block=to_block,
                         white_token_metadata=white_token_metadata,
                         redis_conn=redis_conn,
+                        rpc_helper=rpc_helper,
                     )
 
                     less_than_minimum_liquidity = False
@@ -285,6 +293,7 @@ async def get_token_price_in_block_range(
                     from_block=from_block,
                     to_block=to_block,
                     redis_conn=redis_conn,
+                    rpc_helper=rpc_helper,
                 )
                 for block_num in range(from_block, to_block + 1):
                     token_price_dict[block_num] = token_eth_price_dict.get(
