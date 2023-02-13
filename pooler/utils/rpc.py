@@ -1,3 +1,4 @@
+import asyncio
 from typing import List
 from typing import Union
 
@@ -5,7 +6,6 @@ import eth_abi
 from async_limits import parse_many as limit_parse_many
 from eth_abi.codec import ABICodec
 from eth_utils import keccak
-from gnosis.eth import EthereumClient
 from hexbytes import HexBytes
 from httpx import AsyncClient
 from httpx import AsyncHTTPTransport
@@ -16,7 +16,12 @@ from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
 from web3 import Web3
+from web3._utils.abi import map_abi_data
 from web3._utils.events import get_event_data
+from web3._utils.normalizers import BASE_RETURN_NORMALIZERS
+from web3.eth import AsyncEth
+from web3.types import TxParams
+from web3.types import Wei
 
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
@@ -81,8 +86,8 @@ class RpcHelper(object):
         self._current_node_index = -1
         self._node_count = 0
         self._rate_limit_lua_script_shas = None
-        self._nodes_initialized = False
         self._initialized = False
+        self._sync_nodes_initialized = False
         self._logger = logger.bind(module='PowerLoom|RpcHelper')
         self._client = None
         self._async_transport = None
@@ -95,7 +100,7 @@ class RpcHelper(object):
             redis_conn,
         )
 
-    async def _init_httpx_client(self):
+    async def _init_http_clients(self):
         if self._client is not None:
             return
         self._async_transport = AsyncHTTPTransport(
@@ -111,9 +116,23 @@ class RpcHelper(object):
             transport=self._async_transport,
         )
 
+    async def _load_async_web3_providers(self):
+        for node in self._nodes:
+            if node['web3_client_async'] is not None:
+                continue
+            node['web3_client_async'] = Web3(
+                Web3.AsyncHTTPProvider(node['rpc_url']),
+                modules={'eth': (AsyncEth,)},
+                middlewares=[],
+            )
+
     async def init(self, redis_conn):
+        if not self._sync_nodes_initialized:
+            self._load_web3_providers_and_rate_limits()
+            self._sync_nodes_initialized = True
         await self._load_rate_limit_shas(redis_conn)
-        await self._init_httpx_client()
+        await self._init_http_clients()
+        await self._load_async_web3_providers()
         self._initialized = True
 
     def _load_web3_providers_and_rate_limits(self):
@@ -126,7 +145,8 @@ class RpcHelper(object):
             try:
                 self._nodes.append(
                     {
-                        'web3_client': EthereumClient(node.url),
+                        'web3_client': Web3(Web3.HTTPProvider(node.url)),
+                        'web3_client_async': None,
                         'rate_limit': limit_parse_many(node.rate_limit),
                         'rpc_url': node.url,
                     },
@@ -145,9 +165,9 @@ class RpcHelper(object):
             self._node_count = len(self._nodes)
 
     def get_current_node(self):
-        if not self._nodes_initialized:
+        if not self._sync_nodes_initialized:
             self._load_web3_providers_and_rate_limits()
-            self._nodes_initialized = True
+            self._sync_nodes_initialized = True
 
         if self._current_node_index == -1:
             raise Exception('No full nodes available')
@@ -163,12 +183,8 @@ class RpcHelper(object):
             ),
         )
 
-    async def web3_call(self, tasks, redis_conn):
-        """
-        Call web3 functions in parallel
-        """
-        if not self._initialized:
-            await self.init(redis_conn)
+    async def _async_web3_call(self, contract_function, redis_conn, from_address=None):
+        """Make async web3 call"""
 
         @retry(
             reraise=True,
@@ -178,27 +194,59 @@ class RpcHelper(object):
             before_sleep=self._on_node_exception,
         )
         async def f():
-            node = self.get_current_node()
-            rpc_url = node.get('rpc_url')
-
-            await check_rpc_rate_limit(
-                parsed_limits=node.get('rate_limit', []),
-                app_id=rpc_url.split('/')[-1],
-                redis_conn=redis_conn,
-                request_payload=[task.fn_name for task in tasks],
-                error_msg={
-                    'msg': 'exhausted_api_key_rate_limit inside web3_call',
-                },
-                logger=self._logger,
-                rate_limit_lua_script_shas=self._rate_limit_lua_script_shas,
-                limit_incr_by=len(tasks),
-            )
             try:
-                response = node['web3_client'].batch_call(tasks)
-                return response
+
+                node = self.get_current_node()
+                rpc_url = node.get('rpc_url')
+
+                await check_rpc_rate_limit(
+                    parsed_limits=node.get('rate_limit', []),
+                    app_id=rpc_url.split('/')[-1],
+                    redis_conn=redis_conn,
+                    request_payload=contract_function.fn_name,
+                    error_msg={
+                        'msg': 'exhausted_api_key_rate_limit inside web3_call',
+                    },
+                    logger=self._logger,
+                    rate_limit_lua_script_shas=self._rate_limit_lua_script_shas,
+                    limit_incr_by=1,
+                )
+                params: TxParams = {'gas': Wei(0), 'gasPrice': Wei(0)}
+
+                if not contract_function.address:
+                    raise ValueError(
+                        f'Missing address for batch_call in `{contract_function.fn_name}`',
+                    )
+
+                output_type = [
+                    output['type'] for output in contract_function.abi['outputs']
+                ]
+                payload = {
+                    'to': contract_function.address,
+                    'data': contract_function.build_transaction(params)['data'],
+                    'output_type': output_type,
+                    'fn_name': contract_function.fn_name,  # For debugging purposes
+                }
+                if from_address:
+                    payload['from'] = from_address
+
+                data = await node['web3_client_async'].eth.call(payload)
+
+                decoded_data = node['web3_client_async'].codec.decode_abi(
+                    output_type, HexBytes(data),
+                )
+
+                normalized_data = map_abi_data(
+                    BASE_RETURN_NORMALIZERS, output_type, decoded_data,
+                )
+
+                if len(normalized_data) == 1:
+                    return normalized_data[0]
+                else:
+                    return normalized_data
             except Exception as e:
                 exc = RPCException(
-                    request=[task.fn_name for task in tasks],
+                    request=[contract_function.fn_name],
                     response=None,
                     underlying_exception=e,
                     extra_info={'msg': str(e)},
@@ -211,7 +259,26 @@ class RpcHelper(object):
                     err=lambda: str(exc),
                 )
                 raise exc
+
         return await f()
+
+    async def web3_call(self, tasks, redis_conn, from_address=None):
+        """
+        Call web3 functions in parallel
+        """
+        if not self._initialized:
+            await self.init(redis_conn)
+
+        try:
+            web3_tasks = [
+                self._async_web3_call(
+                    contract_function=task, redis_conn=redis_conn, from_address=from_address,
+                ) for task in tasks
+            ]
+            response = await asyncio.gather(*web3_tasks)
+            return response
+        except Exception as e:
+            raise e
 
     async def batch_eth_call_on_block_range(
         self,
@@ -499,7 +566,7 @@ class RpcHelper(object):
             node = self.get_current_node()
             rpc_url = node.get('rpc_url')
 
-            web3_provider = node['web3_client'].w3
+            web3_provider = node['web3_client_async']
 
             event_log_query = {
                 'address': Web3.toChecksumAddress(contract_address),
@@ -521,7 +588,7 @@ class RpcHelper(object):
             )
             try:
 
-                event_log = web3_provider.eth.get_logs(
+                event_log = await web3_provider.eth.get_logs(
                     event_log_query,
                 )
                 codec: ABICodec = web3_provider.codec

@@ -1,3 +1,5 @@
+import time
+
 from .utils.core import get_pair_trade_volume
 from pooler.settings.config import settings
 from pooler.utils.callback_helpers import CallbackAsyncWorker
@@ -29,6 +31,7 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
         max_chain_height: int,
         data_source_contract_address: str,
     ):
+        self._logger.debug(f'trade volume {data_source_contract_address}, computation init time {int(time.time())}')
         result = await get_pair_trade_volume(
             data_source_contract_address=data_source_contract_address,
             min_chain_height=min_chain_height,
@@ -36,6 +39,7 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
             redis_conn=self._redis_conn,
             rpc_helper=self._rpc_helper,
         )
+        self._logger.debug(f'trade volume {data_source_contract_address}, computation end time {int(time.time())}')
         return result
 
     def transform_processed_epoch_to_trade_volume(

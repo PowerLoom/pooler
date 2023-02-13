@@ -102,7 +102,7 @@ class ProcessorDistributor(multiprocessing.Process):
                 'Unexpected message format of epoch callback',
             )
             return
-
+        self._logger.debug(f'Epoch Distribution time - {int(time.time())}')
         # warm-up cache before constructing snapshots
         self.ev_loop.run_until_complete(
             self._warm_up_cache_for_epoch_data(msg_obj=msg_obj),

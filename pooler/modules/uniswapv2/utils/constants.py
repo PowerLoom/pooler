@@ -35,31 +35,31 @@ factory_contract_abi = read_json_file(
 
 
 # Init Uniswap V2 Core contract Objects
-router_contract_obj = current_node['web3_client'].w3.eth.contract(
+router_contract_obj = current_node['web3_client'].eth.contract(
     address=Web3.toChecksumAddress(
         worker_settings.contract_addresses.iuniswap_v2_router,
     ),
     abi=router_contract_abi,
 )
-factory_contract_obj = current_node['web3_client'].w3.eth.contract(
+factory_contract_obj = current_node['web3_client'].eth.contract(
     address=Web3.toChecksumAddress(
         worker_settings.contract_addresses.iuniswap_v2_factory,
     ),
     abi=factory_contract_abi,
 )
-dai_eth_contract_obj = current_node['web3_client'].w3.eth.contract(
+dai_eth_contract_obj = current_node['web3_client'].eth.contract(
     address=Web3.toChecksumAddress(
         worker_settings.contract_addresses.DAI_WETH_PAIR,
     ),
     abi=pair_contract_abi,
 )
-usdc_eth_contract_obj = current_node['web3_client'].w3.eth.contract(
+usdc_eth_contract_obj = current_node['web3_client'].eth.contract(
     address=Web3.toChecksumAddress(
         worker_settings.contract_addresses.USDC_WETH_PAIR,
     ),
     abi=pair_contract_abi,
 )
-eth_usdt_contract_obj = current_node['web3_client'].w3.eth.contract(
+eth_usdt_contract_obj = current_node['web3_client'].eth.contract(
     address=Web3.toChecksumAddress(
         worker_settings.contract_addresses.USDT_WETH_PAIR,
     ),

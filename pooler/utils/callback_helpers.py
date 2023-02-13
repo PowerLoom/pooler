@@ -452,10 +452,11 @@ class CallbackAsyncWorker(multiprocessing.Process, ABC):
                     self._logger.debug(
                         (
                             'Sent snapshot to audit protocol payload commit'
-                            ' service: {} | Response: {}'
+                            ' service: {} | Response: {}, Time: {}'
                         ),
                         commit_payload,
                         r,
+                        int(time.time()),
                     )
                     update_log = {
                         'worker': self._unique_id,

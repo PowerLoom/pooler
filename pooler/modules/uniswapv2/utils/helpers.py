@@ -101,7 +101,7 @@ async def get_pair_metadata(
                 pair_token_addresses_cache[b'token1Addr'].decode('utf-8'),
             )
         else:
-            pair_contract_obj = current_node['web3_client'].w3.eth.contract(
+            pair_contract_obj = current_node['web3_client'].eth.contract(
                 address=Web3.toChecksumAddress(pair_address),
                 abi=pair_contract_abi,
             )
@@ -124,12 +124,12 @@ async def get_pair_metadata(
             )
 
         # token0 contract
-        token0 = current_node['web3_client'].w3.eth.contract(
+        token0 = current_node['web3_client'].eth.contract(
             address=Web3.toChecksumAddress(token0Addr),
             abi=erc20_abi,
         )
         # token1 contract
-        token1 = current_node['web3_client'].w3.eth.contract(
+        token1 = current_node['web3_client'].eth.contract(
             address=Web3.toChecksumAddress(token1Addr),
             abi=erc20_abi,
         )

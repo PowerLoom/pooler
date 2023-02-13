@@ -41,6 +41,7 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         try:
             # TODO: web3 object should be available within callback worker instance
             #  instead of being a global object in uniswap functions module. Not a good design pattern.
+            self._logger.debug(f'pair reserves {data_source_contract_address} computation init time {int(time.time())}')
             pair_reserve_total = await get_pair_reserves(
                 pair_address=data_source_contract_address,
                 from_block=min_chain_height,
@@ -106,4 +107,6 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                     'contract': data_source_contract_address,
                 },
             )
+            self._logger.debug(f'pair reserves {data_source_contract_address}, computation end time {int(time.time())}')
+
             return pair_total_reserves_snapshot

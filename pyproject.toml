@@ -21,7 +21,6 @@ loguru = "^0.6.0"
 aiohttp = "^3.8.3"
 fastapi = "^0.88.0"
 web3 = "^5.31.3"
-gnosis-py = "^3.9.5"
 async-limits = {git = "https://github.com/powerloom/limits.git"}
 tenacity = "^8.1.0"
 greenletio = "^0.9.0"
