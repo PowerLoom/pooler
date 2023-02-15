@@ -44,35 +44,33 @@ class EpochCallbackManager(Process):
             f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}'
         )
         with create_redis_conn(self._connection_pool) as r:
-            for type_ in self._project_types:
-                # send epoch context to third party worker modules as registered
-                self._logger.debug(f'XAA{self._project_types}, {type_}')
-                routing_key = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.{type_}'
-                self.rabbitmq_interactor.enqueue_msg_delivery(
-                    exchange=callback_exchange_name,
-                    routing_key=routing_key,
-                    msg_body=json.dumps(broadcast_json),
-                )
-                self._logger.debug(
-                    f'Sent epoch to callback routing key {routing_key}: {body}',
-                )
-                update_log = {
-                    'worker': 'EpochCallbackManager',
-                    'update': {
-                        'action': 'CallbackQueue.Publish',
-                        'info': {
-                            'routing_key': routing_key,
-                            'exchange': callback_exchange_name,
-                            'msg': broadcast_json,
-                        },
+            # send epoch context to third party worker modules as registered
+            routing_key = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.task'
+            self.rabbitmq_interactor.enqueue_msg_delivery(
+                exchange=callback_exchange_name,
+                routing_key=routing_key,
+                msg_body=json.dumps(broadcast_json),
+            )
+            self._logger.debug(
+                f'Sent epoch to callback routing key {routing_key}: {body}',
+            )
+            update_log = {
+                'worker': 'EpochCallbackManager',
+                'update': {
+                    'action': 'CallbackQueue.Publish',
+                    'info': {
+                        'routing_key': routing_key,
+                        'exchange': callback_exchange_name,
+                        'msg': broadcast_json,
                     },
-                }
-                r.zadd(
-                    cb_broadcast_processing_logs_zset.format(
-                        broadcast_json['broadcast_id'],
-                    ),
-                    {json.dumps(update_log): int(time.time())},
-                )
+                },
+            }
+            r.zadd(
+                cb_broadcast_processing_logs_zset.format(
+                    broadcast_json['broadcast_id'],
+                ),
+                {json.dumps(update_log): int(time.time())},
+            )
 
             r.zadd(
                 powerloom_broadcast_id_zset,

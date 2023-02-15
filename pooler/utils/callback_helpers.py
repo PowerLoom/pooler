@@ -275,7 +275,7 @@ class CallbackAsyncWorker(multiprocessing.Process, ABC):
     async def _processor_task(self, msg_obj: PowerloomCallbackProcessMessage):
         """Function used to process the received message object."""
         self._logger.debug(
-            'Processing total pair reserves callback: {}', msg_obj,
+            'Processing callback: {}', msg_obj,
         )
 
         self_unique_id = str(uuid4())
@@ -283,7 +283,7 @@ class CallbackAsyncWorker(multiprocessing.Process, ABC):
             asyncio.get_running_loop(),
         )
         cur_task.set_name(
-            f'aio_pika.consumer|PairTotalReservesProcessor|{msg_obj.contract}',
+            f'aio_pika.consumer|Processor|{self._stream}|{msg_obj.contract}',
         )
         self._running_callback_tasks[self_unique_id] = cur_task
 
@@ -294,8 +294,8 @@ class CallbackAsyncWorker(multiprocessing.Process, ABC):
                 self._redis_conn,
             )
         self._logger.debug(
-            'Got epoch to process for calculating total reserves for pair: {}',
-            msg_obj,
+            'Got epoch to process for {}: {}',
+            self._stream, msg_obj,
         )
 
         # check for enqueued failed query epochs

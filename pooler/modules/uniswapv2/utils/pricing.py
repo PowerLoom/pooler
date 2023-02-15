@@ -1,10 +1,17 @@
+import asyncio
 import json
 
 from redis import asyncio as aioredis
 from web3 import Web3
 
 from ..redis_keys import (
+    uinswap_token_pair_contract_mapping,
+)
+from ..redis_keys import (
     uniswap_pair_cached_block_height_token_price,
+)
+from ..redis_keys import (
+    uniswap_token_derived_eth_cached_block_height,
 )
 from ..settings.config import settings as worker_settings
 from .constants import factory_contract_obj
@@ -13,6 +20,7 @@ from .constants import router_contract_abi
 from .constants import tokens_decimals
 from .helpers import get_pair
 from .helpers import get_pair_metadata
+from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.rpc import get_contract_abi_dict
 from pooler.utils.rpc import RpcHelper
@@ -106,21 +114,42 @@ async def get_token_pair_price_and_white_token_reserves(
 async def get_token_derived_eth(
     from_block,
     to_block,
-    white_token_metadata,
+    token_metadata,
     redis_conn,
     rpc_helper: RpcHelper,
 ):
     token_derived_eth_dict = dict()
-
-    if Web3.toChecksumAddress(
-        white_token_metadata['address'],
-    ) == Web3.toChecksumAddress(worker_settings.contract_addresses.WETH):
+    token_address = Web3.toChecksumAddress(
+        token_metadata['address'],
+    )
+    if token_address == Web3.toChecksumAddress(worker_settings.contract_addresses.WETH):
         # set derived eth as 1 if token is weth
         for block_num in range(from_block, to_block + 1):
             token_derived_eth_dict[block_num] = 1
 
         return token_derived_eth_dict
 
+    cached_derived_eth_dict = await redis_conn.zrangebyscore(
+        name=uniswap_token_derived_eth_cached_block_height.format(
+            token_address,
+        ),
+        min=int(from_block),
+        max=int(to_block),
+    )
+    if cached_derived_eth_dict and len(cached_derived_eth_dict) == to_block - (
+        from_block - 1
+    ):
+        token_derived_eth_dict = {
+            json.loads(
+                price.decode(
+                    'utf-8',
+                ),
+            )[
+                'blockHeight'
+            ]: json.loads(price.decode('utf-8'))['price']
+            for price in cached_derived_eth_dict
+        }
+        return token_derived_eth_dict
     # get white
     router_abi_dict = get_contract_abi_dict(router_contract_abi)
     token_derived_eth_list = await rpc_helper.batch_eth_call_on_block_range(
@@ -131,9 +160,9 @@ async def get_token_derived_eth(
         to_block=to_block,
         redis_conn=redis_conn,
         params=[
-            10 ** int(white_token_metadata['decimals']),
+            10 ** int(token_metadata['decimals']),
             [
-                Web3.toChecksumAddress(white_token_metadata['address']),
+                Web3.toChecksumAddress(token_metadata['address']),
                 Web3.toChecksumAddress(worker_settings.contract_addresses.WETH),
             ],
         ],
@@ -167,6 +196,34 @@ async def get_token_derived_eth(
         )
         index += 1
 
+    if (
+        len(token_derived_eth_dict) > 0
+    ):
+        redis_cache_mapping = {
+            json.dumps({'blockHeight': height, 'price': price}): int(
+                height,
+            )
+            for height, price in token_derived_eth_dict.items()
+        }
+
+        await asyncio.gather(
+            redis_conn.zadd(
+                name=uniswap_token_derived_eth_cached_block_height.format(
+                    token_address,
+                ),
+                # timestamp so zset do not ignore same height on multiple heights
+                mapping=redis_cache_mapping,
+            ),
+
+            redis_conn.zremrangebyscore(
+                name=uniswap_token_derived_eth_cached_block_height.format(
+                    token_address,
+                ),
+                min=0,
+                max=int(from_block) - settings.epoch.height * 4,
+            ),
+        )
+
     return token_derived_eth_dict
 
 
@@ -183,10 +240,10 @@ async def get_token_price_in_block_range(
     """
     try:
         token_price_dict = dict()
-
+        token_address = Web3.toChecksumAddress(token_metadata['address'])
         cached_price_dict = await redis_conn.zrangebyscore(
             name=uniswap_pair_cached_block_height_token_price.format(
-                Web3.toChecksumAddress(token_metadata['address']),
+                token_address,
             ),
             min=int(from_block),
             max=int(to_block),
@@ -218,73 +275,140 @@ async def get_token_price_in_block_range(
         else:
             token_eth_price_dict = dict()
 
-            for white_token in worker_settings.uniswap_v2_whitelist:
-                white_token = Web3.toChecksumAddress(white_token)
-                pairAddress = await get_pair(
-                    factory_contract_obj,
-                    white_token,
-                    token_metadata['address'],
-                    redis_conn,
-                    rpc_helper,
-                )
-                if pairAddress != '0x0000000000000000000000000000000000000000':
-                    new_pair_metadata = await get_pair_metadata(
-                        pair_address=pairAddress,
-                        redis_conn=redis_conn,
-                        rpc_helper=rpc_helper,
-                    )
-                    white_token_metadata = (
-                        new_pair_metadata['token0']
-                        if white_token == new_pair_metadata['token0']['address']
-                        else new_pair_metadata['token1']
-                    )
+            # check if pair exists in token mapping using hget
+            pair_address = await redis_conn.hget(
+                name=uinswap_token_pair_contract_mapping,
+                key=token_address,
+            )
 
-                    (
-                        white_token_price_dict,
-                        white_token_reserves_dict,
-                    ) = await get_token_pair_price_and_white_token_reserves(
-                        pair_address=pairAddress,
-                        from_block=from_block,
-                        to_block=to_block,
-                        pair_metadata=new_pair_metadata,
-                        white_token=white_token,
-                        redis_conn=redis_conn,
-                        rpc_helper=rpc_helper,
+            if not pair_address:
+                for white_token in worker_settings.uniswap_v2_whitelist:
+                    white_token = Web3.toChecksumAddress(white_token)
+                    pair_address = await get_pair(
+                        factory_contract_obj,
+                        white_token,
+                        token_metadata['address'],
+                        redis_conn,
+                        rpc_helper,
                     )
-                    white_token_derived_eth_dict = await get_token_derived_eth(
-                        from_block=from_block,
-                        to_block=to_block,
-                        white_token_metadata=white_token_metadata,
-                        redis_conn=redis_conn,
-                        rpc_helper=rpc_helper,
-                    )
-
-                    less_than_minimum_liquidity = False
-                    for block_num in range(from_block, to_block + 1):
-                        white_token_reserves = white_token_reserves_dict.get(
-                            block_num,
-                        ) * white_token_derived_eth_dict.get(block_num)
-
-                        # ignore if reservers are less than threshold
-                        if white_token_reserves < 1:
-                            less_than_minimum_liquidity = True
-                            break
-
-                        # else store eth price in dictionary
-                        token_eth_price_dict[
-                            block_num
-                        ] = white_token_price_dict.get(
-                            block_num,
-                        ) * white_token_derived_eth_dict.get(
-                            block_num,
+                    if pair_address != '0x0000000000000000000000000000000000000000':
+                        new_pair_metadata = await get_pair_metadata(
+                            pair_address=pair_address,
+                            redis_conn=redis_conn,
+                            rpc_helper=rpc_helper,
+                        )
+                        white_token_metadata = (
+                            new_pair_metadata['token0']
+                            if white_token == new_pair_metadata['token0']['address']
+                            else new_pair_metadata['token1']
                         )
 
-                    # if reserves are less than threshold then try next whitelist token pair
-                    if less_than_minimum_liquidity:
-                        token_eth_price_dict = {}
-                        continue
+                        (
+                            white_token_price_dict,
+                            white_token_reserves_dict,
+                        ) = await get_token_pair_price_and_white_token_reserves(
+                            pair_address=pair_address,
+                            from_block=from_block,
+                            to_block=to_block,
+                            pair_metadata=new_pair_metadata,
+                            white_token=white_token,
+                            redis_conn=redis_conn,
+                            rpc_helper=rpc_helper,
+                        )
+                        white_token_derived_eth_dict = await get_token_derived_eth(
+                            from_block=from_block,
+                            to_block=to_block,
+                            token_metadata=white_token_metadata,
+                            redis_conn=redis_conn,
+                            rpc_helper=rpc_helper,
+                        )
 
-                    break
+                        less_than_minimum_liquidity = False
+                        for block_num in range(from_block, to_block + 1):
+                            white_token_reserves = white_token_reserves_dict.get(
+                                block_num,
+                            ) * white_token_derived_eth_dict.get(block_num)
+
+                            # ignore if reservers are less than threshold
+                            if white_token_reserves < 1:
+                                less_than_minimum_liquidity = True
+                                break
+
+                            # else store eth price in dictionary
+                            token_eth_price_dict[
+                                block_num
+                            ] = white_token_price_dict.get(
+                                block_num,
+                            ) * white_token_derived_eth_dict.get(
+                                block_num,
+                            )
+
+                        # if reserves are less than threshold then try next whitelist token pair
+                        if less_than_minimum_liquidity:
+                            token_eth_price_dict = {}
+                            continue
+
+                        # set pair address in redis mapping
+                        await redis_conn.hset(
+                            name=uinswap_token_pair_contract_mapping,
+                            key=token_address,
+                            value=pair_address,
+                        )
+                        break
+
+            else:
+                pair_address = pair_address.decode('utf-8')
+                new_pair_metadata = await get_pair_metadata(
+                    pair_address=pair_address,
+                    redis_conn=redis_conn,
+                    rpc_helper=rpc_helper,
+                )
+                white_token_metadata = (
+                    new_pair_metadata['token1']
+                    if token_address == new_pair_metadata['token0']['address']
+                    else new_pair_metadata['token1']
+                )
+                white_token = white_token_metadata['address']
+
+                (
+                    white_token_price_dict,
+                    white_token_reserves_dict,
+                ) = await get_token_pair_price_and_white_token_reserves(
+                    pair_address=pair_address,
+                    from_block=from_block,
+                    to_block=to_block,
+                    pair_metadata=new_pair_metadata,
+                    white_token=white_token,
+                    redis_conn=redis_conn,
+                    rpc_helper=rpc_helper,
+                )
+                white_token_derived_eth_dict = await get_token_derived_eth(
+                    from_block=from_block,
+                    to_block=to_block,
+                    token_metadata=white_token_metadata,
+                    redis_conn=redis_conn,
+                    rpc_helper=rpc_helper,
+                )
+
+                less_than_minimum_liquidity = False
+                for block_num in range(from_block, to_block + 1):
+                    white_token_reserves = white_token_reserves_dict.get(
+                        block_num,
+                    ) * white_token_derived_eth_dict.get(block_num)
+
+                    # ignore if reservers are less than threshold
+                    if white_token_reserves < 1:
+                        less_than_minimum_liquidity = True
+                        break
+
+                    # else store eth price in dictionary
+                    token_eth_price_dict[
+                        block_num
+                    ] = white_token_price_dict.get(
+                        block_num,
+                    ) * white_token_derived_eth_dict.get(
+                        block_num,
+                    )
 
             if len(token_eth_price_dict) > 0:
                 eth_usd_price_dict = await get_eth_price_usd(
@@ -322,12 +446,22 @@ async def get_token_price_in_block_range(
                 for height, price in token_price_dict.items()
             }
 
-            await redis_conn.zadd(
-                name=uniswap_pair_cached_block_height_token_price.format(
-                    Web3.toChecksumAddress(token_metadata['address']),
+            await asyncio.gather(
+                redis_conn.zadd(
+                    name=uniswap_pair_cached_block_height_token_price.format(
+                        token_address,
+                    ),
+                    # timestamp so zset do not ignore same height on multiple heights
+                    mapping=redis_cache_mapping,
                 ),
-                # timestamp so zset do not ignore same height on multiple heights
-                mapping=redis_cache_mapping,
+
+                redis_conn.zremrangebyscore(
+                    name=uniswap_pair_cached_block_height_token_price.format(
+                        token_address,
+                    ),
+                    min=0,
+                    max=int(from_block) - settings.epoch.height * 4,
+                ),
             )
 
         return token_price_dict

@@ -83,8 +83,7 @@ class ProcessorDistributor(multiprocessing.Process):
     def _distribute_callbacks(self, dont_use_ch, method, properties, body):
         self._logger.debug(
             (
-                'Got processed epoch to distribute among processors for total'
-                ' reserves of a pair: {}'
+                'Got epoch to distribute among processors for: {}'
             ),
             body,
         )
@@ -126,7 +125,7 @@ class ProcessorDistributor(multiprocessing.Process):
                 self._logger.debug(
                     (
                         'Sent out epoch to be processed by worker to calculate'
-                        f' total reserves for pair contract: {process_unit}'
+                        f' {type_} pair contract: {process_unit}'
                     ),
                 )
             update_log = {
