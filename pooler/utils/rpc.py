@@ -332,6 +332,25 @@ class RpcHelper(object):
                     extra_info=f'RPC_CALL_ERROR: {response.text}',
                 )
 
+            response_exceptions = []
+            if type(response_data) is list:
+                for response_item in response_data:
+                    if 'error' in response_item:
+                        response_exceptions.append(
+                            response_exceptions.append(response_item['error']),
+                        )
+            else:
+                if 'error' in response_data:
+                    response_exceptions.append(response_data['error'])
+
+            if response_exceptions:
+                raise RPCException(
+                    request=rpc_query,
+                    response=response_data,
+                    underlying_exception=response_exceptions,
+                    extra_info=f'RPC_BATCH_ETH_CALL_ERROR: {response_exceptions}',
+                )
+
             return response_data
         return await f()
 
