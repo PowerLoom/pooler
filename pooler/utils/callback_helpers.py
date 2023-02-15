@@ -706,8 +706,7 @@ class CallbackAsyncWorker(multiprocessing.Process, ABC):
         except ValidationError as e:
             self._logger.opt(exception=True).error(
                 (
-                    'Bad message structure of callback in processor for total'
-                    ' pair reserves: {}'
+                    'Bad message structure of callback processor. Error: {}'
                 ),
                 e,
             )
@@ -715,8 +714,7 @@ class CallbackAsyncWorker(multiprocessing.Process, ABC):
         except Exception as e:
             self._logger.opt(exception=True).error(
                 (
-                    'Unexpected message structure of callback in processor for'
-                    ' total pair reserves: {}'
+                    'Unexpected message structure of callback in processor. Error: {}'
                 ),
                 e,
             )

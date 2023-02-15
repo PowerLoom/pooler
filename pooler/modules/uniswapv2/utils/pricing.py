@@ -184,29 +184,27 @@ async def get_token_price_in_block_range(
     try:
         token_price_dict = dict()
 
-        # check if cahce exist for given epoch
-        if from_block != 'latest' and to_block != 'latest':
-            cached_price_dict = await redis_conn.zrangebyscore(
-                name=uniswap_pair_cached_block_height_token_price.format(
-                    Web3.toChecksumAddress(token_metadata['address']),
-                ),
-                min=int(from_block),
-                max=int(to_block),
-            )
-            if cached_price_dict and len(cached_price_dict) == to_block - (
-                from_block - 1
-            ):
-                price_dict = {
-                    json.loads(
-                        price.decode(
-                            'utf-8',
-                        ),
-                    )[
-                        'blockHeight'
-                    ]: json.loads(price.decode('utf-8'))['price']
-                    for price in cached_price_dict
-                }
-                return price_dict
+        cached_price_dict = await redis_conn.zrangebyscore(
+            name=uniswap_pair_cached_block_height_token_price.format(
+                Web3.toChecksumAddress(token_metadata['address']),
+            ),
+            min=int(from_block),
+            max=int(to_block),
+        )
+        if cached_price_dict and len(cached_price_dict) == to_block - (
+            from_block - 1
+        ):
+            price_dict = {
+                json.loads(
+                    price.decode(
+                        'utf-8',
+                    ),
+                )[
+                    'blockHeight'
+                ]: json.loads(price.decode('utf-8'))['price']
+                for price in cached_price_dict
+            }
+            return price_dict
 
         if Web3.toChecksumAddress(
             token_metadata['address'],
@@ -315,8 +313,6 @@ async def get_token_price_in_block_range(
 
         # cache price at height
         if (
-            from_block != 'latest' and
-            to_block != 'latest' and
             len(token_price_dict) > 0
         ):
             redis_cache_mapping = {

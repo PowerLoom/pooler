@@ -46,6 +46,7 @@ class EpochCallbackManager(Process):
         with create_redis_conn(self._connection_pool) as r:
             for type_ in self._project_types:
                 # send epoch context to third party worker modules as registered
+                self._logger.debug(f'XAA{self._project_types}, {type_}')
                 routing_key = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.{type_}'
                 self.rabbitmq_interactor.enqueue_msg_delivery(
                     exchange=callback_exchange_name,

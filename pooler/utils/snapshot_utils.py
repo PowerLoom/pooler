@@ -46,26 +46,25 @@ async def get_eth_price_usd(
         eth_price_usd_dict = dict()
         redis_cache_mapping = dict()
 
-        if from_block != 'latest' and to_block != 'latest':
-            cached_price_dict = await redis_conn.zrangebyscore(
-                name=uniswap_eth_usd_price_zset,
-                min=int(from_block),
-                max=int(to_block),
-            )
-            if cached_price_dict and len(cached_price_dict) == to_block - (
-                from_block - 1
-            ):
-                price_dict = {
-                    json.loads(
-                        price.decode(
-                            'utf-8',
-                        ),
-                    )[
-                        'blockHeight'
-                    ]: json.loads(price.decode('utf-8'))['price']
-                    for price in cached_price_dict
-                }
-                return price_dict
+        cached_price_dict = await redis_conn.zrangebyscore(
+            name=uniswap_eth_usd_price_zset,
+            min=int(from_block),
+            max=int(to_block),
+        )
+        if cached_price_dict and len(cached_price_dict) == to_block - (
+            from_block - 1
+        ):
+            price_dict = {
+                json.loads(
+                    price.decode(
+                        'utf-8',
+                    ),
+                )[
+                    'blockHeight'
+                ]: json.loads(price.decode('utf-8'))['price']
+                for price in cached_price_dict
+            }
+            return price_dict
 
         pair_abi_dict = get_contract_abi_dict(pair_contract_abi)
 
@@ -153,18 +152,17 @@ async def get_eth_price_usd(
             block_count += 1
 
         # cache price at height
-        if from_block != 'latest' and to_block != 'latest':
-            await asyncio.gather(
-                redis_conn.zadd(
-                    name=uniswap_eth_usd_price_zset,
-                    mapping=redis_cache_mapping,
-                ),
-                redis_conn.zremrangebyscore(
-                    name=uniswap_eth_usd_price_zset,
-                    min=0,
-                    max=int(from_block) - settings.epoch.height * 4,
-                ),
-            )
+        await asyncio.gather(
+            redis_conn.zadd(
+                name=uniswap_eth_usd_price_zset,
+                mapping=redis_cache_mapping,
+            ),
+            redis_conn.zremrangebyscore(
+                name=uniswap_eth_usd_price_zset,
+                min=0,
+                max=int(from_block) - settings.epoch.height * 4,
+            ),
+        )
 
         return eth_price_usd_dict
 
@@ -186,28 +184,27 @@ async def get_block_details_in_block_range(
 
     """
     try:
-        if from_block != 'latest' and to_block != 'latest':
-            cached_details = await redis_conn.zrangebyscore(
-                name=cached_block_details_at_height,
-                min=int(from_block),
-                max=int(to_block),
-            )
+        cached_details = await redis_conn.zrangebyscore(
+            name=cached_block_details_at_height,
+            min=int(from_block),
+            max=int(to_block),
+        )
 
-            # check if we have cached value for each block number
-            if cached_details and len(cached_details) == to_block - (
-                from_block - 1
-            ):
-                cached_details = {
-                    json.loads(
-                        block_detail.decode(
-                            'utf-8',
-                        ),
-                    )[
-                        'number'
-                    ]: json.loads(block_detail.decode('utf-8'))
-                    for block_detail in cached_details
-                }
-                return cached_details
+        # check if we have cached value for each block number
+        if cached_details and len(cached_details) == to_block - (
+            from_block - 1
+        ):
+            cached_details = {
+                json.loads(
+                    block_detail.decode(
+                        'utf-8',
+                    ),
+                )[
+                    'number'
+                ]: json.loads(block_detail.decode('utf-8'))
+                for block_detail in cached_details
+            }
+            return cached_details
 
         rpc_batch_block_details = await rpc_helper.batch_eth_get_block(from_block, to_block, redis_conn)
 
@@ -233,18 +230,17 @@ async def get_block_details_in_block_range(
             block_num += 1
 
         # add new block details and prune all block details older than latest 3 epochs
-        if from_block != 'latest' and to_block != 'latest':
-            await asyncio.gather(
-                redis_conn.zadd(
-                    name=cached_block_details_at_height,
-                    mapping=redis_cache_mapping,
-                ),
-                redis_conn.zremrangebyscore(
-                    name=cached_block_details_at_height,
-                    min=0,
-                    max=int(from_block) - settings.epoch.height * 3,
-                ),
-            )
+        await asyncio.gather(
+            redis_conn.zadd(
+                name=cached_block_details_at_height,
+                mapping=redis_cache_mapping,
+            ),
+            redis_conn.zremrangebyscore(
+                name=cached_block_details_at_height,
+                min=0,
+                max=int(from_block) - settings.epoch.height * 3,
+            ),
+        )
 
         return block_details_dict
 
