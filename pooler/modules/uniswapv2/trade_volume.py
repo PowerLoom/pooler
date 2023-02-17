@@ -20,8 +20,8 @@ class TradeVolumeProcessor(CallbackAsyncWorker):
         ]
         super(TradeVolumeProcessor, self).__init__(
             name=name,
-            rmq_q=f'powerloom-backend-cb-{self._stream}:{settings.namespace}:{settings.instance_id}',
-            rmq_routing=f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.{self._stream}_worker',
+            rmq_q=f'powerloom-backend-cb:{settings.namespace}:{settings.instance_id}',
+            rmq_routing=f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.{self._stream}',
             **kwargs,
         )
 

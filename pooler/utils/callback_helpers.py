@@ -696,7 +696,7 @@ class CallbackAsyncWorker(multiprocessing.Process, ABC):
             await q_obj.consume(self._on_rabbitmq_message)
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
-
+        print('CXA', message.routing_key)
         await message.ack()
 
         try:

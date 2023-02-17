@@ -14,9 +14,6 @@ sleep 10
 poetry run python -m pooler.processhub_cmd start ProcessorDistributor
 sleep 3
 
-poetry run python -m pooler.processhub_cmd start EpochCallbackManager
-sleep 3
-
 poetry run python -m pooler.processhub_cmd start SystemEpochDetector
 
 echo 'started all pooler scripts';

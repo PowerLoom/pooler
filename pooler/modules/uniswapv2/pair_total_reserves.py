@@ -15,14 +15,18 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
     _snapshot_name = None
     _transformation_lambdas = None
 
+# exchange=f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}',
+# routing_key=f'powerloom-backend-callback:{settings.namespace}'
+# f':{settings.instance_id}.{type_}',
+# powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.*
     def __init__(self, name: str, **kwargs: dict) -> None:
         self._stream = 'uniswap_pairContract_pair_total_reserves'
         self._snapshot_name = 'pair reserves'
         self._transformation_lambdas = []
         super(PairTotalReservesProcessor, self).__init__(
             name=name,
-            rmq_q=f'powerloom-backend-cb-{self._stream}:{settings.namespace}:{settings.instance_id}',
-            rmq_routing=f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.{self._stream}_worker',
+            rmq_q=f'powerloom-backend-cb:{settings.namespace}:{settings.instance_id}',
+            rmq_routing=f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.{self._stream}',
             **kwargs,
         )
 

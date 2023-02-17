@@ -18,7 +18,6 @@ import pydantic
 import redis
 from setproctitle import setproctitle
 
-from pooler.epoch_broadcast_callback_manager import EpochCallbackManager
 from pooler.processor_distributor import ProcessorDistributor
 from pooler.settings.config import projects_config
 from pooler.settings.config import settings
@@ -31,11 +30,6 @@ from pooler.utils.rabbitmq_helpers import RabbitmqSelectLoopInteractor
 from pooler.utils.redis.redis_conn import provide_redis_conn
 
 PROC_STR_ID_TO_CLASS_MAP = {
-    'EpochCallbackManager': {
-        'class': EpochCallbackManager,
-        'name': 'PowerLoom|EpochCallbackManager',
-        'target': None,
-    },
     'SystemEpochDetector': {
         'class': EpochDetectorProcess,
         'name': 'PowerLoom|SystemEpochDetector',

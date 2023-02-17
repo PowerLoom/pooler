@@ -117,9 +117,9 @@ class ProcessorDistributor(multiprocessing.Process):
                     broadcast_id=msg_obj.broadcast_id,
                 )
                 self._rabbitmq_interactor.enqueue_msg_delivery(
-                    exchange=f'{settings.rabbitmq.setup.callbacks.exchange}.workers:{settings.namespace}',
+                    exchange=f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}',
                     routing_key=f'powerloom-backend-callback:{settings.namespace}'
-                    f':{settings.instance_id}.{type_}_worker',
+                    f':{settings.instance_id}.{type_}',
                     msg_body=process_unit.json(),
                 )
                 self._logger.debug(
@@ -170,7 +170,7 @@ class ProcessorDistributor(multiprocessing.Process):
         )
 
         queue_name = (
-            f'powerloom-backend-cb:{settings.namespace}:{settings.instance_id}'
+            f'powerloom-epoch-broadcast-q:{settings.namespace}:{settings.instance_id}'
         )
         self.ev_loop = asyncio.get_event_loop()
         self._rabbitmq_interactor: RabbitmqSelectLoopInteractor = RabbitmqSelectLoopInteractor(
