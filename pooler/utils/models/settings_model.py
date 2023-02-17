@@ -120,17 +120,15 @@ class Logs(BaseModel):
     write_to_files: bool
 
 
-class CallBackWorkerConfig(BaseModel):
+class ProcessorConfig(BaseModel):
     module: str
     class_name: str
-    name: str
-    num_instances: Optional[int] = 1
 
 
 class ProjectConfig(BaseModel):
     project_type: str
     projects: List[str]
-    workers: List[CallBackWorkerConfig]
+    processor: ProcessorConfig
 
 
 class ProjectsConfig(BaseModel):
@@ -159,3 +157,4 @@ class Settings(BaseModel):
     projects_config_path: str
     env: str
     pair_contract_abi: str
+    num_callback_workers: int

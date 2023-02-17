@@ -23,12 +23,10 @@
         "0x470e8de2ebaef52014a47cb5e6af86884947f08c",
         "0x582e3da39948c6339433008703211ad2c13eb2ac"
         ],
-      "workers": [{
+      "processor":{
         "module": "pooler.modules.uniswapv2.pair_total_reserves",
-        "class_name": "PairTotalReservesProcessor",
-        "name": "PowerLoom|UniswapPooler|Callbacks|PairTotalReservesProcessor",
-        "num_instances": 4
-      }]
+        "class_name": "PairTotalReservesProcessor"
+      }
     },
     {
       "project_type": "uniswap_pairContract_trade_volume",
@@ -54,12 +52,10 @@
         "0x470e8de2ebaef52014a47cb5e6af86884947f08c",
         "0x582e3da39948c6339433008703211ad2c13eb2ac"
         ],
-      "workers": [{
-        "module": "pooler.modules.uniswapv2.trade_volume",
-        "class_name": "TradeVolumeProcessor",
-        "name": "PowerLoom|UniswapPooler|Callbacks|TradeVolumeProcessor",
-        "num_instances": 4
-      }]
+        "processor":{
+          "module": "pooler.modules.uniswapv2.trade_volume",
+          "class_name": "TradeVolumeProcessor"
+        }
     }
   ]
 }

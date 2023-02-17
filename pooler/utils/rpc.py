@@ -1,4 +1,6 @@
 import asyncio
+import json
+import time
 from typing import List
 from typing import Union
 
@@ -31,6 +33,9 @@ from pooler.utils.default_logger import logger
 from pooler.utils.exceptions import RPCException
 from pooler.utils.redis.rate_limiter import check_rpc_rate_limit
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
+from pooler.utils.redis.redis_keys import rpc_get_event_logs_calls
+from pooler.utils.redis.redis_keys import rpc_json_rpc_calls
+from pooler.utils.redis.redis_keys import rpc_web3_calls
 from pooler.utils.rpc_cache import LruCacheRpc
 
 
@@ -228,6 +233,18 @@ class RpcHelper(object):
                     rate_limit_lua_script_shas=self._rate_limit_lua_script_shas,
                     limit_incr_by=1,
                 )
+
+                await asyncio.gather(
+                    redis_conn.zadd(
+                        name=rpc_web3_calls,
+                        mapping={contract_function.fn_name: time.time()},
+                    ),
+                    redis_conn.zremrangebyscore(
+                        name=rpc_web3_calls,
+                        min=0,
+                        max=time.time() - 3600,
+                    ),
+                )
                 params: TxParams = {'gas': Wei(0), 'gasPrice': Wei(0)}
 
                 if not contract_function.address:
@@ -298,7 +315,7 @@ class RpcHelper(object):
             raise e
 
     @LruCacheRpc(maxsize=2500, args={'rpc_query'})
-    async def _make_rpc_jsonrpc_call(self, rpc_url, rpc_query):
+    async def _make_rpc_jsonrpc_call(self, rpc_query, redis_conn):
         """Make a jsonrpc call to the given rpc_url"""
 
         @retry(
@@ -309,7 +326,34 @@ class RpcHelper(object):
             before_sleep=self._on_node_exception,
         )
         async def f():
+
+            node = self.get_current_node()
+            rpc_url = node.get('rpc_url')
+            await check_rpc_rate_limit(
+                parsed_limits=node.get('rate_limit', []),
+                app_id=rpc_url.split('/')[-1],
+                redis_conn=redis_conn,
+                request_payload=rpc_query,
+                error_msg={
+                    'msg': 'exhausted_api_key_rate_limit inside make_rpc_jsonrpc_call',
+                },
+                logger=self._logger,
+                rate_limit_lua_script_shas=self._rate_limit_lua_script_shas,
+                limit_incr_by=1,
+            )
+
             try:
+                await asyncio.gather(
+                    redis_conn.zadd(
+                        name=rpc_json_rpc_calls,
+                        mapping={json.dumps(rpc_query): time.time()},
+                    ),
+                    redis_conn.zremrangebyscore(
+                        name=rpc_json_rpc_calls,
+                        min=0,
+                        max=time.time() - 3600,
+                    ),
+                )
                 response = await self._client.post(url=rpc_url, json=rpc_query)
                 response_data = response.json()
             except Exception as e:
@@ -399,24 +443,7 @@ class RpcHelper(object):
             )
             request_id += 1
 
-        node = self.get_current_node()
-        rpc_url = node.get('rpc_url')
-
-        await check_rpc_rate_limit(
-            parsed_limits=node.get('rate_limit', []),
-            app_id=rpc_url.split('/')[-1],
-            redis_conn=redis_conn,
-            request_payload=rpc_query,
-            error_msg={
-                'msg': 'exhausted_api_key_rate_limit inside batch_eth_call_on_block_range',
-            },
-            logger=self._logger,
-            rate_limit_lua_script_shas=self._rate_limit_lua_script_shas,
-            limit_incr_by=len(rpc_query),
-        )
-
-        response_data = await self._make_rpc_jsonrpc_call(rpc_url, rpc_query)
-
+        response_data = await self._make_rpc_jsonrpc_call(rpc_query, redis_conn=redis_conn)
         rpc_response = []
 
         response = response_data if isinstance(response_data, list) else [response_data]
@@ -458,22 +485,7 @@ class RpcHelper(object):
             )
             request_id += 1
 
-        node = self.get_current_node()
-        rpc_url = node.get('rpc_url')
-
-        await check_rpc_rate_limit(
-            parsed_limits=node.get('rate_limit', []),
-            app_id=rpc_url.split('/')[-1],
-            redis_conn=redis_conn,
-            request_payload=rpc_query,
-            error_msg={
-                'msg': 'exhausted_api_key_rate_limit inside batch_eth_get_block',
-            },
-            logger=self._logger,
-            rate_limit_lua_script_shas=self._rate_limit_lua_script_shas,
-            limit_incr_by=len(rpc_query),
-        )
-        response_data = await self._make_rpc_jsonrpc_call(rpc_url, rpc_query)
+        response_data = await self._make_rpc_jsonrpc_call(rpc_query, redis_conn=redis_conn)
         return response_data
 
     @LruCacheRpc(maxsize=2500, args={'contract_address', 'to_block', 'from_block', 'topics', 'event_abi'})
@@ -502,6 +514,7 @@ class RpcHelper(object):
                 'fromBlock': from_block,
                 'topics': topics,
             }
+
             await check_rpc_rate_limit(
                 parsed_limits=node.get('rate_limit', []),
                 app_id=rpc_url.split('/')[-1],
@@ -515,6 +528,17 @@ class RpcHelper(object):
                 limit_incr_by=to_block - from_block + 1,
             )
             try:
+                await asyncio.gather(
+                    redis_conn.zadd(
+                        name=rpc_get_event_logs_calls,
+                        mapping={json.dumps(event_log_query): time.time()},
+                    ),
+                    redis_conn.zremrangebyscore(
+                        name=rpc_get_event_logs_calls,
+                        min=0,
+                        max=time.time() - 3600,
+                    ),
+                )
 
                 event_log = await web3_provider.eth.get_logs(
                     event_log_query,

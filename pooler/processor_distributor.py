@@ -134,8 +134,8 @@ class ProcessorDistributor(multiprocessing.Process):
                     'action': 'RabbitMQ.Publish',
                     'info': {
                         'routing_key': f'powerloom-backend-callback:{settings.namespace}'
-                        f':{settings.instance_id}.{type_}_worker',
-                        'exchange': f'{settings.rabbitmq.setup.callbacks.exchange}.workers:{settings.namespace}',
+                        f':{settings.instance_id}.{type_}',
+                        'exchange': f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}',
                         'msg': msg_obj.dict(),
                     },
                 },

@@ -80,8 +80,8 @@ class LruCacheRpc:
                         ret = await fn(*args, **kwargs)
                         if ret:
                             self.__cache.insert(cache_args, ret)
-                    except:
-                        pass
+                    except Exception as e:
+                        raise e
                 else:
                     self.__hits += 1
 

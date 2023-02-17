@@ -1,4 +1,3 @@
-import importlib
 import json
 import os
 import threading
@@ -19,9 +18,9 @@ import redis
 from setproctitle import setproctitle
 
 from pooler.processor_distributor import ProcessorDistributor
-from pooler.settings.config import projects_config
 from pooler.settings.config import settings
 from pooler.system_epoch_detector import EpochDetectorProcess
+from pooler.utils.callback_worker import CallbackAsyncWorker
 from pooler.utils.default_logger import logger
 from pooler.utils.exceptions import SelfExitException
 from pooler.utils.helper_functions import cleanup_children_procs
@@ -90,56 +89,15 @@ class ProcessHubCore(Process):
                                 k,
                                 worker_process_details['id'],
                             )
-                            callback_worker_class = k
                             callback_worker_name = worker_process_details['id']
                             callback_worker_unique_id = unique_id
 
-                            for project_config in projects_config:
-                                self._logger.debug(
-                                    (
-                                        'Searching callback workers specified'
-                                        ' in module {} for worker class {}'
-                                        ' details'
-                                    ),
-                                    project_config.project_type,
-                                    callback_worker_class,
-                                )
-                                gen = (
-                                    worker
-                                    for worker in project_config.workers
-                                    if worker.class_name ==
-                                    callback_worker_class
-                                )
-
-                                worker_details = next(gen, None)
-                                if worker_details:
-                                    callback_worker_module_file = (
-                                        worker_details.module
-                                    )
-                                    self._logger.debug(
-                                        (
-                                            'Found callback worker process'
-                                            ' initiation name {} for worker'
-                                            ' class {}'
-                                        ),
-                                        callback_worker_name,
-                                        worker_details.class_name,
-                                    )
-                                    break
-
                 if (
-                    callback_worker_module_file and
-                    callback_worker_class and
                     callback_worker_name and
                     callback_worker_unique_id
                 ):
-                    worker_class = getattr(
-                        importlib.import_module(
-                            callback_worker_module_file,
-                        ),
-                        callback_worker_class,
-                    )
-                    worker_obj: Process = worker_class(
+
+                    worker_obj: Process = CallbackAsyncWorker(
                         name=callback_worker_name,
                     )
                     worker_obj.start()
@@ -260,43 +218,32 @@ class ProcessHubCore(Process):
         for signame in [SIGINT, SIGTERM, SIGQUIT, SIGCHLD]:
             signal(signame, self.signal_handler)
 
-        for project_config in projects_config:
-            self._logger.debug('=' * 80)
-            self._logger.debug(
-                'Launching workers for project type {}',
-                project_config.project_type,
+        self._logger.debug('=' * 80)
+        self._logger.debug('Launching Callback Workers')
+        self._spawned_cb_processes_map['callback_worker'] = dict()
+
+        for _ in range(settings.num_callback_workers):
+            unique_id = str(uuid.uuid4())[:5]
+            unique_name = (
+                f'PowerLoom|CallbackWorker:{settings.namespace}:{settings.instance_id}' +
+                '-' +
+                unique_id
             )
-            for worker in project_config.workers:
-                worker_class = getattr(
-                    importlib.import_module(worker.module),
-                    worker.class_name,
-                )
-                worker_count = worker.num_instances
+            worker_obj: Process = CallbackAsyncWorker(name=unique_name)
+            worker_obj.start()
+            self._spawned_cb_processes_map['callback_worker'].update(
+                {unique_id: {'id': unique_name, 'process': worker_obj}},
+            )
+            self._logger.debug(
+                (
+                    'Process Hub Core launched process {} for callback'
+                    ' worker {} with PID: {}'
+                ),
+                unique_name,
+                'callback_worker',
+                worker_obj.pid,
+            )
 
-                self._spawned_cb_processes_map[worker.class_name] = dict()
-                for _ in range(worker_count):
-                    unique_id = str(uuid.uuid4())[:5]
-                    unique_name = (
-                        f'{worker.name}:{settings.namespace}:{settings.instance_id}' +
-                        '-' +
-                        unique_id
-                    )
-                    worker_obj: Process = worker_class(name=unique_name)
-                    worker_obj.start()
-                    self._spawned_cb_processes_map[worker.class_name].update(
-                        {unique_id: {'id': unique_name, 'process': worker_obj}},
-                    )
-                    self._logger.debug(
-                        (
-                            'Process Hub Core launched process {} for callback'
-                            ' worker {} with PID: {}'
-                        ),
-                        unique_name,
-                        worker.class_name,
-                        worker_obj.pid,
-                    )
-
-            self._logger.debug('=' * 80)
         self._logger.debug(
             'Starting Internal Process State reporter for Process Hub Core...',
         )
