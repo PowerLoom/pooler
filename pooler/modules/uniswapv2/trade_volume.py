@@ -3,10 +3,10 @@ import time
 from redis import asyncio as aioredis
 
 from .utils.core import get_pair_trade_volume
+from .utils.models.message_models import UniswapTradesSnapshot
 from pooler.utils.callback_helpers import GenericProcessor
 from pooler.utils.default_logger import logger
 from pooler.utils.models.message_models import EpochBase
-from pooler.utils.models.message_models import UniswapTradesSnapshot
 from pooler.utils.rpc import RpcHelper
 
 
@@ -40,35 +40,35 @@ class TradeVolumeProcessor(GenericProcessor):
 
     def transform_processed_epoch_to_trade_volume(
         self,
-        trade_vol_processed_snapshot,
+        snapshot,
         data_source_contract_address,
         epoch_begin,
         epoch_end,
     ):
         self._logger.debug(
-            'Trade volume processed snapshot: {}', trade_vol_processed_snapshot,
+            'Trade volume processed snapshot: {}', snapshot,
         )
 
         # Set effective trade volume at top level
-        total_trades_in_usd = trade_vol_processed_snapshot['Trades'][
+        total_trades_in_usd = snapshot['Trades'][
             'totalTradesUSD'
         ]
-        total_fee_in_usd = trade_vol_processed_snapshot['Trades']['totalFeeUSD']
-        total_token0_vol = trade_vol_processed_snapshot['Trades'][
+        total_fee_in_usd = snapshot['Trades']['totalFeeUSD']
+        total_token0_vol = snapshot['Trades'][
             'token0TradeVolume'
         ]
-        total_token1_vol = trade_vol_processed_snapshot['Trades'][
+        total_token1_vol = snapshot['Trades'][
             'token1TradeVolume'
         ]
-        total_token0_vol_usd = trade_vol_processed_snapshot['Trades'][
+        total_token0_vol_usd = snapshot['Trades'][
             'token0TradeVolumeUSD'
         ]
-        total_token1_vol_usd = trade_vol_processed_snapshot['Trades'][
+        total_token1_vol_usd = snapshot['Trades'][
             'token1TradeVolumeUSD'
         ]
 
-        max_block_timestamp = trade_vol_processed_snapshot.get('timestamp')
-        trade_vol_processed_snapshot.pop('timestamp', None)
+        max_block_timestamp = snapshot.get('timestamp')
+        snapshot.pop('timestamp', None)
         trade_volume_snapshot = UniswapTradesSnapshot(
             **dict(
                 contract=data_source_contract_address,
@@ -80,7 +80,7 @@ class TradeVolumeProcessor(GenericProcessor):
                 token1TradeVolume=float(f'{total_token1_vol: .6f}'),
                 token0TradeVolumeUSD=float(f'{total_token0_vol_usd: .6f}'),
                 token1TradeVolumeUSD=float(f'{total_token1_vol_usd: .6f}'),
-                events=trade_vol_processed_snapshot,
+                events=snapshot,
             ),
         )
         return trade_volume_snapshot

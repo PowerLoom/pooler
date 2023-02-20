@@ -8,6 +8,7 @@ from urllib.parse import urljoin
 
 import aio_pika
 from httpx import AsyncClient
+from redis import asyncio as aioredis
 from tenacity import AsyncRetrying
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
@@ -18,6 +19,7 @@ from pooler.utils.models.data_models import PayloadCommitAPIRequest
 from pooler.utils.models.data_models import SnapshotterIssue
 from pooler.utils.models.data_models import SnapshotterIssueSeverity
 from pooler.utils.models.message_models import PowerloomCallbackProcessMessage
+from pooler.utils.rpc import RpcHelper
 
 # setup logger
 helper_logger = logger.bind(module='PowerLoom|Callback|Helpers')
@@ -139,5 +141,7 @@ class GenericProcessor(ABC):
         min_chain_height: int,
         max_chain_height: int,
         data_source_contract_address: str,
+        redis: aioredis,
+        rpc_helper: RpcHelper,
     ):
         pass

@@ -8,13 +8,13 @@ from .constants import pair_contract_abi
 from .constants import UNISWAP_EVENTS_ABI
 from .constants import UNISWAP_TRADE_EVENT_SIGS
 from .helpers import get_pair_metadata
+from .models.data_models import epoch_event_trade_data
+from .models.data_models import event_trade_data
+from .models.data_models import trade_data
 from .pricing import (
     get_token_price_in_block_range,
 )
 from pooler.utils.default_logger import logger
-from pooler.utils.models.data_models import epoch_event_trade_data
-from pooler.utils.models.data_models import event_trade_data
-from pooler.utils.models.data_models import trade_data
 from pooler.utils.rpc import get_contract_abi_dict
 from pooler.utils.rpc import get_event_sig_and_abi
 from pooler.utils.rpc import RpcHelper
