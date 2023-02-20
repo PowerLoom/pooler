@@ -40,9 +40,9 @@ rpc_json_rpc_calls = (
 )
 
 rpc_get_event_logs_calls = (
-    'rpc:eventLogsCount' + settings.namespace + ':calls'
+    'rpc:eventLogsCount:' + settings.namespace + ':calls'
 )
 
 rpc_web3_calls = (
-    'rpc:web3' + settings.namespace + ':calls'
+    'rpc:web3:' + settings.namespace + ':calls'
 )

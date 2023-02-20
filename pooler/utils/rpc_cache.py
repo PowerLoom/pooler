@@ -46,7 +46,7 @@ class LruCacheRpc:
         self.__cache = LruCache(capacity=maxsize)
         self.__hits = 0
         self.__misses = 0
-        self.__maxsize: Final = maxsize
+        self.__maxsize = maxsize
         self.__args = args
 
     def __make_immutable(self, arg):

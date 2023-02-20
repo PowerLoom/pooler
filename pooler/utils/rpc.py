@@ -234,17 +234,6 @@ class RpcHelper(object):
                     limit_incr_by=1,
                 )
 
-                await asyncio.gather(
-                    redis_conn.zadd(
-                        name=rpc_web3_calls,
-                        mapping={contract_function.fn_name: time.time()},
-                    ),
-                    redis_conn.zremrangebyscore(
-                        name=rpc_web3_calls,
-                        min=0,
-                        max=time.time() - 3600,
-                    ),
-                )
                 params: TxParams = {'gas': Wei(0), 'gasPrice': Wei(0)}
 
                 if not contract_function.address:
@@ -261,6 +250,24 @@ class RpcHelper(object):
                     'output_type': output_type,
                     'fn_name': contract_function.fn_name,  # For debugging purposes
                 }
+
+                cur_time = time.time()
+                redis_cache_data = payload.copy()
+                redis_cache_data['time'] = cur_time
+                await asyncio.gather(
+                    redis_conn.zadd(
+                        name=rpc_web3_calls,
+                        mapping={
+                            json.dumps(redis_cache_data): cur_time,
+                        },
+                    ),
+                    redis_conn.zremrangebyscore(
+                        name=rpc_web3_calls,
+                        min=0,
+                        max=cur_time - 3600,
+                    ),
+                )
+
                 if from_address:
                     payload['from'] = from_address
 
@@ -343,15 +350,16 @@ class RpcHelper(object):
             )
 
             try:
+                cur_time = time.time()
                 await asyncio.gather(
                     redis_conn.zadd(
                         name=rpc_json_rpc_calls,
-                        mapping={json.dumps(rpc_query): time.time()},
+                        mapping={json.dumps(rpc_query): cur_time},
                     ),
                     redis_conn.zremrangebyscore(
                         name=rpc_json_rpc_calls,
                         min=0,
-                        max=time.time() - 3600,
+                        max=cur_time - 3600,
                     ),
                 )
                 response = await self._client.post(url=rpc_url, json=rpc_query)
@@ -528,15 +536,20 @@ class RpcHelper(object):
                 limit_incr_by=to_block - from_block + 1,
             )
             try:
+                cur_time = time.time()
                 await asyncio.gather(
                     redis_conn.zadd(
                         name=rpc_get_event_logs_calls,
-                        mapping={json.dumps(event_log_query): time.time()},
+                        mapping={
+                            json.dumps(
+                                event_log_query,
+                            ): cur_time,
+                        },
                     ),
                     redis_conn.zremrangebyscore(
                         name=rpc_get_event_logs_calls,
                         min=0,
-                        max=time.time() - 3600,
+                        max=cur_time - 3600,
                     ),
                 )
 
