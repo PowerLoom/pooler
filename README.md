@@ -3,16 +3,11 @@
 
 - [Table of Contents](#table-of-contents)
 - [Overview](#overview)
-- [Requirements](#requirements)
-- [Setup Instructions](#setup-instructions)
-  - [Setup Virtual Env](#setup-virtual-env)
-  - [Generate settings.json](#generate-settingsjson)
-    - [Required](#required)
-    - [Optional](#optional)
-  - [Populate `pooler/static/cached_pair_addresses.json`](#populate-staticcached_pair_addressesjson)
-  - [Set up Env variables](#set-up-env-variables)
-- [Starting all Processes](#starting-all-processes)
+- [Setup](#setup)
+- [Development Instructions](#development-instructions)
+  - [Generate Config](#generate-config)
 - [Monitoring and Debugging](#monitoring-and-debugging)
+- [For Contributors](for-contributors)
 - [Epoch Generation](#epoch-generation)
 - [Snapshot Building](#snapshot-building)
   - [Token Price in USD](#token-price-in-usd)
@@ -62,64 +57,34 @@ Together with an Audit Protocol instance, they form a recently released PoC whos
 
 You can read more about Audit Protocol and the Uniswap v2 PoC in the  [Powerloom Protocol Overview document](https://www.notion.so/powerloom/PowerLoom-Protocol-Overview-c3bf9dd9323541118d46a4d8684565d1#8ad76b8362b341bcaa9b3ae9fe203271)
 
-## Requirements
+## Setup
 
-* macOS or Linux (We're still working on windows support)
-* Python 3.8 or above
-* [Redis](https://redis.io/docs/getting-started/installation/)
-* [RabbitMQ](https://www.rabbitmq.com/download.html)
-* [Pm2](https://pm2.keymetrics.io/docs/usage/quick-start/)
-* [Poetry](https://python-poetry.org/docs/)
-## Setup Instructions
+Pooler is part of a distributed system with multiple moving parts. The easiest way to get started is by using the docker-based setup from the [deploy](https://github.com/PowerLoom/deploy) repository.
 
-### Setup Virtual Env
-Make sure you have poetry installed and run `poetry install`.
+If you're planning to participate as a snapshotter, refer to [these instructions](https://github.com/PowerLoom/deploy#for-snapshotters) to start snapshotting.
 
-### Generate settings.json
-Pooler needs `settings.json` to be present in your project root directory. We've provided a settings template in `settings.example.json` to help you get started.
+If you're a developer, you can follow [this](https://github.com/PowerLoom/deploy#instructions-for-code-contributors) for a more hands on approach.
 
-Copy over [`settings.example.json`](settings.example.json) to `settings.json` using
 
-```
-cp settings.example.json settings.json
-```
+## Development Instructions
+These instructions are needed if you're planning to run the system using `build-dev.sh` from [deploy](https://github.com/PowerLoom/deploy).
 
-Now, there's a lot of configuration in `settings.json` but to get started, you just need to focus on a couple of sections.
+### Generate Config
+Pooler needs the following config files to be present
+1. `settings.json` in `pooler/auth/settings`. This doesn't need much change, you can just copy `settings.example.json` present in the `pooler/auth/settings` directory.
+2. `cached_pair_addresses.json` in `pooler/static`, copy over [`static/cached_pair_addresses.example.json`](static/cached_pair_addresses.example.json) to `pooler/static/cached_pair_addresses.json`. These are the pair contracts for uniswapv2 usecase that will be tracked.
+3. `settings.json` in `pooler/settings` This one is the main configuration file. We've provided a settings template in `pooler/settings/settings.example.json` to help you get started. Copy over [`settings.example.json`](pooler/settings/settings.example.json) to `pooler/settings/settings.json`
 
-Here are the steps you need to get started with `settings.json`.
-#### Required
-- Signup at [Powerloom Dashboard](https://ethindia22.powerloom.io) and generate your API key.
-- Add your generated API Key in the `namespace` section
-- Fill the hosted audit protocol endpoint in the `audit_protocol_engine.url` key or you can use `https://auditprotocol-ethindia.powerloom.io/`
+#### Configuring pooler/settings/settings.json
+There's a lot of configuration in `settings.json` but to get started, you just need to focus on the following.
 
-#### Optional
-- We've provided the `ipfs_url` by default but if you want to run your own IPFS node, you  can add that URL here
-- RabbitMq and Redis should work out of the box with the default config but if it doesn't, you can update the config in `rabbitmq` and `redis` keys respectively.
-- Update the `host` and `port` keys if you want to run the service on some other port
-### Populate `pooler/static/cached_pair_addresses.json`
-
-Copy over [`static/cached_pair_addresses.example.json`](static/cached_pair_addresses.example.json) to `pooler/static/cached_pair_addresses.json`
-
-```
-cp static/cached_pair_addresses.example.json pooler/static/cached_pair_addresses.json
-```
-
-These are the pair contracts on Uniswap v2 or other forks of it that will be tracked for the following in this example implementation.
-
-* Token reserves of `token0` and `token1`
-* Trade volume information as described in the [Overview](#overview) section.
-
-## Starting all Processes
-To launch all the required processes, you can run
-```commandline
-pm2 start pm2.config.js
-```
-then you need to execute `init_processes.sh` using the following command
-```commandline
-./init_processes.sh
-```
+- `instance_id`, it is currently generated on invite only basis (refer [deploy](https://github.com/PowerLoom/deploy) repo for more details)
+- `namespace`, it is the unique key used to identify your project namespace
+- rpc url and rate limit config in `rpc.full_nodes`, this depends on which rpc node you're using
+- consensus url in `consensus.url`, this the the offchain-consensus service url where snapshots will be submitted
 
 ## Monitoring and Debugging
+Login to pooler docker container and use the following commands for monitoring and debugging
 - To monitor the status of running processes, you simply need to run `pm2 status`.
 - To see all logs you can run `pm2 logs`
 - To see logs for a specific process you can run `pm2 logs <Process Identifier>`
