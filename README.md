@@ -50,17 +50,17 @@ These instructions are needed if you're planning to run the system using `build-
 
 ### Generate Config
 Pooler needs the following config files to be present
-1. `settings.json` in `pooler/auth/settings`. This doesn't need much change, you can just copy `settings.example.json` present in the `pooler/auth/settings` directory.
-2. `cached_pair_addresses.json` in `pooler/static`, copy over [`static/cached_pair_addresses.example.json`](static/cached_pair_addresses.example.json) to `pooler/static/cached_pair_addresses.json`. These are the pair contracts for uniswapv2 usecase that will be tracked.
-3. `settings.json` in `pooler/settings` This one is the main configuration file. We've provided a settings template in `pooler/settings/settings.example.json` to help you get started. Copy over [`settings.example.json`](pooler/settings/settings.example.json) to `pooler/settings/settings.json`
+1. `settings.json` in `pooler/auth/settings`. Changes are trivial. Copy `settings.example.json` to `settings.json` present in the `pooler/auth/settings` directory.
+2. `cached_pair_addresses.json` in `pooler/static`. Copy over [`static/cached_pair_addresses.example.json`](static/cached_pair_addresses.example.json) to `pooler/static/cached_pair_addresses.json`. These are the pair contracts for uniswapv2 usecase that will be tracked.
+3. `settings.json` in `pooler/settings` This is the primary configuration. We've provided a settings template in `pooler/settings/settings.example.json` to help you get started. Copy over [`settings.example.json`](pooler/settings/settings.example.json) to `pooler/settings/settings.json`. For more details, read on in the [section below](#configuring-poolersettingssettingsjson).
 
-#### Configuring pooler/settings/settings.json
-There's a lot of configuration in `settings.json` but to get started, you just need to focus on the following.
+#### Configuring `pooler/settings/settings.json`
+There can be a lot to fine tune in `settings.json` but the following are essential.
 
-- `instance_id`, it is currently generated on invite only basis (refer [deploy](https://github.com/PowerLoom/deploy) repo for more details)
+- `instance_id`: This is the unique identifier for your node to participate in consensus. It is currently generated on invite only basis (refer [deploy](https://github.com/PowerLoom/deploy) repo for more details on applying for an instance ID).
 - `namespace`, it is the unique key used to identify your project namespace
-- rpc url and rate limit config in `rpc.full_nodes`, this depends on which rpc node you're using
-- consensus url in `consensus.url`, this the the offchain-consensus service url where snapshots will be submitted
+- RPC service URL(s) and rate limit configurations against them  in `rpc.full_nodes`. This will correspond to RPC nodes or service providers for the chain on which the data source smart contracts live (for eg. Ethereum Mainnet, Polygon Mainnet etc)
+- Consensus URL in `consensus.url`, this the the offchain consensus service to which snapshots will be submitted
 
 ## Monitoring and Debugging
 Login to pooler docker container and use the following commands for monitoring and debugging
