@@ -63,7 +63,7 @@ There can be a lot to fine tune in `settings.json` but the following are essenti
 - Consensus URL in `consensus.url`, this the the offchain consensus service to which snapshots will be submitted
 
 ## Monitoring and Debugging
-Login to pooler docker container and use the following commands for monitoring and debugging
+Login to pooler docker container using `docker exec -it <container_id> bash` (use `docker ps` to see running containers) and use the following commands for monitoring and debugging
 - To monitor the status of running processes, you simply need to run `pm2 status`.
 - To see all logs you can run `pm2 logs`
 - To see logs for a specific process you can run `pm2 logs <Process Identifier>`
