@@ -93,5 +93,6 @@
     },
     "projects_config_path": "pooler/static/projects.json",
     "env": "<test/prod>",
-    "pair_contract_abi": "pooler/static/abis/UniswapV2Pair.json"
+    "pair_contract_abi": "pooler/static/abis/UniswapV2Pair.json",
+    "num_callback_workers": 8
 }

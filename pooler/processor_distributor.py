@@ -83,8 +83,7 @@ class ProcessorDistributor(multiprocessing.Process):
     def _distribute_callbacks(self, dont_use_ch, method, properties, body):
         self._logger.debug(
             (
-                'Got processed epoch to distribute among processors for total'
-                ' reserves of a pair: {}'
+                'Got epoch to distribute among processors for: {}'
             ),
             body,
         )
@@ -118,15 +117,15 @@ class ProcessorDistributor(multiprocessing.Process):
                     broadcast_id=msg_obj.broadcast_id,
                 )
                 self._rabbitmq_interactor.enqueue_msg_delivery(
-                    exchange=f'{settings.rabbitmq.setup.callbacks.exchange}.workers:{settings.namespace}',
+                    exchange=f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}',
                     routing_key=f'powerloom-backend-callback:{settings.namespace}'
-                    f':{settings.instance_id}.{type_}_worker',
+                    f':{settings.instance_id}.{type_}',
                     msg_body=process_unit.json(),
                 )
                 self._logger.debug(
                     (
                         'Sent out epoch to be processed by worker to calculate'
-                        f' total reserves for pair contract: {process_unit}'
+                        f' {type_} pair contract: {process_unit}'
                     ),
                 )
             update_log = {
@@ -135,8 +134,8 @@ class ProcessorDistributor(multiprocessing.Process):
                     'action': 'RabbitMQ.Publish',
                     'info': {
                         'routing_key': f'powerloom-backend-callback:{settings.namespace}'
-                        f':{settings.instance_id}.{type_}_worker',
-                        'exchange': f'{settings.rabbitmq.setup.callbacks.exchange}.workers:{settings.namespace}',
+                        f':{settings.instance_id}.{type_}',
+                        'exchange': f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}',
                         'msg': msg_obj.dict(),
                     },
                 },
@@ -171,7 +170,7 @@ class ProcessorDistributor(multiprocessing.Process):
         )
 
         queue_name = (
-            f'powerloom-backend-cb:{settings.namespace}:{settings.instance_id}'
+            f'powerloom-epoch-broadcast-q:{settings.namespace}:{settings.instance_id}'
         )
         self.ev_loop = asyncio.get_event_loop()
         self._rabbitmq_interactor: RabbitmqSelectLoopInteractor = RabbitmqSelectLoopInteractor(

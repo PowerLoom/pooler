@@ -7,6 +7,10 @@ uniswap_pair_contract_tokens_data = (
     'uniswap:pairContract:' + settings.namespace + ':{}:PairContractTokensData'
 )
 
+uinswap_token_pair_contract_mapping = (
+    'uniswap:tokens:' + settings.namespace + ':PairContractAddress'
+)
+
 uniswap_V2_summarized_snapshots_zset = (
     'uniswap:V2PairsSummarySnapshot:' + settings.namespace + ':snapshotsZset'
 )
@@ -37,4 +41,9 @@ uniswap_tokens_pair_map = (
 uniswap_pair_cached_block_height_token_price = (
     'uniswap:pairContract:' + settings.namespace +
     ':{}:cachedPairBlockHeightTokenPrice'
+)
+
+uniswap_token_derived_eth_cached_block_height = (
+    'uniswap:token:' + settings.namespace +
+    ':{}:cachedDerivedEthBlockHeight'
 )

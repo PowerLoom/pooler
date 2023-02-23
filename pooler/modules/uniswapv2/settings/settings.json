@@ -1,10 +1,10 @@
 {
     "uniswap_contract_abis":{
-        "factory":"pooler/static/abis/IUniswapV2Factory.json",
-        "router":"pooler/static/abis/UniswapV2Router.json",
-        "pair_contract":"pooler/static/abis/UniswapV2Pair.json",
-        "erc20":"pooler/static/abis/IERC20.json",
-        "trade_events":"pooler/static/abis/UniswapTradeEvents.json"
+        "factory":"pooler/modules/uniswapv2/static/abis/IUniswapV2Factory.json",
+        "router":"pooler/modules/uniswapv2/static/abis/UniswapV2Router.json",
+        "pair_contract":"pooler/modules/uniswapv2/static/abis/UniswapV2Pair.json",
+        "erc20":"pooler/modules/uniswapv2/static/abis/IERC20.json",
+        "trade_events":"pooler/modules/uniswapv2/static/abis/UniswapTradeEvents.json"
     },
     "contract_addresses": {
         "iuniswap_v2_factory": "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f",
@@ -32,7 +32,6 @@
         "0x0000000000085d4780b73119b644ae5ecd22b376",
         "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
         "0x39aa39c021dfbae8fac545936693ac917d5e7563",
-        "0x86fadb80d8d2cff3c3680819e4da99c10232ba0f",
         "0x57ab1ec28d129707052df4df418d58a2d46d5f51",
         "0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2",
         "0xc00e94cb662c3520282e6f5717214004a7f26888",

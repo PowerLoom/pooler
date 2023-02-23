@@ -34,3 +34,15 @@ projects_dag_verifier_status = (
 uniswap_eth_usd_price_zset = (
     'uniswap:ethBlockHeightPrice:' + settings.namespace + ':ethPriceZset'
 )
+
+rpc_json_rpc_calls = (
+    'rpc:jsonRpc:' + settings.namespace + ':calls'
+)
+
+rpc_get_event_logs_calls = (
+    'rpc:eventLogsCount:' + settings.namespace + ':calls'
+)
+
+rpc_web3_calls = (
+    'rpc:web3:' + settings.namespace + ':calls'
+)

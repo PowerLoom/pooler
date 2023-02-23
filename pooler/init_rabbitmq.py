@@ -1,7 +1,6 @@
 import aio_pika
 import pika
 
-from pooler.settings.config import projects_config
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 
@@ -66,7 +65,7 @@ def init_callback_queue(
         exchange=callback_exchange_name, exchange_type='topic', durable=True,
     )
     init_rmq_logger.debug(
-        'Initialized RabbitMQ Topic exchange for top level callbacks: {}',
+        'Initialized RabbitMQ Topic exchange for worker processing: {}',
         callback_exchange_name,
     )
     # for example, callbacks for trade volume calculation may be sent on routing key
@@ -82,19 +81,19 @@ def init_callback_queue(
         exchange_name=callback_exchange_name,
     )
     # for internal worker distribution by top level callback modules
-    project_types = set(
-        [project_config.project_type for project_config in projects_config],
-    )
+    # project_types = set(
+    #     [project_config.project_type for project_config in projects_config],
+    # )
 
-    workers_exchange_name = f'{settings.rabbitmq.setup.callbacks.exchange}.workers:{settings.namespace}'
-    ch.exchange_declare(
-        exchange=workers_exchange_name, exchange_type='direct', durable=True,
-    )
+    # workers_exchange_name = f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}'
+    # ch.exchange_declare(
+    #     exchange=workers_exchange_name, exchange_type='direct', durable=True,
+    # )
 
-    for type_ in project_types:
-        topic_routing_key = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.{type_}_worker'
-        queue_name = f'powerloom-backend-cb-{type_}:{settings.namespace}:{settings.instance_id}'
-        init_queue(ch, queue_name, topic_routing_key, workers_exchange_name)
+    # for type_ in project_types:
+    #     topic_routing_key = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.*'
+    #     queue_name = f'powerloom-backend-cb-{type_}:{settings.namespace}:{settings.instance_id}'
+    #     init_queue(ch, queue_name, topic_routing_key, callback_exchange_name)
 
 
 def init_queue(
@@ -138,7 +137,6 @@ def init_exchanges_queues():
             'powerloom-epoch-broadcast-q',
             'epoch-broadcast',
         ),
-        ('powerloom-epoch-confirm-cb-q', 'epoch-confirm-cb'),
     ]
     for queue_name, routing_key in to_be_inited:
         # add namespace and instance ID to facilitate multiple pooler instances sharing same rabbitmq setup and broker

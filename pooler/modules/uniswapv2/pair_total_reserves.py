@@ -3,34 +3,31 @@ from typing import Dict
 from typing import Optional
 from typing import Union
 
+from redis import asyncio as aioredis
+
 from .utils.core import get_pair_reserves
-from pooler.settings.config import settings
-from pooler.utils.callback_helpers import CallbackAsyncWorker
+from .utils.models.message_models import UniswapPairTotalReservesSnapshot
+from pooler.utils.callback_helpers import GenericProcessor
+from pooler.utils.default_logger import logger
 from pooler.utils.models.message_models import EpochBase
-from pooler.utils.models.message_models import UniswapPairTotalReservesSnapshot
+from pooler.utils.rpc import RpcHelper
 
 
-class PairTotalReservesProcessor(CallbackAsyncWorker):
-    _stream = None
-    _snapshot_name = None
-    _transformation_lambdas = None
+class PairTotalReservesProcessor(GenericProcessor):
+    transformation_lambdas = None
 
-    def __init__(self, name: str, **kwargs: dict) -> None:
-        self._stream = 'uniswap_pairContract_pair_total_reserves'
-        self._snapshot_name = 'pair reserves'
-        self._transformation_lambdas = []
-        super(PairTotalReservesProcessor, self).__init__(
-            name=name,
-            rmq_q=f'powerloom-backend-cb-{self._stream}:{settings.namespace}:{settings.instance_id}',
-            rmq_routing=f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.{self._stream}_worker',
-            **kwargs,
-        )
+    def __init__(self) -> None:
+        self.transformation_lambdas = []
+        self._logger = logger.bind(module='PairTotalReservesProcessor')
 
-    async def _compute(
+    async def compute(
         self,
         min_chain_height: int,
         max_chain_height: int,
         data_source_contract_address: str,
+        redis_conn: aioredis,
+        rpc_helper: RpcHelper,
+
     ) -> Optional[Dict[str, Union[int, float]]]:
         epoch_reserves_snapshot_map_token0 = dict()
         epoch_reserves_snapshot_map_token1 = dict()
@@ -41,13 +38,13 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
         try:
             # TODO: web3 object should be available within callback worker instance
             #  instead of being a global object in uniswap functions module. Not a good design pattern.
-            self._logger.debug(f'pair reserves {data_source_contract_address} computation init time {int(time.time())}')
+            self._logger.debug(f'pair reserves {data_source_contract_address} computation init time {time.time()}')
             pair_reserve_total = await get_pair_reserves(
                 pair_address=data_source_contract_address,
                 from_block=min_chain_height,
                 to_block=max_chain_height,
-                redis_conn=self._redis_conn,
-                rpc_helper=self._rpc_helper,
+                redis_conn=redis_conn,
+                rpc_helper=rpc_helper,
                 fetch_timestamp=True,
             )
         except Exception as exc:
@@ -107,6 +104,6 @@ class PairTotalReservesProcessor(CallbackAsyncWorker):
                     'contract': data_source_contract_address,
                 },
             )
-            self._logger.debug(f'pair reserves {data_source_contract_address}, computation end time {int(time.time())}')
+            self._logger.debug(f'pair reserves {data_source_contract_address}, computation end time {time.time()}')
 
             return pair_total_reserves_snapshot

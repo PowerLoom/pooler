@@ -6,15 +6,15 @@ from pydantic import Field
 
 class UniswapContractAbis(BaseModel):
     factory: str = Field(
-        ..., example='pooler/static/abis/IUniswapV2Factory.json',
+        ..., example='pooler/modules/uniswapv2static/abis/IUniswapV2Factory.json',
     )
-    router: str = Field(..., example='pooler/static/abis/UniswapV2Router.json')
+    router: str = Field(..., example='pooler/modules/uniswapv2/static/abis/UniswapV2Router.json')
     pair_contract: str = Field(
-        ..., example='pooler/static/abis/UniswapV2Pair.json',
+        ..., example='pooler/modules/uniswapv2/static/abis/UniswapV2Pair.json',
     )
-    erc20: str = Field(..., example='pooler/static/abis/IERC20.json')
+    erc20: str = Field(..., example='pooler/modules/uniswapv2/static/abis/IERC20.json')
     trade_events: str = Field(
-        ..., example='pooler/static/abis/UniswapTradeEvents.json',
+        ..., example='pooler/modules/uniswapv2/static/abis/UniswapTradeEvents.json',
     )
 
 
