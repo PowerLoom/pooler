@@ -78,7 +78,7 @@ Pooler needs the following config files to be present
 #### Configuring pooler/settings/settings.json
 There's a lot of configuration in `settings.json` but to get started, you just need to focus on the following.
 
-- `instance_id`, it is currently generated on invite only basis
+- `instance_id`, it is currently generated on invite only basis (refer [deploy](https://github.com/PowerLoom/deploy) repo for more details)
 - `namespace`, it is the unique key used to identify your project namespace
 - rpc url and rate limit config in `rpc.full_nodes`, this depends on which rpc node you're using
 - consensus url in `consensus.url`, this the the offchain-consensus service url where snapshots will be submitted
