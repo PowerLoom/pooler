@@ -44,6 +44,7 @@ If you're planning to participate as a snapshotter, refer to [these instructions
 
 If you're a developer, you can follow [this](https://github.com/PowerLoom/deploy#instructions-for-code-contributors) for a more hands on approach.
 
+**Note** - RPC usage is highly use case specific. If your use case is complicated and needs to make a lot of RPC calls, it is recommended to run your own RPC node instead of using third party RPC services as it can get costly.
 
 ## Development Instructions
 These instructions are needed if you're planning to run the system using `build-dev.sh` from [deploy](https://github.com/PowerLoom/deploy).
@@ -59,8 +60,8 @@ There can be a lot to fine tune in `settings.json` but the following are essenti
 
 - `instance_id`: This is the unique identifier for your node to participate in consensus. It is currently generated on invite only basis (refer [deploy](https://github.com/PowerLoom/deploy) repo for more details on applying for an instance ID).
 - `namespace`, it is the unique key used to identify your project namespace
-- RPC service URL(s) and rate limit configurations against them  in `rpc.full_nodes`. This will correspond to RPC nodes or service providers for the chain on which the data source smart contracts live (for eg. Ethereum Mainnet, Polygon Mainnet etc)
-- Consensus URL in `consensus.url`, this the the offchain consensus service to which snapshots will be submitted
+- RPC service URL(s) and rate limit configurations against them  in `rpc.full_nodes`. This will correspond to RPC nodes for the chain on which the data source smart contracts lives (for eg. Ethereum Mainnet, Polygon Mainnet etc). Rate limits are service provider specific, different RPC providers have different rate limits. Example rate limit config for a node looks something like this `"100000000/day;20000/minute;2500/second"`
+- Consensus URL in `consensus.url`, this is the offchain consensus service to which snapshots will be submitted
 
 ## Monitoring and Debugging
 Login to pooler docker container using `docker exec -it <container_id> bash` (use `docker ps` to see running containers) and use the following commands for monitoring and debugging
