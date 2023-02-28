@@ -35,7 +35,7 @@ sed -i "s|https://rpc-url|$RPC_URL|" pooler/settings/settings.json
 
 sed -i "s|generated-uuid|$UUID|" pooler/settings/settings.json
 
-sed -i "s|https://consensus-url|$consensus_url|" pooler/settings/settings.json
+sed -i "s|http://offchain-consensus:9030|$consensus_url|" pooler/settings/settings.json
 
 #rm pooler/settings/settings.json.old
 
