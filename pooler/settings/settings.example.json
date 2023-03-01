@@ -118,7 +118,7 @@
         "skip_anchor_proof":true
     },
     "consensus":{
-        "url": "https://consensus-url",
+        "url": "http://offchain-consensus:9030",
         "epoch_tracker_path": "/currentEpoch",
         "polling_interval":15,
         "fall_behind_reset_num_blocks":1000,
