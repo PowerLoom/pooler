@@ -24,6 +24,15 @@ module.exports = {
       env: {
         NODE_ENV: NODE_ENV,
       }
+    },
+    {
+      name   : "pooler-auth-api",
+      script : `poetry run python -m pooler.auth.gunicorn_auth_entry_launcher`,
+      max_restarts: MAX_RESTART,
+      min_uptime: MIN_UPTIME,
+      env: {
+        NODE_ENV: NODE_ENV,
+      }
     }
   ]
 }
