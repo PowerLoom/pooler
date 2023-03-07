@@ -1,0 +1,151 @@
+{
+    "namespace": "relevant-namespace",
+    "core_api": {
+        "host": "0.0.0.0",
+        "port": 8002,
+        "auth": {
+            "enabled": false,
+            "header_key": "X-API-KEY"
+        },
+        "public_rate_limit": "10000/day;200/minute;5/second"
+    },
+    "chain_id": 1,
+    "instance_id": "generated-uuid",
+    "uniswap_contract_abis":{
+        "factory":"pooler/static/abis/ISushiswapFactory.json",
+        "router":"pooler/static/abis/UniswapV2Router.json",
+        "pair_contract":"pooler/static/abis/SushiswapPair.json",
+        "erc20":"pooler/static/abis/IERC20.json",
+        "trade_events":"pooler/static/abis/UniswapTradeEvents.json"
+    },
+    "logs_prune_time": 3600,
+    "contract_addresses": {
+        "iuniswap_v2_factory": "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac",
+        "iuniswap_v2_router": "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F",
+        "USDT": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "DAI": "0x6b175474e89094c44da98b954eedeac495271d0f",
+        "USDC": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "WETH": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "MAKER": "0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2",
+        "WETH_USDT": "0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852",
+        "FRAX": "0x853d955aCEf822Db058eb8505911ED77F175b99e",
+        "SYN": "0x0f2D719407FdBeFF09D87557AbB7232601FD9F29",
+        "FEI": "0x956F47F50A910163D8BF957Cf5846D573E7f87CA",
+        "agEUR": "0x1a7e4e63778B4f12a199C062f3eFdD288afCBce8",
+        "DAI_WETH_PAIR": "0xc3d03e4f041fd4cd388c549ee2a29a9e5075882f",
+        "USDC_WETH_PAIR": "0x397ff1542f962076d0bfe58ea045ffa2d347aca0",
+        "USDT_WETH_PAIR": "0x06da0fd433c1a5d7a4faa01111c044910a184553"
+    },
+    "uniswap_v2_whitelist": [
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+        "0x6b175474e89094c44da98b954eedeac495271d0f",
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "0x383518188c0c6d7730d91b2c03a03c837814a899",
+        "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "0x0000000000085d4780b73119b644ae5ecd22b376",
+        "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+        "0x57ab1ec28d129707052df4df418d58a2d46d5f51",
+        "0x514910771af9ca656af840dff83e8264ecf986ca",
+        "0x0bc529c00c6401aef6d220be8c6ea1667f6ad93e",
+        "0x8798249c2e607446efb7ad49ec89dd1865ff4272",
+        "0x1456688345527be1f37e9e627da0837d6f08c925",
+        "0x3449fc1cd036255ba1eb19d65ff4ba2b8903a69a",
+        "0x2ba592f78db6436527729929aaf6c908497cb200",
+        "0x3432b6a60d23ca0dfca7761b7ab56459d9c964d0",
+        "0xa1faa113cbe53436df28ff0aee54275c13b40975",
+        "0xdb0f18081b505a7de20b18ac41856bcb4ba86a1a",
+        "0x04fa0d235c4abf4bcf4787af4cf447de572ef828",
+        "0x3155ba85d5f96b2d030a4966af206230e46849cb",
+        "0x87d73e916d7057945c9bcd8cdd94e42a6f47f776",
+        "0xdfe66b14d37c77f4e9b180ceb433d1b164f0281d",
+        "0xad32a8e6220741182940c5abf610bde99e737b2d",
+        "0xafcE9B78D409bF74980CACF610AFB851BF02F257",
+        "0x6b3595068778dd592e39a122f4f5a5cf09c90fe2"
+    ],
+    "ipfs_url": "/dns/ipfs/tcp/5001",
+    "uniswap_functions": {
+        "retrial_attempts": 5
+    },
+    "rpc": {
+        "full_nodes": [
+            {
+                "url": "https://rpc-url",
+                "rate_limit": "500000/day;500/minute;10/second"
+            }
+        ],
+        "archive_nodes": [],
+        "force_archive_blocks": 100,
+        "retry": 1,
+        "request_time_out": 5,
+        "skip_epoch_threshold_blocks": 30
+    },
+    "issue_report_url": "http://audit-protocol:9030/reportIssue",
+    "rlimit": {
+        "file_descriptors": 2048
+    },
+    "timeouts": {
+        "basic": 5,
+        "archival": 180,
+        "connection_init": 2
+    },
+    "module_queues_config":{
+        "pair_total_reserves": {
+            "num_instances": 16
+        }
+    },
+    "epoch": {
+        "height": 10,
+        "head_offset": 2,
+        "block_time": 2
+    },
+    "rabbitmq": {
+        "user": "guest",
+        "password": "guest",
+        "host": "rabbitmq",
+        "port": 5672,
+        "setup": {
+            "core": {
+                "exchange": "powerloom-backend"
+            },
+            "callbacks": {
+                "exchange": "powerloom-backend-callbacks",
+                "path": "pooler/callback_modules/",
+                "config": "module_queues_config.json"
+            }
+        }
+    },
+
+    "audit_protocol_engine": {
+        "url": "http://audit-protocol:9000",
+        "retry": 5,
+        "skip_anchor_proof":true
+    },
+    "consensus":{
+        "url": "http://offchain-consensus:9030",
+        "epoch_tracker_path": "/currentEpoch",
+        "polling_interval":15,
+        "fall_behind_reset_num_blocks":1000,
+        "sleep_secs_between_chunks":60
+    },
+    "redis": {
+        "host": "redis",
+        "port": 6379,
+        "db": 0,
+        "password": null,
+        "ssl": false,
+        "cluster_mode": false
+    },
+    "redis_reader": {
+        "host": "redis",
+        "port": 6379,
+        "db": 0,
+        "password": null
+    },
+    "webhook_listener": {
+        "host": "host.docker.internal",
+        "port": 9090,
+        "root": "https://pooler-callback.com",
+        "commit_confirmation_callback_path": "commit_confirm"
+    }
+}
