@@ -20,7 +20,7 @@ from setproctitle import setproctitle
 from pooler.processor_distributor import ProcessorDistributor
 from pooler.settings.config import settings
 from pooler.system_epoch_detector import EpochDetectorProcess
-from pooler.utils.callback_worker import CallbackAsyncWorker
+from pooler.utils.callback_worker import SnapshotAsyncWorker
 from pooler.utils.default_logger import logger
 from pooler.utils.exceptions import SelfExitException
 from pooler.utils.helper_functions import cleanup_children_procs
@@ -97,7 +97,7 @@ class ProcessHubCore(Process):
                     callback_worker_unique_id
                 ):
 
-                    worker_obj: Process = CallbackAsyncWorker(
+                    worker_obj: Process = SnapshotAsyncWorker(
                         name=callback_worker_name,
                     )
                     worker_obj.start()
@@ -229,7 +229,7 @@ class ProcessHubCore(Process):
                 '-' +
                 unique_id
             )
-            worker_obj: Process = CallbackAsyncWorker(name=unique_name)
+            worker_obj: Process = SnapshotAsyncWorker(name=unique_name)
             worker_obj.start()
             self._spawned_cb_processes_map['callback_worker'].update(
                 {unique_id: {'id': unique_name, 'process': worker_obj}},

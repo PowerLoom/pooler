@@ -80,18 +80,7 @@ class ProcessorDistributor(multiprocessing.Process):
 
         return None
 
-    def _distribute_callbacks(self, dont_use_ch, method, properties, body):
-        self._logger.debug(
-            (
-                'Got epoch to distribute among processors for: {}'
-            ),
-            body,
-        )
-        if not (
-            method.routing_key == f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.EpochReleased'
-        ):
-            return
-
+    def _distribute_callbacks_snapshotting(self, dont_use_ch, method, properties, body):
         try:
             msg_obj: SystemEpochStatusReport = (
                 SystemEpochStatusReport.parse_raw(body)
@@ -156,6 +145,52 @@ class ProcessorDistributor(multiprocessing.Process):
         self._rabbitmq_interactor._channel.basic_ack(
             delivery_tag=method.delivery_tag,
         )
+
+    def _distribute_callbacks_indexing(self, dont_use_ch, method, properties, body):
+        # TODO: Implement this method to distribute indexing callbacks to indexer workers
+        pass
+
+    def _distribute_callbacks_aggregate(self, dont_use_ch, method, properties, body):
+        # TODO: Implement this method to distribute aggregate callbacks to aggregator workers
+        pass
+
+    def _distribute_callbacks(self, dont_use_ch, method, properties, body):
+        self._logger.debug(
+            (
+                'Got message to process and distribute: {}'
+            ),
+            body,
+        )
+        if (
+            method.routing_key ==
+            f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.EpochReleased'
+        ):
+            self._distribute_callbacks_snapshotting(
+                dont_use_ch, method, properties, body,
+            )
+
+        elif (
+            method.routing_key ==
+            f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.EpochFinalized'
+        ):
+            self._distribute_callbacks_indexing(
+                dont_use_ch, method, properties, body,
+            )
+
+        elif (
+            method.routing_key ==
+            f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.IndexFinalized'
+        ):
+            self._distribute_callbacks_aggregate(
+                dont_use_ch, method, properties, body,
+            )
+        else:
+            self._logger.error(
+                (
+                    'Unknown routing key for callback distribution: {}'
+                ),
+                method.routing_key,
+            )
 
     def _exit_signal_handler(self, signum, sigframe):
         if (
