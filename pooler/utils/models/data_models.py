@@ -87,6 +87,7 @@ class EventBase(BaseModel):
 class EpochReleasedEvent(EventBase):
     begin: int
     end: int
+    broadcast_id: str
 
 
 class EpochFinalizedEvent(EventBase):

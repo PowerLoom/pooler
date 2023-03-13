@@ -111,10 +111,10 @@ class EpochDetectorProcess(multiprocessing.Process):
         )
 
         self._exchange = (
-            f'{settings.rabbitmq.setup.core.exchange}:{settings.namespace}'
+            f'{settings.rabbitmq.setup.event_detector.exchange}:{settings.namespace}'
         )
         self._routing_key = (
-            f'epoch-broadcast:{settings.namespace}:{settings.instance_id}'
+            f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.EpochReleased'
         )
 
         self._last_processed_epoch = None

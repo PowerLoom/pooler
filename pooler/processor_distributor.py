@@ -87,6 +87,11 @@ class ProcessorDistributor(multiprocessing.Process):
             ),
             body,
         )
+        if not (
+            method.routing_key == f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.EpochReleased'
+        ):
+            return
+
         try:
             msg_obj: SystemEpochStatusReport = (
                 SystemEpochStatusReport.parse_raw(body)
@@ -170,8 +175,9 @@ class ProcessorDistributor(multiprocessing.Process):
         )
 
         queue_name = (
-            f'powerloom-epoch-broadcast-q:{settings.namespace}:{settings.instance_id}'
+            f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}'
         )
+
         self.ev_loop = asyncio.get_event_loop()
         self._rabbitmq_interactor: RabbitmqSelectLoopInteractor = RabbitmqSelectLoopInteractor(
             consume_queue_name=queue_name,

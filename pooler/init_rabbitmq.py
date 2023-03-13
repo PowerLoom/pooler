@@ -147,10 +147,6 @@ def init_exchanges_queues():
 
     to_be_inited = [
         ('powerloom-processhub-commands-q', 'processhub-commands'),
-        (
-            'powerloom-epoch-broadcast-q',
-            'epoch-broadcast',
-        ),
     ]
     for queue_name, routing_key in to_be_inited:
         # add namespace and instance ID to facilitate multiple pooler instances sharing same rabbitmq setup and broker

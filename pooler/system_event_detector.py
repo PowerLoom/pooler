@@ -5,6 +5,7 @@ import queue
 import signal
 import sys
 import threading
+import uuid
 from functools import wraps
 from signal import SIGINT
 from signal import SIGQUIT
@@ -167,6 +168,7 @@ class EventDetectorProcess(multiprocessing.Process):
                     begin=log.args.begin,
                     end=log.args.end,
                     timestamp=log.args.timestamp,
+                    broadcast_id=str(uuid.uuid4()),
                 )
                 events.append((log.event, event))
 
