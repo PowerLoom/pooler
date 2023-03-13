@@ -33,6 +33,7 @@ from pooler.utils.default_logger import logger
 from pooler.utils.exceptions import RPCException
 from pooler.utils.redis.rate_limiter import check_rpc_rate_limit
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
+from pooler.utils.redis.redis_keys import rpc_blocknumber_calls
 from pooler.utils.redis.redis_keys import rpc_get_event_logs_calls
 from pooler.utils.redis.redis_keys import rpc_json_rpc_calls
 from pooler.utils.redis.redis_keys import rpc_web3_calls
@@ -302,6 +303,47 @@ class RpcHelper(object):
                 raise exc
 
         return await f()
+
+    async def get_current_block(self, redis_conn):
+        """Get the current block number.
+
+        Returns:
+            int : the current block number
+        """
+        node = self.get_current_node()
+        rpc_url = node.get('rpc_url')
+
+        await check_rpc_rate_limit(
+            parsed_limits=node.get('rate_limit', []),
+            app_id=rpc_url.split('/')[-1],
+            redis_conn=redis_conn,
+            request_payload='get_current_block',
+            error_msg={
+                'msg': 'exhausted_api_key_rate_limit inside web3_call',
+            },
+            logger=self._logger,
+            rate_limit_lua_script_shas=self._rate_limit_lua_script_shas,
+            limit_incr_by=1,
+        )
+        current_block = node['web3_client'].eth.block_number
+
+        cur_time = time.time()
+        payload = {'time': cur_time, 'fn_name': 'get_current_block'}
+        await asyncio.gather(
+            redis_conn.zadd(
+                name=rpc_blocknumber_calls,
+                mapping={
+                    json.dumps(payload): cur_time,
+                },
+            ),
+            redis_conn.zremrangebyscore(
+                name=rpc_blocknumber_calls,
+                min=0,
+                max=cur_time - 3600,
+            ),
+        )
+
+        return current_block
 
     async def web3_call(self, tasks, redis_conn, from_address=None):
         """

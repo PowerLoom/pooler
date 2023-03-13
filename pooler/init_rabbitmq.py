@@ -54,46 +54,60 @@ def processhub_command_publish(
     )
 
 
+def init_topic_queue(
+    ch: pika.adapters.blocking_connection.BlockingChannel,
+    exchange_name: str,
+    queue_name: str,
+    routing_key_pattern: str,
+) -> None:
+    ch.exchange_declare(
+        exchange=exchange_name, exchange_type='topic', durable=True,
+    )
+    init_rmq_logger.debug(
+        'Initialized RabbitMQ Topic exchange: {}', exchange_name,
+    )
+    init_queue(
+        ch,
+        queue_name=queue_name,
+        routing_key=routing_key_pattern,
+        exchange_name=exchange_name,
+    )
+
+
 def init_callback_queue(
     ch: pika.adapters.blocking_connection.BlockingChannel,
 ) -> None:
     callback_exchange_name = (
         f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}'
     )
-    # exchange declaration for top level callback modules to listen in on
-    ch.exchange_declare(
-        exchange=callback_exchange_name, exchange_type='topic', durable=True,
-    )
-    init_rmq_logger.debug(
-        'Initialized RabbitMQ Topic exchange for worker processing: {}',
-        callback_exchange_name,
-    )
-    # for example, callbacks for trade volume calculation may be sent on routing key
-    # 'powerloom-backend-callback:{settings.namespace}.trade_volume'
     routing_key_pattern = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.*'
     queue_name = (
         f'powerloom-backend-cb:{settings.namespace}:{settings.instance_id}'
     )
-    init_queue(
+    init_topic_queue(
         ch,
-        queue_name=queue_name,
-        routing_key=routing_key_pattern,
         exchange_name=callback_exchange_name,
+        queue_name=queue_name,
+        routing_key_pattern=routing_key_pattern,
     )
-    # for internal worker distribution by top level callback modules
-    # project_types = set(
-    #     [project_config.project_type for project_config in projects_config],
-    # )
 
-    # workers_exchange_name = f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}'
-    # ch.exchange_declare(
-    #     exchange=workers_exchange_name, exchange_type='direct', durable=True,
-    # )
 
-    # for type_ in project_types:
-    #     topic_routing_key = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.*'
-    #     queue_name = f'powerloom-backend-cb-{type_}:{settings.namespace}:{settings.instance_id}'
-    #     init_queue(ch, queue_name, topic_routing_key, callback_exchange_name)
+def init_event_detector_queue(
+    ch: pika.adapters.blocking_connection.BlockingChannel,
+) -> None:
+    event_detector_exchange_name = (
+        f'{settings.rabbitmq.setup.event_detector.exchange}:{settings.namespace}'
+    )
+    routing_key_pattern = f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.*'
+    queue_name = (
+        f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}'
+    )
+    init_topic_queue(
+        ch,
+        exchange_name=event_detector_exchange_name,
+        queue_name=queue_name,
+        routing_key_pattern=routing_key_pattern,
+    )
 
 
 def init_queue(
@@ -145,6 +159,7 @@ def init_exchanges_queues():
         init_queue(ch, q, r, exchange_name)
 
     init_callback_queue(ch)
+    init_event_detector_queue(ch)
 
 
 if __name__ == '__main__':

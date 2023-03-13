@@ -78,3 +78,26 @@ class IndexingRegistrationData(BaseModel):
 class ProjectRegistrationRequestForIndexing(BaseModel):
     projects: List[IndexingRegistrationData]
     namespace: str
+
+
+class EventBase(BaseModel):
+    timestamp: int
+
+
+class EpochReleasedEvent(EventBase):
+    begin: int
+    end: int
+
+
+class EpochFinalizedEvent(EventBase):
+    DAGBlockHeight: int
+    projectId: str
+    snapshotCid: str
+
+
+class IndexFinalizedEvent(EventBase):
+    projectId: str
+    DAGBlockHeight: int
+    indexTailDAGBlockHeight: int
+    tailBlockEpochSourceChainHeight: int
+    indexIdentifierHash: str

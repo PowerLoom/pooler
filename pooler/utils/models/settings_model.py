@@ -35,6 +35,7 @@ class RPC(BaseModel):
     retry: int
     request_time_out: int
     skip_epoch_threshold_blocks: int
+    polling_interval: int
 
 
 class RLimit(BaseModel):
@@ -57,17 +58,14 @@ class Epoch(BaseModel):
     block_time: int
 
 
-class RabbitMQExchange(BaseModel):
-    exchange: str
-
-
-class RabbitMQCallbacks(BaseModel):
+class RabbitMQConfig(BaseModel):
     exchange: str
 
 
 class RabbitMQSetup(BaseModel):
-    core: RabbitMQExchange
-    callbacks: RabbitMQCallbacks
+    core: RabbitMQConfig
+    callbacks: RabbitMQConfig
+    event_detector: RabbitMQConfig
 
 
 class RabbitMQ(BaseModel):
@@ -135,6 +133,11 @@ class ProjectsConfig(BaseModel):
     config: List[ProjectConfig]
 
 
+class EventContract(BaseModel):
+    address: str
+    abi: str
+
+
 class Settings(BaseModel):
     namespace: str
     core_api: CoreAPI
@@ -157,4 +160,5 @@ class Settings(BaseModel):
     projects_config_path: str
     env: str
     pair_contract_abi: str
+    event_contract: EventContract
     num_callback_workers: int

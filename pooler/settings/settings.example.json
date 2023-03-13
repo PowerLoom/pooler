@@ -24,7 +24,8 @@
         "force_archive_blocks": 100,
         "retry": 5,
         "request_time_out": 5,
-        "skip_epoch_threshold_blocks": 30
+        "skip_epoch_threshold_blocks": 30,
+        "polling_interval": 15
     },
     "issue_report_url": "http://audit-protocol:9030/reportIssue",
     "rlimit": {
@@ -51,6 +52,9 @@
             },
             "callbacks": {
                 "exchange": "powerloom-backend-callbacks"
+            },
+            "event_detector": {
+                "exchange": "powerloom-backend-event-detector"
             }
         }
     },
@@ -94,5 +98,9 @@
     "projects_config_path": "pooler/static/projects.json",
     "env": "<test/prod>",
     "pair_contract_abi": "pooler/static/abis/UniswapV2Pair.json",
+    "event_contract": {
+        "abi": "pooler/static/abis/EventContract.json",
+        "address": "0x568355e16e1bf2fE3CcFe155B987f1D603188028"
+    },
     "num_callback_workers": 8
 }

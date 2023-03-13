@@ -27,6 +27,9 @@ powerloom_broadcast_id_zset = (
     'powerloom:broadcastID:' + settings.namespace + ':broadcastProcessingStatus'
 )
 epoch_detector_last_processed_epoch = 'SystemEpochDetector:lastProcessedEpoch'
+
+event_detector_last_processed_block = 'SystemEventDetector:lastProcessedBlock'
+
 projects_dag_verifier_status = (
     'projects:' + settings.namespace + ':dagVerificationStatus'
 )
@@ -45,4 +48,8 @@ rpc_get_event_logs_calls = (
 
 rpc_web3_calls = (
     'rpc:web3:' + settings.namespace + ':calls'
+)
+
+rpc_blocknumber_calls = (
+    'rpc:blocknumber:' + settings.namespace + ':calls'
 )
