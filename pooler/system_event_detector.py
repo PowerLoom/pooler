@@ -178,6 +178,7 @@ class EventDetectorProcess(multiprocessing.Process):
                     projectId=log.args.projectId,
                     snapshotCid=log.args.snapshotCid,
                     timestamp=log.args.timestamp,
+                    broadcast_id=str(uuid.uuid4()),
                 )
                 events.append((log.event, event))
 
@@ -189,6 +190,7 @@ class EventDetectorProcess(multiprocessing.Process):
                     tailBlockEpochSourceChainHeight=log.args.tailBlockEpochSourceChainHeight,
                     indexIdentifierHash=log.args.indexIdentifierHash,
                     timestamp=log.args.timestamp,
+                    broadcast_id=str(uuid.uuid4()),
                 )
                 events.append((log.event, event))
 
@@ -298,7 +300,3 @@ class EventDetectorProcess(multiprocessing.Process):
         self.ev_loop.run_until_complete(
             self._detect_events(),
         )
-
-
-ev = EventDetectorProcess('test')
-ev.start()

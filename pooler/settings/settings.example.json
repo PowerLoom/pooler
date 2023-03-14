@@ -102,5 +102,9 @@
         "abi": "pooler/static/abis/EventContract.json",
         "address": "0x568355e16e1bf2fE3CcFe155B987f1D603188028"
     },
-    "num_callback_workers": 8
+    "callback_worker_config":{
+        "num_snapshot_workers": 8,
+        "num_indexing_workers": 4,
+        "num_aggregation_workers": 4
+    }
 }

@@ -20,18 +20,26 @@ from setproctitle import setproctitle
 from pooler.processor_distributor import ProcessorDistributor
 from pooler.settings.config import settings
 from pooler.system_epoch_detector import EpochDetectorProcess
-from pooler.utils.callback_worker import SnapshotAsyncWorker
+from pooler.system_event_detector import EventDetectorProcess
+from pooler.utils.aggregation_worker import AggregationAsyncWorker
 from pooler.utils.default_logger import logger
 from pooler.utils.exceptions import SelfExitException
 from pooler.utils.helper_functions import cleanup_children_procs
+from pooler.utils.indexing_worker import IndexingAsyncWorker
 from pooler.utils.models.message_models import ProcessHubCommand
 from pooler.utils.rabbitmq_helpers import RabbitmqSelectLoopInteractor
 from pooler.utils.redis.redis_conn import provide_redis_conn
+from pooler.utils.snapshot_worker import SnapshotAsyncWorker
 
 PROC_STR_ID_TO_CLASS_MAP = {
     'SystemEpochDetector': {
         'class': EpochDetectorProcess,
         'name': 'PowerLoom|SystemEpochDetector',
+        'target': None,
+    },
+    'SystemEventDetector': {
+        'class': EventDetectorProcess,
+        'name': 'PowerLoom|SystemEventDetector',
         'target': None,
     },
     'ProcessorDistributor': {
@@ -91,15 +99,26 @@ class ProcessHubCore(Process):
                             )
                             callback_worker_name = worker_process_details['id']
                             callback_worker_unique_id = unique_id
+                            callback_worker_class = k
 
                 if (
                     callback_worker_name and
                     callback_worker_unique_id
                 ):
 
-                    worker_obj: Process = SnapshotAsyncWorker(
-                        name=callback_worker_name,
-                    )
+                    if callback_worker_class == 'snapshot_workers':
+                        worker_obj: Process = SnapshotAsyncWorker(
+                            name=callback_worker_name,
+                        )
+                    elif callback_worker_class == 'indexing_workers':
+                        worker_obj: Process = IndexingAsyncWorker(
+                            name=callback_worker_name,
+                        )
+                    elif callback_worker_class == 'aggregation_workers':
+                        worker_obj: Process = AggregationAsyncWorker(
+                            name=callback_worker_name,
+                        )
+
                     worker_obj.start()
                     self._spawned_cb_processes_map[callback_worker_class][
                         callback_worker_unique_id
@@ -162,8 +181,9 @@ class ProcessHubCore(Process):
             p_.kill()
 
         for k, v in self._spawned_cb_processes_map.items():
-            if v['process'].pid == pid:
-                v['process'].join()
+            for unique_worker_entries in v.values():
+                if unique_worker_entries['process'].pid == pid:
+                    unique_worker_entries['process'].join()
 
         for k, v in self._spawned_processes_map.items():
             # internal state reporter might set proc_id_map[k] = -1
@@ -219,29 +239,81 @@ class ProcessHubCore(Process):
             signal(signame, self.signal_handler)
 
         self._logger.debug('=' * 80)
-        self._logger.debug('Launching Callback Workers')
-        self._spawned_cb_processes_map['callback_worker'] = dict()
+        self._logger.debug('Launching Workers')
 
-        for _ in range(settings.num_callback_workers):
+        # Starting Snapshot workers
+        self._spawned_cb_processes_map['snapshot_workers'] = dict()
+
+        for _ in range(settings.callback_worker_config.num_snapshot_workers):
             unique_id = str(uuid.uuid4())[:5]
             unique_name = (
-                f'PowerLoom|CallbackWorker:{settings.namespace}:{settings.instance_id}' +
+                f'PowerLoom|SnapshotWorker:{settings.namespace}:{settings.instance_id}' +
                 '-' +
                 unique_id
             )
-            worker_obj: Process = SnapshotAsyncWorker(name=unique_name)
-            worker_obj.start()
-            self._spawned_cb_processes_map['callback_worker'].update(
-                {unique_id: {'id': unique_name, 'process': worker_obj}},
+            snapshot_worker_obj: Process = SnapshotAsyncWorker(name=unique_name)
+            snapshot_worker_obj.start()
+            self._spawned_cb_processes_map['snapshot_workers'].update(
+                {unique_id: {'id': unique_name, 'process': snapshot_worker_obj}},
             )
             self._logger.debug(
                 (
-                    'Process Hub Core launched process {} for callback'
+                    'Process Hub Core launched process {} for snapshot'
                     ' worker {} with PID: {}'
                 ),
                 unique_name,
-                'callback_worker',
-                worker_obj.pid,
+                'snapshot_workers',
+                snapshot_worker_obj.pid,
+            )
+
+        # Starting Indexing workers
+        self._spawned_cb_processes_map['indexing_workers'] = dict()
+
+        for _ in range(settings.callback_worker_config.num_indexing_workers):
+            unique_id = str(uuid.uuid4())[:5]
+            unique_name = (
+                f'PowerLoom|IndexingWorker:{settings.namespace}:{settings.instance_id}' +
+                '-' +
+                unique_id
+            )
+            indexing_worker_obj: Process = IndexingAsyncWorker(name=unique_name)
+            indexing_worker_obj.start()
+            self._spawned_cb_processes_map['indexing_workers'].update(
+                {unique_id: {'id': unique_name, 'process': indexing_worker_obj}},
+            )
+            self._logger.debug(
+                (
+                    'Process Hub Core launched process {} for indexing'
+                    ' worker {} with PID: {}'
+                ),
+                unique_name,
+                'indexing_workers',
+                indexing_worker_obj.pid,
+            )
+
+        # Starting Aggregate workers
+        self._spawned_cb_processes_map['aggregation_workers'] = dict()
+
+        for _ in range(settings.callback_worker_config.num_aggregation_workers):
+            unique_id = str(uuid.uuid4())[:5]
+            unique_name = (
+                f'PowerLoom|AggregationWorker:{settings.namespace}:{settings.instance_id}' +
+                '-' +
+                unique_id
+            )
+            aggregation_worker_obj: Process = AggregationAsyncWorker(name=unique_name)
+            aggregation_worker_obj.start()
+            self._spawned_cb_processes_map['aggregation_workers'].update(
+                {unique_id: {'id': unique_name, 'process': aggregation_worker_obj}},
+            )
+            self._logger.debug(
+                (
+                    'Process Hub Core launched process {} for'
+                    ' worker {} with PID: {}'
+                ),
+                unique_name,
+                'aggregation_workers',
+                aggregation_worker_obj.pid,
             )
 
         self._logger.debug(

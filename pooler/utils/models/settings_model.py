@@ -138,6 +138,12 @@ class EventContract(BaseModel):
     abi: str
 
 
+class CallbackWorkerConfig(BaseModel):
+    num_snapshot_workers: int
+    num_indexing_workers: int
+    num_aggregation_workers: int
+
+
 class Settings(BaseModel):
     namespace: str
     core_api: CoreAPI
@@ -161,4 +167,4 @@ class Settings(BaseModel):
     env: str
     pair_contract_abi: str
     event_contract: EventContract
-    num_callback_workers: int
+    callback_worker_config: CallbackWorkerConfig

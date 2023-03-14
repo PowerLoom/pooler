@@ -94,6 +94,7 @@ class EpochFinalizedEvent(EventBase):
     DAGBlockHeight: int
     projectId: str
     snapshotCid: str
+    broadcast_id: str
 
 
 class IndexFinalizedEvent(EventBase):
@@ -102,3 +103,4 @@ class IndexFinalizedEvent(EventBase):
     indexTailDAGBlockHeight: int
     tailBlockEpochSourceChainHeight: int
     indexIdentifierHash: str
+    broadcast_id: str
