@@ -118,21 +118,6 @@ class Logs(BaseModel):
     write_to_files: bool
 
 
-class ProcessorConfig(BaseModel):
-    module: str
-    class_name: str
-
-
-class ProjectConfig(BaseModel):
-    project_type: str
-    projects: List[str]
-    processor: ProcessorConfig
-
-
-class ProjectsConfig(BaseModel):
-    config: List[ProjectConfig]
-
-
 class EventContract(BaseModel):
     address: str
     abi: str
@@ -177,8 +162,35 @@ class Settings(BaseModel):
     webhook_listener: WebhookListener
     logs: Logs
     projects_config_path: str
+    indexer_config_path: str
     env: str
     pair_contract_abi: str
     event_contract: EventContract
     callback_worker_config: CallbackWorkerConfig
     ipfs: IPFSconfig
+
+
+# Projects related models
+class ProcessorConfig(BaseModel):
+    module: str
+    class_name: str
+
+
+class ProjectConfig(BaseModel):
+    project_type: str
+    projects: List[str]
+    processor: ProcessorConfig
+
+
+class ProjectsConfig(BaseModel):
+    config: List[ProjectConfig]
+
+
+# Indexer related models
+class IndexingConfig(BaseModel):
+    project_type: str
+    processor: ProcessorConfig
+
+
+class IndexerConfig(BaseModel):
+    config: List[IndexingConfig]

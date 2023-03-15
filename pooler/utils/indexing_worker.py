@@ -5,6 +5,7 @@ from uuid import uuid4
 from aio_pika import IncomingMessage
 from pydantic import ValidationError
 
+from pooler.settings.config import indexer_config
 from pooler.utils.generic_worker import GenericAsyncWorker
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 from pooler.utils.redis.redis_keys import (
@@ -19,7 +20,9 @@ class IndexingAsyncWorker(GenericAsyncWorker):
 
         self._index_calculation_mapping = None
         self._task_types = []
-        # TODO: Fill task_types from indexing config
+        for indexing_project in indexer_config.config:
+            type_ = indexing_project.project_type
+            self._task_types.append(type_)
 
     # TODO: Add interfaces and notifiers for indexing failure
     # @notify_on_task_failure

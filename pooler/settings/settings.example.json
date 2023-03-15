@@ -96,6 +96,7 @@
         "write_to_files": true
     },
     "projects_config_path": "pooler/static/projects.json",
+    "indexer_config_path": "pooler/static/indexer.json",
     "env": "<test/prod>",
     "pair_contract_abi": "pooler/static/abis/UniswapV2Pair.json",
     "event_contract": {

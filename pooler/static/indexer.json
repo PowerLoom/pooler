@@ -1,0 +1,18 @@
+{
+    "config": [
+        {
+        "project_type": "24h",
+        "processor":{
+          "module": "pooler.indexer.index_24h",
+          "class_name": "Processor"
+        }
+      },
+      {
+        "project_type": "7d",
+        "processor":{
+          "module": "pooler.indexer.index_7d",
+          "class_name": "Processor"
+        }
+      }
+    ]
+  }

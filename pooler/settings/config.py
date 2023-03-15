@@ -1,5 +1,6 @@
 import json
 
+from pooler.utils.models.settings_model import IndexerConfig
 from pooler.utils.models.settings_model import ProjectsConfig
 from pooler.utils.models.settings_model import Settings
 
@@ -17,3 +18,9 @@ enabled_projects = []
 
 for project_config in projects_config:
     enabled_projects.extend(project_config.projects)
+
+
+indexer_config_path = settings.indexer_config_path
+indexer_config_file = open(indexer_config_path)
+indexer_config_dict = json.load(indexer_config_file)
+indexer_config = IndexerConfig(**indexer_config_dict)
