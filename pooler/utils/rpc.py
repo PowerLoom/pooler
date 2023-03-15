@@ -89,6 +89,9 @@ def get_event_sig_and_abi(event_signatures, event_abis):
 
 
 class RpcHelper(object):
+    _aiohttp_tcp_connector: TCPConnector
+    _web3_aiohttp_client: ClientSession
+
     def __init__(self, archive_mode=False):
         self._archive_mode = archive_mode
 

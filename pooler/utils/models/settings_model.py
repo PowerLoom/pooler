@@ -144,6 +144,19 @@ class CallbackWorkerConfig(BaseModel):
     num_aggregation_workers: int
 
 
+class IPFSWriterRateLimit(BaseModel):
+    req_per_sec: int
+    burst: int
+
+
+class IPFSconfig(BaseModel):
+    url: str
+    reader_url: str
+    write_rate_limit: IPFSWriterRateLimit
+    timeout: int
+    local_cache_path: str
+
+
 class Settings(BaseModel):
     namespace: str
     core_api: CoreAPI
@@ -168,3 +181,4 @@ class Settings(BaseModel):
     pair_contract_abi: str
     event_contract: EventContract
     callback_worker_config: CallbackWorkerConfig
+    ipfs: IPFSconfig

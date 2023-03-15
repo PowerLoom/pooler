@@ -2,6 +2,7 @@ from enum import Enum
 from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Union
 
 from pydantic import BaseModel
 
@@ -80,6 +81,7 @@ class ProjectRegistrationRequestForIndexing(BaseModel):
     namespace: str
 
 
+# Event detector related models
 class EventBase(BaseModel):
     timestamp: int
 
@@ -104,3 +106,89 @@ class IndexFinalizedEvent(EventBase):
     tailBlockEpochSourceChainHeight: int
     indexIdentifierHash: str
     broadcast_id: str
+
+
+# Indexing and Aggregation related models
+class BlockRetrievalFlags(int, Enum):
+    only_dag_block = 0
+    dag_block_and_payload_data = 1
+    only_payload_data = 2
+
+
+class DagCidFinalizedCallback(BaseModel):
+    DAGBlockHeight: int
+    projectId: str
+    dagCid: str
+    timestamp: int
+
+
+class DAGBlockPayloadLinkedPath(BaseModel):
+    cid: Dict[str, str]
+
+
+# DAGBlockPayloadLinkedPath is transformed by retrieval utilities
+# for an easy to access RetrievedDAGBlockPayload object
+class RetrievedDAGBlockPayload(BaseModel):
+    cid: str
+    payload: Union[dict, None]
+
+
+class RetrievedDAGBlock(BaseModel):
+    height: int
+    prevCid: Optional[Dict[str, str]]
+    prevRoot: Optional[str] = None
+    data: Optional[RetrievedDAGBlockPayload]
+    txHash: str
+    timestamp: int
+
+
+class IndexSeek(BaseModel):
+    dagBlockHead: Optional[RetrievedDAGBlock] = None
+    dagBlockTail: Optional[RetrievedDAGBlock] = None
+    dagBlockTailCid: Optional[str] = None
+    # block number in epoch range contained by DAGBlock at
+    # dagBlockCidTail: dagBlock.data.payload['chainHeightRange']
+    # soureChainBlockNum in the range ∈ (epoch_range['begin'], epoch_range['end']]
+    sourceChainBlockNum: int = 0
+
+
+class CachedDAGTailMarker(BaseModel):
+    height: int
+    cid: str
+    sourceChainBlockNum: int
+
+
+class CachedIndexMarker(BaseModel):
+    dagTail: CachedDAGTailMarker
+    dagHeadCid: str
+
+
+class TailAdjustmentCursor(BaseModel):
+    dag_block_height: int
+    dag_block: RetrievedDAGBlock
+    dag_block_cid: str
+    epoch_range: tuple
+
+
+class IndexFinalizedCallback(BaseModel):
+    projectId: str
+    DAGBlockHeight: int
+    indexTailDAGBlockHeight: int
+    tailBlockEpochSourceChainHeight: int
+    indexIdentifierHash: str
+    timestamp: int
+
+
+class CachedAggregateMarker(BaseModel):
+    dagTail: CachedDAGTailMarker
+    dagHeadCid: str
+    aggregate: dict
+
+
+class PairTradeVolume(BaseModel):
+    total_volume: int = 0
+    fees: int = 0
+    token0_volume: int = 0
+    token1_volume: int = 0
+    token0_volume_usd: int = 0
+    token1_volume_usd: int = 0

@@ -106,5 +106,15 @@
         "num_snapshot_workers": 8,
         "num_indexing_workers": 4,
         "num_aggregation_workers": 4
-    }
+    },
+    "ipfs": {
+        "url": "/dns/ipfs/tcp/5001",
+        "reader_url": "/dns/ipfs/tcp/5001",
+        "write_rate_limit": {
+          "req_per_sec": 10,
+          "burst": 10
+        },
+        "timeout": 20,
+        "local_cache_path": "/home/ubuntu/local_cache/"
+      }
 }
