@@ -27,22 +27,27 @@ from pooler.utils.rpc import RpcHelper
 
 class GenericAsyncWorker(multiprocessing.Process):
 
+    _async_transport: AsyncHTTPTransport
+    _rmq_connection_pool: Pool
+    _rmq_channel_pool: Pool
+    _aioredis_pool: aioredis.Redis
+    _writer_redis_pool: aioredis.Redis
+    _reader_redis_pool: aioredis.Redis
+    _rpc_helper: RpcHelper
+    _httpx_client: AsyncClient
+
     def __init__(self, name, **kwargs):
         self._core_rmq_consumer: asyncio.Task
         self._q = f'powerloom-backend-cb:{settings.namespace}:{settings.instance_id}'
         self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
         self._rmq_routing = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.*'
-        self._aioredis_pool = None
         self._redis_conn: Union[None, aioredis.Redis] = None
         self._running_callback_tasks: Dict[str, asyncio.Task] = dict()
         super(GenericAsyncWorker, self).__init__(name=name, **kwargs)
         self._logger = logger.bind(module=self.name)
 
         self._rate_limiting_lua_scripts = None
-        self._client = None
-        self._async_transport = None
         self._shutdown_signal_received_count = 0
-        self._rpc_helper = None
 
     async def _shutdown_handler(self, sig, loop: asyncio.AbstractEventLoop):
         self._shutdown_signal_received_count += 1
@@ -147,7 +152,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._redis_conn = self._aioredis_pool._aioredis_pool
 
     async def _init_httpx_client(self):
-        if self._client is not None:
+        if self._async_transport is not None:
             return
         self._async_transport = AsyncHTTPTransport(
             limits=Limits(

@@ -13,10 +13,12 @@ from eth_utils import keccak
 from pydantic import ValidationError
 from setproctitle import setproctitle
 
+from pooler.settings.config import indexer_config
 from pooler.settings.config import projects_config
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
-from pooler.utils.models.message_models import PowerloomCallbackProcessMessage
+from pooler.utils.models.message_models import PowerloomIndexingProcessMessage
+from pooler.utils.models.message_models import PowerloomSnapshotProcessMessage
 from pooler.utils.models.message_models import SystemEpochStatusReport
 from pooler.utils.rabbitmq_helpers import RabbitmqSelectLoopInteractor
 from pooler.utils.redis.redis_conn import RedisPoolCache
@@ -49,7 +51,7 @@ class ProcessorDistributor(multiprocessing.Process):
             self._rpc_helper = RpcHelper()
 
     async def _warm_up_cache_for_epoch_data(
-        self, msg_obj: PowerloomCallbackProcessMessage,
+        self, msg_obj: PowerloomSnapshotProcessMessage,
     ):
         """
         Function to warm up the cache which is used across all snapshot constructors
@@ -104,7 +106,7 @@ class ProcessorDistributor(multiprocessing.Process):
             type_ = project_config.project_type
             for project in project_config.projects:
                 contract = project.lower()
-                process_unit = PowerloomCallbackProcessMessage(
+                process_unit = PowerloomSnapshotProcessMessage(
                     begin=msg_obj.begin,
                     end=msg_obj.end,
                     contract=contract,
@@ -147,8 +149,60 @@ class ProcessorDistributor(multiprocessing.Process):
         )
 
     def _distribute_callbacks_indexing(self, dont_use_ch, method, properties, body):
-        # TODO: Implement this method to distribute indexing callbacks to indexer workers
-        pass
+        try:
+            msg_obj: PowerloomIndexingProcessMessage = (
+                PowerloomIndexingProcessMessage.parse_raw(body)
+            )
+        except ValidationError:
+            self._logger.opt(exception=True).error(
+                'Bad message structure of event callback',
+            )
+            return
+        except Exception:
+            self._logger.opt(exception=True).error(
+                'Unexpected message format of event callback',
+            )
+            return
+        self._logger.debug(f'Indexing Task Distribution time - {int(time.time())}')
+
+        for config in indexer_config:
+            type_ = config.project_type
+            self._rabbitmq_interactor.enqueue_msg_delivery(
+                exchange=f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}',
+                routing_key=f'powerloom-backend-callback:{settings.namespace}'
+                f':{settings.instance_id}.{type_}',
+                msg_body=process_unit.json(),
+            )
+            self._logger.debug(
+                (
+                    'Sent out epoch to be processed by worker to calculate'
+                    f' {type_} pair contract: {process_unit}'
+                ),
+            )
+
+            update_log = {
+                'worker': self.name,
+                'update': {
+                    'action': 'RabbitMQ.Publish',
+                    'info': {
+                        'routing_key': f'powerloom-backend-callback:{settings.namespace}'
+                        f':{settings.instance_id}.{type_}',
+                        'exchange': f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}',
+                        'msg': msg_obj.dict(),
+                    },
+                },
+            }
+            self.ev_loop.run_until_complete(
+                self._redis_conn.zadd(
+                    cb_broadcast_processing_logs_zset.format(
+                        msg_obj.broadcast_id,
+                    ),
+                    {json.dumps(update_log): int(time.time())},
+                ),
+            )
+        self._rabbitmq_interactor._channel.basic_ack(
+            delivery_tag=method.delivery_tag,
+        )
 
     def _distribute_callbacks_aggregate(self, dont_use_ch, method, properties, body):
         # TODO: Implement this method to distribute aggregate callbacks to aggregator workers

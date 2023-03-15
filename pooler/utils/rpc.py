@@ -31,6 +31,7 @@ from web3.types import Wei
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.exceptions import RPCException
+from pooler.utils.models.settings_model import RPCConfigBase
 from pooler.utils.redis.rate_limiter import check_rpc_rate_limit
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 from pooler.utils.redis.redis_keys import rpc_blocknumber_calls
@@ -92,9 +93,9 @@ class RpcHelper(object):
     _aiohttp_tcp_connector: TCPConnector
     _web3_aiohttp_client: ClientSession
 
-    def __init__(self, archive_mode=False):
+    def __init__(self, rpc_settings: RPCConfigBase = settings.rpc, archive_mode=False):
         self._archive_mode = archive_mode
-
+        self._rpc_settings = rpc_settings
         self._nodes = list()
         self._current_node_index = -1
         self._node_count = 0
@@ -138,7 +139,7 @@ class RpcHelper(object):
         )
         self._web3_aiohttp_client = ClientSession(
             connector=self._aiohttp_tcp_connector,
-            timeout=ClientTimeout(total=settings.rpc.request_time_out),
+            timeout=ClientTimeout(total=self._rpc_settings.request_time_out),
         )
 
     async def _load_async_web3_providers(self):
@@ -163,9 +164,9 @@ class RpcHelper(object):
 
     def _load_web3_providers_and_rate_limits(self):
         if self._archive_mode:
-            nodes = settings.rpc.archive_nodes
+            nodes = self._rpc_settings.archive_nodes
         else:
-            nodes = settings.rpc.full_nodes
+            nodes = self._rpc_settings.full_nodes
 
         for node in nodes:
             try:

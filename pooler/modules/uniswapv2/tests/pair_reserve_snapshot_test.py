@@ -8,7 +8,7 @@ from ..pair_total_reserves import (
 )
 from pooler.init_rabbitmq import init_exchanges_queues
 from pooler.settings.config import settings
-from pooler.utils.models.message_models import PowerloomCallbackProcessMessage
+from pooler.utils.models.message_models import PowerloomSnapshotProcessMessage
 
 
 async def test_construction_snapshot(
@@ -17,7 +17,7 @@ async def test_construction_snapshot(
     pair_contract,
     failed_queued_epochs_past=2,
 ):
-    cur_epoch = PowerloomCallbackProcessMessage(
+    cur_epoch = PowerloomSnapshotProcessMessage(
         begin=epoch_begin,
         end=epoch_end,
         broadcast_id=str(uuid.uuid4()),
@@ -32,7 +32,7 @@ async def test_construction_snapshot(
         )
         failed_query_epochs.insert(
             0,
-            PowerloomCallbackProcessMessage(
+            PowerloomSnapshotProcessMessage(
                 begin=past_failed_query_epoch_begin,
                 end=past_failed_query_epoch_end,
                 broadcast_id=str(uuid.uuid4()),

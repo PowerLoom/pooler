@@ -18,7 +18,7 @@ from pooler.utils.default_logger import logger
 from pooler.utils.models.data_models import PayloadCommitAPIRequest
 from pooler.utils.models.data_models import SnapshotterIssue
 from pooler.utils.models.data_models import SnapshotterIssueSeverity
-from pooler.utils.models.message_models import PowerloomCallbackProcessMessage
+from pooler.utils.models.message_models import PowerloomSnapshotProcessMessage
 from pooler.utils.rpc import RpcHelper
 
 # setup logger
@@ -54,7 +54,7 @@ def notify_on_task_failure(fn):
             try:
                 if 'msg_obj' in kwargs:
                     msg_obj = kwargs['msg_obj']
-                    if isinstance(msg_obj, PowerloomCallbackProcessMessage):
+                    if isinstance(msg_obj, PowerloomSnapshotProcessMessage):
                         contract = msg_obj.contract
                         project_id = f'uniswap_pairContract_*_{contract}_{settings.namespace}'
 

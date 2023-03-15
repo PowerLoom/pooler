@@ -115,13 +115,6 @@ class BlockRetrievalFlags(int, Enum):
     only_payload_data = 2
 
 
-class DagCidFinalizedCallback(BaseModel):
-    DAGBlockHeight: int
-    projectId: str
-    dagCid: str
-    timestamp: int
-
-
 class DAGBlockPayloadLinkedPath(BaseModel):
     cid: Dict[str, str]
 

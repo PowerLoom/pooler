@@ -18,22 +18,20 @@ class CoreAPI(BaseModel):
     public_rate_limit: str
 
 
-class FullNode(BaseModel):
+class RPCNodeConfig(BaseModel):
     url: str
     rate_limit: str
 
 
-class ArchiveNode(BaseModel):
-    url: str
-    rate_limit: str
-
-
-class RPC(BaseModel):
-    full_nodes: List[FullNode]
-    archive_nodes: Optional[List[ArchiveNode]]
-    force_archive_blocks: int
+class RPCConfigBase(BaseModel):
+    full_nodes: List[RPCNodeConfig]
+    archive_nodes: Optional[List[RPCNodeConfig]]
+    force_archive_blocks: Optional[int]
     retry: int
     request_time_out: int
+
+
+class RPCConfigFull(RPCConfigBase):
     skip_epoch_threshold_blocks: int
     polling_interval: int
 
@@ -149,7 +147,7 @@ class Settings(BaseModel):
     instance_id: str
     ipfs_url: str
     logs_prune_time: int
-    rpc: RPC
+    rpc: RPCConfigFull
     issue_report_url: str
     rlimit: RLimit
     timeouts: Timeouts
@@ -165,9 +163,10 @@ class Settings(BaseModel):
     indexer_config_path: str
     env: str
     pair_contract_abi: str
-    event_contract: EventContract
+    protocol_state: EventContract
     callback_worker_config: CallbackWorkerConfig
     ipfs: IPFSconfig
+    anchor_chain_rpc: RPCConfigBase
 
 
 # Projects related models
@@ -189,7 +188,7 @@ class ProjectsConfig(BaseModel):
 # Indexer related models
 class IndexingConfig(BaseModel):
     project_type: str
-    processor: ProcessorConfig
+    duration_in_seconds: int
 
 
 class IndexerConfig(BaseModel):

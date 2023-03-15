@@ -22,7 +22,7 @@ from pooler.utils.models.data_models import PayloadCommitAPIRequest
 from pooler.utils.models.data_models import SnapshotterIssue
 from pooler.utils.models.data_models import SnapshotterIssueSeverity
 from pooler.utils.models.data_models import SourceChainDetails
-from pooler.utils.models.message_models import PowerloomCallbackProcessMessage
+from pooler.utils.models.message_models import PowerloomSnapshotProcessMessage
 from pooler.utils.models.message_models import SnapshotBase
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 from pooler.utils.redis.redis_keys import (
@@ -44,7 +44,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             self._task_types.append(type_)
 
     @notify_on_task_failure
-    async def _processor_task(self, msg_obj: PowerloomCallbackProcessMessage, task_type: str):
+    async def _processor_task(self, msg_obj: PowerloomSnapshotProcessMessage, task_type: str):
         """Function used to process the received message object."""
         self._logger.debug(
             'Processing callback: {}', msg_obj,
@@ -115,7 +115,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
     async def _send_audit_payload_commit_service(
         self,
         audit_stream,
-        original_epoch: PowerloomCallbackProcessMessage,
+        original_epoch: PowerloomSnapshotProcessMessage,
         epoch_snapshot_map: Dict[
             Tuple[int, int],
             Union[SnapshotBase, None],
@@ -266,9 +266,9 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         failed_query_epochs_key: str,
         stream: str,
         discarded_query_epochs_key: str,
-        current_epoch: PowerloomCallbackProcessMessage,
+        current_epoch: PowerloomSnapshotProcessMessage,
         failed_query_epochs_l: Optional[List],
-    ) -> List[PowerloomCallbackProcessMessage]:
+    ) -> List[PowerloomSnapshotProcessMessage]:
         queued_epochs = list()
         # checks for any previously queued epochs, returns a list of such epochs in increasing order of blockheights
         if settings.env != 'test':
@@ -282,8 +282,8 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 failed_query_epochs_key,
             )
             while failed_query_epochs:
-                epoch_broadcast: PowerloomCallbackProcessMessage = (
-                    PowerloomCallbackProcessMessage.parse_raw(
+                epoch_broadcast: PowerloomSnapshotProcessMessage = (
+                    PowerloomSnapshotProcessMessage.parse_raw(
                         failed_query_epochs.decode('utf-8'),
                     )
                 )
@@ -376,7 +376,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
 
     async def _map_processed_epochs_to_adapters(
         self,
-        epochs: List[PowerloomCallbackProcessMessage],
+        epochs: List[PowerloomSnapshotProcessMessage],
         cb_fn_async,
         enqueue_on_failure,
         data_source_contract_address,
@@ -410,7 +410,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                     enqueue_on_failure and
                     settings.env != 'test'
                 ):
-                    queue_msg_obj = PowerloomCallbackProcessMessage(
+                    queue_msg_obj = PowerloomSnapshotProcessMessage(
                         begin=epoch_against_result[0],
                         end=epoch_against_result[1],
                         broadcast_id=epoch_against_result[2],
@@ -472,11 +472,10 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             return
 
         self._logger.debug('task type: {}', task_type)
-        await message.ack()
 
         try:
-            msg_obj: PowerloomCallbackProcessMessage = (
-                PowerloomCallbackProcessMessage.parse_raw(message.body)
+            msg_obj: PowerloomSnapshotProcessMessage = (
+                PowerloomSnapshotProcessMessage.parse_raw(message.body)
             )
         except ValidationError as e:
             self._logger.opt(exception=True).error(
@@ -496,6 +495,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             return
 
         asyncio.ensure_future(self._processor_task(msg_obj=msg_obj, task_type=task_type))
+        await message.ack()
 
     async def _init_project_calculation_mapping(self):
         if self._project_calculation_mapping is not None:

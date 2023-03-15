@@ -23,14 +23,22 @@ class SystemEpochStatusReport(EpochBase):
     reorg: bool = False
 
 
-class PowerloomCallbackEpoch(SystemEpochStatusReport):
+class PowerloomSnapshotEpoch(SystemEpochStatusReport):
     contracts: List[str]
 
 
-class PowerloomCallbackProcessMessage(SystemEpochStatusReport):
+class PowerloomSnapshotProcessMessage(SystemEpochStatusReport):
     contract: str
     coalesced_broadcast_ids: Optional[List[str]] = None
     coalesced_epochs: Optional[List[EpochBase]] = None
+
+
+class PowerloomIndexingProcessMessage(BaseModel):
+    DAGBlockHeight: int
+    projectId: str
+    snapshotCid: str
+    broadcast_id: str
+    timestamp: int
 
 
 class ProcessHubCommand(BaseModel):

@@ -99,12 +99,12 @@ class EventDetectorProcess(multiprocessing.Process):
         self._last_processed_block = None
         setproctitle(name)
 
-        self.rpc_helper = RpcHelper()
+        self.rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
         self.contract_abi = read_json_file(
-            settings.event_contract.abi,
+            settings.protocol_state.abi,
             self._logger,
         )
-        self.contract_address = settings.event_contract.address
+        self.contract_address = settings.protocol_state.address
         self.contract = self.rpc_helper.get_current_node()['web3_client'].eth.contract(
             address=Web3.toChecksumAddress(
                 self.contract_address,
