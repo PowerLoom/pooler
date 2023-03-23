@@ -466,7 +466,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
         task_type = message.routing_key.split('.')[-1]
-        print(task_type)
         if task_type not in self._task_types:
             return
 

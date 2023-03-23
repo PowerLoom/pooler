@@ -56,6 +56,10 @@ class IndexingAsyncWorker(GenericAsyncWorker):
                 indexing_project.duration_in_seconds
             )
         self._asyncio_lock_map: Dict[str, asyncio.Lock] = dict()
+        self._ipfs_singleton = None
+        self._source_chain_rpc_helper = None
+        self._anchor_chain_rpc_helper = None
+        self._dummy_w3_obj = None
 
     @retry(
         reraise=True, wait=wait_random_exponential(multiplier=1, max=20),
@@ -78,8 +82,6 @@ class IndexingAsyncWorker(GenericAsyncWorker):
         self._logger.debug(
             'Processing callback: {}', msg_obj,
         )
-
-        await self.init()
 
         if task_type not in self._index_calculation_mapping:
             self._logger.error(
@@ -117,7 +119,7 @@ class IndexingAsyncWorker(GenericAsyncWorker):
         tasks = [self._anchor_chain_submission_contract_obj.functions.finalizedDagCids(dag_block_height)]
         results = await self._source_chain_rpc_helper.web3_call(
             tasks=tasks,
-            redis_conn=self._writer_redis_pool,
+            redis_conn=self._redis_conn,
         )
         return results[0]
 
@@ -128,7 +130,7 @@ class IndexingAsyncWorker(GenericAsyncWorker):
             head_dag_cid: str,
             time_range: int,
     ):
-        redis_conn: aioredis.Redis = self._writer_redis_pool
+        redis_conn: aioredis.Redis = self._redis_conn
         head_block: RetrievedDAGBlock = await retrieve_block_data(
             project_id,
             head_dag_cid,
@@ -138,7 +140,7 @@ class IndexingAsyncWorker(GenericAsyncWorker):
         latest_block_in_head_epoch_timestamp = await self._source_chain_rpc_helper.batch_eth_get_block(
             from_block=head_block.data.payload['chainHeightRange']['end'],
             to_block=head_block.data.payload['chainHeightRange']['end'],
-            redis_conn=self._writer_redis_pool,
+            redis_conn=self._redis_conn,
         )
         head_timestamp = int(latest_block_in_head_epoch_timestamp[0]['result']['timestamp'], 16)
         tail_block_index = IndexSeek(dagBlockHead=head_block)
@@ -213,7 +215,7 @@ class IndexingAsyncWorker(GenericAsyncWorker):
             time_range: int,
             last_recorded_tail_source_chain_marker: CachedIndexMarker,
     ):
-        redis_conn: aioredis.Redis = self._writer_redis_pool
+        redis_conn: aioredis.Redis = self._redis_conn
         cur_head_block: RetrievedDAGBlock = await retrieve_block_data(
             project_id,
             head_dag_cid,
@@ -305,7 +307,7 @@ class IndexingAsyncWorker(GenericAsyncWorker):
         # consult protocol state stored on smart contract for finalized DAG CID at this height
         head_dag_cid = await self._get_dag_cid_at_height(callback_dag_height)
         project_id = dag_finalization_cb.projectId
-        redis_conn: aioredis.Redis = self._writer_redis_pool
+        redis_conn: aioredis.Redis = self._redis_conn
         last_recorded_dag_height_index = await redis_conn.zrange(
             name=redis_keys.get_last_indexed_markers_zset(project_id),
             start=0,
@@ -350,9 +352,10 @@ class IndexingAsyncWorker(GenericAsyncWorker):
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
         task_type = message.routing_key.split('.')[-1]
-        print(task_type)
         if task_type not in self._task_types:
             return
+
+        await self.init()
 
         self._logger.debug('task type: {}', task_type)
 
@@ -379,10 +382,6 @@ class IndexingAsyncWorker(GenericAsyncWorker):
         await message.ack()
 
     async def _init_indexing_worker(self):
-        if not self._writer_redis_pool:
-            self._writer_redis_pool = self._aioredis_pool.writer_redis_pool
-            self._reader_redis_pool = self._aioredis_pool.reader_redis_pool
-
         if not self._ipfs_singleton:
             self._ipfs_singleton = AsyncIPFSClientSingleton()
             await self._ipfs_singleton.init_sessions()
@@ -390,12 +389,12 @@ class IndexingAsyncWorker(GenericAsyncWorker):
             self._ipfs_reader_client = self._ipfs_singleton._ipfs_read_client
 
         if not self._source_chain_rpc_helper:
-            self._source_chain_rpc_helper = RpcHelper(rpc_settings=settings.source_chain_rpc)
-            await self._source_chain_rpc_helper.init(self._writer_redis_pool)
+            self._source_chain_rpc_helper = RpcHelper(rpc_settings=settings.rpc)
+            await self._source_chain_rpc_helper.init(self._redis_conn)
 
         if not self._anchor_chain_rpc_helper:
             self._anchor_chain_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
-            await self._anchor_chain_rpc_helper.init(self._writer_redis_pool)
+            await self._anchor_chain_rpc_helper.init(self._redis_conn)
 
         if not self._dummy_w3_obj:
             self._dummy_w3_obj = Web3()
