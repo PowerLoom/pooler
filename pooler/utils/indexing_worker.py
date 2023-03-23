@@ -411,7 +411,3 @@ class IndexingAsyncWorker(GenericAsyncWorker):
         await self._init_httpx_client()
         await self._init_rpc_helper()
         await self._init_indexing_worker()
-
-
-wkr = IndexingAsyncWorker('test')
-wkr.start()

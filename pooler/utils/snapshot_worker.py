@@ -516,7 +516,3 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         await self._init_httpx_client()
         await self._init_rpc_helper()
         await self._init_project_calculation_mapping()
-
-
-wkr = SnapshotAsyncWorker('test')
-wkr.start()
