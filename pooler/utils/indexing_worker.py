@@ -97,7 +97,7 @@ class IndexingAsyncWorker(GenericAsyncWorker):
             asyncio.get_running_loop(),
         )
         cur_task.set_name(
-            f'aio_pika.consumer|Processor|{task_type}|{msg_obj.contract}',
+            f'aio_pika.consumer|Processor|{task_type}|{self_unique_id}',
         )
         self._running_callback_tasks[self_unique_id] = cur_task
 
