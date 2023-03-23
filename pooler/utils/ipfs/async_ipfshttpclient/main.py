@@ -5,11 +5,11 @@ from httpx import AsyncHTTPTransport
 from httpx import Limits
 from httpx import Timeout
 
-import pooler.utils.async_ipfshttpclient.utils.addr as addr_util
+import pooler.utils.ipfs.async_ipfshttpclient.utils.addr as addr_util
 from pooler.settings.config import settings
+from pooler.utils.default_logger import logger
 from pooler.utils.ipfs.async_ipfshttpclient.dag import DAGSection
 from pooler.utils.ipfs.async_ipfshttpclient.dag import IPFSAsyncClientError
-from pooler.utils.ipfs.default_logger import logger
 
 
 class AsyncIPFSClient:

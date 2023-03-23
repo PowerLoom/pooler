@@ -50,8 +50,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             'Processing callback: {}', msg_obj,
         )
 
-        await self.init()
-
         if task_type not in self._project_calculation_mapping:
             self._logger.error(
                 (
@@ -468,8 +466,11 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
         task_type = message.routing_key.split('.')[-1]
+        print(task_type)
         if task_type not in self._task_types:
             return
+
+        await self.init()
 
         self._logger.debug('task type: {}', task_type)
 
@@ -515,3 +516,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         await self._init_httpx_client()
         await self._init_rpc_helper()
         await self._init_project_calculation_mapping()
+
+
+wkr = SnapshotAsyncWorker('test')
+wkr.start()

@@ -45,7 +45,9 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._running_callback_tasks: Dict[str, asyncio.Task] = dict()
         super(GenericAsyncWorker, self).__init__(name=name, **kwargs)
         self._logger = logger.bind(module=self.name)
-
+        self._aioredis_pool = None
+        self._async_transport = None
+        self._rpc_helper = None
         self._rate_limiting_lua_scripts = None
         self._shutdown_signal_received_count = 0
 

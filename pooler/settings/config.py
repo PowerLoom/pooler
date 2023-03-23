@@ -23,4 +23,4 @@ for project_config in projects_config:
 indexer_config_path = settings.indexer_config_path
 indexer_config_file = open(indexer_config_path)
 indexer_config_dict = json.load(indexer_config_file)
-indexer_config = IndexerConfig(**indexer_config_dict)
+indexer_config = IndexerConfig(**indexer_config_dict).config

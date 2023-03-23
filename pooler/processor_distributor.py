@@ -57,10 +57,6 @@ class ProcessorDistributor(multiprocessing.Process):
         Function to warm up the cache which is used across all snapshot constructors
         and/or for internal helper functions.
         """
-        if not self._redis_conn:
-            await self._init_redis_pool()
-        if not self._rpc_helper:
-            await self._init_rpc_helper()
 
         try:
             max_chain_height = msg_obj.end
@@ -166,6 +162,13 @@ class ProcessorDistributor(multiprocessing.Process):
         self._logger.debug(f'Indexing Task Distribution time - {int(time.time())}')
 
         for config in indexer_config:
+            process_unit = PowerloomIndexingProcessMessage(
+                DAGBlockHeight=msg_obj.DAGBlockHeight,
+                projectId=msg_obj.projectId,
+                snapshotCid=msg_obj.snapshotCid,
+                broadcast_id=msg_obj.broadcast_id,
+                timestamp=msg_obj.timestamp,
+            )
             type_ = config.project_type
             self._rabbitmq_interactor.enqueue_msg_delivery(
                 exchange=f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}',
@@ -215,6 +218,11 @@ class ProcessorDistributor(multiprocessing.Process):
             ),
             body,
         )
+        if not self._redis_conn:
+            self.ev_loop.run_until_complete(self._init_redis_pool())
+
+        if not self._rpc_helper:
+            self.ev_loop.run_until_complete(self._init_rpc_helper())
         if (
             method.routing_key ==
             f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.EpochReleased'

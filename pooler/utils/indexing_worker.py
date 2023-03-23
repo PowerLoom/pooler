@@ -13,7 +13,6 @@ from tenacity import retry
 from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
-from utils.redis import redis_keys
 from web3 import Web3
 
 from pooler.settings.config import indexer_config
@@ -29,6 +28,7 @@ from pooler.utils.models.data_models import IndexSeek
 from pooler.utils.models.data_models import RetrievedDAGBlock
 from pooler.utils.models.data_models import TailAdjustmentCursor
 from pooler.utils.models.message_models import PowerloomIndexingProcessMessage
+from pooler.utils.redis import redis_keys
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 from pooler.utils.rpc import RpcHelper
 
@@ -49,7 +49,7 @@ class IndexingAsyncWorker(GenericAsyncWorker):
         self._task_types = []
         self._index_calculation_mapping = {}
 
-        for indexing_project in indexer_config.config:
+        for indexing_project in indexer_config:
             type_ = indexing_project.project_type
             self._task_types.append(type_)
             self._index_calculation_mapping[type_] = (
@@ -350,6 +350,7 @@ class IndexingAsyncWorker(GenericAsyncWorker):
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
         task_type = message.routing_key.split('.')[-1]
+        print(task_type)
         if task_type not in self._task_types:
             return
 
@@ -410,3 +411,7 @@ class IndexingAsyncWorker(GenericAsyncWorker):
         await self._init_httpx_client()
         await self._init_rpc_helper()
         await self._init_indexing_worker()
+
+
+wkr = IndexingAsyncWorker('test')
+wkr.start()
