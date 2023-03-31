@@ -191,7 +191,8 @@ class EpochDetectorProcess(multiprocessing.Process):
                     self._last_processed_epoch = json.loads(last_processed_epoch_data)
 
             if self._last_processed_epoch:
-                if current_epoch['begin'] - self._last_processed_epoch['end'] > settings.rpc.skip_epoch_threshold_blocks:
+                if (current_epoch['begin'] - self._last_processed_epoch['end']) \
+                        > settings.rpc.skip_epoch_threshold_blocks:
                     # send alert
                     self._httpx_client.post(
                         url=settings.issue_report_url,
@@ -208,7 +209,7 @@ class EpochDetectorProcess(multiprocessing.Process):
                                 ) / settings.epoch.height,
                             ),
                             timeOfReporting=int(wall_time()),
-                            serviceName=f'Pooler|EpochDetector',
+                            serviceName='Pooler|EpochDetector',
                         ).dict(),
                     )
                     self._logger.warning(
@@ -223,7 +224,8 @@ class EpochDetectorProcess(multiprocessing.Process):
 
                 elif self._last_processed_epoch['end'] == current_epoch['end']:
                     self._logger.debug(
-                        'Last processed epoch is same as current epoch, Sleeping for {} seconds...', settings.consensus.polling_interval,
+                        'Last processed epoch is same as current epoch, Sleeping for {} seconds...',
+                        settings.consensus.polling_interval,
                     )
                     sleep(settings.consensus.polling_interval)
                     continue
@@ -231,14 +233,23 @@ class EpochDetectorProcess(multiprocessing.Process):
                 else:
                     epoch_height = current_epoch['end'] - current_epoch['begin'] + 1
                     if self._last_processed_epoch['end'] > current_epoch['end']:
-                        self._logger.warning(
-                            'Last processed epoch end {} is greater than current epoch end {}, '
-                            'something is wrong. '
-                            'Please consider resetting the state.',
-                            self._last_processed_epoch, current_epoch,
-                        )
-                        raise GenericExitOnSignal
-
+                        if abs(self.last_processed_epoch['end'] - current_epoch['end']) % epoch_height != 0:
+                            self._logger.warning(
+                                'Last processed epoch end {} is greater than current epoch end {}, '
+                                'but the difference is not a multiple of epoch height, something is wrong. '
+                                'Please consider resetting the state.',
+                                self._last_processed_epoch, current_epoch,
+                            )
+                            raise GenericExitOnSignal
+                        else:
+                            self._logger.debug(
+                                'Last processed epoch end {} is greater than current epoch end {}, '
+                                'but the difference is a multiple of epoch height, '
+                                'so we are good, waiting for epoch generator to catch up.',
+                                self._last_processed_epoch, current_epoch,
+                            )
+                            sleep(settings.consensus.sleep_secs_between_chunks)
+                            continue
                     for epoch in chunks(self._last_processed_epoch['end'] + 1, current_epoch['end'], epoch_height):
                         epoch_from_chunk = {
                             'begin': epoch[0], 'end': epoch[1], 'broadcast_id': str(uuid.uuid4()),
