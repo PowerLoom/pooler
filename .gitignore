@@ -1,13 +1,12 @@
 .env
 .python-version
-settings.json
+pooler/settings/settings.json
 __pycache__/
-logs/
 .idea/
 .DS_Store
 screenlog*
 temp/*
 uniswapTokenData
 test.py
-pooler/static/cached_pair_addresses.json
-pooler/auth/settings/auth_settings.json
+projects.json
+auth_settings.json

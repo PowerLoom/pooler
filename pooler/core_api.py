@@ -21,21 +21,11 @@ from pooler.auth.helpers.helpers import incr_success_calls_count
 from pooler.auth.helpers.helpers import inject_rate_limit_fail_response
 from pooler.auth.helpers.helpers import rate_limit_auth_check
 from pooler.auth.helpers.redis_conn import RedisPoolCache as AuthRedisPoolCache
+from pooler.settings.config import enabled_projects
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
-from pooler.utils.file_utils import read_json_file
-from pooler.utils.redis import redis_keys
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 from pooler.utils.redis.redis_conn import RedisPoolCache
-from pooler.utils.redis.redis_keys import uniswap_pair_cached_recent_logs
-from pooler.utils.redis.redis_keys import uniswap_pair_contract_tokens_addresses
-from pooler.utils.redis.redis_keys import uniswap_tokens_pair_map
-from pooler.utils.redis.redis_keys import uniswap_V2_daily_stats_at_blockheight
-from pooler.utils.redis.redis_keys import uniswap_v2_daily_stats_snapshot_zset
-from pooler.utils.redis.redis_keys import uniswap_V2_snapshot_at_blockheight
-from pooler.utils.redis.redis_keys import uniswap_V2_summarized_snapshots_zset
-from pooler.utils.redis.redis_keys import uniswap_V2_tokens_at_blockheight
-from pooler.utils.redis.redis_keys import uniswap_v2_tokens_snapshot_zset
 from pooler.utils.utility_functions import number_to_abbreviated_string
 from pooler.utils.utility_functions import retrieve_payload_data
 
@@ -52,6 +42,40 @@ SNAPSHOT_STATUS_MAP = {
     3: 'TX_CONFIRMATION_PENDING',
     4: 'TX_CONFIRMED',
 }
+
+# Redis Keys
+# TODO: Adding here just to remove dependency on callback_modules, will be removed completely
+# in the future when core_api becomes usecase independent
+uniswap_pair_contract_tokens_addresses = (
+    'uniswap:pairContract:' + settings.namespace + ':{}:PairContractTokensAddresses'
+)
+
+uniswap_V2_summarized_snapshots_zset = (
+    'uniswap:V2PairsSummarySnapshot:' + settings.namespace + ':snapshotsZset'
+)
+uniswap_V2_snapshot_at_blockheight = (
+    'uniswap:V2PairsSummarySnapshot:' + settings.namespace + ':snapshot:{}'
+)  # block_height
+uniswap_v2_daily_stats_snapshot_zset = (
+    'uniswap:V2DailyStatsSnapshot:' + settings.namespace + ':snapshotsZset'
+)
+uniswap_V2_daily_stats_at_blockheight = (
+    'uniswap:V2DailyStatsSnapshot:' + settings.namespace + ':snapshot:{}'
+)  # block_height
+uniswap_v2_tokens_snapshot_zset = (
+    'uniswap:V2TokensSummarySnapshot:' + settings.namespace + ':snapshotsZset'
+)
+uniswap_V2_tokens_at_blockheight = (
+    'uniswap:V2TokensSummarySnapshot:' + settings.namespace + ':{}'
+)  # block_height
+
+uniswap_pair_cached_recent_logs = (
+    'uniswap:pairContract:' + settings.namespace + ':{}:recentLogs'
+)
+
+uniswap_tokens_pair_map = (
+    'uniswap:pairContract:' + settings.namespace + ':tokensPairMap'
+)
 
 
 # setup logging
@@ -83,31 +107,35 @@ async def startup_boilerplate():
     app.state.redis_pool = app.state.aioredis_pool._aioredis_pool
     app.state.auth_aioredis_singleton = AuthRedisPoolCache(pool_size=100)
     await app.state.auth_aioredis_singleton.populate()
-    app.state.auth_aioredis_pool = app.state.auth_aioredis_singleton._aioredis_pool
+    app.state.auth_aioredis_pool = (
+        app.state.auth_aioredis_singleton._aioredis_pool
+    )
     app.state.core_settings = settings
     app.state.local_user_cache = dict()
     await load_rate_limiter_scripts(app.state.auth_aioredis_pool)
 
 
-def project_namespace_inject(request: Request, stream: str = Query(default='pair_total_reserves')):
+def project_namespace_inject(
+    request: Request, stream: str = Query(default='pair_total_reserves'),
+):
     """
-        This dependency injection is meant to support multiple 'streams' of snapshots submitted to Audit Protocol core.
-        for eg. pair total reserves, pair trades etc. Effectively, it injects namespaces into a project ID
+    This dependency injection is meant to support multiple 'streams' of snapshots submitted to Audit Protocol core.
+    for eg. pair total reserves, pair trades etc. Effectively, it injects namespaces into a project ID
     """
     pair_contract_address = request.path_params['pair_contract_address']
-    audit_project_id = f'uniswap_pairContract_{stream}_{pair_contract_address}_{settings.namespace}'
+    audit_project_id = f'{stream}_{pair_contract_address}_{settings.namespace}'
     return audit_project_id
 
 
 # TODO: This will not be required unless we are serving archived data.
 async def save_request_data(
-        request: Request,
-        request_id: str,
-        max_count: int,
-        from_height: int,
-        to_height: int,
-        data,
-        project_id: str,
+    request: Request,
+    request_id: str,
+    max_count: int,
+    from_height: int,
+    to_height: int,
+    data,
+    project_id: str,
 ):
     # Acquire redis connection
     request_info_key = f'pendingRequestInfo:{request_id}'
@@ -124,8 +152,8 @@ async def save_request_data(
 
 
 async def delete_request_data(
-        request: Request,
-        request_id: str,
+    request: Request,
+    request_id: str,
 ):
     request_info_key = f'pendingRequestInfo:{request_id}'
     redis_conn = await request.app.redis_pool
@@ -142,26 +170,30 @@ async def health_check():
 
 @app.get('/snapshots/{pair_contract_address:str}')
 async def get_past_snapshots(
-        request: Request,
-        response: Response,
-        maxCount: Optional[int] = Query(None),
-        audit_project_id: str = Depends(project_namespace_inject),
-        data: Optional[str] = Query('false'),
-        rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
+    request: Request,
+    response: Response,
+    maxCount: Optional[int] = Query(None),
+    audit_project_id: str = Depends(project_namespace_inject),
+    data: Optional[str] = Query('false'),
+    rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
 ):
     if not (
-            rate_limit_auth_dep.rate_limit_passed and
-            rate_limit_auth_dep.authorized and
-            rate_limit_auth_dep.owner.active == UserStatusEnum.active
+        rate_limit_auth_dep.rate_limit_passed and
+        rate_limit_auth_dep.authorized and
+        rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
     if maxCount > 100:
         return {
-            'error': 'Data being queried is more than 100 snapshots. Querying data for upto last 100 snapshots is supported.',
+            'error': (
+                'Data being queried is more than 100 snapshots. Querying data'
+                ' for upto last 100 snapshots is supported.'
+            ),
         }
     max_count = 10 if not maxCount else maxCount
     last_block_height_url = urljoin(
-        settings.audit_protocol_engine.url, f'/{audit_project_id}/payloads/height',
+        settings.audit_protocol_engine.url,
+        f'/{audit_project_id}/payloads/height',
     )
     async with aiohttp.ClientSession() as session:
         async with session.get(url=last_block_height_url) as resp:
@@ -178,13 +210,19 @@ async def get_past_snapshots(
         data = False
     else:
         data = data.lower()
-    query_params = {'from_height': from_block, 'to_height': to_block, 'data': data}
+    query_params = {
+        'from_height': from_block,
+        'to_height': to_block,
+        'data': data,
+    }
     range_fetch_url = urljoin(
         settings.audit_protocol_engine.url,
         f'/{audit_project_id}/payloads',
     )
     async with aiohttp.ClientSession() as session:
-        async with session.get(url=range_fetch_url, params=query_params) as resp:
+        async with session.get(
+            url=range_fetch_url, params=query_params,
+        ) as resp:
             resp_json = await resp.json()
             if isinstance(resp_json, dict):
                 if 'requestId' in resp_json.keys():
@@ -198,24 +236,25 @@ async def get_past_snapshots(
                         project_id=audit_project_id,
                         data=data,
                     )
-            auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
+            auth_redis_conn: aioredis.Redis = (
+                request.app.state.auth_aioredis_pool
+            )
             await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
             return resp_json
 
 
 @app.get('/pair_address')
 async def get_pair_contract_from_tokens(
-        request: Request,
-        response: Response,
-        token0: str,
-        token1: str,
-        rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
-
+    request: Request,
+    response: Response,
+    token0: str,
+    token1: str,
+    rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
 ):
     if not (
-            rate_limit_auth_dep.rate_limit_passed and
-            rate_limit_auth_dep.authorized and
-            rate_limit_auth_dep.owner.active == UserStatusEnum.active
+        rate_limit_auth_dep.rate_limit_passed and
+        rate_limit_auth_dep.authorized and
+        rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
 
@@ -223,9 +262,13 @@ async def get_pair_contract_from_tokens(
     token0_normalized = to_checksum_address(token0)
     token1_normalized = to_checksum_address(token1)
     pair_return = None
-    pair1 = await redis_conn.hget(uniswap_tokens_pair_map, f'{token0_normalized}-{token1_normalized}')
+    pair1 = await redis_conn.hget(
+        uniswap_tokens_pair_map, f'{token0_normalized}-{token1_normalized}',
+    )
     if not pair1:
-        pair2 = await redis_conn.hget(uniswap_tokens_pair_map, f'{token1_normalized}-{token0_normalized}')
+        pair2 = await redis_conn.hget(
+            uniswap_tokens_pair_map, f'{token1_normalized}-{token0_normalized}',
+        )
         if pair2:
             pair_return = pair2
     elif pair1.decode('utf-8') == '0x0000000000000000000000000000000000000000':
@@ -234,22 +277,24 @@ async def get_pair_contract_from_tokens(
     await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
     return {
         'data': {
-            'pairContractAddress': None if not pair_return else pair_return.decode('utf-8'),
+            'pairContractAddress': None
+            if not pair_return
+            else pair_return.decode('utf-8'),
         },
     }
 
 
 @app.get('/v2-pair/{pair_contract_address}')
 async def get_single_v2_pair_data(
-        request: Request,
-        response: Response,
-        pair_contract_address: str,
-        rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
+    request: Request,
+    response: Response,
+    pair_contract_address: str,
+    rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
 ):
     if not (
-            rate_limit_auth_dep.rate_limit_passed and
-            rate_limit_auth_dep.authorized and
-            rate_limit_auth_dep.owner.active == UserStatusEnum.active
+        rate_limit_auth_dep.rate_limit_passed and
+        rate_limit_auth_dep.authorized and
+        rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
     redis_conn = request.app.state.redis_pool
@@ -262,16 +307,23 @@ async def get_single_v2_pair_data(
     if len(latest_v2_summary_snapshot) < 1:
         return {'data': None}
 
-    latest_snapshot_cid_details, latest_snapshot_blockheight = latest_v2_summary_snapshot[0]
+    (
+        latest_snapshot_cid_details,
+        latest_snapshot_blockheight,
+    ) = latest_v2_summary_snapshot[0]
     latest_payload = json.loads(latest_snapshot_cid_details.decode('utf-8'))
     latest_payload_cid = latest_payload.get('cid')
 
     v2_pairs_snapshot_data = await redis_conn.get(
-        name=uniswap_V2_snapshot_at_blockheight.format(int(latest_snapshot_blockheight)),
+        name=uniswap_V2_snapshot_at_blockheight.format(
+            int(latest_snapshot_blockheight),
+        ),
     )
     if not v2_pairs_snapshot_data:
         # fetch from ipfs
-        v2_pairs_snapshot_data = await retrieve_payload_data(latest_payload_cid, redis_conn)
+        v2_pairs_snapshot_data = await retrieve_payload_data(
+            latest_payload_cid, redis_conn,
+        )
 
     auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
     await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
@@ -299,14 +351,14 @@ def get_tokens_liquidity_for_sort(pairData):
 @app.get('/v1/api/v2-pairs')
 @app.get('/v2-pairs')
 async def get_v2_pairs_data(
-        request: Request,
-        response: Response,
-        rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
+    request: Request,
+    response: Response,
+    rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
 ):
     if not (
-            rate_limit_auth_dep.rate_limit_passed and
-            rate_limit_auth_dep.authorized and
-            rate_limit_auth_dep.owner.active == UserStatusEnum.active
+        rate_limit_auth_dep.rate_limit_passed and
+        rate_limit_auth_dep.authorized and
+        rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
 
@@ -333,11 +385,15 @@ async def get_v2_pairs_data(
     begin_block_timestamp_7d = latest_payload.get('begin_block_timestamp_7d')
 
     snapshot_data = await redis_conn.get(
-        name=uniswap_V2_snapshot_at_blockheight.format(int(latest_block_height)),
+        name=uniswap_V2_snapshot_at_blockheight.format(
+            int(latest_block_height),
+        ),
     )
     if not snapshot_data:
         # fetch from ipfs
-        snapshot_data = await retrieve_payload_data(latest_payload_cid, redis_conn)
+        snapshot_data = await retrieve_payload_data(
+            latest_payload_cid, redis_conn,
+        )
 
     # even ipfs doesn't have the data, return empty
     if not snapshot_data:
@@ -350,11 +406,17 @@ async def get_v2_pairs_data(
     await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
     if '/v1/api' in request.url._url:
         return {
-            'data': data, 'txHash': tx_hash, 'cid': latest_payload_cid,
-            'txStatus': SNAPSHOT_STATUS_MAP[tx_status], 'prevTxHash': prev_tx_hash,
-            'block_height': data[0].get('block_height', None), 'block_timestamp': data[0].get('block_timestamp', None),
-            'begin_block_height_24h': begin_block_height_24h, 'begin_block_timestamp_24h': begin_block_timestamp_24h,
-            'begin_block_height_7d': begin_block_height_7d, 'begin_block_timestamp_7d': begin_block_timestamp_7d,
+            'data': data,
+            'txHash': tx_hash,
+            'cid': latest_payload_cid,
+            'txStatus': SNAPSHOT_STATUS_MAP[tx_status],
+            'prevTxHash': prev_tx_hash,
+            'block_height': data[0].get('block_height', None),
+            'block_timestamp': data[0].get('block_timestamp', None),
+            'begin_block_height_24h': begin_block_height_24h,
+            'begin_block_timestamp_24h': begin_block_timestamp_24h,
+            'begin_block_height_7d': begin_block_height_7d,
+            'begin_block_timestamp_7d': begin_block_timestamp_7d,
         }
     else:
         return data
@@ -363,14 +425,14 @@ async def get_v2_pairs_data(
 @app.get('/v1/api/v2-pairs/snapshots')
 @app.get('/v2-pairs/snapshots')
 async def get_v2_pairs_snapshots(
-        request: Request,
-        response: Response,
-        rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
+    request: Request,
+    response: Response,
+    rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
 ):
     if not (
-            rate_limit_auth_dep.rate_limit_passed and
-            rate_limit_auth_dep.authorized and
-            rate_limit_auth_dep.owner.active == UserStatusEnum.active
+        rate_limit_auth_dep.rate_limit_passed and
+        rate_limit_auth_dep.authorized and
+        rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
     redis_conn: aioredis.Redis = request.app.state.redis_pool
@@ -395,15 +457,15 @@ async def get_v2_pairs_snapshots(
 @app.get('/v1/api/v2-pairs/{block_height:int}')
 @app.get('/v2-pairs/{block_height:int}')
 async def get_v2_pairs_at_block_height(
-        request: Request,
-        response: Response,
-        block_height: int,
-        rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
+    request: Request,
+    response: Response,
+    block_height: int,
+    rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
 ):
     if not (
-            rate_limit_auth_dep.rate_limit_passed and
-            rate_limit_auth_dep.authorized and
-            rate_limit_auth_dep.owner.active == UserStatusEnum.active
+        rate_limit_auth_dep.rate_limit_passed and
+        rate_limit_auth_dep.authorized and
+        rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
     redis_conn: aioredis.Redis = request.app.state.redis_pool
@@ -438,12 +500,17 @@ async def get_v2_pairs_at_block_height(
         data.sort(key=get_tokens_liquidity_for_sort, reverse=True)
         if '/v1/api' in request.url._url:
             return {
-                'data': data, 'txHash': tx_hash, 'cid': payload_cid,
-                'txStatus': SNAPSHOT_STATUS_MAP[tx_status], 'prevTxHash': prev_tx_hash,
-                'block_height': block_height, 'block_timestamp': data[0].get('block_timestamp', None),
+                'data': data,
+                'txHash': tx_hash,
+                'cid': payload_cid,
+                'txStatus': SNAPSHOT_STATUS_MAP[tx_status],
+                'prevTxHash': prev_tx_hash,
+                'block_height': block_height,
+                'block_timestamp': data[0].get('block_timestamp', None),
                 'begin_block_height_24h': begin_block_height_24h,
                 'begin_block_timestamp_24h': begin_block_timestamp_24h,
-                'begin_block_height_7d': begin_block_height_7d, 'begin_block_timestamp_7d': begin_block_timestamp_7d,
+                'begin_block_height_7d': begin_block_height_7d,
+                'begin_block_timestamp_7d': begin_block_timestamp_7d,
             }
         else:
             return data
@@ -462,10 +529,15 @@ async def get_v2_pairs_at_block_height(
 
     if '/v1/api' in request.url._url:
         return {
-            'data': payload_data, 'txHash': tx_hash, 'cid': payload_cid,
-            'block_height': block_height, 'block_timestamp': payload_data[0].get('block_timestamp', None),
-            'begin_block_height_24h': begin_block_height_24h, 'begin_block_timestamp_24h': begin_block_timestamp_24h,
-            'begin_block_height_7d': begin_block_height_7d, 'begin_block_timestamp_7d': begin_block_timestamp_7d,
+            'data': payload_data,
+            'txHash': tx_hash,
+            'cid': payload_cid,
+            'block_height': block_height,
+            'block_timestamp': payload_data[0].get('block_timestamp', None),
+            'begin_block_height_24h': begin_block_height_24h,
+            'begin_block_timestamp_24h': begin_block_timestamp_24h,
+            'begin_block_height_7d': begin_block_height_7d,
+            'begin_block_timestamp_7d': begin_block_timestamp_7d,
         }
     else:
         return payload_data
@@ -474,14 +546,14 @@ async def get_v2_pairs_at_block_height(
 @app.get('/v1/api/v2-daily-stats/snapshots')
 @app.get('/v2-daily-stats/snapshots')
 async def get_v2_daily_stats_snapshot(
-        request: Request,
-        response: Response,
-        rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
+    request: Request,
+    response: Response,
+    rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
 ):
     if not (
-            rate_limit_auth_dep.rate_limit_passed and
-            rate_limit_auth_dep.authorized and
-            rate_limit_auth_dep.owner.active == UserStatusEnum.active
+        rate_limit_auth_dep.rate_limit_passed and
+        rate_limit_auth_dep.authorized and
+        rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
     redis_conn: aioredis.Redis = request.app.state.redis_pool
@@ -507,15 +579,15 @@ async def get_v2_daily_stats_snapshot(
 @app.get('/v1/api/v2-daily-stats/{block_height:int}')
 @app.get('/v2-daily-stats/{block_height:int}')
 async def get_v2_daily_stats_by_block(
-        request: Request,
-        response: Response,
-        block_height: int,
-        rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
+    request: Request,
+    response: Response,
+    block_height: int,
+    rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
 ):
     if not (
-            rate_limit_auth_dep.rate_limit_passed and
-            rate_limit_auth_dep.authorized and
-            rate_limit_auth_dep.owner.active == UserStatusEnum.active
+        rate_limit_auth_dep.rate_limit_passed and
+        rate_limit_auth_dep.authorized and
+        rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
     redis_conn: aioredis.Redis = request.app.state.redis_pool
@@ -541,9 +613,13 @@ async def get_v2_daily_stats_by_block(
         )
         if not snapshot_data:
             # fetch from ipfs
-            payload_cid = payload_cid.decode(
-                'utf-8',
-            ) if type(payload_cid) == bytes else payload_cid
+            payload_cid = (
+                payload_cid.decode(
+                    'utf-8',
+                )
+                if type(payload_cid) == bytes
+                else payload_cid
+            )
             snapshot_data = await retrieve_payload_data(payload_cid, redis_conn)
 
         # even ipfs doesn't have payload then exit
@@ -560,67 +636,101 @@ async def get_v2_daily_stats_by_block(
         for contract_obj in snapshot_data:
             if contract_obj:
                 # aggregate trade volume and liquidity across all pairs
-                daily_stats['volume24']['currentValue'] += contract_obj['volume24']['currentValue']
-                daily_stats['volume24']['previousValue'] += contract_obj['volume24']['previousValue']
+                daily_stats['volume24']['currentValue'] += contract_obj[
+                    'volume24'
+                ]['currentValue']
+                daily_stats['volume24']['previousValue'] += contract_obj[
+                    'volume24'
+                ]['previousValue']
 
-                daily_stats['tvl']['currentValue'] += contract_obj['tvl']['currentValue']
-                daily_stats['tvl']['previousValue'] += contract_obj['tvl']['previousValue']
+                daily_stats['tvl']['currentValue'] += contract_obj['tvl'][
+                    'currentValue'
+                ]
+                daily_stats['tvl']['previousValue'] += contract_obj['tvl'][
+                    'previousValue'
+                ]
 
-                daily_stats['fees24']['currentValue'] += contract_obj['fees24']['currentValue']
-                daily_stats['fees24']['previousValue'] += contract_obj['fees24']['previousValue']
+                daily_stats['fees24']['currentValue'] += contract_obj['fees24'][
+                    'currentValue'
+                ]
+                daily_stats['fees24']['previousValue'] += contract_obj[
+                    'fees24'
+                ]['previousValue']
 
         # calculate percentage change
         if daily_stats['volume24']['previousValue'] != 0:
-            daily_stats['volume24']['change'] = daily_stats['volume24']['currentValue'] - daily_stats['volume24'][
-                'previousValue'
-            ]
-            daily_stats['volume24']['change'] = daily_stats['volume24']['change'] / daily_stats['volume24'][
-                'previousValue'
-            ] * 100
-            daily_stats['volume24']['change'] = daily_stats['volume24']['currentValue'] - daily_stats['volume24'][
-                'previousValue'
-            ]
-            daily_stats['volume24']['change'] = daily_stats['volume24']['change'] / daily_stats['volume24'][
-                'previousValue'
-            ] * 100
+            daily_stats['volume24']['change'] = (
+                daily_stats['volume24']['currentValue'] -
+                daily_stats['volume24']['previousValue']
+            )
+            daily_stats['volume24']['change'] = (
+                daily_stats['volume24']['change'] /
+                daily_stats['volume24']['previousValue'] *
+                100
+            )
+            daily_stats['volume24']['change'] = (
+                daily_stats['volume24']['currentValue'] -
+                daily_stats['volume24']['previousValue']
+            )
+            daily_stats['volume24']['change'] = (
+                daily_stats['volume24']['change'] /
+                daily_stats['volume24']['previousValue'] *
+                100
+            )
 
         if daily_stats['tvl']['previousValue'] != 0:
-            daily_stats['tvl']['change'] = daily_stats['tvl']['currentValue'] - \
+            daily_stats['tvl']['change'] = (
+                daily_stats['tvl']['currentValue'] -
                 daily_stats['tvl']['previousValue']
-            daily_stats['tvl']['change'] = daily_stats['tvl']['change'] / \
-                daily_stats['tvl']['previousValue'] * 100
+            )
+            daily_stats['tvl']['change'] = (
+                daily_stats['tvl']['change'] /
+                daily_stats['tvl']['previousValue'] *
+                100
+            )
 
         # format output
+        daily_stats['volume24']['currentValue'] = (
+            f"US${number_to_abbreviated_string(round(daily_stats['volume24']['currentValue'], 2))}"
+        )
+        daily_stats['volume24']['previousValue'] = (
+            f"US${number_to_abbreviated_string(round(daily_stats['volume24']['previousValue'], 2))}"
+        )
         daily_stats['volume24'][
-            'currentValue'
-        ] = f"US${number_to_abbreviated_string(round(daily_stats['volume24']['currentValue'], 2))}"
-        daily_stats['volume24'][
-            'previousValue'
-        ] = f"US${number_to_abbreviated_string(round(daily_stats['volume24']['previousValue'], 2))}"
-        daily_stats['volume24']['change'] = f"{round(daily_stats['volume24']['change'], 2)}%"
+            'change'
+        ] = f"{round(daily_stats['volume24']['change'], 2)}%"
 
+        daily_stats['tvl']['currentValue'] = (
+            f"US${number_to_abbreviated_string(round(daily_stats['tvl']['currentValue'], 2))}"
+        )
+        daily_stats['tvl']['previousValue'] = (
+            f"US${number_to_abbreviated_string(round(daily_stats['tvl']['previousValue'], 2))}"
+        )
         daily_stats['tvl'][
-            'currentValue'
-        ] = f"US${number_to_abbreviated_string(round(daily_stats['tvl']['currentValue'], 2))}"
-        daily_stats['tvl'][
-            'previousValue'
-        ] = f"US${number_to_abbreviated_string(round(daily_stats['tvl']['previousValue'], 2))}"
-        daily_stats['tvl']['change'] = f"{round(daily_stats['tvl']['change'], 2)}%"
+            'change'
+        ] = f"{round(daily_stats['tvl']['change'], 2)}%"
 
+        daily_stats['fees24']['currentValue'] = (
+            f"US${number_to_abbreviated_string(round(daily_stats['fees24']['currentValue'], 2))}"
+        )
+        daily_stats['fees24']['previousValue'] = (
+            f"US${number_to_abbreviated_string(round(daily_stats['fees24']['previousValue'], 2))}"
+        )
         daily_stats['fees24'][
-            'currentValue'
-        ] = f"US${number_to_abbreviated_string(round(daily_stats['fees24']['currentValue'], 2))}"
-        daily_stats['fees24'][
-            'previousValue'
-        ] = f"US${number_to_abbreviated_string(round(daily_stats['fees24']['previousValue'], 2))}"
-        daily_stats['fees24']['change'] = f"{round(daily_stats['fees24']['change'], 2)}%"
+            'change'
+        ] = f"{round(daily_stats['fees24']['change'], 2)}%"
 
         if '/v1/api' in request.url._url:
             return {
-                'data': daily_stats, 'txHash': tx_hash, 'cid': payload_cid,
-                'txStatus': SNAPSHOT_STATUS_MAP[tx_status], 'prevTxHash': prev_tx_hash,
+                'data': daily_stats,
+                'txHash': tx_hash,
+                'cid': payload_cid,
+                'txStatus': SNAPSHOT_STATUS_MAP[tx_status],
+                'prevTxHash': prev_tx_hash,
                 'block_height': snapshot_data[0].get('block_height', None),
-                'block_timestamp': snapshot_data[0].get('block_timestamp', None),
+                'block_timestamp': snapshot_data[0].get(
+                    'block_timestamp', None,
+                ),
             }
         else:
             return daily_stats
@@ -637,19 +747,23 @@ async def get_v2_daily_stats_by_block(
 
 @app.get('/v2-pairs-recent-logs')
 async def get_v2_pairs_recent_logs(
-        request: Request,
-        response: Response,
-        pair_contract: str,
-        rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
+    request: Request,
+    response: Response,
+    pair_contract: str,
+    rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
 ):
     if not (
-            rate_limit_auth_dep.rate_limit_passed and
-            rate_limit_auth_dep.authorized and
-            rate_limit_auth_dep.owner.active == UserStatusEnum.active
+        rate_limit_auth_dep.rate_limit_passed and
+        rate_limit_auth_dep.authorized and
+        rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
     redis_conn = await request.app.state.redis_pool
-    data = await redis_conn.get(uniswap_pair_cached_recent_logs.format(f'{Web3.toChecksumAddress(pair_contract)}'))
+    data = await redis_conn.get(
+        uniswap_pair_cached_recent_logs.format(
+            f'{Web3.toChecksumAddress(pair_contract)}',
+        ),
+    )
 
     if data:
         data = json.loads(data)
@@ -664,19 +778,19 @@ async def get_v2_pairs_recent_logs(
 
 @app.get('/v2-tokens-recent-logs')
 async def get_v2_tokens_recent_logs(
-        request: Request,
-        response: Response,
-        token_contract: str,
-        rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
+    request: Request,
+    response: Response,
+    token_contract: str,
+    rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
 ):
     if not (
-            rate_limit_auth_dep.rate_limit_passed and
-            rate_limit_auth_dep.authorized and
-            rate_limit_auth_dep.owner.active == UserStatusEnum.active
+        rate_limit_auth_dep.rate_limit_passed and
+        rate_limit_auth_dep.authorized and
+        rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
     pair_tokens_addresses = {}
-    all_pair_contracts = read_json_file('pooler/static/cached_pair_addresses.json', rest_logger)
+    all_pair_contracts = enabled_projects
     redis_conn = await request.app.state.redis_pool
 
     # get pair's token addresses ( pair -> token0, token1)
@@ -735,15 +849,15 @@ def sort_on_liquidity(tokenData):
 
 @app.get('/v2-token/{token_addr}')
 async def get_single_token_aggregate_data(
-        request: Request,
-        response: Response,
-        token_addr: str,
-        rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
+    request: Request,
+    response: Response,
+    token_addr: str,
+    rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
 ):
     if not (
-            rate_limit_auth_dep.rate_limit_passed and
-            rate_limit_auth_dep.authorized and
-            rate_limit_auth_dep.owner.active == UserStatusEnum.active
+        rate_limit_auth_dep.rate_limit_passed and
+        rate_limit_auth_dep.authorized and
+        rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
     redis_conn = await request.app.state.redis_pool
@@ -767,10 +881,17 @@ async def get_single_token_aggregate_data(
     )
     if not snapshot_data:
         # fetch from ipfs
-        latest_payload_cid = latest_payload_cid.decode('utf-8') if type(
-            latest_payload_cid,
-        ) == bytes else latest_payload_cid
-        snapshot_data = await retrieve_payload_data(latest_payload_cid, redis_conn)
+        latest_payload_cid = (
+            latest_payload_cid.decode('utf-8')
+            if type(
+                latest_payload_cid,
+            ) ==
+            bytes
+            else latest_payload_cid
+        )
+        snapshot_data = await retrieve_payload_data(
+            latest_payload_cid, redis_conn,
+        )
 
         # even ipfs doesn't have data, return empty
         if not snapshot_data:
@@ -797,14 +918,14 @@ async def get_single_token_aggregate_data(
 @app.get('/v1/api/v2-tokens')
 @app.get('/v2-tokens')
 async def get_v2_tokens(
-        request: Request,
-        response: Response,
-        rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
+    request: Request,
+    response: Response,
+    rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
 ):
     if not (
-            rate_limit_auth_dep.rate_limit_passed and
-            rate_limit_auth_dep.authorized and
-            rate_limit_auth_dep.owner.active == UserStatusEnum.active
+        rate_limit_auth_dep.rate_limit_passed and
+        rate_limit_auth_dep.authorized and
+        rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
     redis_conn = await request.app.state.redis_pool
@@ -831,10 +952,17 @@ async def get_v2_tokens(
     )
     if not snapshot_data:
         # fetch from ipfs
-        latest_payload_cid = latest_payload_cid.decode('utf-8') if type(
-            latest_payload_cid,
-        ) == bytes else latest_payload_cid
-        snapshot_data = await retrieve_payload_data(latest_payload_cid, redis_conn)
+        latest_payload_cid = (
+            latest_payload_cid.decode('utf-8')
+            if type(
+                latest_payload_cid,
+            ) ==
+            bytes
+            else latest_payload_cid
+        )
+        snapshot_data = await retrieve_payload_data(
+            latest_payload_cid, redis_conn,
+        )
 
         # even ipfs doesn't have data, return empty
         if not snapshot_data:
@@ -850,9 +978,13 @@ async def get_v2_tokens(
 
     if '/v1/api' in request.url._url:
         return {
-            'data': data, 'txHash': tx_hash, 'cid': latest_payload_cid,
-            'txStatus': SNAPSHOT_STATUS_MAP[tx_status], 'prevTxHash': prev_tx_hash,
-            'block_height': data[0].get('block_height', None), 'block_timestamp': data[0].get('block_timestamp', None),
+            'data': data,
+            'txHash': tx_hash,
+            'cid': latest_payload_cid,
+            'txStatus': SNAPSHOT_STATUS_MAP[tx_status],
+            'prevTxHash': prev_tx_hash,
+            'block_height': data[0].get('block_height', None),
+            'block_timestamp': data[0].get('block_timestamp', None),
         }
     else:
         return data
@@ -863,33 +995,41 @@ def create_v2_token_snapshot(data):
     tokens_snapshot = []
     # for i in range(len(data)):
     for i, token_data in enumerate(data):
-        tokens_snapshot.append({
-            'index': i,
-            'contract_address': token_data['contractAddress'],
-            'name': token_data['name'],
-            'symbol': token_data['symbol'],
-            'liquidity': f"US${round(abs(token_data['liquidityUSD'])):,}",
-            'volume_24h': f"US${round(abs(token_data['tradeVolumeUSD_24h'])):,}",
-            'volume_7d': f"US${round(abs(token_data['tradeVolumeUSD_7d']))}",
-            'price': f"US${round(abs(token_data['price']), 5):,}",
-            'price_change_24h': f"{round(token_data['priceChangePercent_24h'], 2)}%",
-            'block_height': int(token_data['block_height']),
-            'block_timestamp': int(token_data['block_timestamp']),
-        })
+        tokens_snapshot.append(
+            {
+                'index': i,
+                'contract_address': token_data['contractAddress'],
+                'name': token_data['name'],
+                'symbol': token_data['symbol'],
+                'liquidity': f"US${round(abs(token_data['liquidityUSD'])):,}",
+                'volume_24h': (
+                    f"US${round(abs(token_data['tradeVolumeUSD_24h'])):,}"
+                ),
+                'volume_7d': (
+                    f"US${round(abs(token_data['tradeVolumeUSD_7d']))}"
+                ),
+                'price': f"US${round(abs(token_data['price']), 5):,}",
+                'price_change_24h': (
+                    f"{round(token_data['priceChangePercent_24h'], 2)}%"
+                ),
+                'block_height': int(token_data['block_height']),
+                'block_timestamp': int(token_data['block_timestamp']),
+            },
+        )
     return tokens_snapshot
 
 
 @app.get('/v1/api/v2-tokens/snapshots')
 @app.get('/v2-tokens/snapshots')
 async def get_v2_tokens_snapshots(
-        request: Request,
-        response: Response,
-        rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
+    request: Request,
+    response: Response,
+    rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
 ):
     if not (
-            rate_limit_auth_dep.rate_limit_passed and
-            rate_limit_auth_dep.authorized and
-            rate_limit_auth_dep.owner.active == UserStatusEnum.active
+        rate_limit_auth_dep.rate_limit_passed and
+        rate_limit_auth_dep.authorized and
+        rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
     redis_conn: aioredis.Redis = request.app.state.redis_pool
@@ -915,15 +1055,15 @@ async def get_v2_tokens_snapshots(
 @app.get('/v1/api/v2-tokens/{block_height:int}')
 @app.get('/v2-tokens/{block_height:int}')
 async def get_v2_tokens_data_by_block(
-        request: Request,
-        response: Response,
-        block_height: int,
-        rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
+    request: Request,
+    response: Response,
+    block_height: int,
+    rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
 ):
     if not (
-            rate_limit_auth_dep.rate_limit_passed and
-            rate_limit_auth_dep.authorized and
-            rate_limit_auth_dep.owner.active == UserStatusEnum.active
+        rate_limit_auth_dep.rate_limit_passed and
+        rate_limit_auth_dep.authorized and
+        rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
     redis_conn: aioredis.Redis = request.app.state.redis_pool
@@ -966,8 +1106,11 @@ async def get_v2_tokens_data_by_block(
 
     if '/v1/api' in request.url._url:
         return {
-            'data': snapshot_data, 'txHash': txHash, 'cid': payload_cid,
-            'txStatus': SNAPSHOT_STATUS_MAP[txStatus], 'prevTxHash': prevTxHash,
+            'data': snapshot_data,
+            'txHash': txHash,
+            'cid': payload_cid,
+            'txStatus': SNAPSHOT_STATUS_MAP[txStatus],
+            'prevTxHash': prevTxHash,
             'block_height': snapshot_data[0].get('block_height', None),
             'block_timestamp': snapshot_data[0].get('block_timestamp', None),
         }
@@ -978,18 +1121,17 @@ async def get_v2_tokens_data_by_block(
 @app.get('/v1/api/v2-daily-stats')
 @app.get('/v2-daily-stats')
 async def get_v2_daily_stats(
-        request: Request,
-        response: Response,
-        rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
+    request: Request,
+    response: Response,
+    rate_limit_auth_dep: RateLimitAuthCheck = Depends(rate_limit_auth_check),
 ):
     if not (
-            rate_limit_auth_dep.rate_limit_passed and
-            rate_limit_auth_dep.authorized and
-            rate_limit_auth_dep.owner.active == UserStatusEnum.active
+        rate_limit_auth_dep.rate_limit_passed and
+        rate_limit_auth_dep.authorized and
+        rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
     try:
-
         redis_conn = await request.app.state.redis_pool
         latest_daily_stats_snapshot = await redis_conn.zrevrange(
             name=uniswap_v2_daily_stats_snapshot_zset,
@@ -1009,13 +1151,19 @@ async def get_v2_daily_stats(
         prevTxHash = latest_payload.get('prevTxHash')
 
         snapshot_data = await redis_conn.get(
-            name=uniswap_V2_daily_stats_at_blockheight.format(int(latest_block_height)),
+            name=uniswap_V2_daily_stats_at_blockheight.format(
+                int(latest_block_height),
+            ),
         )
         if not snapshot_data:
             # fetch from ipfs
-            payload_cid = payload_cid.decode(
-                'utf-8',
-            ) if type(payload_cid) == bytes else payload_cid
+            payload_cid = (
+                payload_cid.decode(
+                    'utf-8',
+                )
+                if type(payload_cid) == bytes
+                else payload_cid
+            )
             snapshot_data = await retrieve_payload_data(payload_cid, redis_conn)
 
         # even ipfs doesn't have payload then exit
@@ -1032,74 +1180,110 @@ async def get_v2_daily_stats(
         for contract_obj in snapshot_data:
             if contract_obj:
                 # aggregate trade volume and liquidity across all pairs
-                daily_stats['volume24']['currentValue'] += contract_obj['volume24']['currentValue']
-                daily_stats['volume24']['previousValue'] += contract_obj['volume24']['previousValue']
+                daily_stats['volume24']['currentValue'] += contract_obj[
+                    'volume24'
+                ]['currentValue']
+                daily_stats['volume24']['previousValue'] += contract_obj[
+                    'volume24'
+                ]['previousValue']
 
-                daily_stats['tvl']['currentValue'] += contract_obj['tvl']['currentValue']
-                daily_stats['tvl']['previousValue'] += contract_obj['tvl']['previousValue']
+                daily_stats['tvl']['currentValue'] += contract_obj['tvl'][
+                    'currentValue'
+                ]
+                daily_stats['tvl']['previousValue'] += contract_obj['tvl'][
+                    'previousValue'
+                ]
 
-                daily_stats['fees24']['currentValue'] += contract_obj['fees24']['currentValue']
-                daily_stats['fees24']['previousValue'] += contract_obj['fees24']['previousValue']
+                daily_stats['fees24']['currentValue'] += contract_obj['fees24'][
+                    'currentValue'
+                ]
+                daily_stats['fees24']['previousValue'] += contract_obj[
+                    'fees24'
+                ]['previousValue']
 
         # calculate percentage change
         if daily_stats['volume24']['previousValue'] != 0:
-            daily_stats['volume24']['change'] = daily_stats['volume24']['currentValue'] - daily_stats['volume24'][
-                'previousValue'
-            ]
-            daily_stats['volume24']['change'] = daily_stats['volume24']['change'] / daily_stats['volume24'][
-                'previousValue'
-            ] * 100
+            daily_stats['volume24']['change'] = (
+                daily_stats['volume24']['currentValue'] -
+                daily_stats['volume24']['previousValue']
+            )
+            daily_stats['volume24']['change'] = (
+                daily_stats['volume24']['change'] /
+                daily_stats['volume24']['previousValue'] *
+                100
+            )
 
         if daily_stats['tvl']['previousValue'] != 0:
-            daily_stats['tvl']['change'] = daily_stats['tvl']['currentValue'] - \
+            daily_stats['tvl']['change'] = (
+                daily_stats['tvl']['currentValue'] -
                 daily_stats['tvl']['previousValue']
-            daily_stats['tvl']['change'] = daily_stats['tvl']['change'] / \
-                daily_stats['tvl']['previousValue'] * 100
+            )
+            daily_stats['tvl']['change'] = (
+                daily_stats['tvl']['change'] /
+                daily_stats['tvl']['previousValue'] *
+                100
+            )
 
         if daily_stats['fees24']['previousValue'] != 0:
-            daily_stats['fees24']['change'] = daily_stats['fees24']['currentValue'] - daily_stats['fees24'][
-                'previousValue'
-            ]
-            daily_stats['fees24']['change'] = daily_stats['fees24']['change'] / daily_stats['fees24'][
-                'previousValue'
-            ] * 100
+            daily_stats['fees24']['change'] = (
+                daily_stats['fees24']['currentValue'] -
+                daily_stats['fees24']['previousValue']
+            )
+            daily_stats['fees24']['change'] = (
+                daily_stats['fees24']['change'] /
+                daily_stats['fees24']['previousValue'] *
+                100
+            )
 
         # format output
+        daily_stats['volume24']['currentValue'] = (
+            f"US${number_to_abbreviated_string(round(daily_stats['volume24']['currentValue'], 2))}"
+        )
+        daily_stats['volume24']['previousValue'] = (
+            f"US${number_to_abbreviated_string(round(daily_stats['volume24']['previousValue'], 2))}"
+        )
         daily_stats['volume24'][
-            'currentValue'
-        ] = f"US${number_to_abbreviated_string(round(daily_stats['volume24']['currentValue'], 2))}"
-        daily_stats['volume24'][
-            'previousValue'
-        ] = f"US${number_to_abbreviated_string(round(daily_stats['volume24']['previousValue'], 2))}"
-        daily_stats['volume24']['change'] = f"{round(daily_stats['volume24']['change'], 2)}%"
+            'change'
+        ] = f"{round(daily_stats['volume24']['change'], 2)}%"
 
+        daily_stats['tvl']['currentValue'] = (
+            f"US${number_to_abbreviated_string(round(daily_stats['tvl']['currentValue'], 2))}"
+        )
+        daily_stats['tvl']['previousValue'] = (
+            f"US${number_to_abbreviated_string(round(daily_stats['tvl']['previousValue'], 2))}"
+        )
         daily_stats['tvl'][
-            'currentValue'
-        ] = f"US${number_to_abbreviated_string(round(daily_stats['tvl']['currentValue'], 2))}"
-        daily_stats['tvl'][
-            'previousValue'
-        ] = f"US${number_to_abbreviated_string(round(daily_stats['tvl']['previousValue'], 2))}"
-        daily_stats['tvl']['change'] = f"{round(daily_stats['tvl']['change'], 2)}%"
+            'change'
+        ] = f"{round(daily_stats['tvl']['change'], 2)}%"
 
+        daily_stats['fees24']['currentValue'] = (
+            f"US${number_to_abbreviated_string(round(daily_stats['fees24']['currentValue'], 2))}"
+        )
+        daily_stats['fees24']['previousValue'] = (
+            f"US${number_to_abbreviated_string(round(daily_stats['fees24']['previousValue'], 2))}"
+        )
         daily_stats['fees24'][
-            'currentValue'
-        ] = f"US${number_to_abbreviated_string(round(daily_stats['fees24']['currentValue'], 2))}"
-        daily_stats['fees24'][
-            'previousValue'
-        ] = f"US${number_to_abbreviated_string(round(daily_stats['fees24']['previousValue'], 2))}"
-        daily_stats['fees24']['change'] = f"{round(daily_stats['fees24']['change'], 2)}%"
+            'change'
+        ] = f"{round(daily_stats['fees24']['change'], 2)}%"
 
         if '/v1/api' in request.url._url:
             return {
-                'data': daily_stats, 'txHash': txHash, 'cid': payload_cid,
-                'txStatus': SNAPSHOT_STATUS_MAP[txStatus], 'prevTxHash': prevTxHash,
+                'data': daily_stats,
+                'txHash': txHash,
+                'cid': payload_cid,
+                'txStatus': SNAPSHOT_STATUS_MAP[txStatus],
+                'prevTxHash': prevTxHash,
                 'block_height': snapshot_data[0].get('block_height', None),
-                'block_timestamp': snapshot_data[0].get('block_timestamp', None),
+                'block_timestamp': snapshot_data[0].get(
+                    'block_timestamp', None,
+                ),
             }
         else:
             return daily_stats
     except Exception as exc:
-        rest_logger.opt(exception=True).error(f'Error in get_v2_pairs_daily_stats: {str(exc)}')
+        rest_logger.opt(exception=True).error(
+            f'Error in get_v2_pairs_daily_stats: {str(exc)}',
+        )
         return {'error': 'No data found'}
     finally:
         auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool

@@ -12,18 +12,18 @@ from signal import SIGTERM
 from time import sleep
 from time import time as wall_time
 
+import httpx
 import redis
-import requests
 from httpx import Client
 from httpx import Limits
 from setproctitle import setproctitle
 
-from pooler.callback_modules.data_models import SnapshotterIssue
-from pooler.callback_modules.data_models import SnapshotterIssueSeverity
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.exceptions import GenericExitOnSignal
 from pooler.utils.models.data_models import EpochInfo
+from pooler.utils.models.data_models import SnapshotterIssue
+from pooler.utils.models.data_models import SnapshotterIssueSeverity
 from pooler.utils.models.message_models import SystemEpochStatusReport
 from pooler.utils.rabbitmq_helpers import RabbitmqThreadedSelectLoopInteractor
 from pooler.utils.redis.redis_conn import create_redis_conn
@@ -55,29 +55,37 @@ def rabbitmq_and_redis_cleanup(fn):
     """
     A decorator that wraps the provided function and handles cleaning up RabbitMQ and Redis resources before exiting.
     """
+
     @wraps(fn)
     def wrapper(self, *args, **kwargs):
         try:
             fn(self, *args, **kwargs)
         except (GenericExitOnSignal, KeyboardInterrupt):
             try:
-                self._logger.debug('Waiting for RabbitMQ interactor thread to join...')
+                self._logger.debug(
+                    'Waiting for RabbitMQ interactor thread to join...',
+                )
                 self._rabbitmq_thread.join()
                 self._logger.debug('RabbitMQ interactor thread joined.')
                 if self._last_processed_epoch:
-                    self._logger.debug('Saving last processed epoch to redis...')
+                    self._logger.debug(
+                        'Saving last processed epoch to redis...',
+                    )
                     with create_redis_conn(self._connection_pool) as r:
                         r.set(
                             epoch_detector_last_processed_epoch,
                             json.dumps(self._last_processed_epoch),
                         )
             except Exception as E:
-                self._logger.opt(exception=True).error('Error while saving progress: {}', E)
+                self._logger.opt(exception=True).error(
+                    'Error while saving progress: {}', E,
+                )
         except Exception as E:
             self._logger.opt(exception=True).error('Error while running: {}', E)
         finally:
             self._logger.debug('Shutting down!')
             sys.exit(0)
+
     return wrapper
 
 
@@ -102,20 +110,28 @@ class EpochDetectorProcess(multiprocessing.Process):
             module=f'{name}|{settings.namespace}-{settings.instance_id[:5]}',
         )
 
-        self._exchange = f'{settings.rabbitmq.setup.core.exchange}:{settings.namespace}'
-        self._routing_key = f'epoch-broadcast:{settings.namespace}:{settings.instance_id}'
+        self._exchange = (
+            f'{settings.rabbitmq.setup.event_detector.exchange}:{settings.namespace}'
+        )
+        self._routing_key = (
+            f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.EpochReleased'
+        )
 
         self._last_processed_epoch = None
         setproctitle(name)
 
     def _interactor_wrapper(self, q: queue.Queue):  # run in a separate thread
         self._rabbitmq_interactor = RabbitmqThreadedSelectLoopInteractor(
-            publish_queue=q, consumer_worker_name=self.name,
+            publish_queue=q,
+            consumer_worker_name=self.name,
         )
         self._rabbitmq_interactor.run()  # blocking
 
     def _generic_exit_handler(self, signum, sigframe):
-        if signum in [SIGINT, SIGTERM, SIGQUIT] and not self._shutdown_initiated:
+        if (
+            signum in [SIGINT, SIGTERM, SIGQUIT] and
+            not self._shutdown_initiated
+        ):
             self._shutdown_initiated = True
             self._rabbitmq_interactor.stop()
             raise GenericExitOnSignal
@@ -124,7 +140,11 @@ class EpochDetectorProcess(multiprocessing.Process):
         """Broadcast epoch to the RabbitMQ queue and save update in redis."""
         report_obj = SystemEpochStatusReport(**epoch)
         self._logger.info('Broadcasting epoch for callbacks: {}', report_obj)
-        brodcast_msg = (report_obj.json().encode('utf-8'), self._exchange, self._routing_key)
+        brodcast_msg = (
+            report_obj.json().encode('utf-8'),
+            self._exchange,
+            self._routing_key,
+        )
         self._rabbitmq_queue.put(brodcast_msg)
         self._last_processed_epoch = epoch
         with create_redis_conn(self._connection_pool) as r:
@@ -136,40 +156,50 @@ class EpochDetectorProcess(multiprocessing.Process):
                 )
             except:
                 self._logger.error(
-                    'Unable to save state in redis. Will try again on next epoch.',
+                    (
+                        'Unable to save state in redis. Will try again on next'
+                        ' epoch.'
+                    ),
                 )
 
     @rabbitmq_and_redis_cleanup
     def run(self):
         self._httpx_client = Client(
             limits=Limits(
-                max_connections=20, max_keepalive_connections=20,
+                max_connections=20,
+                max_keepalive_connections=20,
             ),
         )
         """
         The entry point for the process.
         """
-        consensus_epoch_tracker_url = f'{settings.consensus.url}{settings.consensus.epoch_tracker_path}'
+        consensus_epoch_tracker_url = (
+            f'{settings.consensus.url}{settings.consensus.epoch_tracker_path}'
+        )
         for signame in [signal.SIGINT, signal.SIGTERM, signal.SIGQUIT]:
             signal.signal(signame, self._generic_exit_handler)
         self._rabbitmq_thread = threading.Thread(
-            target=self._interactor_wrapper, kwargs={'q': self._rabbitmq_queue},
+            target=self._interactor_wrapper,
+            kwargs={'q': self._rabbitmq_queue},
         )
         self._rabbitmq_thread.start()
 
         while True:
             try:
-                response = requests.get(consensus_epoch_tracker_url)
+                response = httpx.get(url=consensus_epoch_tracker_url)
                 if response.status_code != 200:
                     self._logger.error(
-                        'Error while fetching current epoch data: {}', response.status_code,
+                        'Error while fetching current epoch data: {}',
+                        response.status_code,
                     )
                     sleep(settings.consensus.polling_interval)
                     continue
             except Exception as e:
                 self._logger.error(
-                    'Unable to fetch current epoch, ERROR: {}, '
-                    'sleeping for {} seconds.',
+                    (
+                        'Unable to fetch current epoch, ERROR: {}, '
+                        'sleeping for {} seconds.'
+                    ),
                     e,
                     settings.consensus.polling_interval,
                 )
@@ -186,13 +216,19 @@ class EpochDetectorProcess(multiprocessing.Process):
             # Only use redis is state is not locally present
             if not self._last_processed_epoch:
                 with create_redis_conn(self._connection_pool) as r:
-                    last_processed_epoch_data = r.get(epoch_detector_last_processed_epoch)
+                    last_processed_epoch_data = r.get(
+                        epoch_detector_last_processed_epoch,
+                    )
                 if last_processed_epoch_data:
-                    self._last_processed_epoch = json.loads(last_processed_epoch_data)
+                    self._last_processed_epoch = json.loads(
+                        last_processed_epoch_data,
+                    )
 
             if self._last_processed_epoch:
-                if (current_epoch['begin'] - self._last_processed_epoch['end']) \
-                        > settings.rpc.skip_epoch_threshold_blocks:
+                if (
+                    current_epoch['begin'] - self._last_processed_epoch['end'] >
+                    settings.rpc.skip_epoch_threshold_blocks
+                ):
                     # send alert
                     self._httpx_client.post(
                         url=settings.issue_report_url,
@@ -206,17 +242,24 @@ class EpochDetectorProcess(multiprocessing.Process):
                                 (
                                     current_epoch['begin'] -
                                     self._last_processed_epoch['end']
-                                ) / settings.epoch.height,
+                                ) /
+                                settings.epoch.height,
                             ),
                             timeOfReporting=int(wall_time()),
                             serviceName='Pooler|EpochDetector',
                         ).dict(),
                     )
                     self._logger.warning(
-                        'Epoch processing has fallen behind by more than {} blocks, '
-                        'alert sent to DAG Verifier | Last processed epoch: {} | Current epoch: {} | '
-                        'Will sleep now for {} seconds after broadcasting current epoch',
-                        settings.rpc.skip_epoch_threshold_blocks, self._last_processed_epoch, current_epoch,
+                        (
+                            'Epoch processing has fallen behind by more than {}'
+                            ' blocks, alert sent to DAG Verifier | Last'
+                            ' processed epoch: {} | Current epoch: {} | Will'
+                            ' sleep now for {} seconds after broadcasting'
+                            ' current epoch'
+                        ),
+                        settings.rpc.skip_epoch_threshold_blocks,
+                        self._last_processed_epoch,
+                        current_epoch,
                         settings.consensus.sleep_secs_between_chunks,
                     )
                     self._broadcast_epoch(current_epoch)
@@ -224,14 +267,19 @@ class EpochDetectorProcess(multiprocessing.Process):
 
                 elif self._last_processed_epoch['end'] == current_epoch['end']:
                     self._logger.debug(
-                        'Last processed epoch is same as current epoch, Sleeping for {} seconds...',
+                        (
+                            'Last processed epoch is same as current epoch,'
+                            ' Sleeping for {} seconds...'
+                        ),
                         settings.consensus.polling_interval,
                     )
                     sleep(settings.consensus.polling_interval)
                     continue
 
                 else:
-                    epoch_height = current_epoch['end'] - current_epoch['begin'] + 1
+                    epoch_height = (
+                        current_epoch['end'] - current_epoch['begin'] + 1
+                    )
                     if self._last_processed_epoch['end'] > current_epoch['end']:
                         if abs(self.last_processed_epoch['end'] - current_epoch['end']) % epoch_height != 0:
                             self._logger.warning(
@@ -250,9 +298,17 @@ class EpochDetectorProcess(multiprocessing.Process):
                             )
                             sleep(settings.consensus.sleep_secs_between_chunks)
                             continue
-                    for epoch in chunks(self._last_processed_epoch['end'] + 1, current_epoch['end'], epoch_height):
+
+                    for epoch in chunks(
+                        self._last_processed_epoch['end'] + 1,
+                        current_epoch['end'],
+                        epoch_height,
+                    ):
+
                         epoch_from_chunk = {
-                            'begin': epoch[0], 'end': epoch[1], 'broadcast_id': str(uuid.uuid4()),
+                            'begin': epoch[0],
+                            'end': epoch[1],
+                            'broadcast_id': str(uuid.uuid4()),
                         }
 
                         self._broadcast_epoch(epoch_from_chunk)
@@ -262,7 +318,9 @@ class EpochDetectorProcess(multiprocessing.Process):
                         )
                         sleep(settings.consensus.sleep_secs_between_chunks)
             else:
-                self._logger.debug('No last processed epoch found, processing current epoch')
+                self._logger.debug(
+                    'No last processed epoch found, processing current epoch',
+                )
                 self._broadcast_epoch(current_epoch)
 
                 self._logger.info(

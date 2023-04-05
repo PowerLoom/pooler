@@ -10,8 +10,12 @@ from pooler.utils.redis.redis_conn import REDIS_CONN_CONF
 # Define the parser
 parser = argparse.ArgumentParser(description='clean slate script')
 parser.add_argument(
-    '--ipfs', action=argparse.BooleanOptionalAction, type=bool, dest='ipfs',
-    default=False, help='cleanup ipfs keys',
+    '--ipfs',
+    action=argparse.BooleanOptionalAction,
+    type=bool,
+    dest='ipfs',
+    default=False,
+    help='cleanup ipfs keys',
 )
 args = parser.parse_args()
 
@@ -59,7 +63,9 @@ def redis_cleanup_audit_protocol():
         pass
     try:
         r.delete(*r.keys(f'uniswap*{settings.namespace}:snapshot*'))
-        r.delete(*r.keys(f'uniswap:V2TokensSummarySnapshot:{settings.namespace}:*'))
+        r.delete(
+            *r.keys(f'uniswap:V2TokensSummarySnapshot:{settings.namespace}:*'),
+        )
     except:
         pass
     try:
@@ -103,7 +109,9 @@ def redis_cleanup_audit_protocol():
         pass
 
     try:
-        c = r.delete(*r.keys(f'*uniswap*{settings.namespace}:snapshotTimestampZset'))
+        c = r.delete(
+            *r.keys(f'*uniswap*{settings.namespace}:snapshotTimestampZset'),
+        )
         print('daily stats snapshot timestamp: ', c)
     except:
         pass
@@ -117,7 +125,11 @@ def redis_cleanup_audit_protocol():
 
 
 def redis_cleanup_pooler_namespace(redis_config=None):
-    r = Redis(**redis_config) if isinstance(redis_config, dict) else Redis(**REDIS_CONN_CONF)
+    r = (
+        Redis(**redis_config)
+        if isinstance(redis_config, dict)
+        else Redis(**REDIS_CONN_CONF)
+    )
 
     try:
         r.delete(*r.keys(f'*projectID*{settings.namespace}*'))
@@ -126,13 +138,17 @@ def redis_cleanup_pooler_namespace(redis_config=None):
 
     try:
         r.delete(
-            *r.keys(f'*uniswap:V2PairsSummarySnapshot*{settings.namespace}*snapshotsZset*'),
+            *r.keys(
+                f'*uniswap:V2PairsSummarySnapshot*{settings.namespace}*snapshotsZset*',
+            ),
         )
     except:
         pass
 
     try:
-        c = r.delete(*r.keys(f'*uniswap_pairContract*{settings.namespace}*slidingCache*'))
+        c = r.delete(
+            *r.keys(f'*uniswap_pairContract*{settings.namespace}*slidingCache*'),
+        )
         print('Pair contract sliding cache related keys deleted: ', c)
     except:
         pass
@@ -146,7 +162,9 @@ def redis_cleanup_pooler_namespace(redis_config=None):
     r.delete(f'uniswap:diffRuleSetFor:{settings.namespace}')
 
     try:
-        r.delete(*r.keys(f'*uniswap*{settings.namespace}*pendingTransactions:*'))
+        r.delete(
+            *r.keys(f'*uniswap*{settings.namespace}*pendingTransactions:*'),
+        )
     except:
         pass
 
@@ -156,7 +174,9 @@ def redis_cleanup_pooler_namespace(redis_config=None):
         pass
 
     try:
-        r.delete(*r.keys(f'*uniswap*{settings.namespace}*discardedTransactions:*'))
+        r.delete(
+            *r.keys(f'*uniswap*{settings.namespace}*discardedTransactions:*'),
+        )
     except:
         pass
 
@@ -182,7 +202,11 @@ def redis_cleanup_pooler_namespace(redis_config=None):
         pass
 
     try:
-        r.delete(*r.keys(f'*uniswap*{settings.namespace}*cachedPairBlockHeightTokenPrice*'))
+        r.delete(
+            *r.keys(
+                f'*uniswap*{settings.namespace}*cachedPairBlockHeightTokenPrice*',
+            ),
+        )
     except:
         pass
 
