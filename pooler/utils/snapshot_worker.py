@@ -453,7 +453,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 'Exception while mapping processed epochs to adapters: {}',
                 e,
             )
-            return None
+            raise e
 
     async def _update_broadcast_processing_status(
         self, broadcast_id, update_state,
