@@ -281,22 +281,30 @@ class EpochDetectorProcess(multiprocessing.Process):
                         current_epoch['end'] - current_epoch['begin'] + 1
                     )
                     if self._last_processed_epoch['end'] > current_epoch['end']:
-                        self._logger.warning(
-                            (
-                                'Last processed epoch end {} is greater than'
-                                ' current epoch end {}, something is wrong.'
-                                ' Please consider resetting the state.'
-                            ),
-                            self._last_processed_epoch,
-                            current_epoch,
-                        )
-                        raise GenericExitOnSignal
+                        if abs(self.last_processed_epoch['end'] - current_epoch['end']) % epoch_height != 0:
+                            self._logger.warning(
+                                'Last processed epoch end {} is greater than current epoch end {}, '
+                                'but the difference is not a multiple of epoch height, something is wrong. '
+                                'Please consider resetting the state.',
+                                self._last_processed_epoch, current_epoch,
+                            )
+                            raise GenericExitOnSignal
+                        else:
+                            self._logger.debug(
+                                'Last processed epoch end {} is greater than current epoch end {}, '
+                                'but the difference is a multiple of epoch height, '
+                                'so we are good, waiting for epoch generator to catch up.',
+                                self._last_processed_epoch, current_epoch,
+                            )
+                            sleep(settings.consensus.sleep_secs_between_chunks)
+                            continue
 
                     for epoch in chunks(
                         self._last_processed_epoch['end'] + 1,
                         current_epoch['end'],
                         epoch_height,
                     ):
+
                         epoch_from_chunk = {
                             'begin': epoch[0],
                             'end': epoch[1],
