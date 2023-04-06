@@ -49,6 +49,7 @@ def notify_on_task_failure(fn):
         except Exception as e:
             # Logging the error trace
             logger.opt(exception=True).error(f'Error: {e}')
+            logger.error('Sending Missed Snapshot Error to Issue Reporting Service')
 
             # Sending the error details to the issue reporting service
             try:
@@ -72,7 +73,7 @@ def notify_on_task_failure(fn):
                 )
             except Exception as err:
                 # Logging the error trace if service is not able to report issue
-                logger.opt(exception=True).error(f'Error: {err}')
+                logger.opt(exception=True).error(f'Error: Unable to report the issue, got: {err}')
 
     return wrapper
 
