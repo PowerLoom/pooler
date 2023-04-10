@@ -99,6 +99,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             failed_query_epochs_key=failed_query_epochs_redis_q.format(
                 task_type, msg_obj.contract,
             ),
+            task_type=task_type,
             transformation_lambdas=stream_processor.transformation_lambdas,
         )
 
@@ -379,6 +380,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         enqueue_on_failure,
         data_source_contract_address,
         failed_query_epochs_key,
+        task_type,
         transformation_lambdas: List[Callable],
     ):
         try:
@@ -428,6 +430,25 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                         epoch_against_result[1],
                         each_result,
                     )
+                    self._logger.info(
+                        'Failed to generate snapshot, sending alert, ',
+                        'and queuing epoch for retry',
+                    )
+                    # TODO: Using MISSED_SNAPSHOT FOR NOW but should be a new issue type
+                    # like FAILED_SNAPSHOT_BUILD or something. Update with proper data models later
+                    # post architecture cleanup
+                    await self._client.post(
+                        url=settings.issue_report_url,
+                        json=SnapshotterIssue(
+                            instanceID=settings.instance_id,
+                            severity=SnapshotterIssueSeverity.medium,
+                            issueType='MISSED_SNAPSHOT',
+                            projectID=f'{task_type}:{data_source_contract_address}',
+                            timeOfReporting=int(time.time()),
+                            extra={'issueDetails': f'Error : {each_result}'},
+                            serviceName='Pooler|SnapshotWorker',
+                        ).dict(),
+                    )
                     results_map[
                         (epoch_against_result[0], epoch_against_result[1])
                     ] = None
@@ -453,7 +474,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 'Exception while mapping processed epochs to adapters: {}',
                 e,
             )
-            return None
+            raise e
 
     async def _update_broadcast_processing_status(
         self, broadcast_id, update_state,
