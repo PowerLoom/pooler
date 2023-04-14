@@ -1,21 +1,21 @@
+from multiaddr.protocols import (
+    P_DNS, P_DNS4, P_DNS6,  # type: ignore[import]
+    P_HTTP, P_HTTPS, P_IP4, P_IP6, P_TCP, P_UNIX
+)
+import multiaddr
+import multiaddr.exceptions
+import pooler.utils.ipfs.async_ipfshttpclient.exceptions as exceptions
+import typing as ty
 import socket
 import urllib
 
-import multiaddr.exceptions
-from multiaddr.protocols import P_HTTP
-from multiaddr.protocols import P_HTTPS
-from multiaddr.protocols import P_IP4
-from multiaddr.protocols import P_IP6
-from multiaddr.protocols import P_TCP
-
-import pooler.utils.ipfs.async_ipfshttpclient.exceptions as exceptions
 
 
 AF_UNIX = getattr(socket, 'AF_UNIX', NotImplemented)
 
 
 def multiaddr_to_url_data(
-        addr, base: str,  # type: ignore[no-any-unimported]
+        addr, base: str  # type: ignore[no-any-unimported]
 ):
     try:
         multi_addr = multiaddr.Multiaddr(addr)

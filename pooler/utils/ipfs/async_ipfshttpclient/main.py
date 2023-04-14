@@ -1,22 +1,23 @@
-import json
-
-from httpx import AsyncClient
-from httpx import AsyncHTTPTransport
-from httpx import Limits
-from httpx import Timeout
-
+import sys
+import os
+current = os.path.dirname(os.path.realpath(__file__))
+parent = os.path.dirname(current)
+sys.path.append(parent)
 import pooler.utils.ipfs.async_ipfshttpclient.utils.addr as addr_util
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.ipfs.async_ipfshttpclient.dag import DAGSection
 from pooler.utils.ipfs.async_ipfshttpclient.dag import IPFSAsyncClientError
-
+from httpx import AsyncClient, Timeout, Limits, AsyncHTTPTransport
+from async_ipfshttpclient.dag import DAGSection, IPFSAsyncClientError
+import json
+import asyncio
 
 class AsyncIPFSClient:
     def __init__(
             self,
             addr,
-            api_base='api/v0',
+            api_base='api/v0'
 
     ):
         self._base_url, self._host_numeric = addr_util.multiaddr_to_url_data(addr, api_base)
@@ -27,13 +28,13 @@ class AsyncIPFSClient:
     async def init_session(self):
         if not self._client:
             self._async_transport = AsyncHTTPTransport(
-                limits=Limits(max_connections=300, max_keepalive_connections=100, keepalive_expiry=30),
+                limits=Limits(max_connections=300, max_keepalive_connections=100, keepalive_expiry=30)
             )
             self._client = AsyncClient(
                 base_url=self._base_url,
-                timeout=Timeout(timeout=5.0),
+                timeout=Timeout(settings.ipfs.timeout),
                 follow_redirects=False,
-                transport=self._async_transport,
+                transport=self._async_transport
             )
             self.dag = DAGSection(self._client)
             self._logger.debug('Inited IPFS client on base url {}', self._base_url)
@@ -45,16 +46,17 @@ class AsyncIPFSClient:
     async def add_bytes(self, data: bytes, **kwargs):
         files = {'': data}
         r = await self._client.post(
-            url='/add?cid-version=1',
-            files=files,
+            url=f'/add?cid-version=1',
+            files=files
         )
         if r.status_code != 200:
-            raise IPFSAsyncClientError(f'IPFS client error: add_bytes operation, response:{r}')
+            raise IPFSAsyncClientError(f"IPFS client error: add_bytes operation, response:{r}")
 
         try:
             return json.loads(r.text)
         except json.JSONDecodeError:
             return r.text
+
 
     async def add_json(self, json_obj, **kwargs):
         try:

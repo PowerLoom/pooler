@@ -172,8 +172,7 @@ class ProcessorDistributor(multiprocessing.Process):
             type_ = config.project_type
             self._rabbitmq_interactor.enqueue_msg_delivery(
                 exchange=f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}',
-                routing_key=f'powerloom-backend-callback:{settings.namespace}'
-                f':{settings.instance_id}.{type_}',
+                routing_key=f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.{type_}',
                 msg_body=process_unit.json(),
             )
             self._logger.debug(

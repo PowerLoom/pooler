@@ -122,17 +122,17 @@ class DAGBlockPayloadLinkedPath(BaseModel):
 # DAGBlockPayloadLinkedPath is transformed by retrieval utilities
 # for an easy to access RetrievedDAGBlockPayload object
 class RetrievedDAGBlockPayload(BaseModel):
-    cid: str
-    payload: Union[dict, None]
+    cid: str = 'null'
+    payload: Union[dict, None] = None
 
 
 class RetrievedDAGBlock(BaseModel):
-    height: int
-    prevCid: Optional[Dict[str, str]]
+    height: int = 0
+    prevCid: Optional[Dict[str, str]] = None
     prevRoot: Optional[str] = None
-    data: Optional[RetrievedDAGBlockPayload]
-    txHash: str
-    timestamp: int
+    data: RetrievedDAGBlockPayload = RetrievedDAGBlockPayload()
+    txHash: str = ''
+    timestamp: int = 0
 
 
 class IndexSeek(BaseModel):

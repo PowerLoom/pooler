@@ -1,12 +1,9 @@
-import asyncio
 import json
 from typing import Union
-
-import async_timeout
-from tenacity import AsyncRetrying
+from tenacity import retry
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
-
+from httpx import _exceptions as httpx_exceptions
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.file_utils import read_text_file
@@ -15,81 +12,100 @@ from pooler.utils.ipfs.dag_utils import get_dag_block
 from pooler.utils.models.data_models import BlockRetrievalFlags
 from pooler.utils.models.data_models import RetrievedDAGBlock
 from pooler.utils.models.data_models import RetrievedDAGBlockPayload
-# from data_models import ProjectBlockHeightStatus, PendingTransaction
 
-
+@retry(
+    reraise=True,
+    wait=wait_random_exponential(multiplier=1, max=30),
+    stop=stop_after_attempt(3),
+)
 async def retrieve_block_data(
         project_id: str,  # only required for ease of local filesystem caching
         block_dag_cid: str,
         ipfs_read_client: AsyncIPFSClient,
-        data_flag=BlockRetrievalFlags.only_dag_block,
+        data_flag: BlockRetrievalFlags=BlockRetrievalFlags.only_dag_block,
 ) -> Union[RetrievedDAGBlock, RetrievedDAGBlockPayload]:
     """
         Get dag block from ipfs
         Args:
             block_dag_cid:str - The cid of the dag block that needs to be retrieved
-            data_flag:int - Refer enum data model `utils.data_models.BlockRetrievalFlags`
+            data_flag:int - Refer enum data model `pooler.utils.data_models.BlockRetrievalFlags`
     """
-    async for attempt in AsyncRetrying(
-        reraise=True,
-        stop=stop_after_attempt(5),
-        wait=wait_random_exponential(multiplier=1, max=30),
-    ):
-        with attempt:
-            block = await get_dag_block(block_dag_cid, project_id, ipfs_read_client=ipfs_read_client)
-            if not block:
-                logger.trace(
-                    'DAG block fetch was empty against CID: {} | Attempt: {}',
-                    block_dag_cid, attempt.retry_state.attempt_number,
-                )
-                raise Exception(f'DAG block fetch was empty against CID: {block_dag_cid}')
-    payload = dict()
-    # adapt to simpler data model for retrieved data block
-    if block:
-        payload['payload'] = dict()
-        payload['cid'] = block['data']['cid']['/']
-        block['data'] = payload
+    block = await get_dag_block(block_dag_cid, project_id, ipfs_read_client=ipfs_read_client)
+    # handle case of no dag_block or null payload in dag_block
+    if not block:
+        if data_flag == BlockRetrievalFlags.only_dag_block or data_flag == BlockRetrievalFlags.dag_block_and_payload_data:
+            return RetrievedDAGBlock()
+        else:
+            return RetrievedDAGBlockPayload()
+    logger.trace('Retrieved dag block with CID %s: %s', block_dag_cid, block)
+    # the data field may not be present in the dag block because of the DAG finalizer omitting null fields in DAG block model while converting to JSON
+    if 'data' not in block.keys() or block['data'] is None:  
+        if data_flag == BlockRetrievalFlags.dag_block_and_payload_data:
+            block['data'] = RetrievedDAGBlockPayload()
+            return RetrievedDAGBlock.parse_obj(block)
+        elif data_flag == BlockRetrievalFlags.only_dag_block:
+            return RetrievedDAGBlock.parse_obj(block)
+        else:
+            return RetrievedDAGBlockPayload()
     if data_flag == BlockRetrievalFlags.only_dag_block:
         return RetrievedDAGBlock.parse_obj(block)
-    """ Get the payload Data """
-    # handle case of no dag_block or null payload in dag_block
-    if block['data']['cid'] != '':
-        payload_data = await get_payload(
-            payload_cid=block['data']['cid'],
+    else:
+        payload = dict()
+        payload_data = await retrieve_payload_data(
+            payload_cid=block['data']['cid']['/'],
             project_id=project_id,
-            ipfs_read_client=ipfs_read_client,
+            ipfs_read_client=ipfs_read_client
         )
-    else:
-        payload_data = None
-    if data_flag == BlockRetrievalFlags.dag_block_and_payload_data:
-        block['data']['payload'] = payload_data
-        return RetrievedDAGBlock.parse_obj(block)
-
-    if data_flag == BlockRetrievalFlags.only_payload_data:
+        if payload_data:
+            try:
+                payload_data = json.loads(payload_data)
+            except json.JSONDecodeError:
+                logger.error("Failed to JSON decode payload data for CID %s, project %s: %s", block['data']['cid']['/'], project_id, payload_data)
+                payload_data = None
         payload['payload'] = payload_data
-        return RetrievedDAGBlockPayload.parse_obj(payload)
+        payload['cid'] = block['data']['cid']['/']
+
+        if data_flag == BlockRetrievalFlags.dag_block_and_payload_data:
+            block['data'] = RetrievedDAGBlockPayload.parse_obj(payload)
+            return RetrievedDAGBlock.parse_obj(block)
+
+        if data_flag == BlockRetrievalFlags.only_payload_data:
+            return RetrievedDAGBlockPayload.parse_obj(payload)
 
 
-async def get_payload(payload_cid: str, project_id: str, ipfs_read_client: AsyncIPFSClient):
-    """ Given the payload cid, retrieve the payload."""
-    e_obj = None
-    payload = read_text_file(f'{settings.ipfs.local_cache_path}/project_id/{payload_cid}.json')
-    if payload is None:
-        logger.trace('Failed to read snapshot payload CID {} for project {} from local cache ', payload_cid, project_id)
+async def retrieve_payload_data(
+        payload_cid,
+        ipfs_read_client: AsyncIPFSClient,
+        project_id,
+):
+    """
+        - Given a payload_cid, get its data from ipfs, at the same time increase its hit
+    """
+    #payload_key = redis_keys.get_hits_payload_data_key()
+    #if writer_redis_conn:
+        #r = await writer_redis_conn.zincrby(payload_key, 1.0, payload_cid)
+        #retrieval_utils_logger.debug("Payload Data hit for: ")
+        #retrieval_utils_logger.debug(payload_cid)
+    payload_data = None
+    if project_id is not None:
+        payload_data = read_text_file(settings.ipfs.local_cache_path + "/" + project_id + "/"+ payload_cid + ".json")
+    if payload_data is None:
+        logger.trace("Failed to read payload with CID %s for project %s from local cache ", payload_cid,project_id)
+        # Get the payload Data from ipfs
         try:
-            async with async_timeout.timeout(settings.ipfs.timeout) as cm:
-                try:
-                    payload = await ipfs_read_client.cat(payload_cid)
-                    payload = json.loads(payload)
-                except Exception as ex:
-                    e_obj = ex
-        except (asyncio.exceptions.CancelledError, asyncio.exceptions.TimeoutError) as err:
-            e_obj = err
-        if e_obj or cm.expired:
-            return dict()
+            _payload_data = await ipfs_read_client.cat(payload_cid)
+        except (httpx_exceptions.TransportError, httpx_exceptions.StreamError) as e:
+            logger.error("Failed to read payload with CID %s for project %s from IPFS : %s", payload_cid,project_id, e)
+            return None
+        else:
+            # retrieval_utils_logger.info("Successfully read payload with CID %s for project %s from IPFS: %s ",
+            # payload_cid,project_id, _payload_data)
+            if not isinstance(_payload_data,str):
+                return _payload_data.decode('utf-8')
+            else:
+                return _payload_data
     else:
-        payload = json.loads(payload)
-    return payload
+        return payload_data
 
 
 async def get_dag_chain(project_id: str, from_dag_cid: str, to_dag_cid: str, ipfs_read_client: AsyncIPFSClient):

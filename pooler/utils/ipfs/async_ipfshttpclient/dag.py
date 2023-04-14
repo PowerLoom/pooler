@@ -27,7 +27,7 @@ class DAGSection:
         files = {'': bytes_body}
         r = await self._client.post(
             url=f'/dag/put?pin={str(pin).lower()}',
-            files=files,
+            files=files
         )
         if r.status_code != 200:
             raise IPFSAsyncClientError(f'IPFS client error: dag-put operation, response:{r}')

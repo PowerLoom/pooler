@@ -144,7 +144,8 @@ class IndexingAsyncWorker(GenericAsyncWorker):
         )
         head_timestamp = int(latest_block_in_head_epoch_timestamp[0]['result']['timestamp'], 16)
         tail_block_index = IndexSeek(dagBlockHead=head_block)
-        if not settings.indexing_fast_track.enabled:
+        indexing_fast_track = False
+        if not indexing_fast_track:
             cur_block = head_block
             cur_block_cid = head_dag_cid
             while True:
@@ -327,7 +328,7 @@ class IndexingAsyncWorker(GenericAsyncWorker):
             tail_index: IndexSeek = await self._seek_tail(
                 project_id, head_dag_cid, self._index_calculation_mapping[task_type],
             )
-            self._logger.logger.debug(
+            self._logger.debug(
                 'Project ID {} | Sought tail index for time period {} seconds against head CID {} : {} ',
                 project_id, self._index_calculation_mapping[task_type], head_dag_cid, tail_index,
             )
@@ -410,3 +411,4 @@ class IndexingAsyncWorker(GenericAsyncWorker):
         await self._init_httpx_client()
         await self._init_rpc_helper()
         await self._init_indexing_worker()
+        # TODO: listen to rabbitmq queue
