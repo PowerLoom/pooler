@@ -41,6 +41,24 @@ class PowerloomIndexingProcessMessage(BaseModel):
     timestamp: int
 
 
+class PowerloomAggregateProcessMessageFromIndex(BaseModel):
+    DAGBlockHeight: int
+    projectId: str
+    indexTailDAGBlockHeight: int
+    tailBlockEpochSourceChainHeight: int
+    indexIdentifierHash: str
+    broadcast_id: str
+    timestamp: int
+
+
+class PowerloomAggregateProcessMessageFromAggregate(BaseModel):
+    epochEnd: int
+    projectId: str
+    aggregateCid: str
+    broadcast_id: str
+    timestamp: int
+
+
 class ProcessHubCommand(BaseModel):
     command: str
     pid: Optional[int] = None

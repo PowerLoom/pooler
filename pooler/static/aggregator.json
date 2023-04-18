@@ -1,0 +1,41 @@
+{
+  "config": [{
+      "project_type": "aggregate_uniswap_pairContract_trade_volume",
+      "init_on_event": "IndexFinalized",
+      "filters": [{
+        "indexIdentifierHash": "0x24de7e0fc9d543b75c1781070e96175b18c521fe9e5b61852e257439be6ce367",
+        "projectId": "uniswap_pairContract_trade_volume"
+      }],
+      "processor": {
+        "module": "pooler.modules.something",
+        "class_name": "Something"
+      }
+    },
+    {
+      "project_type": "aggregate_uniswap_pairContract_pair_total_reserves",
+      "init_on_event": "IndexFinalized",
+      "filters": [{
+        "indexIdentifierHash": "0x24de7e0fc9d543b75c1781070e96175b18c521fe9e5b61852e257439be6ce367",
+        "projectId": "uniswap_pairContract_pair_total_reserves"
+      }],
+      "processor": {
+        "module": "pooler.modules.something",
+        "class_name": "Something"
+      }
+    },
+    {
+      "project_type": "aggregate_4_pair_24h_volume",
+      "init_on_event": "AggregateFinalized",
+      "projects_to_wait_for": [
+        "uniswap_pairContract_trade_volume_0x001",
+        "uniswap_pairContract_trade_volume_0x002",
+        "uniswap_pairContract_trade_volume_0x003",
+        "uniswap_pairContract_trade_volume_0x004"
+      ],
+      "processor": {
+        "module": "pooler.modules.something",
+        "class_name": "Something"
+      }
+    }
+  ]
+}

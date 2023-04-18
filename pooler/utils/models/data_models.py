@@ -92,7 +92,7 @@ class EpochReleasedEvent(EventBase):
     broadcast_id: str
 
 
-class EpochFinalizedEvent(EventBase):
+class SnapshotFinalizedEvent(EventBase):
     DAGBlockHeight: int
     projectId: str
     snapshotCid: str
@@ -105,6 +105,13 @@ class IndexFinalizedEvent(EventBase):
     indexTailDAGBlockHeight: int
     tailBlockEpochSourceChainHeight: int
     indexIdentifierHash: str
+    broadcast_id: str
+
+
+class AggregateFinalizedEvent(EventBase):
+    epochEnd: int
+    projectId: str
+    aggregateCid: str
     broadcast_id: str
 
 

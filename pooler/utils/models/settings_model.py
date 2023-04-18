@@ -161,6 +161,7 @@ class Settings(BaseModel):
     logs: Logs
     projects_config_path: str
     indexer_config_path: str
+    aggregator_config_path: str
     env: str
     pair_contract_abi: str
     protocol_state: EventContract
@@ -193,3 +194,20 @@ class IndexingConfig(BaseModel):
 
 class IndexerConfig(BaseModel):
     config: List[IndexingConfig]
+
+
+class AggregateFilterConfig(BaseModel):
+    indexerIdentifierHash: str
+    projectId: str
+
+
+class AggregationConfig(BaseModel):
+    project_type: str
+    init_on_event: str
+    filters: Optional[List[AggregateFilterConfig]]
+    projects_to_wait_for: Optional[List[str]]
+    processor: ProcessorConfig
+
+
+class AggregatorConfig(BaseModel):
+    config: List[AggregationConfig]
