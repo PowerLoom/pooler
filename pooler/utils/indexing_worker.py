@@ -27,7 +27,7 @@ from pooler.utils.models.data_models import CachedIndexMarker
 from pooler.utils.models.data_models import IndexSeek
 from pooler.utils.models.data_models import RetrievedDAGBlock
 from pooler.utils.models.data_models import TailAdjustmentCursor
-from pooler.utils.models.message_models import PowerloomIndexingProcessMessage
+from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
 from pooler.utils.redis import redis_keys
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 from pooler.utils.rpc import RpcHelper
@@ -77,7 +77,7 @@ class IndexingAsyncWorker(GenericAsyncWorker):
 
     # TODO: Add interfaces and notifiers for indexing failure
     # @notify_on_task_failure
-    async def _processor_task(self, msg_obj: PowerloomIndexingProcessMessage, task_type: str):
+    async def _processor_task(self, msg_obj: PowerloomSnapshotFinalizedMessage, task_type: str):
         """Function used to process the received message object."""
         self._logger.debug(
             'Processing callback: {}', msg_obj,
@@ -301,7 +301,7 @@ class IndexingAsyncWorker(GenericAsyncWorker):
 
     async def _index_building_dag_finalization_callback(
         self,
-        dag_finalization_cb: PowerloomIndexingProcessMessage,
+        dag_finalization_cb: PowerloomSnapshotFinalizedMessage,
         task_type: str,
     ):
         callback_dag_height = dag_finalization_cb.DAGBlockHeight
@@ -361,7 +361,7 @@ class IndexingAsyncWorker(GenericAsyncWorker):
         self._logger.debug('task type: {}', task_type)
 
         try:
-            msg_obj = PowerloomIndexingProcessMessage.parse_raw(message.body)
+            msg_obj = PowerloomSnapshotFinalizedMessage.parse_raw(message.body)
         except ValidationError as e:
             self._logger.opt(exception=True).error(
                 (

@@ -3,10 +3,7 @@ import importlib
 import json
 import time
 from typing import Callable
-from typing import Dict
 from typing import List
-from typing import Optional
-from typing import Tuple
 from typing import Union
 from uuid import uuid4
 
@@ -19,17 +16,12 @@ from pooler.utils.callback_helpers import AuditProtocolCommandsHelper
 from pooler.utils.callback_helpers import notify_on_task_failure
 from pooler.utils.generic_worker import GenericAsyncWorker
 from pooler.utils.models.data_models import PayloadCommitAPIRequest
-from pooler.utils.models.data_models import SnapshotterIssue
-from pooler.utils.models.data_models import SnapshotterIssueSeverity
-from pooler.utils.models.data_models import SourceChainDetails
 from pooler.utils.models.message_models import PowerloomSnapshotProcessMessage
 from pooler.utils.models.message_models import SnapshotBase
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 from pooler.utils.redis.redis_keys import (
     cb_broadcast_processing_logs_zset,
 )
-from pooler.utils.redis.redis_keys import discarded_query_epochs_redis_q
-from pooler.utils.redis.redis_keys import failed_query_epochs_redis_q
 
 
 class SnapshotAsyncWorker(GenericAsyncWorker):
@@ -77,28 +69,11 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             task_type, msg_obj,
         )
 
-        # check for enqueued failed query epochs
-        epochs = await self._prepare_epochs(
-            failed_query_epochs_key=failed_query_epochs_redis_q.format(
-                task_type, msg_obj.contract,
-            ),
-            discarded_query_epochs_key=discarded_query_epochs_redis_q.format(
-                task_type, msg_obj.contract,
-            ),
-            current_epoch=msg_obj,
-            failed_query_epochs_l=[],
-            stream=task_type,
-        )
-
         stream_processor = self._project_calculation_mapping[task_type]
-        epoch_snapshot_map = await self._map_processed_epochs_to_adapters(
-            epochs=epochs,
+        snapshot = await self._map_processed_epochs_to_adapters(
+            epoch=epoch,
             cb_fn_async=stream_processor.compute,
-            enqueue_on_failure=True,
             data_source_contract_address=msg_obj.contract,
-            failed_query_epochs_key=failed_query_epochs_redis_q.format(
-                task_type, msg_obj.contract,
-            ),
             task_type=task_type,
             transformation_lambdas=stream_processor.transformation_lambdas,
         )
@@ -106,7 +81,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         await self._send_audit_payload_commit_service(
             audit_stream=task_type,
             original_epoch=msg_obj,
-            epoch_snapshot_map=epoch_snapshot_map,
+            epoch_snapshot_map=snapshot,
         )
 
         del self._running_callback_tasks[self_unique_id]
@@ -115,33 +90,89 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         self,
         audit_stream,
         original_epoch: PowerloomSnapshotProcessMessage,
-        epoch_snapshot_map: Dict[
-            Tuple[int, int],
-            Union[SnapshotBase, None],
-        ],
+        epoch_snapshot: Union[SnapshotBase, None],
     ):
-        for each_epoch, epoch_snapshot in epoch_snapshot_map.items():
-            if not epoch_snapshot:
-                self._logger.error(
-                    (
-                        'No epoch snapshot to commit. Construction of snapshot'
-                        ' failed for {} against epoch {}'
-                    ),
-                    audit_stream,
-                    each_epoch,
+
+        if not epoch_snapshot:
+            self._logger.error(
+                (
+                    'No epoch snapshot to commit. Construction of snapshot'
+                    ' failed for {} against epoch {}'
+                ),
+                audit_stream,
+                original_epoch,
+            )
+            # TODO: standardize/unify update log data model
+            update_log = {
+                'worker': self._unique_id,
+                'update': {
+                    'action': f'SnapshotBuild-{audit_stream}',
+                    'info': {
+                        'epoch': original_epoch.dict(),
+                        'status': 'Failed',
+                    },
+                },
+            }
+
+            await self._redis_conn.zadd(
+                name=cb_broadcast_processing_logs_zset.format(
+                    original_epoch.broadcast_id,
+                ),
+                mapping={json.dumps(update_log): int(time.time())},
+            )
+        else:
+            update_log = {
+                'worker': self._unique_id,
+                'update': {
+                    'action': f'SnapshotBuild-{audit_stream}',
+                    'info': {
+                        'original_epoch': original_epoch.dict(),
+                        'status': 'Success',
+                        'snapshot': epoch_snapshot.dict(),
+                    },
+                },
+            }
+
+            await self._redis_conn.zadd(
+                name=cb_broadcast_processing_logs_zset.format(
+                    original_epoch.broadcast_id,
+                ),
+                mapping={json.dumps(update_log): int(time.time())},
+            )
+            source_chain_details = settings.chain_id
+
+            payload = epoch_snapshot.dict()
+            project_id = f'{audit_stream}_{original_epoch.contract}_{settings.namespace}'
+
+            commit_payload = PayloadCommitAPIRequest(
+                projectId=project_id,
+                payload=payload,
+                sourceChainDetails=source_chain_details,
+            )
+
+            try:
+                r = await AuditProtocolCommandsHelper.commit_payload(
+                    report_payload=commit_payload,
+                    session=self._client,
                 )
-                # TODO: standardize/unify update log data model
+            except Exception as e:
+                self._logger.opt(exception=True).error(
+                    (
+                        'Exception committing snapshot to audit protocol:'
+                        ' {} | dump: {}'
+                    ),
+                    epoch_snapshot,
+                    e,
+                )
                 update_log = {
                     'worker': self._unique_id,
                     'update': {
-                        'action': f'SnapshotBuild-{audit_stream}',
+                        'action': f'SnapshotCommit-{audit_stream}',
                         'info': {
+                            'snapshot': payload,
                             'original_epoch': original_epoch.dict(),
-                            'cur_epoch': {
-                                'begin': each_epoch[0],
-                                'end': each_epoch[1],
-                            },
                             'status': 'Failed',
+                            'exception': e,
                         },
                     },
                 }
@@ -153,18 +184,24 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                     mapping={json.dumps(update_log): int(time.time())},
                 )
             else:
+                self._logger.debug(
+                    (
+                        'Sent snapshot to audit protocol payload commit'
+                        ' service: {} | Response: {}, Time: {}'
+                    ),
+                    commit_payload,
+                    r,
+                    int(time.time()),
+                )
                 update_log = {
                     'worker': self._unique_id,
                     'update': {
-                        'action': f'SnapshotBuild-{audit_stream}',
+                        'action': f'SnapshotCommit-{audit_stream}',
                         'info': {
+                            'snapshot': payload,
                             'original_epoch': original_epoch.dict(),
-                            'cur_epoch': {
-                                'begin': each_epoch[0],
-                                'end': each_epoch[1],
-                            },
                             'status': 'Success',
-                            'snapshot': epoch_snapshot.dict(),
+                            'response': r,
                         },
                     },
                 }
@@ -175,304 +212,38 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                     ),
                     mapping={json.dumps(update_log): int(time.time())},
                 )
-                source_chain_details = SourceChainDetails(
-                    chainID=settings.chain_id,
-                    epochStartHeight=each_epoch[0],
-                    epochEndHeight=each_epoch[1],
-                )
-                payload = epoch_snapshot.dict()
-                project_id = f'{audit_stream}_{original_epoch.contract}_{settings.namespace}'
-
-                commit_payload = PayloadCommitAPIRequest(
-                    projectId=project_id,
-                    payload=payload,
-                    sourceChainDetails=source_chain_details,
-                )
-
-                try:
-                    r = await AuditProtocolCommandsHelper.commit_payload(
-                        report_payload=commit_payload,
-                        session=self._client,
-                    )
-                except Exception as e:
-                    self._logger.opt(exception=True).error(
-                        (
-                            'Exception committing snapshot to audit protocol:'
-                            ' {} | dump: {}'
-                        ),
-                        epoch_snapshot,
-                        e,
-                    )
-                    update_log = {
-                        'worker': self._unique_id,
-                        'update': {
-                            'action': f'SnapshotCommit-{audit_stream}',
-                            'info': {
-                                'snapshot': payload,
-                                'original_epoch': original_epoch.dict(),
-                                'cur_epoch': {
-                                    'begin': each_epoch[0],
-                                    'end': each_epoch[1],
-                                },
-                                'status': 'Failed',
-                                'exception': e,
-                            },
-                        },
-                    }
-
-                    await self._redis_conn.zadd(
-                        name=cb_broadcast_processing_logs_zset.format(
-                            original_epoch.broadcast_id,
-                        ),
-                        mapping={json.dumps(update_log): int(time.time())},
-                    )
-                else:
-                    self._logger.debug(
-                        (
-                            'Sent snapshot to audit protocol payload commit'
-                            ' service: {} | Response: {}, Time: {}'
-                        ),
-                        commit_payload,
-                        r,
-                        int(time.time()),
-                    )
-                    update_log = {
-                        'worker': self._unique_id,
-                        'update': {
-                            'action': f'SnapshotCommit-{audit_stream}',
-                            'info': {
-                                'snapshot': payload,
-                                'original_epoch': original_epoch.dict(),
-                                'cur_epoch': {
-                                    'begin': each_epoch[0],
-                                    'end': each_epoch[1],
-                                },
-                                'status': 'Success',
-                                'response': r,
-                            },
-                        },
-                    }
-
-                    await self._redis_conn.zadd(
-                        name=cb_broadcast_processing_logs_zset.format(
-                            original_epoch.broadcast_id,
-                        ),
-                        mapping={json.dumps(update_log): int(time.time())},
-                    )
-
-    async def _prepare_epochs(
-        self,
-        failed_query_epochs_key: str,
-        stream: str,
-        discarded_query_epochs_key: str,
-        current_epoch: PowerloomSnapshotProcessMessage,
-        failed_query_epochs_l: Optional[List],
-    ) -> List[PowerloomSnapshotProcessMessage]:
-        queued_epochs = list()
-        # checks for any previously queued epochs, returns a list of such epochs in increasing order of blockheights
-        if settings.env != 'test':
-            project_id = (
-                f'{stream}_{current_epoch.contract}_{settings.namespace}'
-            )
-            fall_behind_reset_threshold = (
-                settings.rpc.skip_epoch_threshold_blocks
-            )
-            failed_query_epochs = await self._redis_conn.lpop(
-                failed_query_epochs_key,
-            )
-            while failed_query_epochs:
-                epoch_broadcast: PowerloomSnapshotProcessMessage = (
-                    PowerloomSnapshotProcessMessage.parse_raw(
-                        failed_query_epochs.decode('utf-8'),
-                    )
-                )
-                if (
-                    current_epoch.begin - epoch_broadcast.end >
-                    fall_behind_reset_threshold
-                ):
-                    # send alert
-                    await self._client.post(
-                        url=settings.issue_report_url,
-                        json=SnapshotterIssue(
-                            instanceID=settings.instance_id,
-                            severity=SnapshotterIssueSeverity.medium,
-                            issueType='SKIP_QUEUED_EPOCH',
-                            projectID=project_id,
-                            epochs=[epoch_broadcast.end],
-                            timeOfReporting=int(time.time()),
-                            serviceName=f'Pooler|CallbackProcessor|{stream}',
-                        ).dict(),
-                    )
-                    await self._redis_conn.rpush(
-                        discarded_query_epochs_key,
-                        epoch_broadcast.json(),
-                    )
-                    self._logger.warning(
-                        (
-                            'Project {} | QUEUED Epoch {} processing has fallen'
-                            ' behind by more than {} blocks, alert sent to DAG'
-                            ' Verifier | Discarding queued epoch'
-                        ),
-                        project_id,
-                        epoch_broadcast,
-                        fall_behind_reset_threshold,
-                    )
-                else:
-                    self._logger.info(
-                        (
-                            'Found queued epoch against which snapshot'
-                            " construction for pair contract's {} failed"
-                            ' earlier: {}'
-                        ),
-                        stream,
-                        epoch_broadcast,
-                    )
-                    queued_epochs.append(epoch_broadcast)
-                failed_query_epochs = await self._redis_conn.lpop(
-                    failed_query_epochs_key,
-                )
-        else:
-            queued_epochs = (
-                failed_query_epochs_l if failed_query_epochs_l else list()
-            )
-        queued_epochs.append(current_epoch)
-        # check for continuity in epochs before ordering them
-        self._logger.info(
-            (
-                'Attempting to check for continuity in queued epochs to'
-                " generate snapshots against pair contract's {} including"
-                ' current epoch: {}'
-            ),
-            stream,
-            queued_epochs,
-        )
-        continuity = True
-        for idx, each_epoch in enumerate(queued_epochs):
-            if idx == 0:
-                continue
-            if each_epoch.begin != queued_epochs[idx - 1].end + 1:
-                continuity = False
-                break
-        if not continuity:
-            # mark others as discarded
-            discarded_epochs = queued_epochs[:-1]
-            # pop off current epoch added to end of this list
-            queued_epochs = [queued_epochs[-1]]
-            self._logger.info(
-                (
-                    'Recording epochs as discarded during snapshot construction'
-                    ' stage for {}: {}'
-                ),
-                stream,
-                queued_epochs,
-            )
-            for x in discarded_epochs:
-                await self._redis_conn.rpush(
-                    discarded_query_epochs_key,
-                    x.json(),
-                )
-        return queued_epochs
 
     async def _map_processed_epochs_to_adapters(
         self,
-        epochs: List[PowerloomSnapshotProcessMessage],
+        epoch: PowerloomSnapshotProcessMessage,
         cb_fn_async,
-        enqueue_on_failure,
         data_source_contract_address,
-        failed_query_epochs_key,
         task_type,
         transformation_lambdas: List[Callable],
     ):
         try:
-            tasks_map = dict()
-            for each_epoch in epochs:
-                tasks_map[
-                    (
-                        each_epoch.begin,
-                        each_epoch.end,
-                        each_epoch.broadcast_id,
-                    )
-                ] = cb_fn_async(
-                    min_chain_height=each_epoch.begin,
-                    max_chain_height=each_epoch.end,
-                    data_source_contract_address=data_source_contract_address,
-                    redis_conn=self._redis_conn,
-                    rpc_helper=self._rpc_helper,
-                )
-            results = await asyncio.gather(
-                *tasks_map.values(), return_exceptions=True,
+            result = await cb_fn_async(
+                min_chain_height=epoch.begin,
+                max_chain_height=epoch.end,
+                data_source_contract_address=data_source_contract_address,
+                redis_conn=self._redis_conn,
+                rpc_helper=self._rpc_helper,
             )
-            results_map = dict()
-            for idx, each_result in enumerate(results):
-                epoch_against_result = list(tasks_map.keys())[idx]
-                if (
-                    isinstance(each_result, Exception) and
-                    enqueue_on_failure and
-                    settings.env != 'test'
-                ):
-                    queue_msg_obj = PowerloomSnapshotProcessMessage(
-                        begin=epoch_against_result[0],
-                        end=epoch_against_result[1],
-                        broadcast_id=epoch_against_result[2],
-                        contract=data_source_contract_address,
-                    )
-                    await self._redis_conn.rpush(
-                        failed_query_epochs_key,
-                        queue_msg_obj.json(),
-                    )
-                    self._logger.debug(
-                        (
-                            'Enqueued epoch broadcast ID {} because reserve query'
-                            ' failed on {} - {} | Exception: {}'
-                        ),
-                        queue_msg_obj.broadcast_id,
-                        epoch_against_result[0],
-                        epoch_against_result[1],
-                        each_result,
-                    )
-                    self._logger.info(
-                        'Failed to generate snapshot, sending alert, ',
-                        'and queuing epoch for retry',
-                    )
-                    # TODO: Using MISSED_SNAPSHOT FOR NOW but should be a new issue type
-                    # like FAILED_SNAPSHOT_BUILD or something. Update with proper data models later
-                    # post architecture cleanup
-                    await self._client.post(
-                        url=settings.issue_report_url,
-                        json=SnapshotterIssue(
-                            instanceID=settings.instance_id,
-                            severity=SnapshotterIssueSeverity.medium,
-                            issueType='MISSED_SNAPSHOT',
-                            projectID=f'{task_type}:{data_source_contract_address}',
-                            timeOfReporting=int(time.time()),
-                            extra={'issueDetails': f'Error : {each_result}'},
-                            serviceName='Pooler|SnapshotWorker',
-                        ).dict(),
-                    )
-                    results_map[
-                        (epoch_against_result[0], epoch_against_result[1])
-                    ] = None
-                else:
-                    if not isinstance(each_result, Exception):
-                        for transformation in transformation_lambdas:
-                            each_result = transformation(
-                                each_result,
-                                data_source_contract_address,
-                                epoch_against_result[0],
-                                epoch_against_result[1],
-                            )
-                        results_map[
-                            (
-                                epoch_against_result[0],
-                                epoch_against_result[1],
-                            )
-                        ] = each_result
-                return results_map
+
+            if transformation_lambdas:
+                for each_lambda in transformation_lambdas:
+                    result = each_lambda(result, data_source_contract_address, epoch.begin, epoch.end)
+
+            return result
 
         except Exception as e:
-            self._logger.opt(exception=True).exception(
-                'Exception while mapping processed epochs to adapters: {}',
-                e,
+            self._logger.opt(exception=True).error(
+                (
+                    'Error while processing epoch {} for callback processor'
+                    ' of type {}'
+                ),
+                epoch,
+                task_type,
             )
             raise e
 

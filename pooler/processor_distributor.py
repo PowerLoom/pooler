@@ -18,9 +18,11 @@ from pooler.settings.config import indexer_config
 from pooler.settings.config import projects_config
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
-from pooler.utils.models.message_models import PowerloomAggregateProcessMessageFromAggregate
-from pooler.utils.models.message_models import PowerloomAggregateProcessMessageFromIndex
-from pooler.utils.models.message_models import PowerloomIndexingProcessMessage
+from pooler.utils.models.message_models import PayloadCommitFinalizedMessage
+from pooler.utils.models.message_models import PayloadCommitFinalizedMessageType
+from pooler.utils.models.message_models import PowerloomAggregateFinalizedMessage
+from pooler.utils.models.message_models import PowerloomIndexFinalizedMessage
+from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
 from pooler.utils.models.message_models import PowerloomSnapshotProcessMessage
 from pooler.utils.models.message_models import SystemEpochStatusReport
 from pooler.utils.rabbitmq_helpers import RabbitmqSelectLoopInteractor
@@ -119,8 +121,8 @@ class ProcessorDistributor(multiprocessing.Process):
 
     def _distribute_callbacks_indexing(self, dont_use_ch, method, properties, body):
         try:
-            process_unit: PowerloomIndexingProcessMessage = (
-                PowerloomIndexingProcessMessage.parse_raw(body)
+            process_unit: PowerloomSnapshotFinalizedMessage = (
+                PowerloomSnapshotFinalizedMessage.parse_raw(body)
             )
         except ValidationError:
             self._logger.opt(exception=True).error(
@@ -176,15 +178,78 @@ class ProcessorDistributor(multiprocessing.Process):
             ),
         )
 
-    def _distribute_callbacks_aggregate(self, dont_use_ch, method, properties, body, event_type):
+    def _build_and_forward_to_payload_commit_queue(dont_use_ch, method, properties, body):
+        event_type = method.routing_key.split('.')[-1]
+
+        if event_type == 'IndexFinalized':
+            process_unit: PowerloomIndexFinalizedMessage = (
+                PowerloomIndexFinalizedMessage.parse_raw(body)
+            )
+            msg_type = PayloadCommitFinalizedMessageType.INDEXFINALIZED
+        elif event_type == 'AggregateFinalized':
+            process_unit: PowerloomAggregateFinalizedMessage = (
+                PowerloomAggregateFinalizedMessage.parse_raw(body)
+            )
+            msg_type = PayloadCommitFinalizedMessageType.AGGREGATEFINALIZED
+        elif event_type == 'SnapshotFinalized':
+            process_unit: PowerloomSnapshotFinalizedMessage = (
+                PowerloomSnapshotFinalizedMessage.parse_raw(body)
+            )
+            msg_type = PayloadCommitFinalizedMessageType.SNAPSHOTFINALIZED
+
+        self._logger.debug(f'Payload Commit Message Distribution time - {int(time.time())}')
+
+        process_unit = PayloadCommitFinalizedMessage(
+            message_type=msg_type,
+            message=process_unit,
+            web3Storage=True,
+            sourceChainId=settings.chain_id,
+        )
+        exchange = 'audit-protocol-backend'
+        routing_key = f'commit-payloads:{settings.instance_id}.Finalized'
+
+        self._rabbitmq_interactor.enqueue_msg_delivery(
+            exchange=exchange,
+            routing_key=routing_key,
+            msg_body=process_unit.json(),
+        )
+        self._logger.debug(
+            (
+                'Sent out Event to Payload Commit Queue'
+                f' {event_type} : {process_unit}'
+            ),
+        )
+
+        update_log = {
+            'worker': self.name,
+            'update': {
+                'action': 'RabbitMQ.Publish',
+                'info': {
+                    'routing_key': routing_key,
+                    'exchange': exchange,
+                    'msg': process_unit.dict(),
+                },
+            },
+        }
+        self.ev_loop.run_until_complete(
+            self._redis_conn.zadd(
+                cb_broadcast_processing_logs_zset.format(
+                    process_unit.broadcast_id,
+                ),
+                {json.dumps(update_log): int(time.time())},
+            ),
+        )
+
+    def _distribute_callbacks_aggregate(self, dont_use_ch, method, properties, body):
+        event_type = method.routing_key.split('.')[-1]
         try:
             if event_type == 'IndexFinalized':
-                process_unit: PowerloomAggregateProcessMessageFromIndex = (
-                    PowerloomAggregateProcessMessageFromIndex.parse_raw(body)
+                process_unit: PowerloomIndexFinalizedMessage = (
+                    PowerloomIndexFinalizedMessage.parse_raw(body)
                 )
             elif event_type == 'AggregateFinalized':
-                process_unit: PowerloomAggregateProcessMessageFromAggregate = (
-                    PowerloomAggregateProcessMessageFromAggregate.parse_raw(body)
+                process_unit: PowerloomAggregateFinalizedMessage = (
+                    PowerloomAggregateFinalizedMessage.parse_raw(body)
                 )
             else:
                 self._logger.error(f'Unknown event type {event_type}')
@@ -235,6 +300,21 @@ class ProcessorDistributor(multiprocessing.Process):
 
         if not self._rpc_helper:
             self.ev_loop.run_until_complete(self._init_rpc_helper())
+
+        # Forwarding SnapshotFinalized, IndexFinalized, and AggregateFinalized Events to Payload Commit Queue
+
+        if (
+            method.routing_key ==
+            f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.SnapshotFinalized' or
+            method.routing_key ==
+            f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.IndexFinalized' or
+            method.routing_key ==
+            f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.AggregateFinalized'
+        ):
+            {
+                self._build_and_forward_to_payload_commit_queue(dont_use_ch, method, properties, body),
+            }
+
         if (
             method.routing_key ==
             f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.EpochReleased'
@@ -245,7 +325,7 @@ class ProcessorDistributor(multiprocessing.Process):
 
         elif (
             method.routing_key ==
-            f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.EpochFinalized'
+            f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.SnapshotFinalized'
         ):
             self._distribute_callbacks_indexing(
                 dont_use_ch, method, properties, body,
@@ -253,17 +333,12 @@ class ProcessorDistributor(multiprocessing.Process):
 
         elif (
             method.routing_key ==
-            f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.IndexFinalized'
-        ):
-            self._distribute_callbacks_aggregate(
-                dont_use_ch, method, properties, body, 'IndexFinalized',
-            )
-        elif (
+            f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.IndexFinalized' or
             method.routing_key ==
             f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.AggregateFinalized'
         ):
             self._distribute_callbacks_aggregate(
-                dont_use_ch, method, properties, body, 'AggregateFinalized',
+                dont_use_ch, method, properties, body,
             )
         else:
             self._logger.error(

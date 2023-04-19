@@ -96,7 +96,6 @@
   "projects_config_path": "pooler/static/projects.json",
   "indexer_config_path": "pooler/static/indexer.json",
   "aggregator_config_path": "pooler/static/aggregator.json",
-  "env": "<test/prod>",
   "pair_contract_abi": "pooler/static/abis/UniswapV2Pair.json",
   "protocol_state": {
     "abi": "pooler/static/abis/EventContract.json",

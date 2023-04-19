@@ -162,7 +162,6 @@ class Settings(BaseModel):
     projects_config_path: str
     indexer_config_path: str
     aggregator_config_path: str
-    env: str
     pair_contract_abi: str
     protocol_state: EventContract
     callback_worker_config: CallbackWorkerConfig
