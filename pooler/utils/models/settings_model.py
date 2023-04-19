@@ -196,7 +196,7 @@ class IndexerConfig(BaseModel):
 
 
 class AggregateFilterConfig(BaseModel):
-    indexerIdentifierHash: str
+    indexIdentifierHash: str
     projectId: str
 
 

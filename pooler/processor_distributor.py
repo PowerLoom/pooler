@@ -284,9 +284,9 @@ class ProcessorDistributor(multiprocessing.Process):
                     continue
                 self._send_message_for_processing(process_unit, type_)
 
-    self._rabbitmq_interactor._channel.basic_ack(
-        delivery_tag=method.delivery_tag,
-    )
+        self._rabbitmq_interactor._channel.basic_ack(
+            delivery_tag=method.delivery_tag,
+        )
 
     def _distribute_callbacks(self, dont_use_ch, method, properties, body):
         self._logger.debug(
