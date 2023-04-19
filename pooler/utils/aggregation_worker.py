@@ -64,7 +64,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             asyncio.get_running_loop(),
         )
         cur_task.set_name(
-            f'aio_pika.consumer|Processor|{task_type}|{msg_obj.contract}',
+            f'aio_pika.consumer|Processor|{task_type}|{msg_obj.projectId}',
         )
         self._running_callback_tasks[self_unique_id] = cur_task
 
@@ -232,7 +232,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         try:
             result = await cb_fn_async(
                 msg_obj=msg_obj,
-                redis_conn=self._redis_conn,
+                redis=self._redis_conn,
                 rpc_helper=self._rpc_helper,
             )
 
@@ -346,3 +346,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         await self._init_httpx_client()
         await self._init_rpc_helper()
         await self._init_project_calculation_mapping()
+
+
+wkr = AggregationAsyncWorker('test')
+wkr.start()

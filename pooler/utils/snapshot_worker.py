@@ -71,7 +71,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
 
         stream_processor = self._project_calculation_mapping[task_type]
         snapshot = await self._map_processed_epochs_to_adapters(
-            epoch=epoch,
+            epoch=msg_obj,
             cb_fn_async=stream_processor.compute,
             data_source_contract_address=msg_obj.contract,
             task_type=task_type,

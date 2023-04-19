@@ -178,7 +178,7 @@ class ProcessorDistributor(multiprocessing.Process):
             ),
         )
 
-    def _build_and_forward_to_payload_commit_queue(dont_use_ch, method, properties, body):
+    def _build_and_forward_to_payload_commit_queue(self, dont_use_ch, method, properties, body):
         event_type = method.routing_key.split('.')[-1]
 
         if event_type == 'IndexFinalized':
@@ -220,26 +220,6 @@ class ProcessorDistributor(multiprocessing.Process):
             ),
         )
 
-        update_log = {
-            'worker': self.name,
-            'update': {
-                'action': 'RabbitMQ.Publish',
-                'info': {
-                    'routing_key': routing_key,
-                    'exchange': exchange,
-                    'msg': process_unit.dict(),
-                },
-            },
-        }
-        self.ev_loop.run_until_complete(
-            self._redis_conn.zadd(
-                cb_broadcast_processing_logs_zset.format(
-                    process_unit.broadcast_id,
-                ),
-                {json.dumps(update_log): int(time.time())},
-            ),
-        )
-
     def _distribute_callbacks_aggregate(self, dont_use_ch, method, properties, body):
         event_type = method.routing_key.split('.')[-1]
         try:
@@ -274,13 +254,19 @@ class ProcessorDistributor(multiprocessing.Process):
             type_ = config.project_type
 
             if event_type == 'IndexFinalized':
-                if process_unit.indexIdentifierHash != config.indexIdentifierHash:
+                if process_unit.indexIdentifierHash != config.filters.indexIdentifierHash:
+                    self._logger.info(
+                        f'indexIdentifierHash mismatch {process_unit.indexIdentifierHash}'
+                        f' {config.filters.indexIdentifierHash}',
+                    )
                     continue
-                if process_unit.projectId not in config.projectId:
+                if config.filters.projectId not in process_unit.projectId:
+                    self._logger.info(f'projectId mismatch {process_unit.projectId} {config.filters.projectId}')
                     continue
                 self._send_message_for_processing(process_unit, type_)
             if event_type == 'AggregateFinalized':
                 if process_unit.projectId not in config.projects_to_wait_for:
+                    self._logger.info(f'projectId not required for  {process_unit.projectId}: {config.project_type}')
                     continue
                 self._send_message_for_processing(process_unit, type_)
 

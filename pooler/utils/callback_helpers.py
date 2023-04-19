@@ -104,10 +104,10 @@ def notify_on_task_failure_aggregate(fn):
                 else:
                     task_type = 'unknown'
 
-                projectId = None
+                project_id = None
                 if 'msg_obj' in kwargs:
                     msg_obj = kwargs['msg_obj']
-                    # TODO: Generate project id for aggregate task
+                    project_id = f'{task_type}_{msg_obj.projectId}_{settings.namespace}'
 
                 await self._client.post(
                     url=settings.issue_report_url,

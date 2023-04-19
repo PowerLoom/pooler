@@ -203,7 +203,7 @@ class AggregateFilterConfig(BaseModel):
 class AggregationConfig(BaseModel):
     project_type: str
     init_on_event: str
-    filters: Optional[List[AggregateFilterConfig]]
+    filters: Optional[AggregateFilterConfig]
     projects_to_wait_for: Optional[List[str]]
     processor: ProcessorConfig
 

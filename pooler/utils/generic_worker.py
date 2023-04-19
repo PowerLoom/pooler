@@ -191,7 +191,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                 ),
             )
         self._logger.debug(
-            f'Starting asynchronous epoch callback worker {self._unique_id}...',
+            f'Starting asynchronous callback worker {self._unique_id}...',
         )
         self._core_rmq_consumer = asyncio.ensure_future(
             self._rabbitmq_consumer(ev_loop),

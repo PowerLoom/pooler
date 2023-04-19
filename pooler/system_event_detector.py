@@ -193,7 +193,7 @@ class EventDetectorProcess(multiprocessing.Process):
                     DAGBlockHeight=log.args.DAGBlockHeight,
                     indexTailDAGBlockHeight=log.args.indexTailDAGBlockHeight,
                     tailBlockEpochSourceChainHeight=log.args.tailBlockEpochSourceChainHeight,
-                    indexIdentifierHash=log.args.indexIdentifierHash,
+                    indexIdentifierHash='0x' + log.args.indexIdentifierHash.hex(),
                     timestamp=log.args.timestamp,
                     broadcast_id=str(uuid.uuid4()),
                 )
@@ -268,6 +268,12 @@ class EventDetectorProcess(multiprocessing.Process):
                     )
 
             if self._last_processed_block:
+                if current_block - self._last_processed_block >= 10:
+                    self._logger.warning(
+                        'Last processed block is too far behind current block, '
+                        'processing current block',
+                    )
+                    self._last_processed_block = current_block - 1
                 # Get events from current block to last_processed_block
                 events = await self.get_events(self._last_processed_block + 1, current_block)
             else:
