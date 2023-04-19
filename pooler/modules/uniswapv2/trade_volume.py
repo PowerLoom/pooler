@@ -4,13 +4,13 @@ from redis import asyncio as aioredis
 
 from .utils.core import get_pair_trade_volume
 from .utils.models.message_models import UniswapTradesSnapshot
-from pooler.utils.callback_helpers import GenericProcessor
+from pooler.utils.callback_helpers import GenericProcessorSnapshot
 from pooler.utils.default_logger import logger
 from pooler.utils.models.message_models import EpochBase
 from pooler.utils.rpc import RpcHelper
 
 
-class TradeVolumeProcessor(GenericProcessor):
+class TradeVolumeProcessor(GenericProcessorSnapshot):
     transformation_lambdas = None
 
     def __init__(self) -> None:

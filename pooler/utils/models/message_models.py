@@ -3,6 +3,7 @@ from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Union
 
 from pydantic import BaseModel
 
@@ -31,8 +32,6 @@ class PowerloomSnapshotEpoch(SystemEpochStatusReport):
 
 class PowerloomSnapshotProcessMessage(SystemEpochStatusReport):
     contract: str
-    coalesced_broadcast_ids: Optional[List[str]] = None
-    coalesced_epochs: Optional[List[EpochBase]] = None
 
 
 class PowerloomSnapshotFinalizedMessage(BaseModel):

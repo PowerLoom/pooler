@@ -13,7 +13,7 @@ from pydantic import ValidationError
 from pooler.settings.config import projects_config
 from pooler.settings.config import settings
 from pooler.utils.callback_helpers import AuditProtocolCommandsHelper
-from pooler.utils.callback_helpers import notify_on_task_failure
+from pooler.utils.callback_helpers import notify_on_task_failure_snapshot
 from pooler.utils.generic_worker import GenericAsyncWorker
 from pooler.utils.models.data_models import PayloadCommitAPIRequest
 from pooler.utils.models.message_models import PowerloomSnapshotProcessMessage
@@ -35,7 +35,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             type_ = project_config.project_type
             self._task_types.append(type_)
 
-    @notify_on_task_failure
+    @notify_on_task_failure_snapshot
     async def _processor_task(self, msg_obj: PowerloomSnapshotProcessMessage, task_type: str):
         """Function used to process the received message object."""
         self._logger.debug(
@@ -81,7 +81,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         await self._send_audit_payload_commit_service(
             audit_stream=task_type,
             original_epoch=msg_obj,
-            epoch_snapshot_map=snapshot,
+            epoch_snapshot=snapshot,
         )
 
         del self._running_callback_tasks[self_unique_id]

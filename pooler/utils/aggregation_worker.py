@@ -1,11 +1,25 @@
 import asyncio
+import importlib
 import json
+import time
+from typing import Callable
+from typing import List
+from typing import Union
 from uuid import uuid4
 
 from aio_pika import IncomingMessage
 from pydantic import ValidationError
 
+from pooler.settings.config import aggregator_config
+from pooler.settings.config import projects_config
+from pooler.settings.config import settings
+from pooler.utils.callback_helpers import AuditProtocolCommandsHelper
+from pooler.utils.callback_helpers import notify_on_task_failure_aggregate
 from pooler.utils.generic_worker import GenericAsyncWorker
+from pooler.utils.models.data_models import PayloadCommitAPIRequest
+from pooler.utils.models.message_models import PowerloomAggregateFinalizedMessage
+from pooler.utils.models.message_models import PowerloomIndexFinalizedMessage
+from pooler.utils.models.message_models import SnapshotBase
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 from pooler.utils.redis.redis_keys import (
     cb_broadcast_processing_logs_zset,
@@ -17,25 +31,29 @@ class AggregationAsyncWorker(GenericAsyncWorker):
     def __init__(self, name, **kwargs):
         super(AggregationAsyncWorker, self).__init__(name=name, **kwargs)
 
-        self._aggregation_calculation_mapping = None
+        self._project_calculation_mapping = None
         self._task_types = []
-        # TODO: Fill task_types from aggregation config
+        self._task_type_event_mapping = {}
+        for project_config in aggregator_config:
+            type_ = project_config.project_type
+            self._task_type_event_mapping[type_] = project_config.init_on_event
+            self._task_types.append(type_)
 
-    # TODO: Add interfaces and notifiers for aggregation failure
-    # @notify_on_task_failure
-    # TODO: Write msg_obj interface and fill it in function definition
-    async def _processor_task(self, msg_obj, task_type: str):
+    @notify_on_task_failure_aggregate
+    async def _processor_task(
+        self,
+        msg_obj: Union[PowerloomIndexFinalizedMessage, PowerloomAggregateFinalizedMessage],
+        task_type: str,
+    ):
         """Function used to process the received message object."""
         self._logger.debug(
             'Processing callback: {}', msg_obj,
         )
 
-        await self.init()
-
-        if task_type not in self._aggregate_calculation_mapping:
+        if task_type not in self._project_calculation_mapping:
             self._logger.error(
                 (
-                    'No aggregate calculation mapping found for task type'
+                    'No project calculation mapping found for task type'
                     f' {task_type}. Skipping...'
                 ),
             )
@@ -59,10 +77,181 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             task_type, msg_obj,
         )
 
-        # TODO: Add aggregation calculation and submission logic here
-        # See snapshot_workers for callback based approach reference
+        stream_processor = self._project_calculation_mapping[task_type]
+
+        snapshot = await self._map_processed_epochs_to_adapters(
+            msg_obj=msg_obj,
+            cb_fn_async=stream_processor.compute,
+            task_type=task_type,
+            transformation_lambdas=stream_processor.transformation_lambdas,
+        )
+
+        await self._send_audit_payload_commit_service(
+            audit_stream=task_type,
+            original_epoch=msg_obj,
+            snapshot=snapshot,
+        )
 
         del self._running_callback_tasks[self_unique_id]
+
+    async def _send_audit_payload_commit_service(
+        self,
+        audit_stream,
+        original_epoch: Union[PowerloomIndexFinalizedMessage, PowerloomAggregateFinalizedMessage],
+        snapshot: Union[SnapshotBase, None],
+    ):
+
+        if not snapshot:
+            self._logger.error(
+                (
+                    'No epoch snapshot to commit. Construction of snapshot'
+                    ' failed for {} against epoch {}'
+                ),
+                audit_stream,
+                original_epoch,
+            )
+            # TODO: standardize/unify update log data model
+            update_log = {
+                'worker': self._unique_id,
+                'update': {
+                    'action': f'SnapshotBuild-{audit_stream}',
+                    'info': {
+                        'epoch': original_epoch.dict(),
+                        'status': 'Failed',
+                    },
+                },
+            }
+
+            await self._redis_conn.zadd(
+                name=cb_broadcast_processing_logs_zset.format(
+                    original_epoch.broadcast_id,
+                ),
+                mapping={json.dumps(update_log): int(time.time())},
+            )
+        else:
+            update_log = {
+                'worker': self._unique_id,
+                'update': {
+                    'action': f'SnapshotBuild-{audit_stream}',
+                    'info': {
+                        'original_epoch': original_epoch.dict(),
+                        'status': 'Success',
+                        'snapshot': snapshot.dict(),
+                    },
+                },
+            }
+
+            await self._redis_conn.zadd(
+                name=cb_broadcast_processing_logs_zset.format(
+                    original_epoch.broadcast_id,
+                ),
+                mapping={json.dumps(update_log): int(time.time())},
+            )
+            source_chain_details = settings.chain_id
+
+            payload = snapshot.dict()
+            project_id = f'{audit_stream}_{original_epoch.projectId}_{settings.namespace}'
+
+            commit_payload = PayloadCommitAPIRequest(
+                projectId=project_id,
+                payload=payload,
+                sourceChainDetails=source_chain_details,
+            )
+
+            try:
+                r = await AuditProtocolCommandsHelper.commit_payload(
+                    report_payload=commit_payload,
+                    session=self._client,
+                )
+            except Exception as e:
+                self._logger.opt(exception=True).error(
+                    (
+                        'Exception committing snapshot to audit protocol:'
+                        ' {} | dump: {}'
+                    ),
+                    snapshot,
+                    e,
+                )
+                update_log = {
+                    'worker': self._unique_id,
+                    'update': {
+                        'action': f'SnapshotCommit-{audit_stream}',
+                        'info': {
+                            'snapshot': payload,
+                            'original_epoch': original_epoch.dict(),
+                            'status': 'Failed',
+                            'exception': e,
+                        },
+                    },
+                }
+
+                await self._redis_conn.zadd(
+                    name=cb_broadcast_processing_logs_zset.format(
+                        original_epoch.broadcast_id,
+                    ),
+                    mapping={json.dumps(update_log): int(time.time())},
+                )
+            else:
+                self._logger.debug(
+                    (
+                        'Sent snapshot to audit protocol payload commit'
+                        ' service: {} | Response: {}, Time: {}'
+                    ),
+                    commit_payload,
+                    r,
+                    int(time.time()),
+                )
+                update_log = {
+                    'worker': self._unique_id,
+                    'update': {
+                        'action': f'SnapshotCommit-{audit_stream}',
+                        'info': {
+                            'snapshot': payload,
+                            'original_epoch': original_epoch.dict(),
+                            'status': 'Success',
+                            'response': r,
+                        },
+                    },
+                }
+
+                await self._redis_conn.zadd(
+                    name=cb_broadcast_processing_logs_zset.format(
+                        original_epoch.broadcast_id,
+                    ),
+                    mapping={json.dumps(update_log): int(time.time())},
+                )
+
+    async def _map_processed_epochs_to_adapters(
+        self,
+        msg_obj: Union[PowerloomIndexFinalizedMessage, PowerloomAggregateFinalizedMessage],
+        cb_fn_async,
+        task_type,
+        transformation_lambdas: List[Callable],
+    ):
+
+        try:
+            result = await cb_fn_async(
+                msg_obj=msg_obj,
+                redis_conn=self._redis_conn,
+                rpc_helper=self._rpc_helper,
+            )
+
+            if transformation_lambdas:
+                for each_lambda in transformation_lambdas:
+                    result = each_lambda(result, msg_obj)
+
+            return result
+
+        except Exception as e:
+            self._logger.opt(exception=True).error(
+                (
+                    'Error while processing aggregate {} for callback processor'
+                    ' of type {}'
+                ),
+                msg_obj,
+                task_type,
+            )
+            raise e
 
     async def _update_broadcast_processing_status(
         self, broadcast_id, update_state,
@@ -78,47 +267,79 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         if task_type not in self._task_types:
             return
 
+        await self.init()
+
         self._logger.debug('task type: {}', task_type)
+
+        if self._task_type_event_mapping[task_type] == 'IndexFinalized':
+            try:
+                msg_obj: PowerloomIndexFinalizedMessage = (
+                    PowerloomIndexFinalizedMessage.parse_raw(message.body)
+                )
+            except ValidationError as e:
+                self._logger.opt(exception=True).error(
+                    (
+                        'Bad message structure of callback processor. Error: {}'
+                    ),
+                    e,
+                )
+                return
+            except Exception as e:
+                self._logger.opt(exception=True).error(
+                    (
+                        'Unexpected message structure of callback in processor. Error: {}'
+                    ),
+                    e,
+                )
+                return
+        elif self._task_type_event_mapping[task_type] == 'AggregateFinalized':
+            try:
+                msg_obj: PowerloomAggregateFinalizedMessage = (
+                    PowerloomAggregateFinalizedMessage.parse_raw(message.body)
+                )
+            except ValidationError as e:
+                self._logger.opt(exception=True).error(
+                    (
+                        'Bad message structure of callback processor. Error: {}'
+                    ),
+                    e,
+                )
+                return
+            except Exception as e:
+                self._logger.opt(exception=True).error(
+                    (
+                        'Unexpected message structure of callback in processor. Error: {}'
+                    ),
+                    e,
+                )
+                return
+        else:
+            self._logger.error(
+                'Unknown task type {}', task_type,
+            )
+            return
+        asyncio.ensure_future(self._processor_task(msg_obj=msg_obj, task_type=task_type))
         await message.ack()
 
-        try:
-            # TODO: parse message here and load it in msg_obj (replace the line below)
-            msg_obj = message.body
-        except ValidationError as e:
-            self._logger.opt(exception=True).error(
-                (
-                    'Bad message structure of callback processor. Error: {}'
-                ),
-                e,
-            )
-            return
-        except Exception as e:
-            self._logger.opt(exception=True).error(
-                (
-                    'Unexpected message structure of callback in processor. Error: {}'
-                ),
-                e,
-            )
-            return
-
-        asyncio.ensure_future(self._processor_task(msg_obj=msg_obj, task_type=task_type))
-
-    async def _init_aggregate_calculation_mapping(self):
+    async def _init_project_calculation_mapping(self):
         if self._project_calculation_mapping is not None:
             return
-        # Generate aggregate function mapping
-        self._aggregate_calculation_mapping = dict()
 
-        # TODO: Fill aggregate calculation mapping from aggregation config
-
-        # SAMPLE CODE FOR LOADING PROJECT CONFIG
-        # for project_config in projects_config:
-        #     key = project_config.project_type
-        #     if key in self._project_calculation_mapping:
-        #         raise Exception('Duplicate project type found')
-        #     module = importlib.import_module(project_config.processor.module)
-        #     class_ = getattr(module, project_config.processor.class_name)
-        #     self._project_calculation_mapping[key] = class_()
+        self._project_calculation_mapping = dict()
+        for project_config in aggregator_config:
+            key = project_config.project_type
+            if key in self._project_calculation_mapping:
+                raise Exception('Duplicate project type found')
+            module = importlib.import_module(project_config.processor.module)
+            class_ = getattr(module, project_config.processor.class_name)
+            self._project_calculation_mapping[key] = class_()
+        for project_config in projects_config:
+            key = project_config.project_type
+            if key in self._project_calculation_mapping:
+                raise Exception('Duplicate project type found')
+            module = importlib.import_module(project_config.processor.module)
+            class_ = getattr(module, project_config.processor.class_name)
+            self._project_calculation_mapping[key] = class_()
 
     async def init(self):
         await self._init_redis_pool()
