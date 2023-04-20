@@ -111,7 +111,7 @@ class ProcessorDistributor(multiprocessing.Process):
                     begin=msg_obj.begin,
                     end=msg_obj.end,
                     contract=contract,
-                    broadcast_id=msg_obj.broadcast_id,
+                    broadcastId=msg_obj.broadcastId,
                 )
                 self._send_message_for_processing(process_unit, type_)
 
@@ -172,7 +172,7 @@ class ProcessorDistributor(multiprocessing.Process):
         self.ev_loop.run_until_complete(
             self._redis_conn.zadd(
                 cb_broadcast_processing_logs_zset.format(
-                    process_unit.broadcast_id,
+                    process_unit.broadcastId,
                 ),
                 {json.dumps(update_log): int(time.time())},
             ),
@@ -182,17 +182,17 @@ class ProcessorDistributor(multiprocessing.Process):
         event_type = method.routing_key.split('.')[-1]
 
         if event_type == 'IndexFinalized':
-            process_unit: PowerloomIndexFinalizedMessage = (
+            msg_obj: PowerloomIndexFinalizedMessage = (
                 PowerloomIndexFinalizedMessage.parse_raw(body)
             )
             msg_type = PayloadCommitFinalizedMessageType.INDEXFINALIZED
         elif event_type == 'AggregateFinalized':
-            process_unit: PowerloomAggregateFinalizedMessage = (
+            msg_obj: PowerloomAggregateFinalizedMessage = (
                 PowerloomAggregateFinalizedMessage.parse_raw(body)
             )
             msg_type = PayloadCommitFinalizedMessageType.AGGREGATEFINALIZED
         elif event_type == 'SnapshotFinalized':
-            process_unit: PowerloomSnapshotFinalizedMessage = (
+            msg_obj: PowerloomSnapshotFinalizedMessage = (
                 PowerloomSnapshotFinalizedMessage.parse_raw(body)
             )
             msg_type = PayloadCommitFinalizedMessageType.SNAPSHOTFINALIZED
@@ -200,13 +200,16 @@ class ProcessorDistributor(multiprocessing.Process):
         self._logger.debug(f'Payload Commit Message Distribution time - {int(time.time())}')
 
         process_unit = PayloadCommitFinalizedMessage(
-            message_type=msg_type,
-            message=process_unit,
+            messageType=msg_type,
+            message=msg_obj,
             web3Storage=True,
             sourceChainId=settings.chain_id,
         )
-        exchange = 'audit-protocol-backend'
-        routing_key = f'commit-payloads:{settings.instance_id}.Finalized'
+
+        exchange = (
+            f'{settings.rabbitmq.setup.commit_payload.exchange}:{settings.namespace}'
+        )
+        routing_key = f'powerloom-backend-commit-payload:{settings.namespace}:{settings.instance_id}.Finalized'
 
         self._rabbitmq_interactor.enqueue_msg_delivery(
             exchange=exchange,

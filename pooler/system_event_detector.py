@@ -173,7 +173,7 @@ class EventDetectorProcess(multiprocessing.Process):
                     begin=log.args.begin,
                     end=log.args.end,
                     timestamp=log.args.timestamp,
-                    broadcast_id=str(uuid.uuid4()),
+                    broadcastId=str(uuid.uuid4()),
                 )
                 events.append((log.event, event))
 
@@ -183,7 +183,7 @@ class EventDetectorProcess(multiprocessing.Process):
                     projectId=log.args.projectId,
                     snapshotCid=log.args.snapshotCid,
                     timestamp=log.args.timestamp,
-                    broadcast_id=str(uuid.uuid4()),
+                    broadcastId=str(uuid.uuid4()),
                 )
                 events.append((log.event, event))
 
@@ -195,16 +195,16 @@ class EventDetectorProcess(multiprocessing.Process):
                     tailBlockEpochSourceChainHeight=log.args.tailBlockEpochSourceChainHeight,
                     indexIdentifierHash='0x' + log.args.indexIdentifierHash.hex(),
                     timestamp=log.args.timestamp,
-                    broadcast_id=str(uuid.uuid4()),
+                    broadcastId=str(uuid.uuid4()),
                 )
                 events.append((log.event, event))
             elif log.event == 'AggregateFinalized':
                 event = AggregateFinalizedEvent(
-                    epochEnd=log.args.epochEnd,
+                    DAGBlockHeight=log.args.epochEnd,
                     projectId=log.args.projectId,
                     aggregateCid=log.args.aggregateCid,
                     timestamp=log.args.timestamp,
-                    broadcast_id=str(uuid.uuid4()),
+                    broadcastId=str(uuid.uuid4()),
                 )
                 events.append((log.event, event))
 

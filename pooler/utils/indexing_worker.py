@@ -1,7 +1,9 @@
 import asyncio
 import json
 import math
+import time
 from typing import Dict
+from typing import Union
 from uuid import uuid4
 
 import httpx._exceptions as httpx_exceptions
@@ -27,9 +29,13 @@ from pooler.utils.models.data_models import CachedIndexMarker
 from pooler.utils.models.data_models import IndexSeek
 from pooler.utils.models.data_models import RetrievedDAGBlock
 from pooler.utils.models.data_models import TailAdjustmentCursor
+from pooler.utils.models.message_models import IndexBase
 from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
 from pooler.utils.redis import redis_keys
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
+from pooler.utils.redis.redis_keys import (
+    cb_broadcast_processing_logs_zset,
+)
 from pooler.utils.rpc import RpcHelper
 
 
@@ -345,11 +351,154 @@ class IndexingAsyncWorker(GenericAsyncWorker):
                 mapping={index_record_to_cache.json(): dag_finalization_cb.DAGBlockHeight},
             )
             # commit to index submission contract
-            # TODO: send to transaction manager
+            # TODO: send to audit protocol for contract submission
+            # await self._send_audit_payload_commit_service(
+            #     audit_stream=task_type,
+            #     epoch=dag_finalization_cb,
+            # snapshot={FILL HERE},
+            # )
         else:
             last_recorded_against_dag_head_height = int(last_recorded_dag_height_index[0][1])
             height_diff = callback_dag_height - last_recorded_against_dag_head_height - 1
             last_recorded_tail_source_chain_marker = CachedIndexMarker.parse_raw(last_recorded_dag_height_index[0][0])
+
+    async def _send_audit_payload_commit_service(
+        self,
+        audit_stream,
+        epoch: PowerloomSnapshotFinalizedMessage,
+        snapshot: Union[IndexBase, None],
+    ):
+
+        if not snapshot:
+            self._logger.error(
+                (
+                    'No index to commit. Construction of index'
+                    ' failed for {} against epoch {}'
+                ),
+                audit_stream,
+                epoch,
+            )
+            # TODO: standardize/unify update log data model
+            update_log = {
+                'worker': self._unique_id,
+                'update': {
+                    'action': f'IndexBuild-{audit_stream}',
+                    'info': {
+                        'epoch': epoch.dict(),
+                        'status': 'Failed',
+                    },
+                },
+            }
+
+            await self._redis_conn.zadd(
+                name=cb_broadcast_processing_logs_zset.format(
+                    epoch.broadcastId,
+                ),
+                mapping={json.dumps(update_log): int(time.time())},
+            )
+        else:
+            update_log = {
+                'worker': self._unique_id,
+                'update': {
+                    'action': f'IndexBuild-{audit_stream}',
+                    'info': {
+                        'epoch': epoch.dict(),
+                        'status': 'Success',
+                        'snapshot': snapshot.dict(),
+                    },
+                },
+            }
+
+            await self._redis_conn.zadd(
+                name=cb_broadcast_processing_logs_zset.format(
+                    epoch.broadcastId,
+                ),
+                mapping={json.dumps(update_log): int(time.time())},
+            )
+            source_chain_details = settings.chain_id
+
+            payload = snapshot.dict()
+            project_id = f'{epoch.projectId}'
+
+            commit_payload = PayloadCommitMessage(
+                messageType=PayloadCommitMessageType.INDEX,
+                message=payload,
+                web3Storage=True,
+                sourceChainId=source_chain_details,
+                projectId=project_id,
+                epochEndHeight=epoch.DAGBlockHeight,
+            )
+
+            # send through rabbitmq
+            exchange = (
+                f'{settings.rabbitmq.setup.commit_payload.exchange}:{settings.namespace}'
+            )
+            routing_key = f'powerloom-backend-commit-payload:{settings.namespace}:{settings.instance_id}.Data'
+
+            try:
+
+                async with self._rmq_connection_pool.acquire() as connection:
+                    async with self._rmq_channel_pool.acquire() as channel:
+                        # Prepare a message to send
+
+                        # Use the custom exchange name and routing key to publish the message
+                        await channel.default_exchange.publish(
+                            commit_payload.json(),
+                            routing_key=exchange,
+                            exchange_name=routing_key,
+                        )
+
+                        self._logger.info(
+                            'Sent message to audit protocol: {}', commit_payload,
+                        )
+
+                        update_log = {
+                            'worker': self._unique_id,
+                            'update': {
+                                'action': f'IndexCommit-{audit_stream}',
+                                'info': {
+                                    'snapshot': payload,
+                                    'epoch': epoch.dict(),
+                                    'status': 'Success',
+                                },
+                            },
+                        }
+
+                        await self._redis_conn.zadd(
+                            name=cb_broadcast_processing_logs_zset.format(
+                                epoch.broadcastId,
+                            ),
+                            mapping={json.dumps(update_log): int(time.time())},
+                        )
+
+            except Exception as e:
+                self._logger.opt(exception=True).error(
+                    (
+                        'Exception committing snapshot to audit protocol:'
+                        ' {} | dump: {}'
+                    ),
+                    snapshot,
+                    e,
+                )
+                update_log = {
+                    'worker': self._unique_id,
+                    'update': {
+                        'action': f'IndexCommit-{audit_stream}',
+                        'info': {
+                            'snapshot': payload,
+                            'epoch': epoch.dict(),
+                            'status': 'Failed',
+                            'exception': e,
+                        },
+                    },
+                }
+
+                await self._redis_conn.zadd(
+                    name=cb_broadcast_processing_logs_zset.format(
+                        epoch.broadcastId,
+                    ),
+                    mapping={json.dumps(update_log): int(time.time())},
+                )
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
         task_type = message.routing_key.split('.')[-1]

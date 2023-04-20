@@ -64,6 +64,7 @@ class RabbitMQSetup(BaseModel):
     core: RabbitMQConfig
     callbacks: RabbitMQConfig
     event_detector: RabbitMQConfig
+    commit_payload: RabbitMQConfig
 
 
 class RabbitMQ(BaseModel):

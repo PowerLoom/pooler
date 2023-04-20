@@ -51,6 +51,9 @@
       "callbacks": {
         "exchange": "powerloom-backend-callbacks"
       },
+      "commit_payload": {
+        "exchange": "powerloom-backend-commit-payload"
+      },
       "event_detector": {
         "exchange": "powerloom-backend-event-detector"
       }

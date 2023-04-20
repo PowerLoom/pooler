@@ -14,7 +14,7 @@ class EpochBase(BaseModel):
 
 
 class EpochBroadcast(EpochBase):
-    broadcast_id: str
+    broadcastId: str
 
 
 class EpochConsensusReport(EpochBase):
@@ -22,7 +22,7 @@ class EpochConsensusReport(EpochBase):
 
 
 class SystemEpochStatusReport(EpochBase):
-    broadcast_id: str
+    broadcastId: str
     reorg: bool = False
 
 
@@ -38,7 +38,7 @@ class PowerloomSnapshotFinalizedMessage(BaseModel):
     DAGBlockHeight: int
     projectId: str
     snapshotCid: str
-    broadcast_id: str
+    broadcastId: str
     timestamp: int
 
 
@@ -48,15 +48,15 @@ class PowerloomIndexFinalizedMessage(BaseModel):
     indexTailDAGBlockHeight: int
     tailBlockEpochSourceChainHeight: int
     indexIdentifierHash: str
-    broadcast_id: str
+    broadcastId: str
     timestamp: int
 
 
 class PowerloomAggregateFinalizedMessage(BaseModel):
-    epochEnd: int
+    DAGBlockHeight: int
     projectId: str
     aggregateCid: str
-    broadcast_id: str
+    broadcastId: str
     timestamp: int
 
 
@@ -73,17 +73,27 @@ class SnapshotBase(BaseModel):
     timestamp: float
 
 
+class IndexBase(BaseModel):
+    DAGBlockHeight: int
+
+
+class AggregateBase(BaseModel):
+    DAGBlockHeight: int
+
+
 class PayloadCommitMessageType(Enum):
     SNAPSHOT = 'SNAPSHOT'
     INDEX = 'INDEX'
     AGGREGATE = 'AGGREGATE'
 
 
-class PayloadCommitMessage(Enum):
-    message_type: PayloadCommitMessageType
+class PayloadCommitMessage(BaseModel):
+    messageType: PayloadCommitMessageType
     message: Dict[Any, Any]
     web3Storage: bool
     sourceChainId: int
+    projectId: str
+    epochEndHeight: int
 
 
 class PayloadCommitFinalizedMessageType(Enum):
@@ -93,7 +103,7 @@ class PayloadCommitFinalizedMessageType(Enum):
 
 
 class PayloadCommitFinalizedMessage(BaseModel):
-    message_type: PayloadCommitFinalizedMessageType
+    messageType: PayloadCommitFinalizedMessageType
     message: Union[
         PowerloomSnapshotFinalizedMessage,
         PowerloomIndexFinalizedMessage,

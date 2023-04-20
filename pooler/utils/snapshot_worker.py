@@ -12,10 +12,10 @@ from pydantic import ValidationError
 
 from pooler.settings.config import projects_config
 from pooler.settings.config import settings
-from pooler.utils.callback_helpers import AuditProtocolCommandsHelper
 from pooler.utils.callback_helpers import notify_on_task_failure_snapshot
 from pooler.utils.generic_worker import GenericAsyncWorker
-from pooler.utils.models.data_models import PayloadCommitAPIRequest
+from pooler.utils.models.message_models import PayloadCommitMessage
+from pooler.utils.models.message_models import PayloadCommitMessageType
 from pooler.utils.models.message_models import PowerloomSnapshotProcessMessage
 from pooler.utils.models.message_models import SnapshotBase
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
@@ -80,8 +80,8 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
 
         await self._send_audit_payload_commit_service(
             audit_stream=task_type,
-            original_epoch=msg_obj,
-            epoch_snapshot=snapshot,
+            epoch=msg_obj,
+            snapshot=snapshot,
         )
 
         del self._running_callback_tasks[self_unique_id]
@@ -89,18 +89,18 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
     async def _send_audit_payload_commit_service(
         self,
         audit_stream,
-        original_epoch: PowerloomSnapshotProcessMessage,
-        epoch_snapshot: Union[SnapshotBase, None],
+        epoch: PowerloomSnapshotProcessMessage,
+        snapshot: Union[SnapshotBase, None],
     ):
 
-        if not epoch_snapshot:
+        if not snapshot:
             self._logger.error(
                 (
                     'No epoch snapshot to commit. Construction of snapshot'
                     ' failed for {} against epoch {}'
                 ),
                 audit_stream,
-                original_epoch,
+                epoch,
             )
             # TODO: standardize/unify update log data model
             update_log = {
@@ -108,7 +108,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 'update': {
                     'action': f'SnapshotBuild-{audit_stream}',
                     'info': {
-                        'epoch': original_epoch.dict(),
+                        'epoch': epoch.dict(),
                         'status': 'Failed',
                     },
                 },
@@ -116,7 +116,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
 
             await self._redis_conn.zadd(
                 name=cb_broadcast_processing_logs_zset.format(
-                    original_epoch.broadcast_id,
+                    epoch.broadcastId,
                 ),
                 mapping={json.dumps(update_log): int(time.time())},
             )
@@ -126,42 +126,81 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 'update': {
                     'action': f'SnapshotBuild-{audit_stream}',
                     'info': {
-                        'original_epoch': original_epoch.dict(),
+                        'epoch': epoch.dict(),
                         'status': 'Success',
-                        'snapshot': epoch_snapshot.dict(),
+                        'snapshot': snapshot.dict(),
                     },
                 },
             }
 
             await self._redis_conn.zadd(
                 name=cb_broadcast_processing_logs_zset.format(
-                    original_epoch.broadcast_id,
+                    epoch.broadcastId,
                 ),
                 mapping={json.dumps(update_log): int(time.time())},
             )
             source_chain_details = settings.chain_id
 
-            payload = epoch_snapshot.dict()
-            project_id = f'{audit_stream}_{original_epoch.contract}_{settings.namespace}'
+            payload = snapshot.dict()
+            project_id = f'{audit_stream}_{epoch.contract}_{settings.namespace}'
 
-            commit_payload = PayloadCommitAPIRequest(
+            commit_payload = PayloadCommitMessage(
+                messageType=PayloadCommitMessageType.SNAPSHOT,
+                message=payload,
+                web3Storage=True,
+                sourceChainId=source_chain_details,
                 projectId=project_id,
-                payload=payload,
-                sourceChainDetails=source_chain_details,
+                epochEndHeight=epoch.epoch_end_height,
             )
 
+            exchange = (
+                f'{settings.rabbitmq.setup.commit_payload.exchange}:{settings.namespace}'
+            )
+            routing_key = f'powerloom-backend-commit-payload:{settings.namespace}:{settings.instance_id}.Data'
+
+            # send through rabbitmq
             try:
-                r = await AuditProtocolCommandsHelper.commit_payload(
-                    report_payload=commit_payload,
-                    session=self._client,
-                )
+                async with self._rmq_connection_pool.acquire() as connection:
+                    async with self._rmq_channel_pool.acquire() as channel:
+                        # Prepare a message to send
+
+                        # Use the custom exchange name and routing key to publish the message
+                        await channel.default_exchange.publish(
+                            commit_payload.json(),
+                            routing_key=routing_key,
+                            exchange_name=exchange,
+                        )
+
+                        self._logger.info(
+                            'Sent message to audit protocol: {}', commit_payload,
+                        )
+
+                        update_log = {
+                            'worker': self._unique_id,
+                            'update': {
+                                'action': f'SnapshotCommit-{audit_stream}',
+                                'info': {
+                                    'snapshot': payload,
+                                    'epoch': epoch.dict(),
+                                    'status': 'Success',
+                                },
+                            },
+                        }
+
+                        await self._redis_conn.zadd(
+                            name=cb_broadcast_processing_logs_zset.format(
+                                epoch.broadcastId,
+                            ),
+                            mapping={json.dumps(update_log): int(time.time())},
+                        )
+
             except Exception as e:
                 self._logger.opt(exception=True).error(
                     (
                         'Exception committing snapshot to audit protocol:'
                         ' {} | dump: {}'
                     ),
-                    epoch_snapshot,
+                    snapshot,
                     e,
                 )
                 update_log = {
@@ -170,7 +209,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                         'action': f'SnapshotCommit-{audit_stream}',
                         'info': {
                             'snapshot': payload,
-                            'original_epoch': original_epoch.dict(),
+                            'epoch': epoch.dict(),
                             'status': 'Failed',
                             'exception': e,
                         },
@@ -179,36 +218,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
 
                 await self._redis_conn.zadd(
                     name=cb_broadcast_processing_logs_zset.format(
-                        original_epoch.broadcast_id,
-                    ),
-                    mapping={json.dumps(update_log): int(time.time())},
-                )
-            else:
-                self._logger.debug(
-                    (
-                        'Sent snapshot to audit protocol payload commit'
-                        ' service: {} | Response: {}, Time: {}'
-                    ),
-                    commit_payload,
-                    r,
-                    int(time.time()),
-                )
-                update_log = {
-                    'worker': self._unique_id,
-                    'update': {
-                        'action': f'SnapshotCommit-{audit_stream}',
-                        'info': {
-                            'snapshot': payload,
-                            'original_epoch': original_epoch.dict(),
-                            'status': 'Success',
-                            'response': r,
-                        },
-                    },
-                }
-
-                await self._redis_conn.zadd(
-                    name=cb_broadcast_processing_logs_zset.format(
-                        original_epoch.broadcast_id,
+                        epoch.broadcastId,
                     ),
                     mapping={json.dumps(update_log): int(time.time())},
                 )

@@ -53,3 +53,19 @@ rpc_web3_calls = (
 rpc_blocknumber_calls = (
     'rpc:blocknumber:' + settings.namespace + ':calls'
 )
+
+
+def get_last_indexed_markers_zset(project_id: str):
+    return f'projectID:{project_id}:indexMarkers'
+
+
+def get_project_first_epoch_end_height(project_id):
+    return f'projectID:{project_id}:firstEpochEndHeight'
+
+
+def get_project_epoch_size(project_id):
+    return f'projectID:{project_id}:epochSize'
+
+
+def get_last_aggregate_cache(project_id: str, aggregate_name: str, time_series_identifier: str):
+    return f'projectID:{project_id}:{time_series_identifier}:{aggregate_name}:aggregateCache'

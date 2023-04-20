@@ -20,7 +20,7 @@ async def test_construction_snapshot(
     cur_epoch = PowerloomSnapshotProcessMessage(
         begin=epoch_begin,
         end=epoch_end,
-        broadcast_id=str(uuid.uuid4()),
+        broadcastId=str(uuid.uuid4()),
         contract=pair_contract,
     )
 
@@ -35,7 +35,7 @@ async def test_construction_snapshot(
             PowerloomSnapshotProcessMessage(
                 begin=past_failed_query_epoch_begin,
                 end=past_failed_query_epoch_end,
-                broadcast_id=str(uuid.uuid4()),
+                broadcastId=str(uuid.uuid4()),
                 contract=pair_contract,
             ),
         )

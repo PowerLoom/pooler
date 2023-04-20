@@ -4,18 +4,12 @@ from abc import ABCMeta
 from abc import abstractmethod
 from abc import abstractproperty
 from functools import wraps
-from urllib.parse import urljoin
 
 import aio_pika
-from httpx import AsyncClient
 from redis import asyncio as aioredis
-from tenacity import AsyncRetrying
-from tenacity import stop_after_attempt
-from tenacity import wait_random_exponential
 
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
-from pooler.utils.models.data_models import PayloadCommitAPIRequest
 from pooler.utils.models.data_models import SnapshotterIssue
 from pooler.utils.models.data_models import SnapshotterIssueSeverity
 from pooler.utils.models.message_models import PowerloomAggregateFinalizedMessage
@@ -126,54 +120,6 @@ def notify_on_task_failure_aggregate(fn):
                 logger.opt(exception=True).error(f'Error: Unable to report the issue, got: {err}')
 
     return wrapper
-
-
-class AuditProtocolCommandsHelper:
-    @classmethod
-    async def commit_payload(
-        cls, report_payload: PayloadCommitAPIRequest, session: AsyncClient,
-    ):
-        async for attempt in AsyncRetrying(
-            reraise=False,
-            stop=stop_after_attempt(settings.audit_protocol_engine.retry),
-            wait=wait_random_exponential(multiplier=2, max=10),
-        ):
-            with attempt:
-                response_obj = await session.post(
-                    url=urljoin(
-                        settings.audit_protocol_engine.url, 'commit_payload',
-                    ),
-                    json=report_payload.dict(),
-                )
-                response_status_code = response_obj.status_code
-                response = response_obj.json() or {}
-                if response_status_code in range(200, 300):
-                    return response
-                elif (
-                    attempt.retry_state.attempt_number ==
-                    settings.audit_protocol_engine.retry
-                ):
-                    if (
-                        attempt.retry_state.outcome and
-                        attempt.retry_state.outcome.exception()
-                    ):
-                        raise attempt.retry_state.outcome.exception()
-                    else:
-                        raise Exception(
-                            (
-                                'Failed audit protocol engine call with status'
-                                f' code: {response_status_code} and response:'
-                                f' {response}'
-                            ),
-                        )
-                else:
-                    raise Exception(
-                        (
-                            'Failed audit protocol engine call with status'
-                            f' code: {response_status_code} and response:'
-                            f' {response}'
-                        ),
-                    )
 
 
 class GenericProcessorSnapshot(ABC):

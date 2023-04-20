@@ -83,14 +83,14 @@ class EventBase(BaseModel):
 class EpochReleasedEvent(EventBase):
     begin: int
     end: int
-    broadcast_id: str
+    broadcastId: str
 
 
 class SnapshotFinalizedEvent(EventBase):
     DAGBlockHeight: int
     projectId: str
     snapshotCid: str
-    broadcast_id: str
+    broadcastId: str
 
 
 class IndexFinalizedEvent(EventBase):
@@ -99,14 +99,14 @@ class IndexFinalizedEvent(EventBase):
     indexTailDAGBlockHeight: int
     tailBlockEpochSourceChainHeight: int
     indexIdentifierHash: str
-    broadcast_id: str
+    broadcastId: str
 
 
 class AggregateFinalizedEvent(EventBase):
     epochEnd: int
     projectId: str
     aggregateCid: str
-    broadcast_id: str
+    broadcastId: str
 
 
 # Indexing and Aggregation related models
