@@ -36,6 +36,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             type_ = project_config.project_type
             self._task_type_event_mapping[type_] = project_config.init_on_event
             self._task_types.append(type_)
+        self._initialized = False
 
     @notify_on_task_failure_aggregate
     async def _processor_task(
@@ -350,7 +351,9 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             self._project_calculation_mapping[key] = class_()
 
     async def init(self):
-        await self._init_redis_pool()
-        await self._init_httpx_client()
-        await self._init_rpc_helper()
-        await self._init_project_calculation_mapping()
+        if not self._initialized:
+            await self._init_redis_pool()
+            await self._init_httpx_client()
+            await self._init_rpc_helper()
+            await self._init_project_calculation_mapping()
+        self._initialized = True

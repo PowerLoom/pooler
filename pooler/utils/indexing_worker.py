@@ -66,6 +66,7 @@ class IndexingAsyncWorker(GenericAsyncWorker):
         self._source_chain_rpc_helper = None
         self._anchor_chain_rpc_helper = None
         self._dummy_w3_obj = None
+        self._initialized = False
 
     @retry(
         reraise=True, wait=wait_random_exponential(multiplier=1, max=20),
@@ -556,7 +557,9 @@ class IndexingAsyncWorker(GenericAsyncWorker):
             )
 
     async def init(self):
-        await self._init_redis_pool()
-        await self._init_httpx_client()
-        await self._init_rpc_helper()
-        await self._init_indexing_worker()
+        if not self._initialized:
+            await self._init_redis_pool()
+            await self._init_httpx_client()
+            await self._init_rpc_helper()
+            await self._init_indexing_worker()
+        self._initialized = True
