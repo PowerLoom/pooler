@@ -560,4 +560,3 @@ class IndexingAsyncWorker(GenericAsyncWorker):
         await self._init_httpx_client()
         await self._init_rpc_helper()
         await self._init_indexing_worker()
-        # TODO: listen to rabbitmq queue

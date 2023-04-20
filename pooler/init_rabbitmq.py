@@ -100,7 +100,7 @@ def init_commit_payload_queue(
     )
     routing_key_pattern = f'powerloom-backend-commit-payload:{settings.namespace}:{settings.instance_id}.*'
     queue_name = (
-        f'powerloom-backend-cp:{settings.namespace}:{settings.instance_id}'
+        f'powerloom-backend-commit-payload-queue:{settings.namespace}:{settings.instance_id}'
     )
     init_topic_queue(
         ch,
