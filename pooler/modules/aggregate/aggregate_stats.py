@@ -2,7 +2,7 @@ from redis import asyncio as aioredis
 
 from pooler.utils.callback_helpers import GenericProcessorAggregateBasedAggregate
 from pooler.utils.default_logger import logger
-from pooler.utils.models.message_models import PowerloomAggregateFinalizedMessage
+from pooler.utils.models.message_models import PowerloomCalculateAggregateMessage
 from pooler.utils.rpc import RpcHelper
 
 
@@ -15,7 +15,7 @@ class AggreagateStatsProcessor(GenericProcessorAggregateBasedAggregate):
 
     async def compute(
         self,
-        msg_obj: PowerloomAggregateFinalizedMessage,
+        msg_obj: PowerloomCalculateAggregateMessage,
         redis: aioredis,
         rpc_helper: RpcHelper,
     ):

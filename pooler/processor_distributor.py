@@ -21,6 +21,7 @@ from pooler.utils.default_logger import logger
 from pooler.utils.models.message_models import PayloadCommitFinalizedMessage
 from pooler.utils.models.message_models import PayloadCommitFinalizedMessageType
 from pooler.utils.models.message_models import PowerloomAggregateFinalizedMessage
+from pooler.utils.models.message_models import PowerloomCalculateAggregateMessage
 from pooler.utils.models.message_models import PowerloomIndexFinalizedMessage
 from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
 from pooler.utils.models.message_models import PowerloomSnapshotProcessMessage
@@ -271,7 +272,41 @@ class ProcessorDistributor(multiprocessing.Process):
                 if process_unit.projectId not in config.projects_to_wait_for:
                     self._logger.info(f'projectId not required for  {process_unit.projectId}: {config.project_type}')
                     continue
-                self._send_message_for_processing(process_unit, type_)
+
+                # store event in redis zset
+                self.ev_loop.run_until_complete(
+                    self._redis_conn.zadd(
+                        f'powerloom:aggregator:{config.project_type}:events',
+                        {process_unit.json(): process_unit.DAGBlockheight},
+                    ),
+                )
+
+                events = self.ev_loop.run_until_complete(
+                    self._redis_conn.zrangebyscore(
+                        f'powerloom:aggregator:{config.project_type}:events',
+                        process_unit.DAGBlockheight,
+                        process_unit.DAGBlockheight,
+                    ),
+                )
+
+                if not events:
+                    self._logger.info(f'No events found for {process_unit.DAGBlockheight}')
+                    continue
+
+                event_project_ids = set()
+                finalized_messages = set()
+
+                for event in events:
+                    event = PowerloomAggregateFinalizedMessage.parse_raw(event)
+                    event_project_ids.add(event.projectId)
+                    finalized_messages.add(event)
+
+                if event_for_projects == set(config.projects_to_wait_for):
+                    self._logger.info(f'All projects present for {process_unit.DAGBlockheight}, aggregating')
+                    final_msg = PowerloomCalculateAggregateMessage(
+                        messages=finalized_messages,
+                    )
+                    self._send_message_for_processing(final_msg, type_)
 
         self._rabbitmq_interactor._channel.basic_ack(
             delivery_tag=method.delivery_tag,

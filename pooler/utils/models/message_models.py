@@ -60,6 +60,10 @@ class PowerloomAggregateFinalizedMessage(BaseModel):
     timestamp: int
 
 
+class PowerloomCalculateAggregateMessage(BaseModel):
+    messages: List[PowerloomAggregateFinalizedMessage]
+
+
 class ProcessHubCommand(BaseModel):
     command: str
     pid: Optional[int] = None
