@@ -28,6 +28,9 @@ from pooler.utils.redis.redis_keys import (
 class AggregationAsyncWorker(GenericAsyncWorker):
 
     def __init__(self, name, **kwargs):
+        self._q = f'powerloom-backend-cb-aggregate:{settings.namespace}:{settings.instance_id}'
+        self._rmq_routing = f'powerloom-backend-callback:{settings.namespace}'
+        f':{settings.instance_id}:CalculateAggregate.*'
         super(AggregationAsyncWorker, self).__init__(name=name, **kwargs)
 
         self._project_calculation_mapping = None
@@ -64,7 +67,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             asyncio.get_running_loop(),
         )
         cur_task.set_name(
-            f'aio_pika.consumer|Processor|{task_type}|{msg_obj.projectId}',
+            f'aio_pika.consumer|Processor|{task_type}|{msg_obj.broadcastId}',
         )
         self._running_callback_tasks[self_unique_id] = cur_task
 
@@ -150,7 +153,8 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             source_chain_details = settings.chain_id
 
             payload = snapshot.dict()
-            project_id = f'{audit_stream}_{epoch.projectId}_{settings.namespace}'
+            project_hash = hash([project.projectId for project in epoch.messages])
+            project_id = f'{audit_stream}_{project_hash}_{settings.namespace}'
 
             commit_payload = PayloadCommitMessage(
                 messageType=PayloadCommitMessageType.AGGREGATE,

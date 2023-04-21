@@ -51,6 +51,9 @@ class IndexingAsyncWorker(GenericAsyncWorker):
     _anchor_chain_submission_contract_obj: web3.contract.Contract
 
     def __init__(self, name, **kwargs):
+        self._q = f'powerloom-backend-cb-index:{settings.namespace}:{settings.instance_id}'
+        self._rmq_routing = f'powerloom-backend-callback:{settings.namespace}'
+        f':{settings.instance_id}:SnapshotFinalized.*'
         super(IndexingAsyncWorker, self).__init__(name=name, **kwargs)
 
         self._task_types = []

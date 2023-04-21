@@ -103,7 +103,7 @@ class IndexFinalizedEvent(EventBase):
 
 
 class AggregateFinalizedEvent(EventBase):
-    epochEnd: int
+    DAGBlockHeight: int
     projectId: str
     aggregateCid: str
     broadcastId: str

@@ -28,6 +28,8 @@ from pooler.utils.redis.redis_keys import (
 class SnapshotAsyncWorker(GenericAsyncWorker):
 
     def __init__(self, name, **kwargs):
+        self._q = f'powerloom-backend-cb-snapshot:{settings.namespace}:{settings.instance_id}'
+        self._rmq_routing = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}:EpochReleased.*'
         super(SnapshotAsyncWorker, self).__init__(name=name, **kwargs)
 
         self._project_calculation_mapping = None
@@ -35,7 +37,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         for project_config in projects_config:
             type_ = project_config.project_type
             self._task_types.append(type_)
-
         self._initialized = False
 
     @notify_on_task_failure_snapshot

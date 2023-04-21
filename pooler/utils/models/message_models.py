@@ -62,6 +62,8 @@ class PowerloomAggregateFinalizedMessage(BaseModel):
 
 class PowerloomCalculateAggregateMessage(BaseModel):
     messages: List[PowerloomAggregateFinalizedMessage]
+    broadcastId: str
+    timestamp: int
 
 
 class ProcessHubCommand(BaseModel):

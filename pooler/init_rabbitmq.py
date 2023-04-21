@@ -74,16 +74,56 @@ def init_topic_queue(
     )
 
 
+def get_snapshot_queue_routing_key_pattern() -> str:
+    queue_name = (
+        f'powerloom-backend-cb-snapshot:{settings.namespace}:{settings.instance_id}'
+    )
+    routing_key_pattern = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}:EpochReleased.*'
+    return queue_name, routing_key_pattern
+
+
+def get_index_queue_routing_key_pattern() -> str:
+    queue_name = (
+        f'powerloom-backend-cb-index:{settings.namespace}:{settings.instance_id}'
+    )
+    routing_key_pattern = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}:SnapshotFinalized.*'
+    return queue_name, routing_key_pattern
+
+
+def get_aggregate_queue_routing_key_pattern() -> str:
+    queue_name = (
+        f'powerloom-backend-cb-aggregate:{settings.namespace}:{settings.instance_id}'
+    )
+    routing_key_pattern = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}:CalculateAggregate.*'
+    return queue_name, routing_key_pattern
+
+
 def init_callback_queue(
     ch: pika.adapters.blocking_connection.BlockingChannel,
 ) -> None:
     callback_exchange_name = (
         f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}'
     )
-    routing_key_pattern = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.*'
-    queue_name = (
-        f'powerloom-backend-cb:{settings.namespace}:{settings.instance_id}'
+    # Snapshot queue
+    queue_name, routing_key_pattern = get_snapshot_queue_routing_key_pattern()
+    init_topic_queue(
+        ch,
+        exchange_name=callback_exchange_name,
+        queue_name=queue_name,
+        routing_key_pattern=routing_key_pattern,
     )
+
+    # Index queue
+    queue_name, routing_key_pattern = get_index_queue_routing_key_pattern()
+    init_topic_queue(
+        ch,
+        exchange_name=callback_exchange_name,
+        queue_name=queue_name,
+        routing_key_pattern=routing_key_pattern,
+    )
+
+    # Aggregate queue
+    queue_name, routing_key_pattern = get_aggregate_queue_routing_key_pattern()
     init_topic_queue(
         ch,
         exchange_name=callback_exchange_name,

@@ -114,7 +114,11 @@ class ProcessorDistributor(multiprocessing.Process):
                     contract=contract,
                     broadcastId=msg_obj.broadcastId,
                 )
-                self._send_message_for_processing(process_unit, type_)
+                self._send_message_for_processing(
+                    process_unit,
+                    type_,
+                    f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}:EpochReleased.{type_}',
+                )
 
         self._rabbitmq_interactor._channel.basic_ack(
             delivery_tag=method.delivery_tag,
@@ -139,16 +143,20 @@ class ProcessorDistributor(multiprocessing.Process):
 
         for config in indexer_config:
             type_ = config.project_type
-            self._send_message_for_processing(process_unit, type_)
+            self._send_message_for_processing(
+                process_unit,
+                type_,
+                f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}:SnapshotFinalized.{type_}',
+            )
 
         self._rabbitmq_interactor._channel.basic_ack(
             delivery_tag=method.delivery_tag,
         )
 
-    def _send_message_for_processing(self, process_unit, type_):
+    def _send_message_for_processing(self, process_unit, type_, routing_key):
         self._rabbitmq_interactor.enqueue_msg_delivery(
             exchange=f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}',
-            routing_key=f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.{type_}',
+            routing_key=routing_key,
             msg_body=process_unit.json(),
         )
         self._logger.debug(
@@ -267,47 +275,72 @@ class ProcessorDistributor(multiprocessing.Process):
                 if config.filters.projectId not in process_unit.projectId:
                     self._logger.info(f'projectId mismatch {process_unit.projectId} {config.filters.projectId}')
                     continue
-                self._send_message_for_processing(process_unit, type_)
+                self._send_message_for_processing(
+                    process_unit,
+                    type_,
+                    f'powerloom-backend-callback:{settings.namespace}:'
+                    f'{settings.instance_id}:CalculateAggregate.{type_}',
+                )
             if event_type == 'AggregateFinalized':
                 if process_unit.projectId not in config.projects_to_wait_for:
                     self._logger.info(f'projectId not required for  {process_unit.projectId}: {config.project_type}')
-                    continue
 
                 # store event in redis zset
                 self.ev_loop.run_until_complete(
                     self._redis_conn.zadd(
                         f'powerloom:aggregator:{config.project_type}:events',
-                        {process_unit.json(): process_unit.DAGBlockheight},
+                        {process_unit.json(): process_unit.DAGBlockHeight},
                     ),
                 )
 
                 events = self.ev_loop.run_until_complete(
                     self._redis_conn.zrangebyscore(
                         f'powerloom:aggregator:{config.project_type}:events',
-                        process_unit.DAGBlockheight,
-                        process_unit.DAGBlockheight,
+                        process_unit.DAGBlockHeight,
+                        process_unit.DAGBlockHeight,
                     ),
                 )
 
                 if not events:
-                    self._logger.info(f'No events found for {process_unit.DAGBlockheight}')
+                    self._logger.info(f'No events found for {process_unit.DAGBlockHeight}')
                     continue
 
                 event_project_ids = set()
-                finalized_messages = set()
+                finalized_messages = list()
 
                 for event in events:
                     event = PowerloomAggregateFinalizedMessage.parse_raw(event)
                     event_project_ids.add(event.projectId)
-                    finalized_messages.add(event)
+                    finalized_messages.append(event)
 
-                if event_for_projects == set(config.projects_to_wait_for):
-                    self._logger.info(f'All projects present for {process_unit.DAGBlockheight}, aggregating')
+                if event_project_ids == set(config.projects_to_wait_for):
+                    self._logger.info(f'All projects present for {process_unit.DAGBlockHeight}, aggregating')
                     final_msg = PowerloomCalculateAggregateMessage(
                         messages=finalized_messages,
+                        timestamp=int(time.time()),
+                        broadcastId=str(uuid4()),
                     )
-                    self._send_message_for_processing(final_msg, type_)
+                    self._send_message_for_processing(
+                        final_msg,
+                        type_,
+                        f'powerloom-backend-callback:{settings.namespace}'
+                        f':{settings.instance_id}:CalculateAggregate.{type_}',
+                    )
 
+                    # Cleanup redis
+                    self.ev_loop.run_until_complete(
+                        self._redis_conn.zremrangebyscore(
+                            f'powerloom:aggregator:{config.project_type}:events',
+                            process_unit.DAGBlockHeight,
+                            process_unit.DAGBlockHeight,
+                        ),
+                    )
+
+                else:
+                    self._logger.info(
+                        f'Not all projects present for {process_unit.DAGBlockHeight},'
+                        f' {len(set(config.projects_to_wait_for)) - len(event_project_ids)} missing',
+                    )
         self._rabbitmq_interactor._channel.basic_ack(
             delivery_tag=method.delivery_tag,
         )

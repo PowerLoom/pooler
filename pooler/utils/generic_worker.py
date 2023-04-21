@@ -38,9 +38,8 @@ class GenericAsyncWorker(multiprocessing.Process):
 
     def __init__(self, name, **kwargs):
         self._core_rmq_consumer: asyncio.Task
-        self._q = f'powerloom-backend-cb:{settings.namespace}:{settings.instance_id}'
+        self._exchange_name = f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}'
         self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
-        self._rmq_routing = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}.*'
         self._redis_conn: Union[None, aioredis.Redis] = None
         self._running_callback_tasks: Dict[str, asyncio.Task] = dict()
         super(GenericAsyncWorker, self).__init__(name=name, **kwargs)
@@ -134,6 +133,9 @@ class GenericAsyncWorker(multiprocessing.Process):
         )
         async with self._rmq_channel_pool.acquire() as channel:
             await channel.set_qos(20)
+            exchange = await channel.get_exchange(
+                name=self._exchange_name,
+            )
             q_obj = await channel.get_queue(
                 name=self._q,
                 ensure=False,
@@ -141,6 +143,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             self._logger.debug(
                 f'Consuming queue {self._q} with routing key {self._rmq_routing}...',
             )
+            await q_obj.bind(exchange, routing_key=self._rmq_routing)
             await q_obj.consume(self._on_rabbitmq_message)
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):

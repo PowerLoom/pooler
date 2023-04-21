@@ -179,7 +179,7 @@ class EventDetectorProcess(multiprocessing.Process):
 
             elif log.event == 'SnapshotFinalized':
                 event = SnapshotFinalizedEvent(
-                    DAGBlockHeight=log.args.DAGBlockHeight,
+                    DAGBlockHeight=log.args.epochEnd,
                     projectId=log.args.projectId,
                     snapshotCid=log.args.snapshotCid,
                     timestamp=log.args.timestamp,
