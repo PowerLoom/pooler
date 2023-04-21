@@ -9,6 +9,7 @@ from uuid import uuid4
 import httpx._exceptions as httpx_exceptions
 import web3.contract
 from aio_pika import IncomingMessage
+from aio_pika import Message
 from pydantic import ValidationError
 from redis import asyncio as aioredis
 from tenacity import retry
@@ -442,11 +443,17 @@ class IndexingAsyncWorker(GenericAsyncWorker):
                     async with self._rmq_channel_pool.acquire() as channel:
                         # Prepare a message to send
 
-                        # Use the custom exchange name and routing key to publish the message
-                        await channel.default_exchange.publish(
-                            commit_payload.json(),
-                            routing_key=exchange,
-                            exchange_name=routing_key,
+                        commit_payload_exchange = await channel.get_exchange(
+                            name=exchange,
+                        )
+                        message_data = json.dumps(commit_payload.json()).encode()
+
+                        # Prepare a message to send
+                        message = Message(message_data)
+
+                        await commit_payload_exchange.publish(
+                            message=message,
+                            routing_key=routing_key,
                         )
 
                         self._logger.info(

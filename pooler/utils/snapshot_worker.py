@@ -8,6 +8,7 @@ from typing import Union
 from uuid import uuid4
 
 from aio_pika import IncomingMessage
+from aio_pika import Message
 from pydantic import ValidationError
 
 from pooler.settings.config import projects_config
@@ -152,7 +153,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 web3Storage=True,
                 sourceChainId=source_chain_details,
                 projectId=project_id,
-                epochEndHeight=epoch.epoch_end_height,
+                epochEndHeight=epoch.end,
             )
 
             exchange = (
@@ -165,12 +166,17 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 async with self._rmq_connection_pool.acquire() as connection:
                     async with self._rmq_channel_pool.acquire() as channel:
                         # Prepare a message to send
+                        commit_payload_exchange = await channel.get_exchange(
+                            name=exchange,
+                        )
+                        message_data = json.dumps(commit_payload.json()).encode()
 
-                        # Use the custom exchange name and routing key to publish the message
-                        await channel.default_exchange.publish(
-                            commit_payload.json(),
+                        # Prepare a message to send
+                        message = Message(message_data)
+
+                        await commit_payload_exchange.publish(
+                            message=message,
                             routing_key=routing_key,
-                            exchange_name=exchange,
                         )
 
                         self._logger.info(
