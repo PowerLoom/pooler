@@ -449,7 +449,7 @@ class IndexingAsyncWorker(GenericAsyncWorker):
                         commit_payload_exchange = await channel.get_exchange(
                             name=exchange,
                         )
-                        message_data = json.dumps(commit_payload.json()).encode()
+                        message_data = commit_payload.json().encode()
 
                         # Prepare a message to send
                         message = Message(message_data)
