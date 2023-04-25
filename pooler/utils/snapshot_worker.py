@@ -154,7 +154,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 web3Storage=True,
                 sourceChainId=source_chain_details,
                 projectId=project_id,
-                epochEndHeight=epoch.end,
+                epochId=epoch.epochId,
             )
 
             exchange = (

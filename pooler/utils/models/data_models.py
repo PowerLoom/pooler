@@ -55,47 +55,30 @@ class RLimitConfig(BaseModel):
     file_descriptors: int
 
 
-class EpochInfo(BaseModel):
-    chainId: int
-    epochStartBlockHeight: int
-    epochEndBlockHeight: int
-
-
-class ProjectRegistrationRequest(BaseModel):
-    projectIDs: List[str]
-
-
-class IndexingRegistrationData(BaseModel):
-    projectID: str
-    indexerConfig: Dict
-
-
-class ProjectRegistrationRequestForIndexing(BaseModel):
-    projects: List[IndexingRegistrationData]
-    namespace: str
-
-
 # Event detector related models
 class EventBase(BaseModel):
     timestamp: int
 
 
 class EpochReleasedEvent(EventBase):
+    epochId: int
     begin: int
     end: int
     broadcastId: str
 
 
 class SnapshotFinalizedEvent(EventBase):
-    DAGBlockHeight: int
+    epochId: int
+    epochEnd: int
     projectId: str
     snapshotCid: str
     broadcastId: str
 
 
 class IndexFinalizedEvent(EventBase):
+    epochId: int
+    epochEnd: int
     projectId: str
-    DAGBlockHeight: int
     indexTailDAGBlockHeight: int
     tailBlockEpochSourceChainHeight: int
     indexIdentifierHash: str
@@ -103,7 +86,8 @@ class IndexFinalizedEvent(EventBase):
 
 
 class AggregateFinalizedEvent(EventBase):
-    DAGBlockHeight: int
+    epochId: int
+    epochEnd: int
     projectId: str
     aggregateCid: str
     broadcastId: str
@@ -166,7 +150,7 @@ class TailAdjustmentCursor(BaseModel):
 
 class IndexFinalizedCallback(BaseModel):
     projectId: str
-    DAGBlockHeight: int
+    epochId: int
     indexTailDAGBlockHeight: int
     tailBlockEpochSourceChainHeight: int
     indexIdentifierHash: str

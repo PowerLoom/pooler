@@ -31,6 +31,8 @@ from pooler.utils.models.data_models import IndexSeek
 from pooler.utils.models.data_models import RetrievedDAGBlock
 from pooler.utils.models.data_models import TailAdjustmentCursor
 from pooler.utils.models.message_models import IndexBase
+from pooler.utils.models.message_models import PayloadCommitMessage
+from pooler.utils.models.message_models import PayloadCommitMessageType
 from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
 from pooler.utils.redis import redis_keys
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
@@ -315,7 +317,7 @@ class IndexingAsyncWorker(GenericAsyncWorker):
         dag_finalization_cb: PowerloomSnapshotFinalizedMessage,
         task_type: str,
     ):
-        callback_dag_height = dag_finalization_cb.DAGBlockHeight
+        callback_dag_height = dag_finalization_cb.epochId
         # consult protocol state stored on smart contract for finalized DAG CID at this height
         head_dag_cid = await self._get_dag_cid_at_height(callback_dag_height)
         project_id = dag_finalization_cb.projectId
@@ -353,7 +355,7 @@ class IndexingAsyncWorker(GenericAsyncWorker):
             )
             await redis_conn.zadd(
                 name=redis_keys.get_last_indexed_markers_zset(project_id),
-                mapping={index_record_to_cache.json(): dag_finalization_cb.DAGBlockHeight},
+                mapping={index_record_to_cache.json(): dag_finalization_cb.epochId},
             )
             # commit to index submission contract
             # TODO: send to audit protocol for contract submission
@@ -431,7 +433,7 @@ class IndexingAsyncWorker(GenericAsyncWorker):
                 web3Storage=True,
                 sourceChainId=source_chain_details,
                 projectId=project_id,
-                epochEndHeight=epoch.DAGBlockHeight,
+                epochId=epoch.epochId,
             )
 
             # send through rabbitmq

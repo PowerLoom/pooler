@@ -8,7 +8,13 @@ from typing import Union
 from pydantic import BaseModel
 
 
+class EpochBaseSnapshot(BaseModel):
+    begin: int
+    end: int
+
+
 class EpochBase(BaseModel):
+    epochId: int
     begin: int
     end: int
 
@@ -17,25 +23,16 @@ class EpochBroadcast(EpochBase):
     broadcastId: str
 
 
-class EpochConsensusReport(EpochBase):
-    reorg: bool = False
-
-
-class SystemEpochStatusReport(EpochBase):
-    broadcastId: str
-    reorg: bool = False
-
-
-class PowerloomSnapshotEpoch(SystemEpochStatusReport):
+class PowerloomSnapshotEpoch(EpochBroadcast):
     contracts: List[str]
 
 
-class PowerloomSnapshotProcessMessage(SystemEpochStatusReport):
+class PowerloomSnapshotProcessMessage(EpochBroadcast):
     contract: str
 
 
 class PowerloomSnapshotFinalizedMessage(BaseModel):
-    DAGBlockHeight: int
+    epochId: int
     projectId: str
     snapshotCid: str
     broadcastId: str
@@ -43,7 +40,7 @@ class PowerloomSnapshotFinalizedMessage(BaseModel):
 
 
 class PowerloomIndexFinalizedMessage(BaseModel):
-    DAGBlockHeight: int
+    epochId: int
     projectId: str
     indexTailDAGBlockHeight: int
     tailBlockEpochSourceChainHeight: int
@@ -53,7 +50,7 @@ class PowerloomIndexFinalizedMessage(BaseModel):
 
 
 class PowerloomAggregateFinalizedMessage(BaseModel):
-    DAGBlockHeight: int
+    epochId: int
     projectId: str
     aggregateCid: str
     broadcastId: str
@@ -75,16 +72,16 @@ class ProcessHubCommand(BaseModel):
 
 class SnapshotBase(BaseModel):
     contract: str
-    chainHeightRange: EpochBase
+    chainHeightRange: EpochBaseSnapshot
     timestamp: float
 
 
 class IndexBase(BaseModel):
-    DAGBlockHeight: int
+    epochId: int
 
 
 class AggregateBase(BaseModel):
-    DAGBlockHeight: int
+    epochId: int
 
 
 class PayloadCommitMessageType(Enum):
@@ -99,7 +96,7 @@ class PayloadCommitMessage(BaseModel):
     web3Storage: bool
     sourceChainId: int
     projectId: str
-    epochEndHeight: int
+    epochId: int
 
 
 class PayloadCommitFinalizedMessageType(Enum):

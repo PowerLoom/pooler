@@ -18,6 +18,7 @@ from pooler.settings.config import indexer_config
 from pooler.settings.config import projects_config
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
+from pooler.utils.models.message_models import EpochBroadcast
 from pooler.utils.models.message_models import PayloadCommitFinalizedMessage
 from pooler.utils.models.message_models import PayloadCommitFinalizedMessageType
 from pooler.utils.models.message_models import PowerloomAggregateFinalizedMessage
@@ -25,7 +26,6 @@ from pooler.utils.models.message_models import PowerloomCalculateAggregateMessag
 from pooler.utils.models.message_models import PowerloomIndexFinalizedMessage
 from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
 from pooler.utils.models.message_models import PowerloomSnapshotProcessMessage
-from pooler.utils.models.message_models import SystemEpochStatusReport
 from pooler.utils.rabbitmq_helpers import RabbitmqSelectLoopInteractor
 from pooler.utils.redis.redis_conn import RedisPoolCache
 from pooler.utils.redis.redis_keys import (
@@ -86,8 +86,8 @@ class ProcessorDistributor(multiprocessing.Process):
 
     def _distribute_callbacks_snapshotting(self, dont_use_ch, method, properties, body):
         try:
-            msg_obj: SystemEpochStatusReport = (
-                SystemEpochStatusReport.parse_raw(body)
+            msg_obj: EpochBroadcast = (
+                EpochBroadcast.parse_raw(body)
             )
         except ValidationError:
             self._logger.opt(exception=True).error(
@@ -111,6 +111,7 @@ class ProcessorDistributor(multiprocessing.Process):
                 process_unit = PowerloomSnapshotProcessMessage(
                     begin=msg_obj.begin,
                     end=msg_obj.end,
+                    epochId=msg_obj.epochId,
                     contract=contract,
                     broadcastId=msg_obj.broadcastId,
                 )
@@ -289,20 +290,20 @@ class ProcessorDistributor(multiprocessing.Process):
                 self.ev_loop.run_until_complete(
                     self._redis_conn.zadd(
                         f'powerloom:aggregator:{config.project_type}:events',
-                        {process_unit.json(): process_unit.DAGBlockHeight},
+                        {process_unit.json(): process_unit.epochId},
                     ),
                 )
 
                 events = self.ev_loop.run_until_complete(
                     self._redis_conn.zrangebyscore(
                         f'powerloom:aggregator:{config.project_type}:events',
-                        process_unit.DAGBlockHeight,
-                        process_unit.DAGBlockHeight,
+                        process_unit.epochId,
+                        process_unit.epochId,
                     ),
                 )
 
                 if not events:
-                    self._logger.info(f'No events found for {process_unit.DAGBlockHeight}')
+                    self._logger.info(f'No events found for {process_unit.epochId}')
                     continue
 
                 event_project_ids = set()
@@ -314,7 +315,7 @@ class ProcessorDistributor(multiprocessing.Process):
                     finalized_messages.append(event)
 
                 if event_project_ids == set(config.projects_to_wait_for):
-                    self._logger.info(f'All projects present for {process_unit.DAGBlockHeight}, aggregating')
+                    self._logger.info(f'All projects present for {process_unit.epochId}, aggregating')
                     final_msg = PowerloomCalculateAggregateMessage(
                         messages=finalized_messages,
                         timestamp=int(time.time()),
@@ -331,14 +332,14 @@ class ProcessorDistributor(multiprocessing.Process):
                     self.ev_loop.run_until_complete(
                         self._redis_conn.zremrangebyscore(
                             f'powerloom:aggregator:{config.project_type}:events',
-                            process_unit.DAGBlockHeight,
-                            process_unit.DAGBlockHeight,
+                            process_unit.epochId,
+                            process_unit.epochId,
                         ),
                     )
 
                 else:
                     self._logger.info(
-                        f'Not all projects present for {process_unit.DAGBlockHeight},'
+                        f'Not all projects present for {process_unit.epochId},'
                         f' {len(set(config.projects_to_wait_for)) - len(event_project_ids)} missing',
                     )
         self._rabbitmq_interactor._channel.basic_ack(

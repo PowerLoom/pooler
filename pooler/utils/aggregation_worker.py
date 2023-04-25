@@ -153,6 +153,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             source_chain_details = settings.chain_id
 
             payload = snapshot.dict()
+
             project_hash = hash([project.projectId for project in epoch.messages])
             project_id = f'{audit_stream}_{project_hash}_{settings.namespace}'
 
@@ -162,7 +163,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 web3Storage=True,
                 sourceChainId=source_chain_details,
                 projectId=project_id,
-                epochEndHeight=epoch.DAGBlockHeight,
+                epochId=epoch.epochId,
             )
 
             exchange = (

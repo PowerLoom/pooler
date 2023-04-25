@@ -8,29 +8,22 @@
 		"anonymous": false,
 		"inputs": [
 			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "epochId",
+				"type": "uint256"
+			},
+			{
 				"indexed": false,
-				"internalType": "address",
-				"name": "adminModuleAddress",
-				"type": "address"
-			}
-		],
-		"name": "AdminModuleUpdated",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
+				"internalType": "uint256",
+				"name": "epochEnd",
+				"type": "uint256"
+			},
 			{
 				"indexed": false,
 				"internalType": "string",
 				"name": "projectId",
 				"type": "string"
-			},
-			{
-				"indexed": true,
-				"internalType": "uint256",
-				"name": "DAGBlockHeight",
-				"type": "uint256"
 			},
 			{
 				"indexed": false,
@@ -39,7 +32,7 @@
 				"type": "string"
 			},
 			{
-				"indexed": true,
+				"indexed": false,
 				"internalType": "uint256",
 				"name": "timestamp",
 				"type": "uint256"
@@ -52,16 +45,22 @@
 		"anonymous": false,
 		"inputs": [
 			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "epochId",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "epochEnd",
+				"type": "uint256"
+			},
+			{
 				"indexed": false,
 				"internalType": "string",
 				"name": "projectId",
 				"type": "string"
-			},
-			{
-				"indexed": true,
-				"internalType": "uint256",
-				"name": "DAGBlockHeight",
-				"type": "uint256"
 			},
 			{
 				"indexed": false,
@@ -70,7 +69,7 @@
 				"type": "string"
 			},
 			{
-				"indexed": true,
+				"indexed": false,
 				"internalType": "uint256",
 				"name": "timestamp",
 				"type": "uint256"
@@ -82,6 +81,12 @@
 	{
 		"anonymous": false,
 		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "epochId",
+				"type": "uint256"
+			},
 			{
 				"indexed": false,
 				"internalType": "uint256",
@@ -101,7 +106,7 @@
 				"type": "string"
 			},
 			{
-				"indexed": true,
+				"indexed": false,
 				"internalType": "uint256",
 				"name": "timestamp",
 				"type": "uint256"
@@ -126,9 +131,9 @@
 				"type": "string"
 			},
 			{
-				"indexed": false,
+				"indexed": true,
 				"internalType": "uint256",
-				"name": "epochEnd",
+				"name": "epochId",
 				"type": "uint256"
 			},
 			{
@@ -138,7 +143,7 @@
 				"type": "string"
 			},
 			{
-				"indexed": true,
+				"indexed": false,
 				"internalType": "uint256",
 				"name": "timestamp",
 				"type": "uint256"
@@ -151,16 +156,22 @@
 		"anonymous": false,
 		"inputs": [
 			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "epochId",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "epochEnd",
+				"type": "uint256"
+			},
+			{
 				"indexed": false,
 				"internalType": "string",
 				"name": "projectId",
 				"type": "string"
-			},
-			{
-				"indexed": true,
-				"internalType": "uint256",
-				"name": "DAGBlockHeight",
-				"type": "uint256"
 			},
 			{
 				"indexed": false,
@@ -169,7 +180,7 @@
 				"type": "string"
 			},
 			{
-				"indexed": true,
+				"indexed": false,
 				"internalType": "uint256",
 				"name": "timestamp",
 				"type": "uint256"
@@ -194,9 +205,9 @@
 				"type": "string"
 			},
 			{
-				"indexed": false,
+				"indexed": true,
 				"internalType": "uint256",
-				"name": "epochEnd",
+				"name": "epochId",
 				"type": "uint256"
 			},
 			{
@@ -206,7 +217,7 @@
 				"type": "string"
 			},
 			{
-				"indexed": true,
+				"indexed": false,
 				"internalType": "uint256",
 				"name": "timestamp",
 				"type": "uint256"
@@ -231,9 +242,9 @@
 				"type": "uint256"
 			},
 			{
-				"indexed": false,
+				"indexed": true,
 				"internalType": "uint256",
-				"name": "DAGBlockHeight",
+				"name": "epochId",
 				"type": "uint256"
 			},
 			{
@@ -249,7 +260,7 @@
 				"type": "bytes32"
 			},
 			{
-				"indexed": true,
+				"indexed": false,
 				"internalType": "uint256",
 				"name": "timestamp",
 				"type": "uint256"
@@ -274,9 +285,9 @@
 				"type": "string"
 			},
 			{
-				"indexed": false,
+				"indexed": true,
 				"internalType": "uint256",
-				"name": "epochEnd",
+				"name": "epochId",
 				"type": "uint256"
 			},
 			{
@@ -286,7 +297,7 @@
 				"type": "string"
 			},
 			{
-				"indexed": true,
+				"indexed": false,
 				"internalType": "uint256",
 				"name": "timestamp",
 				"type": "uint256"
@@ -298,6 +309,12 @@
 	{
 		"anonymous": false,
 		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "epochId",
+				"type": "uint256"
+			},
 			{
 				"indexed": false,
 				"internalType": "uint256",
@@ -311,7 +328,7 @@
 				"type": "uint256"
 			},
 			{
-				"indexed": true,
+				"indexed": false,
 				"internalType": "uint256",
 				"name": "timestamp",
 				"type": "uint256"
@@ -324,16 +341,22 @@
 		"anonymous": false,
 		"inputs": [
 			{
-				"indexed": false,
-				"internalType": "string",
-				"name": "projectId",
-				"type": "string"
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "epochId",
+				"type": "uint256"
 			},
 			{
 				"indexed": false,
 				"internalType": "uint256",
-				"name": "DAGBlockHeight",
+				"name": "epochEnd",
 				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "projectId",
+				"type": "string"
 			},
 			{
 				"indexed": false,
@@ -354,7 +377,7 @@
 				"type": "bytes32"
 			},
 			{
-				"indexed": true,
+				"indexed": false,
 				"internalType": "uint256",
 				"name": "timestamp",
 				"type": "uint256"
@@ -379,9 +402,9 @@
 				"type": "uint256"
 			},
 			{
-				"indexed": false,
+				"indexed": true,
 				"internalType": "uint256",
-				"name": "DAGBlockHeight",
+				"name": "epochId",
 				"type": "uint256"
 			},
 			{
@@ -397,7 +420,7 @@
 				"type": "bytes32"
 			},
 			{
-				"indexed": true,
+				"indexed": false,
 				"internalType": "uint256",
 				"name": "timestamp",
 				"type": "uint256"
@@ -429,16 +452,22 @@
 		"anonymous": false,
 		"inputs": [
 			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "epochId",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "epochEnd",
+				"type": "uint256"
+			},
+			{
 				"indexed": false,
 				"internalType": "string",
 				"name": "projectId",
 				"type": "string"
-			},
-			{
-				"indexed": true,
-				"internalType": "uint256",
-				"name": "DAGBlockHeight",
-				"type": "uint256"
 			},
 			{
 				"indexed": false,
@@ -447,7 +476,7 @@
 				"type": "string"
 			},
 			{
-				"indexed": true,
+				"indexed": false,
 				"internalType": "uint256",
 				"name": "timestamp",
 				"type": "uint256"
@@ -460,16 +489,22 @@
 		"anonymous": false,
 		"inputs": [
 			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "epochId",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "epochEnd",
+				"type": "uint256"
+			},
+			{
 				"indexed": false,
 				"internalType": "string",
 				"name": "projectId",
 				"type": "string"
-			},
-			{
-				"indexed": true,
-				"internalType": "uint256",
-				"name": "DAGBlockHeight",
-				"type": "uint256"
 			},
 			{
 				"indexed": false,
@@ -478,7 +513,7 @@
 				"type": "string"
 			},
 			{
-				"indexed": true,
+				"indexed": false,
 				"internalType": "uint256",
 				"name": "timestamp",
 				"type": "uint256"
@@ -490,6 +525,12 @@
 	{
 		"anonymous": false,
 		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "epochId",
+				"type": "uint256"
+			},
 			{
 				"indexed": false,
 				"internalType": "uint256",
@@ -509,7 +550,7 @@
 				"type": "string"
 			},
 			{
-				"indexed": true,
+				"indexed": false,
 				"internalType": "uint256",
 				"name": "timestamp",
 				"type": "uint256"
@@ -534,9 +575,9 @@
 				"type": "string"
 			},
 			{
-				"indexed": false,
+				"indexed": true,
 				"internalType": "uint256",
-				"name": "epochEnd",
+				"name": "epochId",
 				"type": "uint256"
 			},
 			{
@@ -546,7 +587,7 @@
 				"type": "string"
 			},
 			{
-				"indexed": true,
+				"indexed": false,
 				"internalType": "uint256",
 				"name": "timestamp",
 				"type": "uint256"
@@ -759,7 +800,7 @@
 			},
 			{
 				"internalType": "uint256",
-				"name": "DAGBlockHeight",
+				"name": "epochId",
 				"type": "uint256"
 			}
 		],
@@ -783,7 +824,7 @@
 			},
 			{
 				"internalType": "uint256",
-				"name": "DAGBlockHeight",
+				"name": "epochId",
 				"type": "uint256"
 			},
 			{
@@ -812,7 +853,7 @@
 			},
 			{
 				"internalType": "uint256",
-				"name": "epochEnd",
+				"name": "epochId",
 				"type": "uint256"
 			}
 		],
@@ -836,7 +877,7 @@
 			},
 			{
 				"internalType": "uint256",
-				"name": "dagBlockHeight",
+				"name": "epochId",
 				"type": "uint256"
 			},
 			{
@@ -880,6 +921,11 @@
 				"internalType": "uint256",
 				"name": "end",
 				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "epochId",
+				"type": "uint256"
 			}
 		],
 		"stateMutability": "view",
@@ -893,7 +939,7 @@
 				"type": "uint256"
 			}
 		],
-		"name": "epochReleaseTime",
+		"name": "epochInfo",
 		"outputs": [
 			{
 				"internalType": "uint256",
@@ -903,6 +949,11 @@
 			{
 				"internalType": "uint256",
 				"name": "blocknumber",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "epochEnd",
 				"type": "uint256"
 			}
 		],
@@ -976,7 +1027,7 @@
 			},
 			{
 				"internalType": "uint256",
-				"name": "DAGBlockHeight",
+				"name": "epochId",
 				"type": "uint256"
 			}
 		],
@@ -994,7 +1045,7 @@
 			},
 			{
 				"internalType": "uint256",
-				"name": "DAGBlockHeight",
+				"name": "epochId",
 				"type": "uint256"
 			},
 			{
@@ -1017,7 +1068,7 @@
 			},
 			{
 				"internalType": "uint256",
-				"name": "epochEnd",
+				"name": "epochId",
 				"type": "uint256"
 			}
 		],
@@ -1410,7 +1461,7 @@
 				"type": "string"
 			}
 		],
-		"name": "projectFirstEpochEndHeight",
+		"name": "projectFirstEpochId",
 		"outputs": [
 			{
 				"internalType": "uint256",
@@ -1611,7 +1662,7 @@
 			},
 			{
 				"internalType": "uint256",
-				"name": "DAGBlockHeight",
+				"name": "epochId",
 				"type": "uint256"
 			},
 			{
@@ -1651,7 +1702,7 @@
 			},
 			{
 				"internalType": "uint256",
-				"name": "DAGBlockHeight",
+				"name": "epochId",
 				"type": "uint256"
 			},
 			{
@@ -1701,7 +1752,7 @@
 			},
 			{
 				"internalType": "uint256",
-				"name": "epochEnd",
+				"name": "epochId",
 				"type": "uint256"
 			},
 			{
@@ -1730,19 +1781,6 @@
 		"name": "submitSnapshot",
 		"outputs": [],
 		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [],
-		"name": "totalSnapshotterCount",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"stateMutability": "view",
 		"type": "function"
 	},
 	{

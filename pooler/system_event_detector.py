@@ -113,12 +113,13 @@ class EventDetectorProcess(multiprocessing.Process):
             abi=self.contract_abi,
         )
 
-        # Event Structures
-        # event EpochReleased(uint256 begin, uint256 end, uint256 indexed timestamp);
-        # event SnapshotFinalized(uint256 epochEnd, string projectId, string snapshotCid, uint256 indexed timestamp);
-        # event IndexFinalized(string projectId, uint256 DAGBlockHeight, uint256 indexTailDAGBlockHeight,
-        #     uint256 tailBlockEpochSourceChainHeight, bytes32 indexIdentifierHash, uint256 indexed timestamp);
-        # event AggregateFinalized(uint256 epochEnd, string projectId, string aggregateCid, uint256 indexed timestamp);
+# event EpochReleased(uint256 indexed epochId, uint256 begin, uint256 end, uint256 timestamp);
+# event SnapshotFinalized(uint256 indexed epochId, uint256 epochEnd, string projectId,
+#     string snapshotCid, uint256 timestamp);
+# event IndexFinalized(uint256 indexed epochId, uint256 epochEnd, string projectId, uint256 indexTailDAGBlockHeight,
+#     uint256 tailBlockEpochSourceChainHeight, bytes32 indexIdentifierHash, uint256 timestamp);
+# event AggregateFinalized(uint256 indexed epochId, uint256 epochEnd, string projectId,
+#     string aggregateCid, uint256 timestamp);
 
         EVENTS_ABI = {
             'EpochReleased': self.contract.events.EpochReleased._get_event_abi(),
@@ -128,10 +129,10 @@ class EventDetectorProcess(multiprocessing.Process):
         }
 
         EVENT_SIGS = {
-            'EpochReleased': 'EpochReleased(uint256,uint256,uint256)',
-            'SnapshotFinalized': 'SnapshotFinalized(uint256,string,string,uint256)',
-            'IndexFinalized': 'IndexFinalized(string,uint256,uint256,uint256,bytes32,uint256)',
-            'AggregateFinalized': 'AggregateFinalized(uint256,string,string,uint256)',
+            'EpochReleased': 'EpochReleased(uint256,uint256,uint256,uint256)',
+            'SnapshotFinalized': 'SnapshotFinalized(uint256,uint256,string,string,uint256)',
+            'IndexFinalized': 'IndexFinalized(uint256,uint256,string,uint256,uint256,bytes32,uint256)',
+            'AggregateFinalized': 'AggregateFinalized(uint256,uint256,string,string,uint256)',
         }
 
         self.event_sig, self.event_abi = get_event_sig_and_abi(
@@ -172,6 +173,7 @@ class EventDetectorProcess(multiprocessing.Process):
                 event = EpochReleasedEvent(
                     begin=log.args.begin,
                     end=log.args.end,
+                    epochId=log.args.epochId,
                     timestamp=log.args.timestamp,
                     broadcastId=str(uuid.uuid4()),
                 )
@@ -179,7 +181,8 @@ class EventDetectorProcess(multiprocessing.Process):
 
             elif log.event == 'SnapshotFinalized':
                 event = SnapshotFinalizedEvent(
-                    DAGBlockHeight=log.args.epochEnd,
+                    epochId=log.args.epochId,
+                    epochEnd=log.args.epochEnd,
                     projectId=log.args.projectId,
                     snapshotCid=log.args.snapshotCid,
                     timestamp=log.args.timestamp,
@@ -189,8 +192,9 @@ class EventDetectorProcess(multiprocessing.Process):
 
             elif log.event == 'IndexFinalized':
                 event = IndexFinalizedEvent(
+                    epochId=log.args.epochId,
+                    epochEnd=log.args.epochEnd,
                     projectId=log.args.projectId,
-                    DAGBlockHeight=log.args.DAGBlockHeight,
                     indexTailDAGBlockHeight=log.args.indexTailDAGBlockHeight,
                     tailBlockEpochSourceChainHeight=log.args.tailBlockEpochSourceChainHeight,
                     indexIdentifierHash='0x' + log.args.indexIdentifierHash.hex(),
@@ -200,7 +204,8 @@ class EventDetectorProcess(multiprocessing.Process):
                 events.append((log.event, event))
             elif log.event == 'AggregateFinalized':
                 event = AggregateFinalizedEvent(
-                    DAGBlockHeight=log.args.epochEnd,
+                    epochId=log.args.epochId,
+                    epochEnd=log.args.epochEnd,
                     projectId=log.args.projectId,
                     aggregateCid=log.args.aggregateCid,
                     timestamp=log.args.timestamp,
