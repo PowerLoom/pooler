@@ -42,22 +42,12 @@ class ProcessorDistributor(multiprocessing.Process):
         self._redis_conn = None
         self._aioredis_pool = None
         self._rpc_helper = None
-        self._project_types = set()
-        self._aggregate_types = set()
 
     async def _init_redis_pool(self):
         if not self._aioredis_pool:
             self._aioredis_pool = RedisPoolCache()
             await self._aioredis_pool.populate()
             self._redis_conn = self._aioredis_pool._aioredis_pool
-
-    def _create_project_type_mapping(self):
-
-        for project in projects_config:
-            self._project_types.add(project['type'])
-
-        for aggregator in aggregator_config:
-            self._aggregate_types.add(aggregator['type'])
 
     async def _init_rpc_helper(self):
         if not self._rpc_helper:
@@ -316,9 +306,6 @@ class ProcessorDistributor(multiprocessing.Process):
 
         if not self._rpc_helper:
             self.ev_loop.run_until_complete(self._init_rpc_helper())
-
-        if not self._project_types and not self._aggregate_types:
-            self.ev_loop.run_until_complete(self._init_project_types())
 
         # Forwarding SnapshotFinalized, IndexFinalized, and AggregateFinalized Events to Payload Commit Queue
 
