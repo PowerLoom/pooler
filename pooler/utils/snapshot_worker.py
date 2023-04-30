@@ -16,7 +16,6 @@ from pooler.settings.config import settings
 from pooler.utils.callback_helpers import notify_on_task_failure_snapshot
 from pooler.utils.generic_worker import GenericAsyncWorker
 from pooler.utils.models.message_models import PayloadCommitMessage
-from pooler.utils.models.message_models import PayloadCommitMessageType
 from pooler.utils.models.message_models import PowerloomSnapshotProcessMessage
 from pooler.utils.models.message_models import SnapshotBase
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
@@ -149,7 +148,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             project_id = f'{audit_stream}_{epoch.contract}_{settings.namespace}'
 
             commit_payload = PayloadCommitMessage(
-                messageType=PayloadCommitMessageType.SNAPSHOT,
                 message=payload,
                 web3Storage=True,
                 sourceChainId=source_chain_details,

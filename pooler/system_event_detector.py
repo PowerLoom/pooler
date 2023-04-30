@@ -18,10 +18,8 @@ from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.exceptions import GenericExitOnSignal
 from pooler.utils.file_utils import read_json_file
-from pooler.utils.models.data_models import AggregateFinalizedEvent
 from pooler.utils.models.data_models import EpochReleasedEvent
 from pooler.utils.models.data_models import EventBase
-from pooler.utils.models.data_models import IndexFinalizedEvent
 from pooler.utils.models.data_models import SnapshotFinalizedEvent
 from pooler.utils.rabbitmq_helpers import RabbitmqThreadedSelectLoopInteractor
 from pooler.utils.redis.redis_conn import RedisPoolCache
@@ -116,23 +114,15 @@ class EventDetectorProcess(multiprocessing.Process):
 # event EpochReleased(uint256 indexed epochId, uint256 begin, uint256 end, uint256 timestamp);
 # event SnapshotFinalized(uint256 indexed epochId, uint256 epochEnd, string projectId,
 #     string snapshotCid, uint256 timestamp);
-# event IndexFinalized(uint256 indexed epochId, uint256 epochEnd, string projectId, uint256 indexTailDAGBlockHeight,
-#     uint256 tailBlockEpochSourceChainHeight, bytes32 indexIdentifierHash, uint256 timestamp);
-# event AggregateFinalized(uint256 indexed epochId, uint256 epochEnd, string projectId,
-#     string aggregateCid, uint256 timestamp);
 
         EVENTS_ABI = {
             'EpochReleased': self.contract.events.EpochReleased._get_event_abi(),
             'SnapshotFinalized': self.contract.events.SnapshotFinalized._get_event_abi(),
-            'IndexFinalized': self.contract.events.IndexFinalized._get_event_abi(),
-            'AggregateFinalized': self.contract.events.AggregateFinalized._get_event_abi(),
         }
 
         EVENT_SIGS = {
             'EpochReleased': 'EpochReleased(uint256,uint256,uint256,uint256)',
             'SnapshotFinalized': 'SnapshotFinalized(uint256,uint256,string,string,uint256)',
-            'IndexFinalized': 'IndexFinalized(uint256,uint256,string,uint256,uint256,bytes32,uint256)',
-            'AggregateFinalized': 'AggregateFinalized(uint256,uint256,string,string,uint256)',
         }
 
         self.event_sig, self.event_abi = get_event_sig_and_abi(
@@ -185,29 +175,6 @@ class EventDetectorProcess(multiprocessing.Process):
                     epochEnd=log.args.epochEnd,
                     projectId=log.args.projectId,
                     snapshotCid=log.args.snapshotCid,
-                    timestamp=log.args.timestamp,
-                    broadcastId=str(uuid.uuid4()),
-                )
-                events.append((log.event, event))
-
-            elif log.event == 'IndexFinalized':
-                event = IndexFinalizedEvent(
-                    epochId=log.args.epochId,
-                    epochEnd=log.args.epochEnd,
-                    projectId=log.args.projectId,
-                    indexTailDAGBlockHeight=log.args.indexTailDAGBlockHeight,
-                    tailBlockEpochSourceChainHeight=log.args.tailBlockEpochSourceChainHeight,
-                    indexIdentifierHash='0x' + log.args.indexIdentifierHash.hex(),
-                    timestamp=log.args.timestamp,
-                    broadcastId=str(uuid.uuid4()),
-                )
-                events.append((log.event, event))
-            elif log.event == 'AggregateFinalized':
-                event = AggregateFinalizedEvent(
-                    epochId=log.args.epochId,
-                    epochEnd=log.args.epochEnd,
-                    projectId=log.args.projectId,
-                    aggregateCid=log.args.aggregateCid,
                     timestamp=log.args.timestamp,
                     broadcastId=str(uuid.uuid4()),
                 )

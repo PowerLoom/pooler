@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import List
 from typing import Optional
 from typing import Union
@@ -124,7 +125,6 @@ class EventContract(BaseModel):
 
 class CallbackWorkerConfig(BaseModel):
     num_snapshot_workers: int
-    num_indexing_workers: int
     num_aggregation_workers: int
 
 
@@ -161,7 +161,6 @@ class Settings(BaseModel):
     webhook_listener: WebhookListener
     logs: Logs
     projects_config_path: str
-    indexer_config_path: str
     aggregator_config_path: str
     pair_contract_abi: str
     protocol_state: EventContract
@@ -186,24 +185,18 @@ class ProjectsConfig(BaseModel):
     config: List[ProjectConfig]
 
 
-# Indexer related models
-class IndexingConfig(BaseModel):
-    project_type: str
-    duration_in_seconds: int
-
-
-class IndexerConfig(BaseModel):
-    config: List[IndexingConfig]
-
-
 class AggregateFilterConfig(BaseModel):
-    indexIdentifierHash: str
     projectId: str
+
+
+class AggregateOn(str, Enum):
+    single_project = 'SingleProject'
+    multi_project = 'MultiProject'
 
 
 class AggregationConfig(BaseModel):
     project_type: str
-    init_on_event: str
+    aggregate_on: AggregateOn
     filters: Optional[AggregateFilterConfig]
     projects_to_wait_for: Optional[List[str]]
     processor: ProcessorConfig

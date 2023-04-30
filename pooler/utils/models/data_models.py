@@ -2,14 +2,13 @@ from enum import Enum
 from typing import Dict
 from typing import List
 from typing import Optional
-from typing import Union
 
 from pydantic import BaseModel
 
 
 class PayloadCommitAPIRequest(BaseModel):
     projectId: str
-    payload: dict
+    payload: Dict
     web3Storage: bool = False
     # skip anchor tx by default, unless passed
     skipAnchorProof: bool = True
@@ -41,7 +40,7 @@ class SnapshotterIssue(BaseModel):
     epochs: Optional[List[int]]
     timeOfReporting: int
     noOfEpochsBehind: Optional[int]
-    extra: Optional[dict]
+    extra: Optional[Dict]
     serviceName: str
 
 
@@ -73,94 +72,6 @@ class SnapshotFinalizedEvent(EventBase):
     projectId: str
     snapshotCid: str
     broadcastId: str
-
-
-class IndexFinalizedEvent(EventBase):
-    epochId: int
-    epochEnd: int
-    projectId: str
-    indexTailDAGBlockHeight: int
-    tailBlockEpochSourceChainHeight: int
-    indexIdentifierHash: str
-    broadcastId: str
-
-
-class AggregateFinalizedEvent(EventBase):
-    epochId: int
-    epochEnd: int
-    projectId: str
-    aggregateCid: str
-    broadcastId: str
-
-
-# Indexing and Aggregation related models
-class BlockRetrievalFlags(int, Enum):
-    only_dag_block = 0
-    dag_block_and_payload_data = 1
-    only_payload_data = 2
-
-
-class DAGBlockPayloadLinkedPath(BaseModel):
-    cid: Dict[str, str]
-
-
-# DAGBlockPayloadLinkedPath is transformed by retrieval utilities
-# for an easy to access RetrievedDAGBlockPayload object
-class RetrievedDAGBlockPayload(BaseModel):
-    cid: str = 'null'
-    payload: Union[dict, None] = None
-
-
-class RetrievedDAGBlock(BaseModel):
-    height: int = 0
-    prevCid: Optional[Dict[str, str]] = None
-    prevRoot: Optional[str] = None
-    data: RetrievedDAGBlockPayload = RetrievedDAGBlockPayload()
-    txHash: str = ''
-    timestamp: int = 0
-
-
-class IndexSeek(BaseModel):
-    dagBlockHead: Optional[RetrievedDAGBlock] = None
-    dagBlockTail: Optional[RetrievedDAGBlock] = None
-    dagBlockTailCid: Optional[str] = None
-    # block number in epoch range contained by DAGBlock at
-    # dagBlockCidTail: dagBlock.data.payload['chainHeightRange']
-    # soureChainBlockNum in the range ∈ (epoch_range['begin'], epoch_range['end']]
-    sourceChainBlockNum: int = 0
-
-
-class CachedDAGTailMarker(BaseModel):
-    height: int
-    cid: str
-    sourceChainBlockNum: int
-
-
-class CachedIndexMarker(BaseModel):
-    dagTail: CachedDAGTailMarker
-    dagHeadCid: str
-
-
-class TailAdjustmentCursor(BaseModel):
-    dag_block_height: int
-    dag_block: RetrievedDAGBlock
-    dag_block_cid: str
-    epoch_range: tuple
-
-
-class IndexFinalizedCallback(BaseModel):
-    projectId: str
-    epochId: int
-    indexTailDAGBlockHeight: int
-    tailBlockEpochSourceChainHeight: int
-    indexIdentifierHash: str
-    timestamp: int
-
-
-class CachedAggregateMarker(BaseModel):
-    dagTail: CachedDAGTailMarker
-    dagHeadCid: str
-    aggregate: dict
 
 
 class PairTradeVolume(BaseModel):

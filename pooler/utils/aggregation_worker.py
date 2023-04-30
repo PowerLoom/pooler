@@ -17,8 +17,10 @@ from pooler.settings.config import settings
 from pooler.utils.callback_helpers import notify_on_task_failure_aggregate
 from pooler.utils.generic_worker import GenericAsyncWorker
 from pooler.utils.models.message_models import AggregateBase
+from pooler.utils.models.message_models import PayloadCommitMessage
 from pooler.utils.models.message_models import PowerloomCalculateAggregateMessage
-from pooler.utils.models.message_models import PowerloomIndexFinalizedMessage
+from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
+from pooler.utils.models.settings_model import AggregateOn
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 from pooler.utils.redis.redis_keys import (
     cb_broadcast_processing_logs_zset,
@@ -34,18 +36,20 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         super(AggregationAsyncWorker, self).__init__(name=name, **kwargs)
 
         self._project_calculation_mapping = None
-        self._task_types = []
-        self._task_type_event_mapping = {}
-        for project_config in aggregator_config:
-            type_ = project_config.project_type
-            self._task_type_event_mapping[type_] = project_config.init_on_event
-            self._task_types.append(type_)
         self._initialized = False
+        self._single_project_types = set()
+        self._multi_project_types = set()
+
+        for config in aggregator_config:
+            if config.aggregate_on == AggregateOn.single_project:
+                self._single_project_types.add(config.project_type)
+            elif config.aggregate_on == AggregateOn.multi_project:
+                self._multi_project_types.add(config.project_type)
 
     @notify_on_task_failure_aggregate
     async def _processor_task(
         self,
-        msg_obj: Union[PowerloomIndexFinalizedMessage, PowerloomCalculateAggregateMessage],
+        msg_obj: Union[PowerloomSnapshotFinalizedMessage, PowerloomCalculateAggregateMessage],
         task_type: str,
     ):
         """Function used to process the received message object."""
@@ -100,7 +104,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
     async def _send_audit_payload_commit_service(
         self,
         audit_stream,
-        epoch: Union[PowerloomIndexFinalizedMessage, PowerloomCalculateAggregateMessage],
+        epoch: Union[PowerloomSnapshotFinalizedMessage, PowerloomCalculateAggregateMessage],
         snapshot: Union[AggregateBase, None],
     ):
 
@@ -158,7 +162,6 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             project_id = f'{audit_stream}_{project_hash}_{settings.namespace}'
 
             commit_payload = PayloadCommitMessage(
-                messageType=PayloadCommitMessageType.AGGREGATE,
                 message=payload,
                 web3Storage=True,
                 sourceChainId=source_chain_details,
@@ -244,7 +247,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
 
     async def _map_processed_epochs_to_adapters(
         self,
-        msg_obj: Union[PowerloomIndexFinalizedMessage, PowerloomCalculateAggregateMessage],
+        msg_obj: Union[PowerloomSnapshotFinalizedMessage, PowerloomCalculateAggregateMessage],
         cb_fn_async,
         task_type,
         transformation_lambdas: List[Callable],
@@ -291,11 +294,11 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         await self.init()
 
         self._logger.debug('task type: {}', task_type)
-
-        if self._task_type_event_mapping[task_type] == 'IndexFinalized':
+        # TODO: Update based on new single project based design
+        if task_type in self._single_project_types:
             try:
-                msg_obj: PowerloomIndexFinalizedMessage = (
-                    PowerloomIndexFinalizedMessage.parse_raw(message.body)
+                msg_obj: PowerloomSnapshotFinalizedMessage = (
+                    PowerloomSnapshotFinalizedMessage.parse_raw(message.body)
                 )
             except ValidationError as e:
                 self._logger.opt(exception=True).error(
@@ -313,7 +316,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                     e,
                 )
                 return
-        elif self._task_type_event_mapping[task_type] == 'AggregateFinalized':
+        elif task_type in self._multi_project_types:
             try:
                 msg_obj: PowerloomCalculateAggregateMessage = (
                     PowerloomCalculateAggregateMessage.parse_raw(message.body)

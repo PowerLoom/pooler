@@ -82,14 +82,6 @@ def get_snapshot_queue_routing_key_pattern() -> str:
     return queue_name, routing_key_pattern
 
 
-def get_index_queue_routing_key_pattern() -> str:
-    queue_name = (
-        f'powerloom-backend-cb-index:{settings.namespace}:{settings.instance_id}'
-    )
-    routing_key_pattern = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}:SnapshotFinalized.*'
-    return queue_name, routing_key_pattern
-
-
 def get_aggregate_queue_routing_key_pattern() -> str:
     queue_name = (
         f'powerloom-backend-cb-aggregate:{settings.namespace}:{settings.instance_id}'
@@ -106,15 +98,6 @@ def init_callback_queue(
     )
     # Snapshot queue
     queue_name, routing_key_pattern = get_snapshot_queue_routing_key_pattern()
-    init_topic_queue(
-        ch,
-        exchange_name=callback_exchange_name,
-        queue_name=queue_name,
-        routing_key_pattern=routing_key_pattern,
-    )
-
-    # Index queue
-    queue_name, routing_key_pattern = get_index_queue_routing_key_pattern()
     init_topic_queue(
         ch,
         exchange_name=callback_exchange_name,

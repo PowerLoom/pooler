@@ -97,7 +97,6 @@
     "write_to_files": true
   },
   "projects_config_path": "pooler/static/projects.json",
-  "indexer_config_path": "pooler/static/indexer.json",
   "aggregator_config_path": "pooler/static/aggregator.json",
   "pair_contract_abi": "pooler/static/abis/UniswapV2Pair.json",
   "protocol_state": {
@@ -106,7 +105,6 @@
   },
   "callback_worker_config": {
     "num_snapshot_workers": 8,
-    "num_indexing_workers": 4,
     "num_aggregation_workers": 4
   },
   "ipfs": {

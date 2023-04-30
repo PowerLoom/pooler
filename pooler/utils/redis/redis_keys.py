@@ -55,10 +55,6 @@ rpc_blocknumber_calls = (
 )
 
 
-def get_last_indexed_markers_zset(project_id: str):
-    return f'projectID:{project_id}:indexMarkers'
-
-
 def get_project_epoch_size(project_id):
     return f'projectID:{project_id}:epochSize'
 

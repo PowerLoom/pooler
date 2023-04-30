@@ -13,7 +13,7 @@ from pooler.utils.default_logger import logger
 from pooler.utils.models.data_models import SnapshotterIssue
 from pooler.utils.models.data_models import SnapshotterIssueSeverity
 from pooler.utils.models.message_models import PowerloomCalculateAggregateMessage
-from pooler.utils.models.message_models import PowerloomIndexFinalizedMessage
+from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
 from pooler.utils.models.message_models import PowerloomSnapshotProcessMessage
 from pooler.utils.rpc import RpcHelper
 
@@ -144,7 +144,7 @@ class GenericProcessorSnapshot(ABC):
         pass
 
 
-class GenericProcessorIndexBasedAggregate(ABC):
+class GenericProcessorSingleProjectAggregate(ABC):
     __metaclass__ = ABCMeta
 
     def __init__(self):
@@ -157,14 +157,14 @@ class GenericProcessorIndexBasedAggregate(ABC):
     @abstractmethod
     async def compute(
         self,
-        msg_obj: PowerloomIndexFinalizedMessage,
+        msg_obj: PowerloomSnapshotFinalizedMessage,
         redis: aioredis,
         rpc_helper: RpcHelper,
     ):
         pass
 
 
-class GenericProcessorAggregateBasedAggregate(ABC):
+class GenericProcessorMultiProjectAggregate(ABC):
     __metaclass__ = ABCMeta
 
     def __init__(self):
