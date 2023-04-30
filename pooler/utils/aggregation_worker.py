@@ -160,8 +160,13 @@ class AggregationAsyncWorker(GenericAsyncWorker):
 
             payload = snapshot.dict()
 
-            project_hash = hash([project.projectId for project in epoch.messages])
-            project_id = f'{audit_stream}_{project_hash}_{settings.namespace}'
+            if type(epoch) == PowerloomSnapshotFinalizedMessage:
+                # TODO: Use better separators for project names to improve logic
+                contract = epoch.projectId.split('_')[-2]
+                project_id = project_id = f'{audit_stream}_{contract}_{settings.namespace}'
+            else:
+                project_hash = hash([project.projectId for project in epoch.messages])
+                project_id = f'{audit_stream}_{project_hash}_{settings.namespace}'
 
             commit_payload = PayloadCommitMessage(
                 message=payload,

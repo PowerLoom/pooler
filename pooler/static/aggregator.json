@@ -6,29 +6,39 @@
         "projectId": "uniswap_pairContract_trade_volume_0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc_UNISWAPV2-ph15-prod"
       },
       "processor": {
-        "module": "pooler.modules.aggregate.single_trade_volume",
+        "module": "pooler.modules.aggregate.single_uniswap_trade_volume",
         "class_name": "AggreagateTradeVolumeProcessor"
       }
     },
     {
-      "project_type": "aggregate_uniswap_pairContract_pair_total_reserves",
-      "aggregate_on": "SingleProject",
-      "filters": {
-        "projectId": "uniswap_pairContract_pair_total_reserves_0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc_UNISWAPV2-ph15-prod"
-      },
+      "project_type": "aggregate_uniswap_top_pairs",
+      "aggregate_on": "MultiProject",
+      "projects_to_wait_for": [
+        "aggregate_uniswapv2_pairContract_trade_volume_0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc_UNISWAPV2-ph15-prod",
+        "uniswap_pairContract_pair_total_reserves_0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc_UNISWAPV2-ph15-prod"
+      ],
       "processor": {
-        "module": "pooler.modules.aggregate.single_pair_reserves",
-        "class_name": "AggreagatePairReserveProcessor"
+        "module": "pooler.modules.aggregate.aggregate_stats",
+        "class_name": "AggreagateTopPairsProcessor"
       }
     },
     {
-      "project_type": "aggregate_stats",
+      "project_type": "aggregate_uniswap_top_tokens",
       "aggregate_on": "MultiProject",
       "projects_to_wait_for": [
-        "uniswap_pairContract_trade_volume_0x001",
-        "uniswap_pairContract_trade_volume_0x002",
-        "uniswap_pairContract_trade_volume_0x003",
-        "uniswap_pairContract_trade_volume_0x004"
+        "aggregate_uniswapv2_pairContract_trade_volume_0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc_UNISWAPV2-ph15-prod",
+        "uniswap_pairContract_pair_total_reserves_0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc_UNISWAPV2-ph15-prod"
+      ],
+      "processor": {
+        "module": "pooler.modules.aggregate.aggregate_stats",
+        "class_name": "AggreagateTopTokensProcessor"
+      }
+    },
+    {
+      "project_type": "aggregate_uniswap_stats",
+      "aggregate_on": "MultiProject",
+      "projects_to_wait_for": [
+        "TODO: add projects to wait for"
       ],
       "processor": {
         "module": "pooler.modules.aggregate.aggregate_stats",
