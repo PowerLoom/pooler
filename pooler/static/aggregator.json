@@ -3,7 +3,7 @@
       "project_type": "aggregate_uniswap_pairContract_trade_volume",
       "aggregate_on": "SingleProject",
       "filters": {
-        "projectId": "uniswap_pairContract_trade_volume"
+        "projectId": "uniswap_pairContract_trade_volume_0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc_UNISWAPV2-ph15-prod"
       },
       "processor": {
         "module": "pooler.modules.aggregate.single_trade_volume",
@@ -14,7 +14,7 @@
       "project_type": "aggregate_uniswap_pairContract_pair_total_reserves",
       "aggregate_on": "SingleProject",
       "filters": {
-        "projectId": "uniswap_pairContract_pair_total_reserves"
+        "projectId": "uniswap_pairContract_pair_total_reserves_0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc_UNISWAPV2-ph15-prod"
       },
       "processor": {
         "module": "pooler.modules.aggregate.single_pair_reserves",

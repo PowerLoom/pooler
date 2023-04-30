@@ -163,14 +163,12 @@ class ProcessorDistributor(multiprocessing.Process):
             msg_obj: PowerloomSnapshotFinalizedMessage = (
                 PowerloomSnapshotFinalizedMessage.parse_raw(body)
             )
-            msg_type = PayloadCommitFinalizedMessageType.SNAPSHOTFINALIZED
         else:
             return
 
         self._logger.debug(f'Payload Commit Message Distribution time - {int(time.time())}')
 
         process_unit = PayloadCommitFinalizedMessage(
-            messageType=msg_type,
             message=msg_obj,
             web3Storage=True,
             sourceChainId=settings.chain_id,
@@ -233,7 +231,7 @@ class ProcessorDistributor(multiprocessing.Process):
             elif config.aggregate_on == AggregateOn.multi_project:
                 if process_unit.projectId not in config.projects_to_wait_for:
                     self._logger.info(f'projectId not required for  {process_unit.projectId}: {config.project_type}')
-
+                    continue
                 # store event in redis zset
                 self.ev_loop.run_until_complete(
                     self._redis_conn.zadd(

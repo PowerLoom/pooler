@@ -39,12 +39,14 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         self._initialized = False
         self._single_project_types = set()
         self._multi_project_types = set()
+        self._task_types = set()
 
         for config in aggregator_config:
             if config.aggregate_on == AggregateOn.single_project:
                 self._single_project_types.add(config.project_type)
             elif config.aggregate_on == AggregateOn.multi_project:
                 self._multi_project_types.add(config.project_type)
+            self._task_types.add(config.project_type)
 
     @notify_on_task_failure_aggregate
     async def _processor_task(
