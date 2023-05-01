@@ -26,16 +26,20 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
 
     ):
         self._logger.info(f'compute called with {msg_obj}')
-        # Get the submission data
-        submission_data = await get_project_epoch_snapshot_bulk(
-            redis, protocol_state_contract, anchor_rpc_helper, [msg_obj.epochId], msg_obj.projectId,
+        tail_epoch_id = await get_tail_epoch_id(
+            redis, protocol_state_contract, anchor_rpc_helper, msg_obj.epochId, 86400,
         )
-        if submission_data:
-            trade_volume_snapshot = UniswapTradesSnapshot.parse_raw(submission_data[0])
-            self._logger.info('Trade Volume Snapshot {}', trade_volume_snapshot)
 
-            tail_epoch_id = await get_tail_epoch_id(
-                redis, protocol_state_contract, anchor_rpc_helper, msg_obj.epochId, 3000,
-            )
+        self._logger.info('Tail Epoch Id {}', tail_epoch_id)
 
-            self._logger.info('Tail Epoch Id {}', tail_epoch_id)
+        # Get the submission data
+        epochs = range(tail_epoch_id, msg_obj.epochId + 1)
+        snapshots = await get_project_epoch_snapshot_bulk(
+            redis, protocol_state_contract, anchor_rpc_helper, epochs, msg_obj.projectId,
+        )
+        # TODO: process and generate aggregate snapshot
+        # TODO: design sliding window for 24h based on last present snapshot (if any)
+        for snapshot in snapshots:
+            if snapshot:
+                trade_volume_snapshot = UniswapTradesSnapshot.parse_raw(submission_data[0])
+                self._logger.info('Trade Volume Snapshot {}', trade_volume_snapshot)
