@@ -28,7 +28,7 @@ from pooler.utils.redis.redis_conn import RedisPoolCache
 from pooler.utils.redis.redis_keys import (
     cb_broadcast_processing_logs_zset,
 )
-from pooler.utils.redis.redis_keys import get_project_finalized_data_zset
+from pooler.utils.redis.redis_keys import project_finalized_data_zset
 from pooler.utils.rpc import RpcHelper
 from pooler.utils.snapshot_utils import warm_up_cache_for_snapshot_constructors
 
@@ -170,7 +170,7 @@ class ProcessorDistributor(multiprocessing.Process):
         # Add to project finalized data zset
         self.ev_loop.run_until_complete(
             self._redis_conn.zadd(
-                get_project_finalized_data_zset(project_id=msg_obj.projectId),
+                project_finalized_data_zset(project_id=msg_obj.projectId),
                 {msg_obj.snapshotCid: msg_obj.epochId},
             ),
         )

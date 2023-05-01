@@ -1,7 +1,8 @@
 from redis import asyncio as aioredis
 
 from ..utils.models.message_models import UniswapTradesSnapshot
-from pooler.utils.aggregation_helper import get_project_epoch_snapshot
+from pooler.utils.aggregation_helper import get_project_epoch_snapshot_bulk
+from pooler.utils.aggregation_helper import get_tail_epoch_id
 from pooler.utils.callback_helpers import GenericProcessorSingleProjectAggregate
 from pooler.utils.default_logger import logger
 from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
@@ -26,10 +27,15 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
     ):
         self._logger.info(f'compute called with {msg_obj}')
         # Get the submission data
-        submission_data = await get_project_epoch_snapshot(
-            redis, protocol_state_contract, anchor_rpc_helper, msg_obj.epochId, msg_obj.projectId,
+        submission_data = await get_project_epoch_snapshot_bulk(
+            redis, protocol_state_contract, anchor_rpc_helper, [msg_obj.epochId], msg_obj.projectId,
         )
         if submission_data:
-            trade_volume_snapshot = UniswapTradesSnapshot.parse_raw(submission_data)
-
+            trade_volume_snapshot = UniswapTradesSnapshot.parse_raw(submission_data[0])
             self._logger.info('Trade Volume Snapshot {}', trade_volume_snapshot)
+
+            tail_epoch_id = await get_tail_epoch_id(
+                redis, protocol_state_contract, anchor_rpc_helper, msg_obj.epochId, 3000,
+            )
+
+            self._logger.info('Tail Epoch Id {}', tail_epoch_id)

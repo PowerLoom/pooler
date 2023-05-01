@@ -201,7 +201,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                         )
 
                         self._logger.info(
-                            'Sent message to audit protocol: {}', commit_payload,
+                            'Sent message to commit payload queue: {}', commit_payload,
                         )
 
                         update_log = {
