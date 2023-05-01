@@ -28,6 +28,7 @@ from pooler.utils.redis.redis_conn import RedisPoolCache
 from pooler.utils.redis.redis_keys import (
     cb_broadcast_processing_logs_zset,
 )
+from pooler.utils.redis.redis_keys import get_project_finalized_data_zset
 from pooler.utils.rpc import RpcHelper
 from pooler.utils.snapshot_utils import warm_up_cache_for_snapshot_constructors
 
@@ -156,7 +157,7 @@ class ProcessorDistributor(multiprocessing.Process):
             ),
         )
 
-    def _build_and_forward_to_payload_commit_queue(self, dont_use_ch, method, properties, body):
+    def _cache_and_forward_to_payload_commit_queue(self, dont_use_ch, method, properties, body):
         event_type = method.routing_key.split('.')[-1]
 
         if event_type == 'SnapshotFinalized':
@@ -165,6 +166,16 @@ class ProcessorDistributor(multiprocessing.Process):
             )
         else:
             return
+
+        # Add to project finalized data zset
+        self.ev_loop.run_until_complete(
+            self._redis_conn.zadd(
+                get_project_finalized_data_zset(project_id=msg_obj.projectId),
+                {msg_obj.snapshotCid: msg_obj.epochId},
+            ),
+        )
+
+        # TODO: prune zset
 
         self._logger.debug(f'Payload Commit Message Distribution time - {int(time.time())}')
 
@@ -312,7 +323,7 @@ class ProcessorDistributor(multiprocessing.Process):
             f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.SnapshotFinalized'
         ):
             {
-                self._build_and_forward_to_payload_commit_queue(dont_use_ch, method, properties, body),
+                self._cache_and_forward_to_payload_commit_queue(dont_use_ch, method, properties, body),
             }
 
         if (

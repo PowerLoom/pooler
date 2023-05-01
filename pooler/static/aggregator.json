@@ -6,7 +6,7 @@
         "projectId": "uniswap_pairContract_trade_volume_0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc_UNISWAPV2-ph15-prod"
       },
       "processor": {
-        "module": "pooler.modules.aggregate.single_uniswap_trade_volume",
+        "module": "pooler.modules.uniswapv2.aggregate.single_uniswap_trade_volume",
         "class_name": "AggreagateTradeVolumeProcessor"
       }
     },
@@ -18,7 +18,7 @@
         "uniswap_pairContract_pair_total_reserves_0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc_UNISWAPV2-ph15-prod"
       ],
       "processor": {
-        "module": "pooler.modules.aggregate.aggregate_stats",
+        "module": "pooler.modules.uniswapv2.aggregate.multi_uniswap_top_pairs",
         "class_name": "AggreagateTopPairsProcessor"
       }
     },
@@ -30,7 +30,7 @@
         "uniswap_pairContract_pair_total_reserves_0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc_UNISWAPV2-ph15-prod"
       ],
       "processor": {
-        "module": "pooler.modules.aggregate.aggregate_stats",
+        "module": "pooler.modules.uniswapv2.aggregate.multi_uniswap_top_tokens",
         "class_name": "AggreagateTopTokensProcessor"
       }
     },
@@ -41,7 +41,7 @@
         "TODO: add projects to wait for"
       ],
       "processor": {
-        "module": "pooler.modules.aggregate.aggregate_stats",
+        "module": "pooler.modules.uniswapv2.aggregate.multi_uniswap_stats",
         "class_name": "AggreagateStatsProcessor"
       }
     }

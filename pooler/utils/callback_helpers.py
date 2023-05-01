@@ -160,6 +160,8 @@ class GenericProcessorSingleProjectAggregate(ABC):
         msg_obj: PowerloomSnapshotFinalizedMessage,
         redis: aioredis,
         rpc_helper: RpcHelper,
+        anchor_rpc_helper: RpcHelper,
+        protocol_state_contract,
     ):
         pass
 
@@ -180,5 +182,8 @@ class GenericProcessorMultiProjectAggregate(ABC):
         msg_obj: PowerloomCalculateAggregateMessage,
         redis: aioredis,
         rpc_helper: RpcHelper,
+        anchor_rpc_helper: RpcHelper,
+        protocol_state_contract,
+
     ):
         pass

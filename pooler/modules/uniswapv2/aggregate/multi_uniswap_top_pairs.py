@@ -6,7 +6,7 @@ from pooler.utils.models.message_models import PowerloomCalculateAggregateMessag
 from pooler.utils.rpc import RpcHelper
 
 
-class AggreagateTopTokensProcessor(GenericProcessorMultiProjectAggregate):
+class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
     transformation_lambdas = None
 
     def __init__(self) -> None:
@@ -18,5 +18,8 @@ class AggreagateTopTokensProcessor(GenericProcessorMultiProjectAggregate):
         msg_obj: PowerloomCalculateAggregateMessage,
         redis: aioredis,
         rpc_helper: RpcHelper,
+        anchor_rpc_helper: RpcHelper,
+        protocol_state_contract,
+
     ):
         self._logger.info(f'compute called with {msg_obj}')

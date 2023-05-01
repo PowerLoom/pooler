@@ -265,6 +265,8 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 msg_obj=msg_obj,
                 redis=self._redis_conn,
                 rpc_helper=self._rpc_helper,
+                anchor_rpc_helper=self._anchor_rpc_helper,
+                protocol_state_contract=self.protocol_state_contract,
             )
 
             if transformation_lambdas:

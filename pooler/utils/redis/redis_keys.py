@@ -55,6 +55,21 @@ rpc_blocknumber_calls = (
 )
 
 
+# project finalzed data zset
+def get_project_finalized_data_zset(project_id):
+    return f'projectID:{project_id}:finalizedData'
+
+# project first epoch hashmap
+
+
+def get_project_first_epoch_hmap():
+    return 'projectFirstEpoch'
+
+
+def get_cid_data(cid):
+    return f'cidData:{cid}'
+
+
 def get_project_epoch_size(project_id):
     return f'projectID:{project_id}:epochSize'
 
