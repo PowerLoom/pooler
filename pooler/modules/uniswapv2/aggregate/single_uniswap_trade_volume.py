@@ -32,4 +32,4 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
         if submission_data:
             trade_volume_snapshot = UniswapTradesSnapshot.parse_raw(submission_data)
 
-            self._logger.error('XA {}', trade_volume_snapshot)
+            self._logger.info('Trade Volume Snapshot {}', trade_volume_snapshot)
