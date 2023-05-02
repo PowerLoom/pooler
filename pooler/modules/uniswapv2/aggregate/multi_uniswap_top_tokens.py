@@ -16,10 +16,11 @@ class AggreagateTopTokensProcessor(GenericProcessorMultiProjectAggregate):
     async def compute(
         self,
         msg_obj: PowerloomCalculateAggregateMessage,
-        redis: aioredis,
+        redis: aioredis.Redis,
         rpc_helper: RpcHelper,
         anchor_rpc_helper: RpcHelper,
         protocol_state_contract,
+        project_id: str,
 
     ):
         self._logger.info(f'compute called with {msg_obj}')

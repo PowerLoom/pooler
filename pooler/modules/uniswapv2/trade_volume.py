@@ -24,7 +24,7 @@ class TradeVolumeProcessor(GenericProcessorSnapshot):
         min_chain_height: int,
         max_chain_height: int,
         data_source_contract_address: str,
-        redis_conn: aioredis,
+        redis_conn: aioredis.Redis,
         rpc_helper: RpcHelper,
     ):
         self._logger.debug(f'trade volume {data_source_contract_address}, computation init time {time.time()}')

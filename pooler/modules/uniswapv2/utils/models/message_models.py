@@ -39,3 +39,12 @@ class UniswapTradesSnapshot(SnapshotBase):
     token0TradeVolumeUSD: float
     token1TradeVolumeUSD: float
     events: UniswapTradeEvents
+
+
+class UniswapTradesAggregateSnapshot(BaseModel):
+    totalTrade: float = 0  # in USD
+    totalFee: float = 0  # in USD
+    token0TradeVolume: float = 0  # in token native decimals supply
+    token1TradeVolume: float = 0  # in token native decimals supply
+    token0TradeVolumeUSD: float = 0
+    token1TradeVolumeUSD: float = 0

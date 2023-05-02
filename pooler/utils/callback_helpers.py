@@ -138,7 +138,7 @@ class GenericProcessorSnapshot(ABC):
         min_chain_height: int,
         max_chain_height: int,
         data_source_contract_address: str,
-        redis: aioredis,
+        redis: aioredis.Redis,
         rpc_helper: RpcHelper,
     ):
         pass
@@ -158,10 +158,11 @@ class GenericProcessorSingleProjectAggregate(ABC):
     async def compute(
         self,
         msg_obj: PowerloomSnapshotFinalizedMessage,
-        redis: aioredis,
+        redis: aioredis.Redis,
         rpc_helper: RpcHelper,
         anchor_rpc_helper: RpcHelper,
         protocol_state_contract,
+        project_id: str,
     ):
         pass
 
@@ -180,10 +181,11 @@ class GenericProcessorMultiProjectAggregate(ABC):
     async def compute(
         self,
         msg_obj: PowerloomCalculateAggregateMessage,
-        redis: aioredis,
+        redis: aioredis.Redis,
         rpc_helper: RpcHelper,
         anchor_rpc_helper: RpcHelper,
         protocol_state_contract,
+        project_id: str,
 
     ):
         pass

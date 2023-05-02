@@ -19,41 +19,40 @@ from pooler.utils.redis.redis_keys import source_chain_id_key
 logger = logger.bind(module='data_helper')
 
 
-async def get_project_finalized_cid(redis_conn: aioredis, state_contract_obj, rpc_helper, epochId, projectId):
+async def get_project_finalized_cid(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, epoch_id, project_id):
 
-    project_first_epoch = await get_project_first_epoch(redis_conn, state_contract_obj, rpc_helper, projectId)
-    logger.info('First Project Epoch {} {}', epochId, project_first_epoch)
-    if epochId < project_first_epoch:
+    project_first_epoch = await get_project_first_epoch(
+        redis_conn, state_contract_obj, rpc_helper, project_id,
+    )
+    if epoch_id < project_first_epoch:
         return None
 
     # if data is present in finalzied data zset, return it
-    [cid] = await redis_conn.zrangebyscore(
-        project_finalized_data_zset(projectId),
-        epochId,
-        epochId,
+    cid_data = await redis_conn.zrangebyscore(
+        project_finalized_data_zset(project_id),
+        epoch_id,
+        epoch_id,
     )
-    if cid:
-        return cid.decode('utf-8')
+    if cid_data:
+        return cid_data[0].decode('utf-8')
     else:
-        logger.info('CID not found in finalized data zset, fetching from contract')
-        cid = await check_and_get_finalized_cid(redis_conn, state_contract_obj, rpc_helper, epochId, projectId)
-        logger.info('CID {}', cid)
+        cid = await check_and_get_finalized_cid(redis_conn, state_contract_obj, rpc_helper, epoch_id, project_id)
         return cid
 
 
-async def check_and_get_finalized_cid(redis_conn: aioredis, state_contract_obj, rpc_helper, epochId, projectId):
+async def check_and_get_finalized_cid(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, epoch_id, project_id):
 
     tasks = [
-        state_contract_obj.functions.checkDynamicConsensusSnapshot(projectId, epochId),
-        state_contract_obj.functions.maxSnapshotsCid(projectId, epochId),
+        state_contract_obj.functions.checkDynamicConsensusSnapshot(project_id, epoch_id),
+        state_contract_obj.functions.maxSnapshotsCid(project_id, epoch_id),
     ]
 
     [consensus_status, cid] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
 
     if consensus_status:
         await redis_conn.zadd(
-            project_finalized_data_zset(projectId),
-            epochId,
+            project_finalized_data_zset(project_id),
+            epoch_id,
             cid,
         )
         return cid
@@ -61,33 +60,37 @@ async def check_and_get_finalized_cid(redis_conn: aioredis, state_contract_obj, 
         return None
 
 
-async def get_project_first_epoch(redis_conn: aioredis, state_contract_obj, rpc_helper, projectId):
+async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, project_id):
+
     first_epoch_data = await redis_conn.hget(
         project_first_epoch_hmap(),
-        projectId,
+        project_id,
     )
     if first_epoch_data:
         first_epoch = int(first_epoch_data)
         return first_epoch
     else:
         tasks = [
-            state_contract_obj.functions.projectFirstEpochId(projectId),
+            state_contract_obj.functions.projectFirstEpochId(project_id),
         ]
 
         [first_epoch] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
 
+        # Don't cache if it is 0
+        if first_epoch == 0:
+            return 0
+
         await redis_conn.hset(
             project_first_epoch_hmap(),
-            projectId,
+            project_id,
             first_epoch,
         )
 
         return first_epoch
 
 
-async def get_submission_data(redis_conn: aioredis, cid):
+async def get_submission_data(redis_conn: aioredis.Redis, cid):
     # TODO: Using redis for now, find better way to cache this data
-    logger.info('CID {}, fetching data from IPFS', cid)
     submission_data = await redis_conn.get(
         cid_data(cid),
     )
@@ -112,20 +115,21 @@ async def get_submission_data(redis_conn: aioredis, cid):
     wait=wait_random_exponential(multiplier=1, max=10),
     stop=stop_after_attempt(3),
 )
-async def get_project_epoch_snapshot(redis_conn: aioredis, state_contract_obj, rpc_helper, epochId, projectId):
-    cid = await get_project_finalized_cid(redis_conn, state_contract_obj, rpc_helper, epochId, projectId)
+async def get_project_epoch_snapshot(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, epoch_id, project_id):
+    cid = await get_project_finalized_cid(redis_conn, state_contract_obj, rpc_helper, epoch_id, project_id)
     if cid:
         return await get_submission_data(redis_conn, cid)
     else:
         return None
 
 
-async def get_source_chain_id(redis_conn: aioredis, state_contract_obj, rpc_helper):
+async def get_source_chain_id(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper):
+
     source_chain_id_data = await redis_conn.get(
         source_chain_id_key(),
     )
     if source_chain_id_data:
-        source_chain_id = int(source_chain_id_data)
+        source_chain_id = int(source_chain_id_data.decode('utf-8'))
         return source_chain_id
     else:
         tasks = [
@@ -142,12 +146,13 @@ async def get_source_chain_id(redis_conn: aioredis, state_contract_obj, rpc_help
         return source_chain_id
 
 
-async def get_source_chain_epoch_size(redis_conn: aioredis, state_contract_obj, rpc_helper):
+async def get_source_chain_epoch_size(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper):
+
     source_chain_epoch_size_data = await redis_conn.get(
         source_chain_epoch_size_key(),
     )
     if source_chain_epoch_size_data:
-        source_chain_epoch_size = int(source_chain_epoch_size_data)
+        source_chain_epoch_size = int(source_chain_epoch_size_data.decode('utf-8'))
         return source_chain_epoch_size
     else:
         tasks = [
@@ -164,12 +169,12 @@ async def get_source_chain_epoch_size(redis_conn: aioredis, state_contract_obj, 
         return source_chain_epoch_size
 
 
-async def get_source_chain_block_time(redis_conn: aioredis, state_contract_obj, rpc_helper):
+async def get_source_chain_block_time(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper):
     source_chain_block_time_data = await redis_conn.get(
         source_chain_block_time_key(),
     )
     if source_chain_block_time_data:
-        source_chain_block_time = int(source_chain_block_time_data)
+        source_chain_block_time = int(source_chain_block_time_data.decode('utf-8'))
         return source_chain_block_time
     else:
         tasks = [
@@ -177,7 +182,7 @@ async def get_source_chain_block_time(redis_conn: aioredis, state_contract_obj, 
         ]
 
         [source_chain_block_time] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
-        source_chain_block_time = int(source_chain_block_time) / 1e4
+        source_chain_block_time = int(source_chain_block_time / 1e4)
 
         await redis_conn.set(
             source_chain_block_time_key(),
@@ -187,35 +192,51 @@ async def get_source_chain_block_time(redis_conn: aioredis, state_contract_obj, 
         return source_chain_block_time
 
 
-# calculate tail epochId given current epoch and time in seconds
-async def get_tail_epoch_id(redis_conn: aioredis, state_contract_obj, rpc_helper, current_epochId, time_in_seconds):
+# calculate tail epoch_id given current epoch and time in seconds
+async def get_tail_epoch_id(
+        redis_conn: aioredis.Redis,
+        state_contract_obj,
+        rpc_helper,
+        current_epoch_id,
+        time_in_seconds,
+        project_id,
+):
+    # Returns tail epoch_id and a boolean indicating if tail contains the full time window
     source_chain_epoch_size = await get_source_chain_epoch_size(redis_conn, state_contract_obj, rpc_helper)
     source_chain_block_time = await get_source_chain_block_time(redis_conn, state_contract_obj, rpc_helper)
 
-    # calculate tail epochId
-    tail_epoch_id = current_epochId - int(time_in_seconds / (source_chain_epoch_size * source_chain_block_time))
+    # calculate tail epoch_id
+    tail_epoch_id = current_epoch_id - int(time_in_seconds / (source_chain_epoch_size * source_chain_block_time))
+    project_first_epoch = await(
+        get_project_first_epoch(redis_conn, state_contract_obj, rpc_helper, project_id)
+    )
+    if tail_epoch_id < project_first_epoch:
+        tail_epoch_id = project_first_epoch
+        return tail_epoch_id, False
 
-    if tail_epoch_id < 1:
-        tail_epoch_id = 1
-
-    return tail_epoch_id
+    return tail_epoch_id, True
 
 
 async def get_project_epoch_snapshot_bulk(
-        redis_conn: aioredis,
+        redis_conn: aioredis.Redis,
         state_contract_obj,
         rpc_helper,
-        epochIds: List,
-        projectId,
+        epoch_ids: List,
+        project_id,
 ):
 
-    # fetch data for all epochIds using get_project_epoch_snapshot in parallel
-    tasks = [
-        get_project_epoch_snapshot(
-            redis_conn, state_contract_obj, rpc_helper, epochId, projectId,
-        ) for epochId in epochIds
-    ]
+    # fetch data for all epoch_ids using get_project_epoch_snapshot in parallel
 
-    epoch_snapshots = await asyncio.gather(*tasks)
+    epoch_snapshots = []
+
+    # fetch in 100 batches
+    for i in range(0, len(epoch_ids), 10):
+        tasks = [
+            get_project_epoch_snapshot(
+                redis_conn, state_contract_obj, rpc_helper, epoch_id, project_id,
+            ) for epoch_id in epoch_ids[i:i + 100]
+        ]
+
+        epoch_snapshots += await asyncio.gather(*tasks)
 
     return epoch_snapshots

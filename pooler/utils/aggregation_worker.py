@@ -103,6 +103,23 @@ class AggregationAsyncWorker(GenericAsyncWorker):
 
         del self._running_callback_tasks[self_unique_id]
 
+    def _gen_single_type_project_id(self, type_, epoch):
+        contract = epoch.projectId.split('_')[-2]
+        project_id = project_id = f'{type_}_{contract}_{settings.namespace}'
+        return project_id
+
+    def _gen_multiple_type_project_id(self, type_, epoch):
+        project_hash = hash([project.projectId for project in epoch.messages])
+        project_id = f'{type_}_{project_hash}_{settings.namespace}'
+
+    def _gen_project_id(self, type_, epoch):
+        if type_ in self._single_project_types:
+            return self._gen_single_type_project_id(type_, epoch)
+        elif type_ in self._multi_project_types:
+            return self._gen_multiple_type_project_id(type_, epoch)
+        else:
+            raise ValueError(f'Unknown project type {type_}')
+
     async def _send_audit_payload_commit_service(
         self,
         audit_stream,
@@ -160,13 +177,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
 
             payload = snapshot.dict()
 
-            if type(epoch) == PowerloomSnapshotFinalizedMessage:
-                # TODO: Use better separators for project names to improve logic
-                contract = epoch.projectId.split('_')[-2]
-                project_id = project_id = f'{audit_stream}_{contract}_{settings.namespace}'
-            else:
-                project_hash = hash([project.projectId for project in epoch.messages])
-                project_id = f'{audit_stream}_{project_hash}_{settings.namespace}'
+            project_id = self._gen_project_id(audit_stream, epoch)
 
             commit_payload = PayloadCommitMessage(
                 message=payload,
@@ -261,12 +272,16 @@ class AggregationAsyncWorker(GenericAsyncWorker):
     ):
 
         try:
+
+            project_id = self._gen_project_id(task_type, msg_obj)
+
             result = await cb_fn_async(
                 msg_obj=msg_obj,
                 redis=self._redis_conn,
                 rpc_helper=self._rpc_helper,
                 anchor_rpc_helper=self._anchor_rpc_helper,
                 protocol_state_contract=self.protocol_state_contract,
+                project_id=project_id,
             )
 
             if transformation_lambdas:

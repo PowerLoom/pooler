@@ -25,7 +25,7 @@ class PairTotalReservesProcessor(GenericProcessorSnapshot):
         min_chain_height: int,
         max_chain_height: int,
         data_source_contract_address: str,
-        redis_conn: aioredis,
+        redis_conn: aioredis.Redis,
         rpc_helper: RpcHelper,
 
     ) -> Optional[Dict[str, Union[int, float]]]:
