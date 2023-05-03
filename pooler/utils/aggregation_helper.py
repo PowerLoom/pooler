@@ -44,6 +44,12 @@ async def get_project_finalized_cid(redis_conn: aioredis.Redis, state_contract_o
         return None
 
 
+@retry(
+    reraise=True,
+    retry=retry_if_exception_type(Exception),
+    wait=wait_random_exponential(multiplier=1, max=10),
+    stop=stop_after_attempt(3),
+)
 async def check_and_get_finalized_cid(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, epoch_id, project_id):
 
     tasks = [
@@ -58,14 +64,14 @@ async def check_and_get_finalized_cid(redis_conn: aioredis.Redis, state_contract
             project_finalized_data_zset(project_id),
             {cid: epoch_id},
         )
-        return cid
+        return cid, epoch_id
     else:
         # Add null to zset
         await redis_conn.zadd(
             project_finalized_data_zset(project_id),
             {f'null_{epoch_id}': epoch_id},
         )
-        return None
+        return None, epoch_id
 
 
 async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, project_id):
@@ -232,25 +238,72 @@ async def get_project_epoch_snapshot_bulk(
         redis_conn: aioredis.Redis,
         state_contract_obj,
         rpc_helper,
-        epoch_ids: List,
+        epoch_id_min: int,
+        epoch_id_max: int,
         project_id,
 ):
 
-    # fetch data for all epoch_ids using get_project_epoch_snapshot in parallel
-
-    epoch_snapshots = []
-
-    # fetch in batchs
     batch_size = 100
-    for i in range(0, len(epoch_ids), batch_size):
+
+    project_first_epoch = await get_project_first_epoch(
+        redis_conn, state_contract_obj, rpc_helper, project_id,
+    )
+    if epoch_id_min < project_first_epoch:
+        return None
+
+    # if data is present in finalzied data zset, return it
+    cid_data_with_epochs = await redis_conn.zrangebyscore(
+        project_finalized_data_zset(project_id),
+        epoch_id_min,
+        epoch_id_max,
+        withscores=True,
+    )
+
+    cid_data_with_epochs = [(cid.decode('utf-8'), int(epoch_id)) for cid, epoch_id in cid_data_with_epochs]
+
+    all_epochs = set(range(epoch_id_min, epoch_id_max + 1))
+    for cid, epoch_id in cid_data_with_epochs:
+        all_epochs.remove(int(epoch_id))
+
+    missing_epochs = list(all_epochs)
+    if missing_epochs:
+        logger.info('found {} missing_epochs, fetching from contract', len(missing_epochs))
+
+    for i in range(0, len(missing_epochs), batch_size):
+
         tasks = [
-            get_project_epoch_snapshot(
+            check_and_get_finalized_cid(
                 redis_conn, state_contract_obj, rpc_helper, epoch_id, project_id,
-            ) for epoch_id in epoch_ids[i:i + batch_size]
+            ) for epoch_id in missing_epochs[i:i + batch_size]
         ]
 
-        batch_snapshots = await asyncio.gather(*tasks)
+        batch_cid_data_with_epochs = await asyncio.gather(*tasks)
 
-        epoch_snapshots += batch_snapshots
+        cid_data_with_epochs += batch_cid_data_with_epochs
 
-    return epoch_snapshots
+    valid_cid_data_with_epochs = []
+    for data in cid_data_with_epochs:
+        cid, epoch_id = data
+        if cid and 'null' not in cid:
+            valid_cid_data_with_epochs.append((cid, epoch_id))
+
+    snapshot_data = await redis_conn.mget(
+        *[
+            cid_data(cid) for cid, _ in valid_cid_data_with_epochs
+        ],
+    )
+
+    all_snapshot_data = []
+    ipfs_snapshot_tasks = []
+    logger.info('ipfs_snapshot_tasks: {}', len(ipfs_snapshot_tasks))
+
+    for i in range(len(snapshot_data)):
+        if snapshot_data[i]:
+            all_snapshot_data.append(snapshot_data[i])
+        else:
+            ipfs_snapshot_tasks.append(get_submission_data(redis_conn, valid_cid_data_with_epochs[i][0]))
+
+    ipfs_snapshot_data = await asyncio.gather(*ipfs_snapshot_tasks)
+    all_snapshot_data.extend(ipfs_snapshot_data)
+    logger.info('all_snapshot_data: {}', len(all_snapshot_data))
+    return all_snapshot_data

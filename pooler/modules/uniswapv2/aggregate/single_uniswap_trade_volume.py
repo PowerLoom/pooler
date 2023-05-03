@@ -2,6 +2,7 @@ from redis import asyncio as aioredis
 
 from ..utils.models.message_models import UniswapTradesAggregateSnapshot
 from ..utils.models.message_models import UniswapTradesSnapshot
+from pooler.utils.aggregation_helper import get_project_epoch_snapshot
 from pooler.utils.aggregation_helper import get_project_epoch_snapshot_bulk
 from pooler.utils.aggregation_helper import get_project_first_epoch
 from pooler.utils.aggregation_helper import get_tail_epoch_id
@@ -74,9 +75,8 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
         if project_first_epoch == 0:
             self._logger.info('project_first_epoch is 0, building aggregate from scratch')
             snapshots_data = await get_project_epoch_snapshot_bulk(
-                redis, protocol_state_contract, anchor_rpc_helper, range(
-                    tail_epoch_id, msg_obj.epochId + 1,
-                ), msg_obj.projectId,
+                redis, protocol_state_contract, anchor_rpc_helper,
+                tail_epoch_id, msg_obj.epochId, msg_obj.projectId,
             )
 
             aggregate_snapshot = UniswapTradesAggregateSnapshot.parse_obj({'epochId': msg_obj.epochId})
@@ -90,22 +90,22 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
         else:
             # if epoch window is not complete, just add current snapshot to the aggregate
             self._logger.info('project_first_epoch is not 0, building aggregate from previous aggregate')
-            [previous_aggregate_snapshot_data] = await get_project_epoch_snapshot_bulk(
-                redis, protocol_state_contract, anchor_rpc_helper, [msg_obj.epochId - 1], project_id,
+            [previous_aggregate_snapshot_data] = await get_project_epoch_snapshot(
+                redis, protocol_state_contract, anchor_rpc_helper, msg_obj.epochId - 1, project_id,
             )
 
             if previous_aggregate_snapshot_data:
                 aggregate_snapshot = UniswapTradesAggregateSnapshot.parse_raw(previous_aggregate_snapshot_data)
 
-                [current_snapshot_data] = await get_project_epoch_snapshot_bulk(
-                    redis, protocol_state_contract, anchor_rpc_helper, [msg_obj.epochId], msg_obj.projectId,
+                [current_snapshot_data] = await get_project_epoch_snapshot(
+                    redis, protocol_state_contract, anchor_rpc_helper, msg_obj.epochId, msg_obj.projectId,
                 )
 
                 current_snapshot = UniswapTradesSnapshot.parse_raw(current_snapshot_data)
 
                 if complete:
-                    [current_tail_end_snapshot_data] = await get_project_epoch_snapshot_bulk(
-                        redis, protocol_state_contract, anchor_rpc_helper, [tail_epoch_id], project_id,
+                    [current_tail_end_snapshot_data] = await get_project_epoch_snapshot(
+                        redis, protocol_state_contract, anchor_rpc_helper, tail_epoch_id, project_id,
                     )
 
                     current_tail_end_snapshot = UniswapTradesSnapshot.parse_raw(current_tail_end_snapshot_data)
@@ -120,9 +120,8 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
                 # if previous_aggregate_snapshot_data is not found for some reason, do entire calculation
                 self._logger.info('previous_aggregate_snapshot_data not found, building aggregate from scratch')
                 snapshots_data = await get_project_epoch_snapshot_bulk(
-                    redis, protocol_state_contract, anchor_rpc_helper, range(
-                        tail_epoch_id, msg_obj.epochId + 1,
-                    ), msg_obj.projectId,
+                    redis, protocol_state_contract, anchor_rpc_helper,
+                    tail_epoch_id, msg_obj.epochId, msg_obj.projectId,
                 )
 
                 aggregate_snapshot = UniswapTradesAggregateSnapshot.parse_obj({'epochId': msg_obj.epochId})
