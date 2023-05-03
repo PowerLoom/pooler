@@ -92,21 +92,21 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
         else:
             # if epoch window is not complete, just add current snapshot to the aggregate
             self._logger.info('project_first_epoch is not 0, building aggregate from previous aggregate')
-            [previous_aggregate_snapshot_data] = await get_project_epoch_snapshot(
+            previous_aggregate_snapshot_data = await get_project_epoch_snapshot(
                 redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader, msg_obj.epochId - 1, project_id,
             )
 
             if previous_aggregate_snapshot_data:
                 aggregate_snapshot = UniswapTradesAggregateSnapshot.parse_raw(previous_aggregate_snapshot_data)
 
-                [current_snapshot_data] = await get_project_epoch_snapshot(
+                current_snapshot_data = await get_project_epoch_snapshot(
                     redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader, msg_obj.epochId, msg_obj.projectId,
                 )
 
                 current_snapshot = UniswapTradesSnapshot.parse_raw(current_snapshot_data)
 
                 if complete:
-                    [current_tail_end_snapshot_data] = await get_project_epoch_snapshot(
+                    current_tail_end_snapshot_data = await get_project_epoch_snapshot(
                         redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id, project_id,
                     )
 
