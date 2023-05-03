@@ -3,6 +3,7 @@ from typing import List
 
 from pydantic import BaseModel
 
+from pooler.utils.models.message_models import AggregateBase
 from pooler.utils.models.message_models import SnapshotBase
 
 
@@ -41,7 +42,7 @@ class UniswapTradesSnapshot(SnapshotBase):
     events: UniswapTradeEvents
 
 
-class UniswapTradesAggregateSnapshot(BaseModel):
+class UniswapTradesAggregateSnapshot(AggregateBase):
     totalTrade: float = 0  # in USD
     totalFee: float = 0  # in USD
     token0TradeVolume: float = 0  # in token native decimals supply

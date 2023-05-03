@@ -58,7 +58,6 @@ class SnapshotBase(BaseModel):
 
 class AggregateBase(BaseModel):
     epochId: int
-    timestamp: int
 
 
 class PayloadCommitMessage(BaseModel):

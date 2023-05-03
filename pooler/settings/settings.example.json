@@ -105,7 +105,7 @@
   },
   "callback_worker_config": {
     "num_snapshot_workers": 8,
-    "num_aggregation_workers": 4
+    "num_aggregation_workers": 16
   },
   "ipfs": {
     "url": "/dns/ipfs/tcp/5001",

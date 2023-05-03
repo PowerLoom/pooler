@@ -58,7 +58,7 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
         project_id: str,
 
     ):
-        self._logger.info(f'compute called with {msg_obj}')
+        self._logger.info(f'Building trade volume aggregate snapshot for {msg_obj}')
 
         # aggregate project first epoch
         project_first_epoch = await get_project_first_epoch(
@@ -79,12 +79,13 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
                 ), msg_obj.projectId,
             )
 
-            aggregate_snapshot = UniswapTradesAggregateSnapshot.parse_obj({})
+            aggregate_snapshot = UniswapTradesAggregateSnapshot.parse_obj({'epochId': msg_obj.epochId})
 
             for snapshot_data in snapshots_data:
                 if snapshot_data:
                     snapshot = UniswapTradesSnapshot.parse_raw(snapshot_data)
                     aggregate_snapshot = self._add_aggregate_snapshot(aggregate_snapshot, snapshot)
+                    self._logger.info(f'aggregate_snapshot: {aggregate_snapshot.dict()}')
 
         else:
             # if epoch window is not complete, just add current snapshot to the aggregate
@@ -124,11 +125,11 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
                     ), msg_obj.projectId,
                 )
 
-                aggregate_snapshot = UniswapTradesAggregateSnapshot.parse_obj({})
+                aggregate_snapshot = UniswapTradesAggregateSnapshot.parse_obj({'epochId': msg_obj.epochId})
 
                 for snapshot_data in snapshots_data:
                     if snapshot_data:
                         snapshot = UniswapTradesSnapshot.parse_raw(snapshot_data)
                         aggregate_snapshot = self._add_aggregate_snapshot(aggregate_snapshot, snapshot)
 
-            return aggregate_snapshot
+        return aggregate_snapshot

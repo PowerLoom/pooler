@@ -28,36 +28,43 @@ async def get_project_finalized_cid(redis_conn: aioredis.Redis, state_contract_o
         return None
 
     # if data is present in finalzied data zset, return it
-    logger.info(f'checking for data in finalized data zset for project {project_id} and epoch {epoch_id}')
     cid_data = await redis_conn.zrangebyscore(
         project_finalized_data_zset(project_id),
         epoch_id,
         epoch_id,
     )
     if cid_data:
-        return cid_data[0].decode('utf-8')
+        cid = cid_data[0].decode('utf-8')
     else:
         cid = await check_and_get_finalized_cid(redis_conn, state_contract_obj, rpc_helper, epoch_id, project_id)
+
+    if 'null' not in cid:
         return cid
+    else:
+        return None
 
 
 async def check_and_get_finalized_cid(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, epoch_id, project_id):
 
     tasks = [
-        state_contract_obj.functions.checkDynamicConsensusSnapshot(project_id, epoch_id),
+        state_contract_obj.functions.snapshotStatus(project_id, epoch_id),
         state_contract_obj.functions.maxSnapshotsCid(project_id, epoch_id),
     ]
 
     [consensus_status, cid] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
     logger.info(f'consensus status for project {project_id} and epoch {epoch_id} is {consensus_status}')
-    if consensus_status:
+    if consensus_status[0]:
         await redis_conn.zadd(
             project_finalized_data_zset(project_id),
-            epoch_id,
-            cid,
+            {cid: epoch_id},
         )
         return cid
     else:
+        # Add null to zset
+        await redis_conn.zadd(
+            project_finalized_data_zset(project_id),
+            {f'null_{epoch_id}': epoch_id},
+        )
         return None
 
 
@@ -96,7 +103,6 @@ async def get_submission_data(redis_conn: aioredis.Redis, cid):
         cid_data(cid),
     )
     if submission_data:
-        logger.info('CID {}, found data in redis', cid)
         return submission_data
     else:
         # Fetch from IPFS
@@ -119,8 +125,8 @@ async def get_submission_data(redis_conn: aioredis.Redis, cid):
 async def get_project_epoch_snapshot(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, epoch_id, project_id):
     cid = await get_project_finalized_cid(redis_conn, state_contract_obj, rpc_helper, epoch_id, project_id)
     if cid:
-        logger.info(f'CID {cid} found for project {project_id} and epoch {epoch_id}')
-        return await get_submission_data(redis_conn, cid)
+        data = await get_submission_data(redis_conn, cid)
+        return data
     else:
         return None
 
@@ -219,6 +225,8 @@ async def get_tail_epoch_id(
 
     return tail_epoch_id, True
 
+#
+
 
 async def get_project_epoch_snapshot_bulk(
         redis_conn: aioredis.Redis,
@@ -233,7 +241,7 @@ async def get_project_epoch_snapshot_bulk(
     epoch_snapshots = []
 
     # fetch in batchs
-    batch_size = 10
+    batch_size = 100
     for i in range(0, len(epoch_ids), batch_size):
         tasks = [
             get_project_epoch_snapshot(
@@ -241,6 +249,8 @@ async def get_project_epoch_snapshot_bulk(
             ) for epoch_id in epoch_ids[i:i + batch_size]
         ]
 
-        epoch_snapshots += await asyncio.gather(*tasks)
+        batch_snapshots = await asyncio.gather(*tasks)
+
+        epoch_snapshots += batch_snapshots
 
     return epoch_snapshots
