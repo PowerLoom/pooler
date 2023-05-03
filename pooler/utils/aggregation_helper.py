@@ -8,7 +8,6 @@ from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
 
 from pooler.utils.default_logger import logger
-from pooler.utils.ipfs_async import async_ipfs_client as ipfs_client
 from pooler.utils.redis.redis_keys import cid_data
 from pooler.utils.redis.redis_keys import project_finalized_data_zset
 from pooler.utils.redis.redis_keys import project_first_epoch_hmap
@@ -102,8 +101,13 @@ async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj
 
         return first_epoch
 
-
-async def get_submission_data(redis_conn: aioredis.Redis, cid):
+@retry(
+    reraise=True,
+    retry=retry_if_exception_type(Exception),
+    wait=wait_random_exponential(multiplier=1, max=10),
+    stop=stop_after_attempt(2),
+)
+async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader):
     # TODO: Using redis for now, find better way to cache this data
     submission_data = await redis_conn.get(
         cid_data(cid),
@@ -113,14 +117,18 @@ async def get_submission_data(redis_conn: aioredis.Redis, cid):
     else:
         # Fetch from IPFS
         logger.info('CID {}, fetching data from IPFS', cid)
-        submission_data = await ipfs_client.async_cat(cid)
-        await redis_conn.set(
-            cid_data(cid),
-            submission_data,
-        )
+        try:
+            submission_data = await ipfs_reader.cat(cid)
+            await redis_conn.set(
+                cid_data(cid),
+                submission_data,
+                ex=60 * 60 * 24 * 7,
+            )
 
-        return submission_data
-
+            return submission_data
+        except Exception as e:
+            logger.error(f'Error while fetching data from IPFS {e}')
+            return None
 
 @retry(
     reraise=True,
@@ -128,10 +136,10 @@ async def get_submission_data(redis_conn: aioredis.Redis, cid):
     wait=wait_random_exponential(multiplier=1, max=10),
     stop=stop_after_attempt(3),
 )
-async def get_project_epoch_snapshot(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, epoch_id, project_id):
+async def get_project_epoch_snapshot(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, ipfs_reader, epoch_id, project_id):
     cid = await get_project_finalized_cid(redis_conn, state_contract_obj, rpc_helper, epoch_id, project_id)
     if cid:
-        data = await get_submission_data(redis_conn, cid)
+        data = await get_submission_data(redis_conn, cid, ipfs_reader)
         return data
     else:
         return None
@@ -238,6 +246,7 @@ async def get_project_epoch_snapshot_bulk(
         redis_conn: aioredis.Redis,
         state_contract_obj,
         rpc_helper,
+        ipfs_reader,
         epoch_id_min: int,
         epoch_id_max: int,
         project_id,
@@ -295,15 +304,13 @@ async def get_project_epoch_snapshot_bulk(
 
     all_snapshot_data = []
     ipfs_snapshot_tasks = []
-    logger.info('ipfs_snapshot_tasks: {}', len(ipfs_snapshot_tasks))
 
     for i in range(len(snapshot_data)):
         if snapshot_data[i]:
             all_snapshot_data.append(snapshot_data[i])
         else:
-            ipfs_snapshot_tasks.append(get_submission_data(redis_conn, valid_cid_data_with_epochs[i][0]))
+            ipfs_snapshot_tasks.append(get_submission_data(redis_conn, valid_cid_data_with_epochs[i][0], ipfs_reader))
 
     ipfs_snapshot_data = await asyncio.gather(*ipfs_snapshot_tasks)
     all_snapshot_data.extend(ipfs_snapshot_data)
-    logger.info('all_snapshot_data: {}', len(all_snapshot_data))
     return all_snapshot_data

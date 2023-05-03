@@ -25,9 +25,16 @@ from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 from pooler.utils.redis.redis_keys import (
     cb_broadcast_processing_logs_zset,
 )
+from pooler.utils.ipfs.async_ipfshttpclient.main import AsyncIPFSClient
+from pooler.utils.ipfs.async_ipfshttpclient.main import AsyncIPFSClientSingleton
+
 
 
 class AggregationAsyncWorker(GenericAsyncWorker):
+    _ipfs_singleton: AsyncIPFSClientSingleton
+    _ipfs_writer_client: AsyncIPFSClient
+    _ipfs_reader_client: AsyncIPFSClient
+
 
     def __init__(self, name, **kwargs):
         self._q = f'powerloom-backend-cb-aggregate:{settings.namespace}:{settings.instance_id}'
@@ -40,6 +47,8 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         self._single_project_types = set()
         self._multi_project_types = set()
         self._task_types = set()
+        self._ipfs_singleton = None
+
 
         for config in aggregator_config:
             if config.aggregate_on == AggregateOn.single_project:
@@ -280,6 +289,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 redis=self._redis_conn,
                 rpc_helper=self._rpc_helper,
                 anchor_rpc_helper=self._anchor_rpc_helper,
+                ipfs_reader=self._ipfs_reader_client,
                 protocol_state_contract=self.protocol_state_contract,
                 project_id=project_id,
             )
@@ -389,10 +399,18 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             class_ = getattr(module, project_config.processor.class_name)
             self._project_calculation_mapping[key] = class_()
 
+    async def _init_ipfs_client(self):
+        if not self._ipfs_singleton:
+            self._ipfs_singleton = AsyncIPFSClientSingleton()
+            await self._ipfs_singleton.init_sessions()
+            self._ipfs_writer_client = self._ipfs_singleton._ipfs_write_client
+            self._ipfs_reader_client = self._ipfs_singleton._ipfs_read_client
+
     async def init(self):
         if not self._initialized:
             await self._init_redis_pool()
             await self._init_httpx_client()
             await self._init_rpc_helper()
             await self._init_project_calculation_mapping()
+            await self._init_ipfs_client()
         self._initialized = True

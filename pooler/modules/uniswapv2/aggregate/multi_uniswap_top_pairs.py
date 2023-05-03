@@ -4,6 +4,7 @@ from pooler.utils.callback_helpers import GenericProcessorMultiProjectAggregate
 from pooler.utils.default_logger import logger
 from pooler.utils.models.message_models import PowerloomCalculateAggregateMessage
 from pooler.utils.rpc import RpcHelper
+from pooler.utils.ipfs.async_ipfshttpclient.main import AsyncIPFSClient
 
 
 class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
@@ -19,6 +20,7 @@ class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
         redis: aioredis.Redis,
         rpc_helper: RpcHelper,
         anchor_rpc_helper: RpcHelper,
+        ipfs_reader: AsyncIPFSClient,
         protocol_state_contract,
         project_id: str,
 

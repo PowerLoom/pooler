@@ -16,6 +16,7 @@ from pooler.utils.models.message_models import PowerloomCalculateAggregateMessag
 from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
 from pooler.utils.models.message_models import PowerloomSnapshotProcessMessage
 from pooler.utils.rpc import RpcHelper
+from pooler.utils.ipfs.async_ipfshttpclient.main import AsyncIPFSClient
 
 # setup logger
 helper_logger = logger.bind(module='PowerLoom|Callback|Helpers')
@@ -161,6 +162,7 @@ class GenericProcessorSingleProjectAggregate(ABC):
         redis: aioredis.Redis,
         rpc_helper: RpcHelper,
         anchor_rpc_helper: RpcHelper,
+        ipfs_reader: AsyncIPFSClient,
         protocol_state_contract,
         project_id: str,
     ):
@@ -184,6 +186,7 @@ class GenericProcessorMultiProjectAggregate(ABC):
         redis: aioredis.Redis,
         rpc_helper: RpcHelper,
         anchor_rpc_helper: RpcHelper,
+        ipfs_reader: AsyncIPFSClient,
         protocol_state_contract,
         project_id: str,
 
