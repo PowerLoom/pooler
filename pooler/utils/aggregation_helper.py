@@ -28,6 +28,7 @@ async def get_project_finalized_cid(redis_conn: aioredis.Redis, state_contract_o
         return None
 
     # if data is present in finalzied data zset, return it
+    logger.info(f'checking for data in finalized data zset for project {project_id} and epoch {epoch_id}')
     cid_data = await redis_conn.zrangebyscore(
         project_finalized_data_zset(project_id),
         epoch_id,
@@ -48,7 +49,7 @@ async def check_and_get_finalized_cid(redis_conn: aioredis.Redis, state_contract
     ]
 
     [consensus_status, cid] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
-
+    logger.info(f'consensus status for project {project_id} and epoch {epoch_id} is {consensus_status}')
     if consensus_status:
         await redis_conn.zadd(
             project_finalized_data_zset(project_id),
@@ -75,7 +76,7 @@ async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj
         ]
 
         [first_epoch] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
-
+        logger.info(f'first epoch for project {project_id} is {first_epoch}')
         # Don't cache if it is 0
         if first_epoch == 0:
             return 0
@@ -118,6 +119,7 @@ async def get_submission_data(redis_conn: aioredis.Redis, cid):
 async def get_project_epoch_snapshot(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, epoch_id, project_id):
     cid = await get_project_finalized_cid(redis_conn, state_contract_obj, rpc_helper, epoch_id, project_id)
     if cid:
+        logger.info(f'CID {cid} found for project {project_id} and epoch {epoch_id}')
         return await get_submission_data(redis_conn, cid)
     else:
         return None
@@ -142,7 +144,6 @@ async def get_source_chain_id(redis_conn: aioredis.Redis, state_contract_obj, rp
             source_chain_id_key(),
             source_chain_id,
         )
-
         return source_chain_id
 
 
@@ -214,6 +215,8 @@ async def get_tail_epoch_id(
         tail_epoch_id = project_first_epoch
         return tail_epoch_id, False
 
+    logger.info('tail epoch_id: {}', tail_epoch_id)
+
     return tail_epoch_id, True
 
 
@@ -229,12 +232,13 @@ async def get_project_epoch_snapshot_bulk(
 
     epoch_snapshots = []
 
-    # fetch in 100 batches
-    for i in range(0, len(epoch_ids), 10):
+    # fetch in batchs
+    batch_size = 10
+    for i in range(0, len(epoch_ids), batch_size):
         tasks = [
             get_project_epoch_snapshot(
                 redis_conn, state_contract_obj, rpc_helper, epoch_id, project_id,
-            ) for epoch_id in epoch_ids[i:i + 100]
+            ) for epoch_id in epoch_ids[i:i + batch_size]
         ]
 
         epoch_snapshots += await asyncio.gather(*tasks)

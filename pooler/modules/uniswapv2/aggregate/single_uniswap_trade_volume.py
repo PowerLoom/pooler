@@ -72,6 +72,7 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
 
         # If no past snapshots exist, then aggregate will be current snapshot
         if project_first_epoch == 0:
+            self._logger.info('project_first_epoch is 0, building aggregate from scratch')
             snapshots_data = await get_project_epoch_snapshot_bulk(
                 redis, protocol_state_contract, anchor_rpc_helper, range(
                     tail_epoch_id, msg_obj.epochId + 1,
@@ -87,6 +88,7 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
 
         else:
             # if epoch window is not complete, just add current snapshot to the aggregate
+            self._logger.info('project_first_epoch is not 0, building aggregate from previous aggregate')
             [previous_aggregate_snapshot_data] = await get_project_epoch_snapshot_bulk(
                 redis, protocol_state_contract, anchor_rpc_helper, [msg_obj.epochId - 1], project_id,
             )
@@ -115,6 +117,7 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
 
             else:
                 # if previous_aggregate_snapshot_data is not found for some reason, do entire calculation
+                self._logger.info('previous_aggregate_snapshot_data not found, building aggregate from scratch')
                 snapshots_data = await get_project_epoch_snapshot_bulk(
                     redis, protocol_state_contract, anchor_rpc_helper, range(
                         tail_epoch_id, msg_obj.epochId + 1,
