@@ -19,7 +19,7 @@ class AggreagateTopTokensProcessor(GenericProcessorMultiProjectAggregate):
 
     def __init__(self) -> None:
         self.transformation_lambdas = []
-        self._logger = logger.bind(module='AggregateStatsProcessor')
+        self._logger = logger.bind(module='AggregateTopTokensProcessor')
 
     async def compute(
         self,
@@ -53,16 +53,14 @@ class AggreagateTopTokensProcessor(GenericProcessorMultiProjectAggregate):
                 snapshot = UniswapTradesAggregateSnapshot.parse_raw(snapshot_data[i])
             snapshot_mapping[msg.projectId] = snapshot
 
-            contract_address = project_id.split('_')[-2]
+            contract_address = msg.projectId.split('_')[-2]
             pair_metadata = await get_pair_metadata(
                 contract_address,
                 redis_conn=redis,
                 rpc_helper=rpc_helper,
             )
 
-            projects_metadata[project_id] = pair_metadata
-
-        all_tokens = set()
+            projects_metadata[msg.projectId] = pair_metadata
 
         # iterate over all snapshots and generate token data
         token_data = {}
