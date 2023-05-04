@@ -24,6 +24,19 @@ module.exports = {
       env: {
         NODE_ENV: NODE_ENV,
       }
-    }
+    },
+    {
+      name   : "ap-payload-commit",
+      script : "go/payload-commit",
+      cwd : `${__dirname}/go/payload-commit`,
+      max_restarts: MAX_RESTART,
+      min_uptime: MIN_UPTIME,
+      kill_timeout : 3000,
+      env: {
+        NODE_ENV: NODE_ENV,
+        CONFIG_PATH:`${__dirname}`,
+      },
+      args: "5" //Log level set to debug, for production change to 4 (INFO) or 2(ERROR)
+    },
   ]
 }

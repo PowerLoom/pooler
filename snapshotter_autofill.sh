@@ -21,7 +21,7 @@ echo "Got RPC URL: ${RPC_URL}"
 echo "Got UUID: ${UUID}"
 
 echo "Got CONSENSUS_URL: ${CONSENSUS_URL}"
-cp pooler/settings/settings.example.json pooler/settings/settings.json
+cp settings.example.json settings.json
 
 export namespace=UNISWAPV2-ph15-prod
 export consensus_url="${CONSENSUS_URL:-https://offchain-consensus-api.powerloom.io}"
