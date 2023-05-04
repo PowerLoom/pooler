@@ -39,6 +39,7 @@ class PowerloomSnapshotFinalizedMessage(BaseModel):
 
 class PowerloomCalculateAggregateMessage(BaseModel):
     messages: List[PowerloomSnapshotFinalizedMessage]
+    epochId: int
     broadcastId: str
     timestamp: int
 

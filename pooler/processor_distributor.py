@@ -275,6 +275,7 @@ class ProcessorDistributor(multiprocessing.Process):
                     self._logger.info(f'All projects present for {process_unit.epochId}, aggregating')
                     final_msg = PowerloomCalculateAggregateMessage(
                         messages=finalized_messages,
+                        epochId=process_unit.epochId,
                         timestamp=int(time.time()),
                         broadcastId=str(uuid4()),
                     )

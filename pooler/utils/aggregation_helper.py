@@ -101,14 +101,16 @@ async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj
 
         return first_epoch
 
-@retry(
-    reraise=True,
-    retry=retry_if_exception_type(Exception),
-    wait=wait_random_exponential(multiplier=1, max=10),
-    stop=stop_after_attempt(2),
-)
+
 async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader):
     # TODO: Using redis for now, find better way to cache this data
+
+    if not cid:
+        return None
+
+    if 'null' in cid:
+        return None
+
     submission_data = await redis_conn.get(
         cid_data(cid),
     )
@@ -127,16 +129,24 @@ async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader):
 
             return submission_data
         except Exception as e:
-            logger.error(f'Error while fetching data from IPFS {e}')
+            logger.error(f'Error while fetching data from IPFS. Error: {e}')
             return None
 
-@retry(
-    reraise=True,
-    retry=retry_if_exception_type(Exception),
-    wait=wait_random_exponential(multiplier=1, max=10),
-    stop=stop_after_attempt(3),
-)
-async def get_project_epoch_snapshot(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, ipfs_reader, epoch_id, project_id):
+
+async def get_sumbmission_data_bulk(redis_conn: aioredis.Redis, cids: List, ipfs_reader):
+    batch_size = 10
+    all_snapshot_data = []
+    for i in range(0, len(cids), batch_size):
+        batch_cids = cids[i:i + batch_size]
+        batch_snapshot_data = await asyncio.gather(
+            *[get_submission_data(redis_conn, cid, ipfs_reader) for cid in batch_cids],
+        )
+        all_snapshot_data.extend(batch_snapshot_data)
+
+
+async def get_project_epoch_snapshot(
+    redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, ipfs_reader, epoch_id, project_id,
+):
     cid = await get_project_finalized_cid(redis_conn, state_contract_obj, rpc_helper, epoch_id, project_id)
     if cid:
         data = await get_submission_data(redis_conn, cid, ipfs_reader)
@@ -239,8 +249,6 @@ async def get_tail_epoch_id(
 
     return tail_epoch_id, True
 
-#
-
 
 async def get_project_epoch_snapshot_bulk(
         redis_conn: aioredis.Redis,
@@ -253,6 +261,7 @@ async def get_project_epoch_snapshot_bulk(
 ):
 
     batch_size = 100
+    ipfs_fetch_batch_size = 10
 
     project_first_epoch = await get_project_first_epoch(
         redis_conn, state_contract_obj, rpc_helper, project_id,
@@ -305,12 +314,14 @@ async def get_project_epoch_snapshot_bulk(
     all_snapshot_data = []
     ipfs_snapshot_tasks = []
 
-    for i in range(len(snapshot_data)):
-        if snapshot_data[i]:
-            all_snapshot_data.append(snapshot_data[i])
-        else:
-            ipfs_snapshot_tasks.append(get_submission_data(redis_conn, valid_cid_data_with_epochs[i][0], ipfs_reader))
+    for i in range(0, len(snapshot_data), ipfs_fetch_batch_size):
+        batch_snapshot_data = snapshot_data[i:i + batch_size]
+        batch_cid_data = valid_cid_data_with_epochs[i:i + batch_size]
+        batch_snapshot_data = await asyncio.gather(
+            *[
+                get_submission_data(redis_conn, cid, ipfs_reader) for cid, _ in batch_cid_data
+            ],
+        )
+        all_snapshot_data.extend(batch_snapshot_data)
 
-    ipfs_snapshot_data = await asyncio.gather(*ipfs_snapshot_tasks)
-    all_snapshot_data.extend(ipfs_snapshot_data)
     return all_snapshot_data

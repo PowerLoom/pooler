@@ -18,6 +18,8 @@ class UniswapPairTotalReservesSnapshot(SnapshotBase):
     ]  # block number to corresponding total reserves
     token0ReservesUSD: Dict[str, float]
     token1ReservesUSD: Dict[str, float]
+    token0Prices: Dict[str, float]
+    token1Prices: Dict[str, float]
 
 
 class logsTradeModel(BaseModel):
@@ -49,3 +51,18 @@ class UniswapTradesAggregateSnapshot(AggregateBase):
     token1TradeVolume: float = 0  # in token native decimals supply
     token0TradeVolumeUSD: float = 0
     token1TradeVolumeUSD: float = 0
+
+
+class UniswapTopTokenSnapshot(BaseModel):
+    name: str
+    symbol: str
+    decimals: int
+    address: str
+    price: float
+    price_change: float
+    volume_24h: float
+    liquidity: float
+
+
+class UniswapTopTokensSnapshot(AggregateBase):
+    tokens: List[UniswapTopTokenSnapshot] = []
