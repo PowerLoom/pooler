@@ -66,3 +66,14 @@ class UniswapTopTokenSnapshot(BaseModel):
 
 class UniswapTopTokensSnapshot(AggregateBase):
     tokens: List[UniswapTopTokenSnapshot] = []
+
+
+class UniswapTopPairSnapshot(BaseModel):
+    name: str
+    liquidity_24h: float
+    volume_24h: float
+    fee_24h: float
+
+
+class UniswapTopPairsSnapshot(AggregateBase):
+    pairs: List[UniswapTopPairSnapshot] = []
