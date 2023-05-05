@@ -24,6 +24,7 @@ async def retry_state_callback(retry_state: tenacity.RetryCallState):
     logger.warning(f'Encountered IPFS cat exception: {retry_state.outcome.exception()}')
 
 
+# TODO: warmup cache to reduce RPC calls overhead
 async def get_project_finalized_cid(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, epoch_id, project_id):
 
     project_first_epoch = await get_project_first_epoch(
@@ -41,7 +42,7 @@ async def get_project_finalized_cid(redis_conn: aioredis.Redis, state_contract_o
     if cid_data:
         cid = cid_data[0].decode('utf-8')
     else:
-        cid = await check_and_get_finalized_cid(redis_conn, state_contract_obj, rpc_helper, epoch_id, project_id)
+        cid = await w3_get_and_cache_finalized_cid(redis_conn, state_contract_obj, rpc_helper, epoch_id, project_id)
 
     if 'null' not in cid:
         return cid
@@ -55,7 +56,7 @@ async def get_project_finalized_cid(redis_conn: aioredis.Redis, state_contract_o
     wait=wait_random_exponential(multiplier=1, max=10),
     stop=stop_after_attempt(3),
 )
-async def check_and_get_finalized_cid(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, epoch_id, project_id):
+async def w3_get_and_cache_finalized_cid(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, epoch_id, project_id):
 
     tasks = [
         state_contract_obj.functions.snapshotStatus(project_id, epoch_id),
@@ -79,6 +80,7 @@ async def check_and_get_finalized_cid(redis_conn: aioredis.Redis, state_contract
         return None, epoch_id
 
 
+# TODO: warmup cache to reduce RPC calls overhead
 async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, project_id):
 
     first_epoch_data = await redis_conn.hget(
@@ -108,6 +110,9 @@ async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj
         return first_epoch
 
 
+
+# TODO: cache IPFS payloads in local file system
+# TODO: warmup cache to reduce IPFS calls overhead
 @retry(
     reraise=True,
     retry=retry_if_exception_type(IPFSAsyncClientError),
@@ -116,8 +121,6 @@ async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj
     before_sleep=retry_state_callback
 )
 async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader):
-    # TODO: Using redis for now, find better way to cache this data
-
     if not cid:
         return None
 
@@ -303,7 +306,7 @@ async def get_project_epoch_snapshot_bulk(
     for i in range(0, len(missing_epochs), batch_size):
 
         tasks = [
-            check_and_get_finalized_cid(
+            get_project_finalized_cid(
                 redis_conn, state_contract_obj, rpc_helper, epoch_id, project_id,
             ) for epoch_id in missing_epochs[i:i + batch_size]
         ]
