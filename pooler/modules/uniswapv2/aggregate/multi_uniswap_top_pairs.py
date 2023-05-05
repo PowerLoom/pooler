@@ -63,9 +63,9 @@ class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
 
         # iterate over all snapshots and generate pair data
         pair_data = {}
-        for project_id in snapshot_mapping.keys():
-            snapshot = snapshot_mapping[project_id]
-            contract = project_id.split('_')[-2]
+        for snapshot_project_id in snapshot_mapping.keys():
+            snapshot = snapshot_mapping[snapshot_project_id]
+            contract = snapshot_project_id.split('_')[-2]
             pair_metadata = all_pair_metadata[contract]
 
             if contract not in pair_data:
@@ -77,18 +77,18 @@ class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
                     'fee24h': 0,
                 }
 
-            if 'reserves' in project_id:
+            if 'reserves' in snapshot_project_id:
                 max_epoch_block = snapshot.chainHeightRange.end
                 pair_data[contract]['liquidity'] += snapshot.token0ReservesUSD[f'block{max_epoch_block}'] + \
                     snapshot.token1ReservesUSD[f'block{max_epoch_block}']
 
-            elif 'volume' in project_id:
+            elif 'volume' in snapshot_project_id:
                 pair_data[contract]['volume24h'] += snapshot.totalTrade
                 pair_data[contract]['fee24h'] += snapshot.totalFee
 
         top_pairs = []
         for pair in pair_data.values():
-            top_tokens.append(UniswapTopPairSnapshot.parse_obj(**token))
+            top_pairs.append(UniswapTopPairSnapshot.parse_obj(pair))
 
         top_pairs = sorted(top_pairs, key=lambda x: x.liquidity, reverse=True)
 

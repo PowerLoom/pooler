@@ -36,6 +36,9 @@ async def get_rabbitmq_channel(connection_pool) -> aio_pika.Channel:
     async with connection_pool.acquire() as connection:
         return await connection.channel()
 
+# TODO: Update notification flow, send directly to slack and a copy to issue reporting service
+# (offchain consensus for now)
+
 
 def notify_on_task_failure_snapshot(fn):
     @wraps(fn)

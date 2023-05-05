@@ -64,9 +64,9 @@ class AggreagateTopTokensProcessor(GenericProcessorMultiProjectAggregate):
 
         # iterate over all snapshots and generate token data
         token_data = {}
-        for project_id in snapshot_mapping.keys():
-            snapshot = snapshot_mapping[project_id]
-            project_metadata = projects_metadata[project_id]
+        for snapshot_project_id in snapshot_mapping.keys():
+            snapshot = snapshot_mapping[snapshot_project_id]
+            project_metadata = projects_metadata[snapshot_project_id]
 
             token0 = project_metadata['token0']
             token1 = project_metadata['token1']
@@ -95,7 +95,7 @@ class AggreagateTopTokensProcessor(GenericProcessorMultiProjectAggregate):
                     'priceChange24h': 0,
                 }
 
-            if 'reserves' in project_id:
+            if 'reserves' in snapshot_project_id:
                 max_epoch_block = snapshot.chainHeightRange.end
 
                 token_data[token0['address']]['price'] = snapshot.token0Prices[f'block{max_epoch_block}']
@@ -104,7 +104,7 @@ class AggreagateTopTokensProcessor(GenericProcessorMultiProjectAggregate):
                 token_data[token0['address']]['liquidity'] += snapshot.token0ReservesUSD[f'block{max_epoch_block}']
                 token_data[token1['address']]['liquidity'] += snapshot.token1ReservesUSD[f'block{max_epoch_block}']
 
-            elif 'volume' in project_id:
+            elif 'volume' in snapshot_project_id:
 
                 token_data[token0['address']]['volume24h'] += snapshot.token0TradeVolumeUSD
                 token_data[token1['address']]['volume24h'] += snapshot.token1TradeVolumeUSD
@@ -130,7 +130,7 @@ class AggreagateTopTokensProcessor(GenericProcessorMultiProjectAggregate):
 
         top_tokens = []
         for token in token_data.values():
-            top_tokens.append(UniswapTopTokenSnapshot.parse_obj(**token))
+            top_tokens.append(UniswapTopTokenSnapshot.parse_obj(token))
 
         top_tokens = sorted(top_tokens, key=lambda x: x.liquidity, reverse=True)
 

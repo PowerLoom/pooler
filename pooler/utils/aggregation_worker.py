@@ -117,6 +117,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
     def _gen_multiple_type_project_id(self, type_, epoch):
         project_hash = hash(tuple(sorted([project.projectId for project in epoch.messages])))
         project_id = f'{type_}_{project_hash}_{settings.namespace}'
+        return project_id
 
     def _gen_project_id(self, type_, epoch):
         if type_ in self._single_project_types:

@@ -59,16 +59,16 @@ class AggreagateStatsProcessor(GenericProcessorMultiProjectAggregate):
             'feeChange24h': 0,
         }
         # iterate over all snapshots and generate stats data
-        for project_id in snapshot_mapping.keys():
-            snapshot = snapshot_mapping[project_id]
+        for snapshot_project_id in snapshot_mapping.keys():
+            snapshot = snapshot_mapping[snapshot_project_id]
 
-            if 'reserves' in project_id:
+            if 'reserves' in snapshot_project_id:
                 max_epoch_block = snapshot.chainHeightRange.end
 
                 stats_data['tvl'] += snapshot.token0ReservesUSD[f'block{max_epoch_block}'] + \
                     snapshot.token1ReservesUSD[f'block{max_epoch_block}']
 
-            elif 'volume' in project_id:
+            elif 'volume' in snapshot_project_id:
                 stats_data['volume24h'] += snapshot.totalTrade
                 stats_data['fee24h'] += snapshot.totalFee
 
@@ -81,18 +81,18 @@ class AggreagateStatsProcessor(GenericProcessorMultiProjectAggregate):
                 redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id, project_id,
             )
 
-        if previous_stats_snapshot_data:
-            previous_stats_snapshot = UniswapStatsSnapshot.parse_raw(previous_stats_snapshot_data)
+            if previous_stats_snapshot_data:
+                previous_stats_snapshot = UniswapStatsSnapshot.parse_raw(previous_stats_snapshot_data)
 
-            # calculate change in percentage
-            stats_data['volumeChange24h'] = (stats_data['volume24h'] - previous_stats_snapshot.volume24h) / \
-                previous_stats_snapshot.volume24h * 100
+                # calculate change in percentage
+                stats_data['volumeChange24h'] = (stats_data['volume24h'] - previous_stats_snapshot.volume24h) / \
+                    previous_stats_snapshot.volume24h * 100
 
-            stats_data['tvlChange24h'] = (stats_data['tvl'] - previous_stats_snapshot.tvl) / \
-                previous_stats_snapshot.tvl * 100
+                stats_data['tvlChange24h'] = (stats_data['tvl'] - previous_stats_snapshot.tvl) / \
+                    previous_stats_snapshot.tvl * 100
 
-            stats_data['feeChange24h'] = (stats_data['fee24h'] - previous_stats_snapshot.fee24h) / \
-                previous_stats_snapshot.fee24h * 100
+                stats_data['feeChange24h'] = (stats_data['fee24h'] - previous_stats_snapshot.fee24h) / \
+                    previous_stats_snapshot.fee24h * 100
 
         stats_snapshot = UniswapStatsSnapshot(
             epochId=epoch_id,

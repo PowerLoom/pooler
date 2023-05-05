@@ -266,11 +266,11 @@ async def get_tail_epoch_id(
     )
     if tail_epoch_id < project_first_epoch:
         tail_epoch_id = project_first_epoch
-        return tail_epoch_id, False
+        return tail_epoch_id, True
 
     logger.info('tail epoch_id: {}', tail_epoch_id)
 
-    return tail_epoch_id, True
+    return tail_epoch_id, False
 
 
 async def get_project_epoch_snapshot_bulk(

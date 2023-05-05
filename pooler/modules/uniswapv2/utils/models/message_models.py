@@ -59,8 +59,8 @@ class UniswapTopTokenSnapshot(BaseModel):
     decimals: int
     address: str
     price: float
-    price_change: float
-    volume_24h: float
+    priceChange24h: float
+    volume24h: float
     liquidity: float
 
 
@@ -71,8 +71,8 @@ class UniswapTopTokensSnapshot(AggregateBase):
 class UniswapTopPairSnapshot(BaseModel):
     name: str
     liquidity: float
-    volume_24h: float
-    fee_24h: float
+    volume24h: float
+    fee24h: float
 
 
 class UniswapTopPairsSnapshot(AggregateBase):
@@ -85,4 +85,4 @@ class UniswapStatsSnapshot(AggregateBase):
     fee24h: float = 0
     volumeChange24h: float = 0
     tvlChange24h: float = 0
-    feeChange24h: float = 0
+    feeCchange24h: float = 0

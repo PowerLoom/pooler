@@ -106,7 +106,8 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
 
                 if extrapolated_flag:
                     current_tail_end_snapshot_data = await get_project_epoch_snapshot(
-                        redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id, project_id,
+                        redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader,
+                        tail_epoch_id, msg_obj.projectId,
                     )
 
                     current_tail_end_snapshot = UniswapTradesSnapshot.parse_raw(current_tail_end_snapshot_data)
