@@ -10,13 +10,13 @@ from redis import asyncio as aioredis
 
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
+from pooler.utils.ipfs.async_ipfshttpclient.main import AsyncIPFSClient
 from pooler.utils.models.data_models import SnapshotterIssue
 from pooler.utils.models.data_models import SnapshotterIssueSeverity
 from pooler.utils.models.message_models import PowerloomCalculateAggregateMessage
 from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
 from pooler.utils.models.message_models import PowerloomSnapshotProcessMessage
 from pooler.utils.rpc import RpcHelper
-from pooler.utils.ipfs.async_ipfshttpclient.main import AsyncIPFSClient
 
 # setup logger
 helper_logger = logger.bind(module='PowerLoom|Callback|Helpers')
@@ -102,7 +102,12 @@ def notify_on_task_failure_aggregate(fn):
                 project_id = None
                 if 'msg_obj' in kwargs:
                     msg_obj = kwargs['msg_obj']
-                    project_id = f'{task_type}_{msg_obj.projectId}_{settings.namespace}'
+                    if isinstance(msg_obj, PowerloomCalculateAggregateMessage):
+                        project_id = f'{task_type}_*_{settings.namespace}'
+                    elif isinstance(msg_obj, PowerloomSnapshotFinalizedMessage):
+                        project_id = f'{task_type}_{msg_obj.projectId}_{settings.namespace}'
+                    else:
+                        project_id = f'{task_type}_{settings.namespace}'
 
                 await self._client.post(
                     url=settings.issue_report_url,
@@ -110,7 +115,7 @@ def notify_on_task_failure_aggregate(fn):
                         instanceID=settings.instance_id,
                         severity=SnapshotterIssueSeverity.medium,
                         issueType='MISSED_SNAPSHOT',
-                        projectID=project_id if project_id else '*',
+                        projectID=project_id,
                         timeOfReporting=int(time.time()),
                         extra={'issueDetails': f'Error : {e}'},
                         serviceName='Pooler|AggregateWorker',

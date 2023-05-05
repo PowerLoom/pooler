@@ -1,12 +1,12 @@
 import asyncio
 from typing import List
 
+import tenacity
 from redis import asyncio as aioredis
 from tenacity import retry
 from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
-import tenacity
 
 from pooler.utils.default_logger import logger
 from pooler.utils.ipfs.async_ipfshttpclient.dag import IPFSAsyncClientError
@@ -56,7 +56,13 @@ async def get_project_finalized_cid(redis_conn: aioredis.Redis, state_contract_o
     wait=wait_random_exponential(multiplier=1, max=10),
     stop=stop_after_attempt(3),
 )
-async def w3_get_and_cache_finalized_cid(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, epoch_id, project_id):
+async def w3_get_and_cache_finalized_cid(
+    redis_conn: aioredis.Redis,
+    state_contract_obj,
+    rpc_helper,
+    epoch_id,
+    project_id,
+):
 
     tasks = [
         state_contract_obj.functions.snapshotStatus(project_id, epoch_id),
@@ -110,7 +116,6 @@ async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj
         return first_epoch
 
 
-
 # TODO: cache IPFS payloads in local file system
 # TODO: warmup cache to reduce IPFS calls overhead
 @retry(
@@ -118,7 +123,7 @@ async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj
     retry=retry_if_exception_type(IPFSAsyncClientError),
     wait=wait_random_exponential(multiplier=0.5, max=10),
     stop=stop_after_attempt(3),
-    before_sleep=retry_state_callback
+    before_sleep=retry_state_callback,
 )
 async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader):
     if not cid:
@@ -158,6 +163,8 @@ async def get_sumbmission_data_bulk(redis_conn: aioredis.Redis, cids: List, ipfs
             *[get_submission_data(redis_conn, cid, ipfs_reader) for cid in batch_cids],
         )
         all_snapshot_data.extend(batch_snapshot_data)
+
+    return all_snapshot_data
 
 
 async def get_project_epoch_snapshot(

@@ -65,11 +65,11 @@ class PairTotalReservesProcessor(GenericProcessorSnapshot):
             ] = block_pair_total_reserves['token1USD']
 
             epoch_prices_snapshot_map_token0[
-                'token0Price'
+                f'block{block_num}'
             ] = block_pair_total_reserves['token0Price']
 
             epoch_prices_snapshot_map_token1[
-                'token1Price'
+                f'block{block_num}'
             ] = block_pair_total_reserves['token1Price']
 
             if fetch_ts:

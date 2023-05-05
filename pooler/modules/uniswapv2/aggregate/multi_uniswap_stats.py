@@ -5,6 +5,7 @@ from ..utils.models.message_models import UniswapStatsSnapshot
 from ..utils.models.message_models import UniswapTradesAggregateSnapshot
 from pooler.utils.aggregation_helper import get_project_epoch_snapshot
 from pooler.utils.aggregation_helper import get_sumbmission_data_bulk
+from pooler.utils.aggregation_helper import get_tail_epoch_id
 from pooler.utils.callback_helpers import GenericProcessorMultiProjectAggregate
 from pooler.utils.default_logger import logger
 from pooler.utils.ipfs.async_ipfshttpclient.main import AsyncIPFSClient
@@ -64,8 +65,8 @@ class AggreagateStatsProcessor(GenericProcessorMultiProjectAggregate):
             if 'reserves' in project_id:
                 max_epoch_block = snapshot.chainHeightRange.end
 
-                stats_data['tvl'] += snapshot.token0ReservesUSD[max_epoch_block] + \
-                    snapshot.token1ReservesUSD[max_epoch_block]
+                stats_data['tvl'] += snapshot.token0ReservesUSD[f'block{max_epoch_block}'] + \
+                    snapshot.token1ReservesUSD[f'block{max_epoch_block}']
 
             elif 'volume' in project_id:
                 stats_data['volume24h'] += snapshot.totalTrade
@@ -76,7 +77,7 @@ class AggreagateStatsProcessor(GenericProcessorMultiProjectAggregate):
             redis, protocol_state_contract, anchor_rpc_helper, msg_obj.epochId, 86400, project_id,
         )
         if not extrapolated_flag:
-            previous_stats_snapshot_data = get_project_epoch_snapshot(
+            previous_stats_snapshot_data = await get_project_epoch_snapshot(
                 redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id, project_id,
             )
 

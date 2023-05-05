@@ -79,8 +79,8 @@ class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
 
             if 'reserves' in project_id:
                 max_epoch_block = snapshot.chainHeightRange.end
-                pair_data[contract]['liquidity'] += snapshot.token0ReservesUSD[max_epoch_block] + \
-                    snapshot.token1ReservesUSD[max_epoch_block]
+                pair_data[contract]['liquidity'] += snapshot.token0ReservesUSD[f'block{max_epoch_block}'] + \
+                    snapshot.token1ReservesUSD[f'block{max_epoch_block}']
 
             elif 'volume' in project_id:
                 pair_data[contract]['volume24h'] += snapshot.totalTrade
