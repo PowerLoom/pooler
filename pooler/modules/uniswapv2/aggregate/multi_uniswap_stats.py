@@ -1,11 +1,15 @@
 from redis import asyncio as aioredis
 
+from ..utils.models.message_models import UniswapPairTotalReservesSnapshot
+from ..utils.models.message_models import UniswapStatsSnapshot
+from ..utils.models.message_models import UniswapTradesAggregateSnapshot
+from pooler.utils.aggregation_helper import get_project_epoch_snapshot
+from pooler.utils.aggregation_helper import get_sumbmission_data_bulk
 from pooler.utils.callback_helpers import GenericProcessorMultiProjectAggregate
 from pooler.utils.default_logger import logger
+from pooler.utils.ipfs.async_ipfshttpclient.main import AsyncIPFSClient
 from pooler.utils.models.message_models import PowerloomCalculateAggregateMessage
 from pooler.utils.rpc import RpcHelper
-from pooler.utils.ipfs.async_ipfshttpclient.main import AsyncIPFSClient
-
 
 
 class AggreagateStatsProcessor(GenericProcessorMultiProjectAggregate):
@@ -26,4 +30,73 @@ class AggreagateStatsProcessor(GenericProcessorMultiProjectAggregate):
         project_id: str,
 
     ):
-        self._logger.info(f'compute called with {msg_obj}')
+        self._logger.info(f'Calculating unswap stats for {msg_obj}')
+
+        epoch_id = msg_obj.epochId
+
+        snapshot_mapping = {}
+
+        snapshot_data = await get_sumbmission_data_bulk(
+            redis, [msg.snapshotCid for msg in msg_obj.messages], ipfs_reader,
+        )
+
+        for i in range(len(msg_obj.messages)):
+            msg = msg_obj.messages[i]
+            if not snapshot_data[i]:
+                continue
+            if 'reserves' in msg.projectId:
+                snapshot = UniswapPairTotalReservesSnapshot.parse_raw(snapshot_data[i])
+            elif 'volume' in msg.projectId:
+                snapshot = UniswapTradesAggregateSnapshot.parse_raw(snapshot_data[i])
+            snapshot_mapping[msg.projectId] = snapshot
+
+        stats_data = {
+            'volume24h': 0,
+            'tvl': 0,
+            'fee24h': 0,
+            'volumeChange24h': 0,
+            'tvlChange24h': 0,
+            'feeChange24h': 0,
+        }
+        # iterate over all snapshots and generate stats data
+        for project_id in snapshot_mapping.keys():
+            snapshot = snapshot_mapping[project_id]
+
+            if 'reserves' in project_id:
+                max_epoch_block = snapshot.chainHeightRange.end
+
+                stats_data['tvl'] += snapshot.token0ReservesUSD[max_epoch_block] + \
+                    snapshot.token1ReservesUSD[max_epoch_block]
+
+            elif 'volume' in project_id:
+                stats_data['volume24h'] += snapshot.totalTrade
+                stats_data['fee24h'] += snapshot.totalFee
+
+        previous_stats_snapshot_data = get_project_epoch_snapshot(
+            redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader, epoch_id - 1, project_id,
+        )
+
+        if previous_stats_snapshot_data:
+            previous_stats_snapshot = UniswapStatsSnapshot.parse_raw(previous_stats_snapshot_data)
+
+            # calculate change in percentage
+            stats_data['volumeChange24h'] = (stats_data['volume24h'] - previous_stats_snapshot.volume24h) / \
+                previous_stats_snapshot.volume24h * 100
+
+            stats_data['tvlChange24h'] = (stats_data['tvl'] - previous_stats_snapshot.tvl) / \
+                previous_stats_snapshot.tvl * 100
+
+            stats_data['feeChange24h'] = (stats_data['fee24h'] - previous_stats_snapshot.fee24h) / \
+                previous_stats_snapshot.fee24h * 100
+
+        stats_snapshot = UniswapStatsSnapshot(
+            epochId=epoch_id,
+            volume24h=stats_data['volume24h'],
+            tvl=stats_data['tvl'],
+            fee24h=stats_data['fee24h'],
+            volumeChange24h=stats_data['volumeChange24h'],
+            tvlChange24h=stats_data['tvlChange24h'],
+            feeChange24h=stats_data['feeChange24h'],
+        )
+
+        return stats_snapshot

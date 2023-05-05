@@ -77,3 +77,12 @@ class UniswapTopPairSnapshot(BaseModel):
 
 class UniswapTopPairsSnapshot(AggregateBase):
     pairs: List[UniswapTopPairSnapshot] = []
+
+
+class UniswapStatsSnapshot(AggregateBase):
+    volume24h: float = 0
+    tvl: float = 0
+    fee24h: float = 0
+    volumeChange24h: float = 0
+    tvlChange24h: float = 0
+    feeChange24h: float = 0
