@@ -40,14 +40,13 @@ class AggreagateStatsProcessor(GenericProcessorMultiProjectAggregate):
             redis, [msg.snapshotCid for msg in msg_obj.messages], ipfs_reader,
         )
 
-        for i in range(len(msg_obj.messages)):
-            msg = msg_obj.messages[i]
-            if not snapshot_data[i]:
+        for msg, data in zip(msg_obj.messages, snapshot_data):
+            if not data:
                 continue
             if 'reserves' in msg.projectId:
-                snapshot = UniswapPairTotalReservesSnapshot.parse_raw(snapshot_data[i])
+                snapshot = UniswapPairTotalReservesSnapshot.parse_raw(data)
             elif 'volume' in msg.projectId:
-                snapshot = UniswapTradesAggregateSnapshot.parse_raw(snapshot_data[i])
+                snapshot = UniswapTradesAggregateSnapshot.parse_raw(data)
             snapshot_mapping[msg.projectId] = snapshot
 
         stats_data = {
@@ -72,9 +71,14 @@ class AggreagateStatsProcessor(GenericProcessorMultiProjectAggregate):
                 stats_data['volume24h'] += snapshot.totalTrade
                 stats_data['fee24h'] += snapshot.totalFee
 
-        previous_stats_snapshot_data = get_project_epoch_snapshot(
-            redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader, epoch_id - 1, project_id,
+        # source project tail epoch
+        [tail_epoch_id, extrapolated_flag] = await get_tail_epoch_id(
+            redis, protocol_state_contract, anchor_rpc_helper, msg_obj.epochId, 86400, project_id,
         )
+        if not extrapolated_flag:
+            previous_stats_snapshot_data = get_project_epoch_snapshot(
+                redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id, project_id,
+            )
 
         if previous_stats_snapshot_data:
             previous_stats_snapshot = UniswapStatsSnapshot.parse_raw(previous_stats_snapshot_data)

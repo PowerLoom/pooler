@@ -70,7 +70,7 @@ class UniswapTopTokensSnapshot(AggregateBase):
 
 class UniswapTopPairSnapshot(BaseModel):
     name: str
-    liquidity_24h: float
+    liquidity: float
     volume_24h: float
     fee_24h: float
 

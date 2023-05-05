@@ -243,6 +243,8 @@ class ProcessorDistributor(multiprocessing.Process):
                 if process_unit.projectId not in config.projects_to_wait_for:
                     self._logger.info(f'projectId not required for  {process_unit.projectId}: {config.project_type}')
                     continue
+
+                # TODO: use a sync redis library
                 # store event in redis zset
                 self.ev_loop.run_until_complete(
                     self._redis_conn.zadd(

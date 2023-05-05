@@ -8,10 +8,9 @@ from pooler.utils.aggregation_helper import get_project_first_epoch
 from pooler.utils.aggregation_helper import get_tail_epoch_id
 from pooler.utils.callback_helpers import GenericProcessorSingleProjectAggregate
 from pooler.utils.default_logger import logger
+from pooler.utils.ipfs.async_ipfshttpclient.main import AsyncIPFSClient
 from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
 from pooler.utils.rpc import RpcHelper
-from pooler.utils.ipfs.async_ipfshttpclient.main import AsyncIPFSClient
-
 
 
 class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
@@ -70,7 +69,7 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
         )
 
         # source project tail epoch
-        [tail_epoch_id, complete] = await get_tail_epoch_id(
+        [tail_epoch_id, extrapolated_flag] = await get_tail_epoch_id(
             redis, protocol_state_contract, anchor_rpc_helper, msg_obj.epochId, 86400, msg_obj.projectId,
         )
 
@@ -105,7 +104,7 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
 
                 current_snapshot = UniswapTradesSnapshot.parse_raw(current_snapshot_data)
 
-                if complete:
+                if extrapolated_flag:
                     current_tail_end_snapshot_data = await get_project_epoch_snapshot(
                         redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id, project_id,
                     )

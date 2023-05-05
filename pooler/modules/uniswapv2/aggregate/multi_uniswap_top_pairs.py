@@ -42,14 +42,13 @@ class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
             redis, [msg.snapshotCid for msg in msg_obj.messages], ipfs_reader,
         )
 
-        for i in range(len(msg_obj.messages)):
-            msg = msg_obj.messages[i]
-            if not snapshot_data[i]:
+        for msg, data in zip(msg_obj.messages, snapshot_data):
+            if not data:
                 continue
             if 'reserves' in msg.projectId:
-                snapshot = UniswapPairTotalReservesSnapshot.parse_raw(snapshot_data[i])
+                snapshot = UniswapPairTotalReservesSnapshot.parse_raw(data)
             elif 'volume' in msg.projectId:
-                snapshot = UniswapTradesAggregateSnapshot.parse_raw(snapshot_data[i])
+                snapshot = UniswapTradesAggregateSnapshot.parse_raw(data)
             snapshot_mapping[msg.projectId] = snapshot
 
             contract_address = msg.projectId.split('_')[-2]
@@ -73,19 +72,19 @@ class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
                 pair_data[contract] = {
                     'address': contract,
                     'name': pair_metadata['pair']['symbol'],
-                    'liquidity24h': 0,
+                    'liquidity': 0,
                     'volume24h': 0,
                     'fee24h': 0,
                 }
 
             if 'reserves' in project_id:
                 max_epoch_block = snapshot.chainHeightRange.end
-                pair_data[contract] += snapshot.token0ReservesUSD[max_epoch_block] + \
+                pair_data[contract]['liquidity'] += snapshot.token0ReservesUSD[max_epoch_block] + \
                     snapshot.token1ReservesUSD[max_epoch_block]
 
             elif 'volume' in project_id:
-                pair_data[contract] += snapshot.totalTrade
-                pair_data[contract] += snapshot.totalFee
+                pair_data[contract]['volume24h'] += snapshot.totalTrade
+                pair_data[contract]['fee24h'] += snapshot.totalFee
 
         top_pairs = []
         for pair in pair_data.values():
