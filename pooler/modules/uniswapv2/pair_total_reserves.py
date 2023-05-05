@@ -95,8 +95,8 @@ class PairTotalReservesProcessor(GenericProcessorSnapshot):
                 'token1Reserves': epoch_reserves_snapshot_map_token1,
                 'token0ReservesUSD': epoch_usd_reserves_snapshot_map_token0,
                 'token1ReservesUSD': epoch_usd_reserves_snapshot_map_token1,
-                'token0Price': epoch_prices_snapshot_map_token0,
-                'token1Price': epoch_prices_snapshot_map_token1,
+                'token0Prices': epoch_prices_snapshot_map_token0,
+                'token1Prices': epoch_prices_snapshot_map_token1,
                 'chainHeightRange': EpochBaseSnapshot(
                     begin=min_chain_height, end=max_chain_height,
                 ),
