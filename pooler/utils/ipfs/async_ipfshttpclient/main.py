@@ -69,12 +69,16 @@ class AsyncIPFSClient:
 
     async def cat(self, cid, **kwargs):
         response_body = ''
+        last_response_code = None
         async with self._client.stream(method='POST', url=f'/cat?arg={cid}') as response:
             if response.status_code != 200:
-                raise IPFSAsyncClientError(f'IPFS client error: cat operation, response:{response}')
+                raise IPFSAsyncClientError(f'IPFS client error: cat on CID {cid}, response status code error: {response.status_code}')
 
             async for chunk in response.aiter_text():
                 response_body += chunk
+            last_response_code = response.status_code
+        if not response_body:
+            raise IPFSAsyncClientError(f'IPFS client error: cat on CID {cid}, response body empty. response status code error: {last_response_code}')
         return response_body
 
     async def get_json(self, cid, **kwargs):

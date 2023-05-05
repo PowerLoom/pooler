@@ -6,8 +6,10 @@ from tenacity import retry
 from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
+import tenacity
 
 from pooler.utils.default_logger import logger
+from pooler.utils.ipfs.async_ipfshttpclient.dag import IPFSAsyncClientError
 from pooler.utils.redis.redis_keys import cid_data
 from pooler.utils.redis.redis_keys import project_finalized_data_zset
 from pooler.utils.redis.redis_keys import project_first_epoch_hmap
@@ -16,6 +18,10 @@ from pooler.utils.redis.redis_keys import source_chain_epoch_size_key
 from pooler.utils.redis.redis_keys import source_chain_id_key
 
 logger = logger.bind(module='data_helper')
+
+
+async def retry_state_callback(retry_state: tenacity.RetryCallState):
+    logger.warning(f'Encountered IPFS cat exception: {retry_state.outcome.exception()}')
 
 
 async def get_project_finalized_cid(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, epoch_id, project_id):
@@ -102,6 +108,13 @@ async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj
         return first_epoch
 
 
+@retry(
+    reraise=True,
+    retry=retry_if_exception_type(IPFSAsyncClientError),
+    wait=wait_random_exponential(multiplier=0.5, max=10),
+    stop=stop_after_attempt(3),
+    before_sleep=retry_state_callback
+)
 async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader):
     # TODO: Using redis for now, find better way to cache this data
 
