@@ -16,6 +16,8 @@ from pooler.settings.config import projects_config
 from pooler.settings.config import settings
 from pooler.utils.callback_helpers import notify_on_task_failure_aggregate
 from pooler.utils.generic_worker import GenericAsyncWorker
+from pooler.utils.ipfs.async_ipfshttpclient.main import AsyncIPFSClient
+from pooler.utils.ipfs.async_ipfshttpclient.main import AsyncIPFSClientSingleton
 from pooler.utils.models.message_models import AggregateBase
 from pooler.utils.models.message_models import PayloadCommitMessage
 from pooler.utils.models.message_models import PowerloomCalculateAggregateMessage
@@ -25,16 +27,12 @@ from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 from pooler.utils.redis.redis_keys import (
     cb_broadcast_processing_logs_zset,
 )
-from pooler.utils.ipfs.async_ipfshttpclient.main import AsyncIPFSClient
-from pooler.utils.ipfs.async_ipfshttpclient.main import AsyncIPFSClientSingleton
-
 
 
 class AggregationAsyncWorker(GenericAsyncWorker):
     _ipfs_singleton: AsyncIPFSClientSingleton
     _ipfs_writer_client: AsyncIPFSClient
     _ipfs_reader_client: AsyncIPFSClient
-
 
     def __init__(self, name, **kwargs):
         self._q = f'powerloom-backend-cb-aggregate:{settings.namespace}:{settings.instance_id}'
@@ -48,7 +46,6 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         self._multi_project_types = set()
         self._task_types = set()
         self._ipfs_singleton = None
-
 
         for config in aggregator_config:
             if config.aggregate_on == AggregateOn.single_project:
@@ -118,7 +115,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         return project_id
 
     def _gen_multiple_type_project_id(self, type_, epoch):
-        project_hash = hash([project.projectId for project in epoch.messages])
+        project_hash = hash(tuple(sorted([project.projectId for project in epoch.messages])))
         project_id = f'{type_}_{project_hash}_{settings.namespace}'
 
     def _gen_project_id(self, type_, epoch):

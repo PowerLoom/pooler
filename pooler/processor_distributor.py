@@ -241,7 +241,7 @@ class ProcessorDistributor(multiprocessing.Process):
                 )
             elif config.aggregate_on == AggregateOn.multi_project:
                 if process_unit.projectId not in config.projects_to_wait_for:
-                    self._logger.info(f'projectId not required for  {process_unit.projectId}: {config.project_type}')
+                    self._logger.info(f'projectId not required for {config.project_type}: {process_unit.projectId}')
                     continue
 
                 # TODO: use a sync redis library
