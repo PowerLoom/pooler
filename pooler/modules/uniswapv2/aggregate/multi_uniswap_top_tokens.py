@@ -5,10 +5,10 @@ from ..utils.models.message_models import UniswapPairTotalReservesSnapshot
 from ..utils.models.message_models import UniswapTopTokenSnapshot
 from ..utils.models.message_models import UniswapTopTokensSnapshot
 from ..utils.models.message_models import UniswapTradesAggregateSnapshot
-from pooler.utils.aggregation_helper import get_project_epoch_snapshot
-from pooler.utils.aggregation_helper import get_sumbmission_data_bulk
-from pooler.utils.aggregation_helper import get_tail_epoch_id
 from pooler.utils.callback_helpers import GenericProcessorMultiProjectAggregate
+from pooler.utils.data_utils import get_project_epoch_snapshot
+from pooler.utils.data_utils import get_sumbmission_data_bulk
+from pooler.utils.data_utils import get_tail_epoch_id
 from pooler.utils.default_logger import logger
 from pooler.utils.ipfs.async_ipfshttpclient.main import AsyncIPFSClient
 from pooler.utils.models.message_models import PowerloomCalculateAggregateMessage

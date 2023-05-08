@@ -5,8 +5,8 @@ from ..utils.models.message_models import UniswapPairTotalReservesSnapshot
 from ..utils.models.message_models import UniswapTopPairSnapshot
 from ..utils.models.message_models import UniswapTopPairsSnapshot
 from ..utils.models.message_models import UniswapTradesAggregateSnapshot
-from pooler.utils.aggregation_helper import get_sumbmission_data_bulk
 from pooler.utils.callback_helpers import GenericProcessorMultiProjectAggregate
+from pooler.utils.data_utils import get_sumbmission_data_bulk
 from pooler.utils.default_logger import logger
 from pooler.utils.ipfs.async_ipfshttpclient.main import AsyncIPFSClient
 from pooler.utils.models.message_models import PowerloomCalculateAggregateMessage

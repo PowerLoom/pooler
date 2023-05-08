@@ -2,11 +2,11 @@ from redis import asyncio as aioredis
 
 from ..utils.models.message_models import UniswapTradesAggregateSnapshot
 from ..utils.models.message_models import UniswapTradesSnapshot
-from pooler.utils.aggregation_helper import get_project_epoch_snapshot
-from pooler.utils.aggregation_helper import get_project_epoch_snapshot_bulk
-from pooler.utils.aggregation_helper import get_project_first_epoch
-from pooler.utils.aggregation_helper import get_tail_epoch_id
 from pooler.utils.callback_helpers import GenericProcessorSingleProjectAggregate
+from pooler.utils.data_utils import get_project_epoch_snapshot
+from pooler.utils.data_utils import get_project_epoch_snapshot_bulk
+from pooler.utils.data_utils import get_project_first_epoch
+from pooler.utils.data_utils import get_tail_epoch_id
 from pooler.utils.default_logger import logger
 from pooler.utils.ipfs.async_ipfshttpclient.main import AsyncIPFSClient
 from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
