@@ -110,11 +110,12 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
                         tail_epoch_id, msg_obj.projectId,
                     )
 
-                    current_tail_end_snapshot = UniswapTradesSnapshot.parse_raw(current_tail_end_snapshot_data)
+                    if current_tail_end_snapshot_data:
+                        current_tail_end_snapshot = UniswapTradesSnapshot.parse_raw(current_tail_end_snapshot_data)
 
-                    aggregate_snapshot = self._remove_aggregate_snapshot(
-                        aggregate_snapshot, current_tail_end_snapshot,
-                    )
+                        aggregate_snapshot = self._remove_aggregate_snapshot(
+                            aggregate_snapshot, current_tail_end_snapshot,
+                        )
 
                 aggregate_snapshot = self._add_aggregate_snapshot(aggregate_snapshot, current_snapshot)
 

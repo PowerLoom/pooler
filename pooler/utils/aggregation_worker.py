@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import importlib
 import json
 import time
@@ -114,10 +115,16 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         project_id = project_id = f'{type_}_{contract}_{settings.namespace}'
         return project_id
 
-    def _gen_multiple_type_project_id(self, type_, epoch):
-        project_hash = hash(tuple(sorted([project.projectId for project in epoch.messages])))
-        project_id = f'{type_}_{project_hash}_{settings.namespace}'
-        return project_id
+
+def _gen_multiple_type_project_id(type_, epoch):
+
+    underlying_project_ids = [project.projectId for project in epoch.messages]
+    unique_project_id = ''.join(sorted(underlying_project_ids))
+
+    project_hash = hashlib.sha3_256(unique_project_id.encode()).hexdigest()
+
+    project_id = f'{type_}_{project_hash}_{settings.namespace}'
+    return project_id
 
     def _gen_project_id(self, type_, epoch):
         if type_ in self._single_project_types:
