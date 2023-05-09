@@ -11,8 +11,6 @@
   },
   "chain_id": 1,
   "instance_id": "generated-uuid",
-  "logs_prune_time": 3600,
-  "ipfs_url": "/dns/ipfs/tcp/5001",
   "rpc": {
     "full_nodes": [{
       "url": "https://rpc-url",
@@ -23,16 +21,16 @@
     "retry": 5,
     "request_time_out": 5,
     "skip_epoch_threshold_blocks": 30,
-    "polling_interval": 15
+    "polling_interval": 15,
+    "connection_limits":{  
+      "max_connections": 100,
+      "max_keepalive_connections": 50,
+      "keepalive_expiry": 300
+    }
   },
   "issue_report_url": "http://audit-protocol:9030/reportIssue",
   "rlimit": {
     "file_descriptors": 2048
-  },
-  "timeouts": {
-    "basic": 5,
-    "archival": 180,
-    "connection_init": 2
   },
   "epoch": {
     "height": 10,
@@ -115,7 +113,12 @@
       "burst": 10
     },
     "timeout": 20,
-    "local_cache_path": "/home/ubuntu/local_cache/"
+    "local_cache_path": "/home/ubuntu/local_cache/",
+    "connection_limits":{  
+      "max_connections": 100,
+      "max_keepalive_connections": 50,
+      "keepalive_expiry": 300
+    }
   },
   "anchor_chain_rpc": {
     "full_nodes": [{
@@ -123,6 +126,11 @@
       "rate_limit": "10000000/day;2000/minute;100/second"
     }],
     "retry": 5,
-    "request_time_out": 5
+    "request_time_out": 5,
+    "connection_limits":{  
+      "max_connections": 100,
+      "max_keepalive_connections": 50,
+      "keepalive_expiry": 300
+    }
   }
 }

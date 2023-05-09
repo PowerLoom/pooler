@@ -42,7 +42,7 @@ class ProtocolStateLoader:
                     self._logger.info('Fetched finalized CIDs for project {} in epoch {}', project_id, first_epoch_id+idx)
     
     async def _init_redis_pool(self):
-        self._aioredis_pool = RedisPoolCache(pool_size=500)
+        self._aioredis_pool = RedisPoolCache(pool_size=1000)
         await self._aioredis_pool.populate()
         self._redis_conn = self._aioredis_pool._aioredis_pool
 

@@ -147,19 +147,16 @@ class IPFSconfig(BaseModel):
     timeout: int
     local_cache_path: str
     connection_limits: ConnectionLimits
-    
+
 
 class Settings(BaseModel):
     namespace: str
     core_api: CoreAPI
     chain_id: int
     instance_id: str
-    ipfs_url: str
-    logs_prune_time: int
     rpc: RPCConfigFull
     issue_report_url: str
     rlimit: RLimit
-    epoch: Epoch
     rabbitmq: RabbitMQ
     audit_protocol_engine: AuditProtocolEngine
     consensus: Consensus

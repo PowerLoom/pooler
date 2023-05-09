@@ -4,6 +4,8 @@ import json
 from redis import asyncio as aioredis
 from web3 import Web3
 
+from pooler.utils.redis.redis_keys import source_chain_epoch_size_key
+
 from ..redis_keys import (
     uniswap_pair_cached_block_height_token_price,
 )
@@ -202,7 +204,7 @@ async def get_token_derived_eth(
             )
             for height, price in token_derived_eth_dict.items()
         }
-
+        source_chain_epoch_size = int(await redis_conn.get(source_chain_epoch_size_key()))
         await asyncio.gather(
             redis_conn.zadd(
                 name=uniswap_token_derived_eth_cached_block_height.format(
@@ -217,7 +219,7 @@ async def get_token_derived_eth(
                     token_address,
                 ),
                 min=0,
-                max=int(from_block) - settings.epoch.height * 4,
+                max=int(from_block) - source_chain_epoch_size * 4,
             ),
         )
 
