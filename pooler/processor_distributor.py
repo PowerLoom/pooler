@@ -12,10 +12,12 @@ from uuid import uuid4
 from eth_utils import keccak
 from pydantic import ValidationError
 from setproctitle import setproctitle
+from web3 import Web3
 
 from pooler.settings.config import aggregator_config
 from pooler.settings.config import projects_config
 from pooler.settings.config import settings
+from pooler.utils.data_utils import get_source_chain_epoch_size
 from pooler.utils.default_logger import logger
 from pooler.utils.models.message_models import EpochBroadcast
 from pooler.utils.models.message_models import PayloadCommitFinalizedMessage
@@ -53,6 +55,20 @@ class ProcessorDistributor(multiprocessing.Process):
     async def _init_rpc_helper(self):
         if not self._rpc_helper:
             self._rpc_helper = RpcHelper()
+            self._anchor_chain_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
+            with open(settings.protocol_state.abi, 'r') as f:
+                abi_dict = json.load(f)
+            protocol_state_contract = self._anchor_chain_rpc_helper.get_current_node()['web3_client'].eth.contract(
+                address=Web3.toChecksumAddress(
+                    settings.protocol_state.address,
+                ),
+                abi=abi_dict,
+            )
+            await get_source_chain_epoch_size(
+                redis_conn= self._redis_conn,
+                rpc_helper=self._anchor_chain_rpc_helper,
+                state_contract_obj=protocol_state_contract
+            )
 
     async def _warm_up_cache_for_epoch_data(
         self, msg_obj: PowerloomSnapshotProcessMessage,
