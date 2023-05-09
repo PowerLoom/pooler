@@ -15,10 +15,10 @@ import (
 	"github.com/swagftw/gi"
 	"golang.org/x/time/rate"
 
-	"audit-protocol/goutils/datamodel"
-	"audit-protocol/goutils/httpclient"
-	"audit-protocol/goutils/settings"
-	datamodel2 "audit-protocol/payload-commit/datamodel"
+	"pooler/goutils/datamodel"
+	"pooler/goutils/httpclient"
+	"pooler/goutils/settings"
+	datamodel2 "pooler/payload-commit/datamodel"
 )
 
 type IpfsClient struct {

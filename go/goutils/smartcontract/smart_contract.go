@@ -12,8 +12,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/swagftw/gi"
 
-	"audit-protocol/goutils/settings"
-	"audit-protocol/goutils/smartcontract/api"
+	"pooler/goutils/settings"
+	contractApi "pooler/goutils/smartcontract/api"
 )
 
 // Keeping this util straight forward and simple for now

@@ -16,7 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/swagftw/gi"
 
-	"audit-protocol/goutils/settings"
+	"pooler/goutils/settings"
 )
 
 func SignMessage(privKey *ecdsa.PrivateKey, signerData *types.TypedData) ([]byte, error) {

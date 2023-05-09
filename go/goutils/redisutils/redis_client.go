@@ -8,7 +8,7 @@ import (
 
 	"github.com/swagftw/gi"
 
-	"audit-protocol/goutils/datamodel"
+	"pooler/goutils/datamodel"
 
 	"github.com/go-redis/redis/v8"
 	log "github.com/sirupsen/logrus"
@@ -111,7 +111,7 @@ func FetchIntFieldFromRedis(ctx context.Context, redisClient *redis.Client, key 
 
 func GetPayloadCidFromZSet(ctx context.Context, redisClient *redis.Client, projectId string, startScore string,
 	retryIntervalsecs int, retrycount int) (string, error) {
-	//key := projectId + ":payloadCids"
+	// key := projectId + ":payloadCids"
 	key := fmt.Sprintf(REDIS_KEY_PROJECT_PAYLOAD_CIDS, projectId)
 	payloadCid := ""
 

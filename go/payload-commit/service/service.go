@@ -20,17 +20,17 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/swagftw/gi"
 
-	"audit-protocol/caching"
-	datamodel2 "audit-protocol/goutils/datamodel"
-	"audit-protocol/goutils/httpclient"
-	"audit-protocol/goutils/ipfsutils"
-	"audit-protocol/goutils/settings"
-	"audit-protocol/goutils/smartcontract/api"
-	"audit-protocol/goutils/smartcontract/transactions"
-	"audit-protocol/goutils/taskmgr"
-	w3storage "audit-protocol/goutils/w3s"
-	"audit-protocol/payload-commit/datamodel"
-	"audit-protocol/payload-commit/signer"
+	"pooler/caching"
+	datamodel2 "pooler/goutils/datamodel"
+	"pooler/goutils/httpclient"
+	"pooler/goutils/ipfsutils"
+	"pooler/goutils/settings"
+	contractApi "pooler/goutils/smartcontract/api"
+	"pooler/goutils/smartcontract/transactions"
+	"pooler/goutils/taskmgr"
+	w3storage "pooler/goutils/w3s"
+	"pooler/payload-commit/datamodel"
+	"pooler/payload-commit/signer"
 )
 
 type PayloadCommitService struct {
@@ -193,7 +193,7 @@ func (s *PayloadCommitService) HandlePayloadCommitTask(msg *datamodel.PayloadCom
 		s.txManager.Mu.Unlock()
 	}()
 
-	txPayload := &datamodel.SnapshotAndAggrRelayerPayload{
+	txPayload := &datamodel.SnapshotRelayerPayload{
 		ProjectID:   msg.ProjectID,
 		EpochID:     msg.EpochID,
 		SnapshotCID: msg.SnapshotCID,
@@ -201,26 +201,29 @@ func (s *PayloadCommitService) HandlePayloadCommitTask(msg *datamodel.PayloadCom
 		Signature:   string(signature),
 	}
 
-	err = s.txManager.SubmitSnapshot(s.contractAPI, s.privKey, signerData, txPayload, signature)
-	if err != nil {
-		return err
+	// if relayer service url is not set in config, send payload commit message with signature to contract directly
+	if *s.settingsObj.Relayer.Host == "" {
+		err = s.txManager.SubmitSnapshot(s.contractAPI, s.privKey, signerData, txPayload, signature)
+		if err != nil {
+			return err
+		}
+
+		return nil
 	}
 
-	// TODO: uncomment this once relayer is ready
-	// // send payload commit message with signature to relayer
-	// err = backoff.Retry(func() error {
-	// 	err = s.sendSignatureToRelayer(relayerPayload)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	//
-	// 	return nil
-	// }, backoff.NewExponentialBackOff())
-	// if err != nil {
-	// 	log.WithError(err).Error("failed to send signature to relayer")
-	//
-	// 	return err
-	// }
+	// send payload commit message with signature to relayer
+	err = backoff.Retry(func() error {
+		err = s.sendSignatureToRelayer(txPayload)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}, backoff.NewExponentialBackOff())
+	if err != nil {
+		log.WithError(err).Error("failed to send signature to relayer")
+		return err
+	}
 
 	return nil
 }
@@ -380,7 +383,7 @@ func (s *PayloadCommitService) uploadToW3s(msg *datamodel.PayloadCommitMessage) 
 			return "", err
 		}
 
-		log.WithField("cid", web3resp.CID).Info("successfully uploaded payload commit to web3.storage")
+		log.WithField("cid", web3resp.CID).Info("successfully uploaded payload commit message to web3.storage")
 
 		return web3resp.CID, nil
 	}
@@ -449,11 +452,11 @@ func (s *PayloadCommitService) signPayload() (*apitypes.TypedData, []byte, error
 }
 
 // sendSignatureToRelayer sends the signature to the relayer
-func (s *PayloadCommitService) sendSignatureToRelayer(payload interface{}) error {
+func (s *PayloadCommitService) sendSignatureToRelayer(payload *datamodel.SnapshotRelayerPayload) error {
+	log.Debug("sending signature to relayer")
 	httpClient := httpclient.GetDefaultHTTPClient()
 
-	// url = "host+port" ; endpoint = "/endpoint"
-	url := s.settingsObj.Relayer.URL + s.settingsObj.Relayer.Endpoint
+	url := *s.settingsObj.Relayer.Host + *s.settingsObj.Relayer.Endpoint
 
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {

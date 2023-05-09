@@ -1,10 +1,11 @@
-module audit-protocol
+module pooler
 
 go 1.19
 
 require (
 	github.com/cenkalti/backoff/v4 v4.2.0
 	github.com/ethereum/go-ethereum v1.11.0
+	github.com/go-playground/validator/v10 v10.11.1
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/hashicorp/go-retryablehttp v0.5.3
 	github.com/ipfs/go-ipfs-api v0.3.0
@@ -33,7 +34,8 @@ require (
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.2.5 // indirect
-	github.com/go-playground/validator/v10 v10.11.1 // indirect
+	github.com/go-playground/locales v0.14.0 // indirect
+	github.com/go-playground/universal-translator v0.18.0 // indirect
 	github.com/go-stack/stack v1.8.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/google/uuid v1.3.0 // indirect
@@ -76,6 +78,7 @@ require (
 	github.com/jbenet/goprocess v0.1.4 // indirect
 	github.com/klauspost/compress v1.15.15 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.3 // indirect
+	github.com/leodido/go-urn v1.2.1 // indirect
 	github.com/libp2p/go-buffer-pool v0.1.0 // indirect
 	github.com/libp2p/go-flow-metrics v0.1.0 // indirect
 	github.com/libp2p/go-libp2p v0.24.3-0.20230207035812-313b080ea4e2 // indirect
@@ -120,6 +123,7 @@ require (
 	golang.org/x/net v0.5.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/sys v0.5.0 // indirect
+	golang.org/x/text v0.7.0 // indirect
 	golang.org/x/tools v0.3.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect

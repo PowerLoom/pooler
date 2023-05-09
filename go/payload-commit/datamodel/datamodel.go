@@ -39,7 +39,7 @@ type PayloadCommitFinalizedMessage struct {
 	SourceChainID int                                `json:"sourceChainId"`
 }
 
-type SnapshotAndAggrRelayerPayload struct {
+type SnapshotRelayerPayload struct {
 	ProjectID   string                    `json:"projectId"`
 	SnapshotCID string                    `json:"snapshotCid"`
 	EpochID     int                       `json:"epochId"`

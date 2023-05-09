@@ -8,11 +8,11 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/swagftw/gi"
 
-	"audit-protocol/goutils/settings"
-	"audit-protocol/goutils/taskmgr"
-	rabbitmqMgr "audit-protocol/goutils/taskmgr/rabbitmq"
-	worker2 "audit-protocol/goutils/taskmgr/worker"
-	"audit-protocol/payload-commit/service"
+	"pooler/goutils/settings"
+	"pooler/goutils/taskmgr"
+	rabbitmqMgr "pooler/goutils/taskmgr/rabbitmq"
+	worker2 "pooler/goutils/taskmgr/worker"
+	"pooler/payload-commit/service"
 )
 
 type Worker struct {
@@ -32,26 +32,19 @@ func (w *Worker) ConsumeTask() error {
 	// start consuming messages in separate go routine.
 	// messages will be sent back over taskChan.
 	go func() {
-		err := backoff.Retry(
-			func() error {
-				errChan := make(chan error)
-				err := w.taskmgr.Consume(context.Background(), worker2.TypePayloadCommitWorker, taskChan, errChan)
-				if err != nil {
-					log.WithError(err).Error("failed to consume the message")
-				}
+		err := backoff.Retry(func() error {
+			err := w.taskmgr.Consume(context.Background(), worker2.TypePayloadCommitWorker, taskChan)
+			if err != nil {
+				log.WithError(err).Error("failed to consume the message, retrying")
 
-				err = <-errChan
-				if err != nil {
-					log.WithError(err).Error("failed to consume the message")
+				return err
+			}
 
-					return err
-				}
-
-				return nil
-			}, backoff.NewExponentialBackOff())
+			return nil
+		}, backoff.NewExponentialBackOff())
 
 		if err != nil {
-			log.WithError(err).Error("failed to consume the message")
+			log.WithError(err).Fatal("failed to consume the messages after max retries")
 		}
 	}()
 

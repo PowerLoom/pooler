@@ -128,8 +128,8 @@
   "signer": {
     "domain": {
       "name": "PowerloomProtocolContract",
-      "version": "1",
-      "chainId": "11155111",
+      "version": "0.1",
+      "chainId": "100",
       "verifyingContract": "0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2"
     },
     "accountAddress": "0x05BE3003b0C5047DfEA4B7563Ce07B8fb268d721",

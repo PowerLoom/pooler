@@ -3,16 +3,16 @@ package main
 import (
 	log "github.com/sirupsen/logrus"
 
-	"audit-protocol/caching"
-	"audit-protocol/goutils/ipfsutils"
-	"audit-protocol/goutils/logger"
-	"audit-protocol/goutils/redisutils"
-	"audit-protocol/goutils/settings"
-	"audit-protocol/goutils/smartcontract"
-	taskmgr "audit-protocol/goutils/taskmgr/rabbitmq"
-	w3storage "audit-protocol/goutils/w3s"
-	"audit-protocol/payload-commit/service"
-	"audit-protocol/payload-commit/worker"
+	"pooler/caching"
+	"pooler/goutils/ipfsutils"
+	"pooler/goutils/logger"
+	"pooler/goutils/redisutils"
+	"pooler/goutils/settings"
+	"pooler/goutils/smartcontract"
+	taskmgr "pooler/goutils/taskmgr/rabbitmq"
+	w3storage "pooler/goutils/w3s"
+	"pooler/payload-commit/service"
+	"pooler/payload-commit/worker"
 )
 
 func main() {
@@ -30,7 +30,7 @@ func main() {
 		settingsObj.Redis.Host,
 		settingsObj.Redis.Port,
 		settingsObj.Redis.Db,
-		settingsObj.DagVerifierSettings.RedisPoolSize,
+		20,
 		settingsObj.Redis.Password,
 		-1,
 	)
