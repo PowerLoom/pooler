@@ -23,7 +23,6 @@ fastapi = "^0.88.0"
 web3 = "^5.31.3"
 async-limits = {git = "https://github.com/powerloom/limits.git"}
 tenacity = "^8.1.0"
-greenletio = "^0.9.0"
 limits = "^2.8.0"
 httpx = "^0.23.2"
 ipfs-toolkit = {git = "https://github.com/anomit/IPFS-Toolkit-Python.git", rev = "76dc979dd8ca6c31b0fe07d41cf13d3c467072c8"}
@@ -31,6 +30,7 @@ uvicorn = "^0.20.0"
 frozendict = "^2.3.4"
 multiaddr = "^0.0.9"
 idna = "^3.4"
+uvloop = "^0.17.0"
 
 
 [build-system]
