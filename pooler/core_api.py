@@ -84,6 +84,102 @@ async def startup_boilerplate():
 async def health_check():
     return {'status': 'OK'}
 
+# get current epoch
+
+
+@app.get('/current_epoch')
+async def get_current_epoch(
+    request: Request,
+    response: Response,
+    rate_limit_auth_dep: RateLimitAuthCheck = Depends(
+        rate_limit_auth_check,
+    ),
+):
+    """
+    This endpoint is used to fetch current epoch.
+    """
+    if not (
+        rate_limit_auth_dep.rate_limit_passed and
+        rate_limit_auth_dep.authorized and
+        rate_limit_auth_dep.owner.active == UserStatusEnum.active
+    ):
+        return inject_rate_limit_fail_response(rate_limit_auth_dep)
+
+    try:
+        [current_epoch_data] = await request.app.state.anchor_rpc_helper.web3_call(
+            [request.app.state.protocol_state_contract.functions.currentEpoch()],
+            redis_conn=request.app.state.redis_pool,
+        )
+        current_epoch = {
+            'begin': current_epoch_data[0],
+            'end': current_epoch_data[1],
+            'epochId': current_epoch_data[2],
+        }
+
+    except Exception as e:
+        rest_logger.exception(
+            'Exception in get_current_epoch',
+            e=e,
+        )
+        response.status_code = 500
+        return {
+            'status': 'error',
+            'message': f'Unable to get current epoch, error: {e}',
+        }
+
+    auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
+    await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
+
+    return current_epoch
+
+
+# get epoch info
+@app.get('/epoch/{epoch_id}')
+async def get_epoch_info(
+    request: Request,
+    response: Response,
+    epoch_id: int,
+    rate_limit_auth_dep: RateLimitAuthCheck = Depends(
+        rate_limit_auth_check,
+    ),
+):
+    """
+    This endpoint is used to fetch epoch info for a given epoch_id.
+    """
+    if not (
+        rate_limit_auth_dep.rate_limit_passed and
+        rate_limit_auth_dep.authorized and
+        rate_limit_auth_dep.owner.active == UserStatusEnum.active
+    ):
+        return inject_rate_limit_fail_response(rate_limit_auth_dep)
+
+    try:
+        [epoch_info_data] = await request.app.state.anchor_rpc_helper.web3_call(
+            [request.app.state.protocol_state_contract.functions.epochInfo(epoch_id)],
+            redis_conn=request.app.state.redis_pool,
+        )
+        epoch_info = {
+            'timestamp': epoch_info_data[0],
+            'blocknumber': epoch_info_data[1],
+            'epochEnd': epoch_info_data[2],
+        }
+
+    except Exception as e:
+        rest_logger.exception(
+            'Exception in get_current_epoch',
+            e=e,
+        )
+        response.status_code = 500
+        return {
+            'status': 'error',
+            'message': f'Unable to get current epoch, error: {e}',
+        }
+
+    auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
+    await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
+
+    return epoch_info
+
 
 # get data for epoch_id, project_id
 @app.get('/data/{epoch_id}/{project_id}/')
