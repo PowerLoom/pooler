@@ -24,12 +24,19 @@ class RPCNodeConfig(BaseModel):
     rate_limit: str
 
 
+class ConnectionLimits(BaseModel):
+    max_connections: int = 100
+    max_keepalive_connections: int = 50
+    keepalive_expiry: int = 300
+
+
 class RPCConfigBase(BaseModel):
     full_nodes: List[RPCNodeConfig]
     archive_nodes: Optional[List[RPCNodeConfig]]
     force_archive_blocks: Optional[int]
     retry: int
     request_time_out: int
+    connection_limits: ConnectionLimits
 
 
 class RPCConfigFull(RPCConfigBase):
@@ -139,7 +146,8 @@ class IPFSconfig(BaseModel):
     write_rate_limit: IPFSWriterRateLimit
     timeout: int
     local_cache_path: str
-
+    connection_limits: ConnectionLimits
+    
 
 class Settings(BaseModel):
     namespace: str
@@ -151,7 +159,6 @@ class Settings(BaseModel):
     rpc: RPCConfigFull
     issue_report_url: str
     rlimit: RLimit
-    timeouts: Timeouts
     epoch: Epoch
     rabbitmq: RabbitMQ
     audit_protocol_engine: AuditProtocolEngine

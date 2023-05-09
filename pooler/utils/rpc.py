@@ -121,9 +121,9 @@ class RpcHelper(object):
             return
         self._async_transport = AsyncHTTPTransport(
             limits=Limits(
-                max_connections=100,
-                max_keepalive_connections=50,
-                keepalive_expiry=None,
+                max_connections=self._rpc_settings.connection_limits.max_connections,
+                max_keepalive_connections=self._rpc_settings.connection_limits.max_keepalive_connections,
+                keepalive_expiry=self._rpc_settings.connection_limits.keepalive_expiry,
             ),
         )
         self._client = AsyncClient(
@@ -134,7 +134,7 @@ class RpcHelper(object):
         if self._aiohttp_tcp_connector is not None:
             return
         self._aiohttp_tcp_connector = TCPConnector(
-            keepalive_timeout=300,
+            keepalive_timeout=self._rpc_settings.connection_limits.keepalive_expiry,
             limit=1000,
         )
         self._web3_aiohttp_client = ClientSession(

@@ -70,7 +70,7 @@ async def w3_get_and_cache_finalized_cid(
     ]
 
     [consensus_status, cid] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
-    logger.info(f'consensus status for project {project_id} and epoch {epoch_id} is {consensus_status}')
+    logger.trace(f'consensus status for project {project_id} and epoch {epoch_id} is {consensus_status}')
     if consensus_status[0]:
         await redis_conn.zadd(
             project_finalized_data_zset(project_id),

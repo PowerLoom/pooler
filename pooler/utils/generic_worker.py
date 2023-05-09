@@ -183,20 +183,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             transport=self._async_transport,
         )
 
-    async def _init_rpc_helper(self):
-        if self._rpc_helper is None:
-            self._rpc_helper = RpcHelper()
-
-        if self._anchor_rpc_helper is None:
-            self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
-
-            self.protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
-                address=Web3.toChecksumAddress(
-                    self.protocol_state_contract_address,
-                ),
-                abi=self.protocol_state_contract_abi,
-            )
-
+    
     def run(self) -> None:
         setproctitle(self._unique_id)
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
