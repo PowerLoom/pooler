@@ -85,4 +85,4 @@ class UniswapStatsSnapshot(AggregateBase):
     fee24h: float = 0
     volumeChange24h: float = 0
     tvlChange24h: float = 0
-    feeCchange24h: float = 0
+    feeChange24h: float = 0
