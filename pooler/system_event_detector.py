@@ -246,14 +246,45 @@ class EventDetectorProcess(multiprocessing.Process):
                         'processing current block',
                     )
                     self._last_processed_block = current_block - 1
+
                 # Get events from current block to last_processed_block
-                events = await self.get_events(self._last_processed_block + 1, current_block)
+                try:
+                    events = await self.get_events(self._last_processed_block + 1, current_block)
+                except Exception as e:
+                    self._logger.opt(exception=True).error(
+                        (
+                            'Unable to fetch events from block {} to block {}, '
+                            'ERROR: {}, sleeping for {} seconds.'
+                        ),
+                        self._last_processed_block + 1,
+                        current_block,
+                        e,
+                        settings.rpc.polling_interval,
+                    )
+                    await asyncio.sleep(settings.rpc.polling_interval)
+                    continue
+
             else:
 
                 self._logger.debug(
                     'No last processed epoch found, processing current block',
                 )
-                events = await self.get_events(current_block, current_block)
+
+                try:
+                    events = await self.get_events(current_block, current_block)
+                except Exception as e:
+                    self._logger.opt(exception=True).error(
+                        (
+                            'Unable to fetch events from block {} to block {}, '
+                            'ERROR: {}, sleeping for {} seconds.'
+                        ),
+                        current_block,
+                        current_block,
+                        e,
+                        settings.rpc.polling_interval,
+                    )
+                    await asyncio.sleep(settings.rpc.polling_interval)
+                    continue
 
             for event_type, event in events:
                 self._logger.info(
