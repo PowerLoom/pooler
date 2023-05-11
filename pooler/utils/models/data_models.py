@@ -33,14 +33,14 @@ class SnapshotterIssueType(str, Enum):
 
 class SnapshotterIssue(BaseModel):
     instanceID: str
-    namespace: Optional[str]
+    namespace: Optional[str] = ""
     severity: SnapshotterIssueSeverity
     issueType: str
     projectID: str
-    epochs: Optional[List[int]]
+    epochs: Optional[List[int]] = list()
     timeOfReporting: int
-    noOfEpochsBehind: Optional[int]
-    extra: Optional[Dict]
+    noOfEpochsBehind: Optional[int] = 0
+    extra: Optional[Dict] = dict()
     serviceName: str
 
 
