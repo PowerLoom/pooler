@@ -20,6 +20,7 @@ from tenacity import retry
 from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
+import tenacity
 from web3 import Web3
 from web3._utils.abi import map_abi_data
 from web3._utils.events import get_event_data
@@ -200,17 +201,17 @@ class RpcHelper(object):
             raise Exception('No full nodes available')
         return self._nodes[self._current_node_index]
 
-    def _on_node_exception(self, retry_state):
-        self._current_node_index = (self._current_node_index + 1) % self._node_count
+    def _on_node_exception(self, retry_state: tenacity.RetryCallState):
+        exc_idx = retry_state.kwargs['node_idx']
+        next_node_idx = (retry_state.kwargs.get('node_idx', 0) + 1) % self._node_count
+        retry_state.kwargs['node_idx'] = next_node_idx
+        # self._current_node_index = (self._current_node_index + 1) % self._node_count
         self._logger.warning(
-            (
-                'Found exception injected next full_node | exception:'
-                f' {retry_state.outcome.exception()} |'
-                f' function:{retry_state.fn}'
-            ),
+            'Found exception while performing RPC {} on node {} at idx {}. Injecting next node {} at idx {} | exception: {} ', 
+            retry_state.fn, self._nodes[exc_idx], exc_idx, self._nodes[next_node_idx], next_node_idx, retry_state.outcome.exception()
         )
 
-    async def _async_web3_call(self, contract_function, redis_conn, from_address=None):
+    async def _async_web3_call(self, contract_function, redis_conn, from_address=None, node_idx=0):
         """Make async web3 call"""
 
         @retry(
@@ -223,7 +224,7 @@ class RpcHelper(object):
         async def f():
             try:
 
-                node = self.get_current_node()
+                node = self._nodes[node_idx]
                 rpc_url = node.get('rpc_url')
 
                 await check_rpc_rate_limit(
@@ -308,13 +309,13 @@ class RpcHelper(object):
 
         return await f()
 
-    async def get_current_block(self, redis_conn):
+    async def get_current_block(self, redis_conn, node_idx=0):
         """Get the current block number.
 
         Returns:
             int : the current block number
         """
-        node = self.get_current_node()
+        node = self._nodes[node_idx]
         rpc_url = node.get('rpc_url')
 
         await check_rpc_rate_limit(
@@ -368,7 +369,7 @@ class RpcHelper(object):
             raise e
 
     @LruCacheRpc(maxsize=2500, args={'rpc_query'})
-    async def _make_rpc_jsonrpc_call(self, rpc_query, redis_conn):
+    async def _make_rpc_jsonrpc_call(self, rpc_query, redis_conn, node_idx=0):
         """Make a jsonrpc call to the given rpc_url"""
 
         @retry(
@@ -380,7 +381,7 @@ class RpcHelper(object):
         )
         async def f():
 
-            node = self.get_current_node()
+            node = self._nodes[node_idx]
             rpc_url = node.get('rpc_url')
             await check_rpc_rate_limit(
                 parsed_limits=node.get('rate_limit', []),
@@ -544,7 +545,7 @@ class RpcHelper(object):
 
     @LruCacheRpc(maxsize=2500, args={'contract_address', 'to_block', 'from_block', 'topics', 'event_abi'})
     async def get_events_logs(
-        self, contract_address, to_block, from_block, topics, event_abi, redis_conn,
+        self, contract_address, to_block, from_block, topics, event_abi, redis_conn, node_idx=0
     ):
         if not self._initialized:
             await self.init(redis_conn)
@@ -557,7 +558,7 @@ class RpcHelper(object):
             before_sleep=self._on_node_exception,
         )
         async def f():
-            node = self.get_current_node()
+            node = self._nodes[node_idx]
             rpc_url = node.get('rpc_url')
 
             web3_provider = node['web3_client_async']
