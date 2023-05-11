@@ -81,3 +81,13 @@ class PairTradeVolume(BaseModel):
     token1_volume: int = 0
     token0_volume_usd: int = 0
     token1_volume_usd: int = 0
+
+
+class ProjectSpecificState(BaseModel):
+    first_epoch_id: int
+    finalized_cids: Dict[int, str]  # mapping of epoch ID to snapshot CID
+
+
+class ProtocolState(BaseModel):
+    project_specific_states: Dict[str, ProjectSpecificState]  # project ID -> project specific state
+    synced_till_epoch_id: int
