@@ -21,7 +21,7 @@ echo "Got RPC URL: ${RPC_URL}"
 echo "Got UUID: ${UUID}"
 
 echo "Got CONSENSUS_URL: ${CONSENSUS_URL}"
-cp pooler/settings/settings.example.json pooler/settings/settings.json
+cp config/settings.example.json config/settings.json
 
 export namespace=UNISWAPV2-ph15-prod
 export consensus_url="${CONSENSUS_URL:-https://offchain-consensus-api.powerloom.io}"
@@ -29,16 +29,17 @@ export consensus_url="${CONSENSUS_URL:-https://offchain-consensus-api.powerloom.
 echo "Using Namespace: ${namespace}"
 echo "Using CONSENSUS_URL: ${consensus_url}"
 
-sed -i "s|relevant-namespace|$namespace|" pooler/settings/settings.json
+sed -i "s|relevant-namespace|$namespace|" config/settings.json
 
-sed -i "s|https://rpc-url|$RPC_URL|" pooler/settings/settings.json
+sed -i "s|https://rpc-url|$RPC_URL|" config/settings.json
 
-sed -i "s|generated-uuid|$UUID|" pooler/settings/settings.json
+sed -i "s|generated-uuid|$UUID|" config/settings.json
 
-sed -i "s|https://consensus-url|$consensus_url|" pooler/settings/settings.json
+sed -i "s|https://consensus-url|$consensus_url|" config/settings.json
 
-cp pooler/auth/settings/auth_settings.example.json pooler/auth/settings/auth_settings.json
+cp config/auth_settings.example.json config/auth_settings.json
 
-cp pooler/static/projects.example.json pooler/static/projects.json
+cp config/projects.example.json config/projects.json
+cp config/aggregator.example.json config/aggregator.json
 
 echo 'settings has been populated!'

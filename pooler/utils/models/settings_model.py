@@ -135,7 +135,6 @@ class IPFSconfig(BaseModel):
 class Settings(BaseModel):
     namespace: str
     core_api: CoreAPI
-    chain_id: int
     instance_id: str
     rpc: RPCConfigFull
     issue_report_url: str
