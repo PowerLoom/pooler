@@ -1,25 +1,33 @@
 import asyncio
 import bz2
-from collections import defaultdict
+import concurrent.futures
 import io
 import json
 import resource
 import sys
+from collections import defaultdict
+
 import pydantic
 import redis
 import uvloop
-import concurrent.futures
+from ipfs_client.main import AsyncIPFSClientSingleton
 from redis import asyncio as aioredis
 from web3 import Web3
+
 from pooler.settings.config import settings
-from pooler.utils.models.data_models import ProjectSpecificState, ProtocolState
-from pooler.utils.redis.redis_conn import REDIS_CONN_CONF, RedisPoolCache
-from pooler.utils.data_utils import get_project_finalized_cid, get_project_first_epoch, w3_get_and_cache_finalized_cid
-from pooler.utils.file_utils import read_json_file
-from pooler.utils.ipfs.async_ipfshttpclient.main import AsyncIPFSClientSingleton
-from pooler.utils.redis.redis_keys import project_finalized_data_zset, project_first_epoch_hmap, source_chain_epoch_size_key
-from pooler.utils.rpc import RpcHelper
+from pooler.utils.data_utils import get_project_finalized_cid
+from pooler.utils.data_utils import get_project_first_epoch
+from pooler.utils.data_utils import w3_get_and_cache_finalized_cid
 from pooler.utils.default_logger import logger
+from pooler.utils.file_utils import read_json_file
+from pooler.utils.models.data_models import ProjectSpecificState
+from pooler.utils.models.data_models import ProtocolState
+from pooler.utils.redis.redis_conn import REDIS_CONN_CONF
+from pooler.utils.redis.redis_conn import RedisPoolCache
+from pooler.utils.redis.redis_keys import project_finalized_data_zset
+from pooler.utils.redis.redis_keys import project_first_epoch_hmap
+from pooler.utils.redis.redis_keys import source_chain_epoch_size_key
+from pooler.utils.rpc import RpcHelper
 from pooler.utils.utility_functions import acquire_bounded_semaphore
 
 
@@ -32,22 +40,33 @@ class ProtocolStateLoader:
     async def _load_finalized_cids_from_contract(self, project_id, begin_epoch_id, cur_epoch_id, semaphore):
         epoch_id_fetch_batch_size = 20
         for e in range(begin_epoch_id, cur_epoch_id + 1, epoch_id_fetch_batch_size):
-            self._logger.info('Fetching finalized CIDs for project {} in epoch range {} to {}', project_id, e, min(e + epoch_id_fetch_batch_size, cur_epoch_id + 1) - 1)
-            r = await asyncio.gather(*[
-                w3_get_and_cache_finalized_cid(
-                    project_id=project_id,
-                    rpc_helper=self._anchor_rpc_helper,
-                    epoch_id=epoch_id,
-                    redis_conn=self._redis_conn,
-                    state_contract_obj=self._protocol_state_contract
-                )
-                for epoch_id in range(e, min(e + epoch_id_fetch_batch_size, cur_epoch_id + 1))
-            ], return_exceptions=True)
+            self._logger.info(
+                'Fetching finalized CIDs for project {} in epoch range {} to {}',
+                project_id, e, min(e + epoch_id_fetch_batch_size, cur_epoch_id + 1) - 1,
+            )
+            r = await asyncio.gather(
+                *[
+                    w3_get_and_cache_finalized_cid(
+                        project_id=project_id,
+                        rpc_helper=self._anchor_rpc_helper,
+                        epoch_id=epoch_id,
+                        redis_conn=self._redis_conn,
+                        state_contract_obj=self._protocol_state_contract,
+                    )
+                    for epoch_id in range(e, min(e + epoch_id_fetch_batch_size, cur_epoch_id + 1))
+                ], return_exceptions=True,
+            )
             for idx, e in enumerate(r):
                 if isinstance(e, Exception):
-                    self._logger.error('Error fetching finalized CIDs for project {} in epoch {}: {}', project_id, begin_epoch_id+idx, e)
+                    self._logger.error(
+                        'Error fetching finalized CIDs for project {} in epoch {}: {}',
+                        project_id, begin_epoch_id + idx, e,
+                    )
                 else:
-                    self._logger.trace('Fetched finalized CIDs for project {} in epoch {}', project_id, begin_epoch_id+idx)
+                    self._logger.trace(
+                        'Fetched finalized CIDs for project {} in epoch {}',
+                        project_id, begin_epoch_id + idx,
+                    )
 
     async def _init_redis_pool(self):
         self._aioredis_pool = RedisPoolCache(pool_size=1000)
@@ -55,7 +74,7 @@ class ProtocolStateLoader:
         self._redis_conn = self._aioredis_pool._aioredis_pool
 
     async def _init_ipfs_client(self):
-        self._ipfs_singleton = AsyncIPFSClientSingleton()
+        self._ipfs_singleton = AsyncIPFSClientSingleton(settings.ipfs)
         await self._ipfs_singleton.init_sessions()
         self._ipfs_writer_client = self._ipfs_singleton._ipfs_write_client
         self._ipfs_reader_client = self._ipfs_singleton._ipfs_read_client
@@ -67,7 +86,7 @@ class ProtocolStateLoader:
             address=Web3.toChecksumAddress(
                 settings.protocol_state.address,
             ),
-            abi=protocol_abi
+            abi=protocol_abi,
         )
 
     async def init(self):
@@ -88,7 +107,7 @@ class ProtocolStateLoader:
         state_query_call_tasks.append(all_project_ids_task)
         results = await self._anchor_rpc_helper.web3_call(state_query_call_tasks, self._redis_conn)
         # print(results)
-        # current epoch ID query returned as a list representing the ordered array of elements (begin, end, epochID) of the struct 
+        # current epoch ID query returned as a list representing the ordered array of elements (begin, end, epochID) of the struct
         # and the other list has only element corresponding to the single level structure of the struct EpochInfo in the contract
         cur_epoch_id = results[0][-1]
         all_project_ids: list = results[1]
@@ -96,15 +115,19 @@ class ProtocolStateLoader:
         project_id_first_epoch_query_tasks = [
             # get project first epoch ID
             get_project_first_epoch(
-                self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, project_id
+                self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, project_id,
             ) for project_id in all_project_ids
             # self._protocol_state_contract.functions.projectFirstEpochId(project_id) for project_id in all_project_ids
         ]
         project_to_first_epoch_id_results = await asyncio.gather(*project_id_first_epoch_query_tasks, return_exceptions=True)
-        self._logger.debug('Fetched {} results against first epoch IDs successfully', len(list(filter(lambda x: x is not None and not isinstance(x, Exception), project_to_first_epoch_id_results))))
+        self._logger.debug(
+            'Fetched {} results against first epoch IDs successfully', len(
+                list(filter(lambda x: x is not None and not isinstance(x, Exception), project_to_first_epoch_id_results)),
+            ),
+        )
         project_id_first_epoch_id_map = dict(zip(all_project_ids, project_to_first_epoch_id_results))
         return cur_epoch_id, project_id_first_epoch_id_map, all_project_ids
-    
+
     def _export_project_state(self, project_id, first_epoch_id, end_epoch_id, redis_conn: redis.Redis) -> ProjectSpecificState:
         self._logger.debug('Exporting project state for {}', project_id)
         project_state = ProjectSpecificState.construct()
@@ -131,7 +154,11 @@ class ProtocolStateLoader:
         state.project_specific_states = dict()
         exceptions = defaultdict()
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-            future_to_project = {executor.submit(self._export_project_state, project_id, project_id_first_epoch_id_map[project_id], cur_epoch_id, r): project_id for project_id in all_project_ids}
+            future_to_project = {
+                executor.submit(
+                    self._export_project_state, project_id, project_id_first_epoch_id_map[project_id], cur_epoch_id, r,
+                ): project_id for project_id in all_project_ids
+            }
         for future in concurrent.futures.as_completed(future_to_project):
             project_id = future_to_project[future]
             try:
@@ -175,7 +202,13 @@ class ProtocolStateLoader:
             return
         self._logger.debug('Loading state from file {}', file_name)
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-            future_to_project = {executor.submit(self._load_project_state, project_id, ProjectSpecificState.parse_obj(project_state), r): project_id for project_id, project_state in state.project_specific_states.items()}
+            future_to_project = {
+                executor.submit(
+                    self._load_project_state, project_id, ProjectSpecificState.parse_obj(
+                        project_state,
+                    ), r,
+                ): project_id for project_id, project_state in state.project_specific_states.items()
+            }
         for future in concurrent.futures.as_completed(future_to_project):
             project_id = future_to_project[future]
             try:
@@ -185,6 +218,7 @@ class ProtocolStateLoader:
             else:
                 self._logger.debug('Loaded project state for {}', project_id)
         self._logger.debug('Loaded state from file {}', file_name)
+
 
 if __name__ == '__main__':
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
@@ -197,5 +231,3 @@ if __name__ == '__main__':
         ProtocolStateLoader().export()
     elif sys.argv[1] == 'load':
         ProtocolStateLoader().load()
-    
-

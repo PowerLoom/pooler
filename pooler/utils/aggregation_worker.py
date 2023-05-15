@@ -10,6 +10,8 @@ from uuid import uuid4
 
 from aio_pika import IncomingMessage
 from aio_pika import Message
+from ipfs_client.main import AsyncIPFSClient
+from ipfs_client.main import AsyncIPFSClientSingleton
 from pydantic import ValidationError
 
 from pooler.settings.config import aggregator_config
@@ -18,8 +20,6 @@ from pooler.settings.config import settings
 from pooler.utils.callback_helpers import notify_on_task_failure_aggregate
 from pooler.utils.data_utils import get_source_chain_id
 from pooler.utils.generic_worker import GenericAsyncWorker
-from pooler.utils.ipfs.async_ipfshttpclient.main import AsyncIPFSClient
-from pooler.utils.ipfs.async_ipfshttpclient.main import AsyncIPFSClientSingleton
 from pooler.utils.models.message_models import AggregateBase
 from pooler.utils.models.message_models import PayloadCommitMessage
 from pooler.utils.models.message_models import PowerloomCalculateAggregateMessage
@@ -411,7 +411,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
 
     async def _init_ipfs_client(self):
         if not self._ipfs_singleton:
-            self._ipfs_singleton = AsyncIPFSClientSingleton()
+            self._ipfs_singleton = AsyncIPFSClientSingleton(settings.ipfs)
             await self._ipfs_singleton.init_sessions()
             self._ipfs_writer_client = self._ipfs_singleton._ipfs_write_client
             self._ipfs_reader_client = self._ipfs_singleton._ipfs_read_client

@@ -2,6 +2,7 @@ import asyncio
 from typing import List
 
 import tenacity
+from ipfs_client.dag import IPFSAsyncClientError
 from redis import asyncio as aioredis
 from tenacity import retry
 from tenacity import retry_if_exception_type
@@ -9,7 +10,6 @@ from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
 
 from pooler.utils.default_logger import logger
-from pooler.utils.ipfs.async_ipfshttpclient.dag import IPFSAsyncClientError
 from pooler.utils.redis.redis_keys import cid_data
 from pooler.utils.redis.redis_keys import project_finalized_data_zset
 from pooler.utils.redis.redis_keys import project_first_epoch_hmap

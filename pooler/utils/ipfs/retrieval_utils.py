@@ -1,17 +1,20 @@
 import json
 from typing import Union
+
+from httpx import _exceptions as httpx_exceptions
+from ipfs_client.main import AsyncIPFSClient
 from tenacity import retry
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
-from httpx import _exceptions as httpx_exceptions
+
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.file_utils import read_text_file
-from pooler.utils.ipfs.async_ipfshttpclient.main import AsyncIPFSClient
 from pooler.utils.ipfs.dag_utils import get_dag_block
 from pooler.utils.models.data_models import BlockRetrievalFlags
 from pooler.utils.models.data_models import RetrievedDAGBlock
 from pooler.utils.models.data_models import RetrievedDAGBlockPayload
+
 
 @retry(
     reraise=True,
@@ -22,7 +25,7 @@ async def retrieve_block_data(
         project_id: str,  # only required for ease of local filesystem caching
         block_dag_cid: str,
         ipfs_read_client: AsyncIPFSClient,
-        data_flag: BlockRetrievalFlags=BlockRetrievalFlags.only_dag_block,
+        data_flag: BlockRetrievalFlags = BlockRetrievalFlags.only_dag_block,
 ) -> Union[RetrievedDAGBlock, RetrievedDAGBlockPayload]:
     """
         Get dag block from ipfs
@@ -39,7 +42,7 @@ async def retrieve_block_data(
             return RetrievedDAGBlockPayload()
     logger.trace('Retrieved dag block with CID %s: %s', block_dag_cid, block)
     # the data field may not be present in the dag block because of the DAG finalizer omitting null fields in DAG block model while converting to JSON
-    if 'data' not in block.keys() or block['data'] is None:  
+    if 'data' not in block.keys() or block['data'] is None:
         if data_flag == BlockRetrievalFlags.dag_block_and_payload_data:
             block['data'] = RetrievedDAGBlockPayload()
             return RetrievedDAGBlock.parse_obj(block)
@@ -54,13 +57,16 @@ async def retrieve_block_data(
         payload_data = await retrieve_payload_data(
             payload_cid=block['data']['cid']['/'],
             project_id=project_id,
-            ipfs_read_client=ipfs_read_client
+            ipfs_read_client=ipfs_read_client,
         )
         if payload_data:
             try:
                 payload_data = json.loads(payload_data)
             except json.JSONDecodeError:
-                logger.error("Failed to JSON decode payload data for CID %s, project %s: %s", block['data']['cid']['/'], project_id, payload_data)
+                logger.error(
+                    'Failed to JSON decode payload data for CID %s, project %s: %s',
+                    block['data']['cid']['/'], project_id, payload_data,
+                )
                 payload_data = None
         payload['payload'] = payload_data
         payload['cid'] = block['data']['cid']['/']
@@ -82,25 +88,25 @@ async def retrieve_payload_data(
         - Given a payload_cid, get its data from ipfs, at the same time increase its hit
     """
     #payload_key = redis_keys.get_hits_payload_data_key()
-    #if writer_redis_conn:
-        #r = await writer_redis_conn.zincrby(payload_key, 1.0, payload_cid)
-        #retrieval_utils_logger.debug("Payload Data hit for: ")
-        #retrieval_utils_logger.debug(payload_cid)
+    # if writer_redis_conn:
+    # r = await writer_redis_conn.zincrby(payload_key, 1.0, payload_cid)
+    #retrieval_utils_logger.debug("Payload Data hit for: ")
+    # retrieval_utils_logger.debug(payload_cid)
     payload_data = None
     if project_id is not None:
-        payload_data = read_text_file(settings.ipfs.local_cache_path + "/" + project_id + "/"+ payload_cid + ".json")
+        payload_data = read_text_file(settings.ipfs.local_cache_path + '/' + project_id + '/' + payload_cid + '.json')
     if payload_data is None:
-        logger.trace("Failed to read payload with CID %s for project %s from local cache ", payload_cid,project_id)
+        logger.trace('Failed to read payload with CID %s for project %s from local cache ', payload_cid, project_id)
         # Get the payload Data from ipfs
         try:
             _payload_data = await ipfs_read_client.cat(payload_cid)
         except (httpx_exceptions.TransportError, httpx_exceptions.StreamError) as e:
-            logger.error("Failed to read payload with CID %s for project %s from IPFS : %s", payload_cid,project_id, e)
+            logger.error('Failed to read payload with CID %s for project %s from IPFS : %s', payload_cid, project_id, e)
             return None
         else:
             # retrieval_utils_logger.info("Successfully read payload with CID %s for project %s from IPFS: %s ",
             # payload_cid,project_id, _payload_data)
-            if not isinstance(_payload_data,str):
+            if not isinstance(_payload_data, str):
                 return _payload_data.decode('utf-8')
             else:
                 return _payload_data

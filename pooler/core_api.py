@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi import Request
 from fastapi import Response
 from fastapi.middleware.cors import CORSMiddleware
+from ipfs_client.main import AsyncIPFSClientSingleton
 from redis import asyncio as aioredis
 from web3 import Web3
 
@@ -18,7 +19,6 @@ from pooler.settings.config import settings
 from pooler.utils.data_utils import get_project_epoch_snapshot
 from pooler.utils.default_logger import logger
 from pooler.utils.file_utils import read_json_file
-from pooler.utils.ipfs.async_ipfshttpclient.main import AsyncIPFSClientSingleton
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 from pooler.utils.redis.redis_conn import RedisPoolCache
 from pooler.utils.rpc import RpcHelper
@@ -73,7 +73,7 @@ async def startup_boilerplate():
         ),
         abi=protocol_state_contract_abi,
     )
-    app.state.ipfs_singleton = AsyncIPFSClientSingleton()
+    app.state.ipfs_singleton = AsyncIPFSClientSingleton(settings.ipfs)
     await app.state.ipfs_singleton.init_sessions()
     app.state.ipfs_reader_client = app.state.ipfs_singleton._ipfs_read_client
 

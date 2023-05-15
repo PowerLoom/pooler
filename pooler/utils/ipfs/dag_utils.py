@@ -1,13 +1,14 @@
 import io
 import json
 from typing import Optional
+
 from httpx import AsyncClient
+from ipfs_client.main import AsyncIPFSClient
+
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.file_utils import read_text_file
 from pooler.utils.file_utils import write_bytes_to_file
-from pooler.utils.ipfs.async_ipfshttpclient.main import AsyncIPFSClient
-
 
 
 async def send_commit_callback(httpx_session: AsyncClient, url, payload):
@@ -18,9 +19,9 @@ async def send_commit_callback(httpx_session: AsyncClient, url, payload):
     return json_response
 
 
-async def get_dag_block(dag_cid: str, project_id:str, ipfs_read_client: AsyncIPFSClient) -> Optional[dict]:
+async def get_dag_block(dag_cid: str, project_id: str, ipfs_read_client: AsyncIPFSClient) -> Optional[dict]:
     dag_ipfs_fetch = False
-    dag = read_text_file(settings.ipfs.local_cache_path + "/" + project_id + "/"+ dag_cid + ".json")
+    dag = read_text_file(settings.ipfs.local_cache_path + '/' + project_id + '/' + dag_cid + '.json')
     try:
         dag_json = json.loads(dag)
     except:
@@ -30,11 +31,14 @@ async def get_dag_block(dag_cid: str, project_id:str, ipfs_read_client: AsyncIPF
     if dag_ipfs_fetch:
         dag = await ipfs_read_client.dag.get(dag_cid)
         # TODO: should be aiofiles
-        write_bytes_to_file(settings.ipfs.local_cache_path + "/" + project_id , "/" + dag_cid + ".json", str(dag).encode('utf-8'))
+        write_bytes_to_file(
+            settings.ipfs.local_cache_path + '/' + project_id,
+            '/' + dag_cid + '.json', str(dag).encode('utf-8'),
+        )
         return dag.as_json()
 
 
-async def put_dag_block(dag_json: str, project_id:str, ipfs_write_client: AsyncIPFSClient):
+async def put_dag_block(dag_json: str, project_id: str, ipfs_write_client: AsyncIPFSClient):
     dag_json = dag_json.encode('utf-8')
     out = await ipfs_write_client.dag.put(io.BytesIO(dag_json), pin=True)
     dag_cid = out['Cid']['/']
@@ -42,7 +46,7 @@ async def put_dag_block(dag_json: str, project_id:str, ipfs_write_client: AsyncI
         write_bytes_to_file(f'{settings.ipfs.local_cache_path}/project_id', f'/{dag_cid}.json', dag_json)
     except Exception as exc:
         logger.opt(exception=True).error(
-            "Failed to write dag-block {} for project {} to local cache due to exception {}",
-            dag_json, project_id, exc
+            'Failed to write dag-block {} for project {} to local cache due to exception {}',
+            dag_json, project_id, exc,
         )
     return dag_cid
