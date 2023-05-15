@@ -9,8 +9,7 @@
     },
     "public_rate_limit": "10000/day;200/minute;5/second"
   },
-  "chain_id": 1,
-  "instance_id": "generated-uuid",
+  "instance_id": "account-address",
   "rpc": {
     "full_nodes": [{
       "url": "https://rpc-url",
@@ -22,7 +21,7 @@
     "request_time_out": 5,
     "skip_epoch_threshold_blocks": 30,
     "polling_interval": 15,
-    "connection_limits":{  
+    "connection_limits":{
       "max_connections": 100,
       "max_keepalive_connections": 50,
       "keepalive_expiry": 300
@@ -31,11 +30,6 @@
   "issue_report_url": "http://audit-protocol:9030/reportIssue",
   "rlimit": {
     "file_descriptors": 2048
-  },
-  "epoch": {
-    "height": 10,
-    "head_offset": 2,
-    "block_time": 2
   },
   "rabbitmq": {
     "user": "guest",
@@ -57,12 +51,6 @@
       }
     }
   },
-
-  "audit_protocol_engine": {
-    "url": "http://audit-protocol:9000",
-    "retry": 5,
-    "skip_anchor_proof": true
-  },
   "consensus": {
     "url": "https://consensus-url",
     "epoch_tracker_path": "/currentEpoch",
@@ -83,12 +71,6 @@
     "port": 6379,
     "db": 0,
     "password": null
-  },
-  "webhook_listener": {
-    "host": "host.docker.internal",
-    "port": 9090,
-    "root": "https://pooler-callback.com",
-    "commit_confirmation_callback_path": "commit_confirm"
   },
   "logs": {
     "trace_enabled": false,
@@ -114,7 +96,7 @@
     },
     "timeout": 20,
     "local_cache_path": "/home/ubuntu/local_cache/",
-    "connection_limits":{  
+    "connection_limits":{
       "max_connections": 100,
       "max_keepalive_connections": 50,
       "keepalive_expiry": 300
@@ -127,7 +109,7 @@
     }],
     "retry": 5,
     "request_time_out": 5,
-    "connection_limits":{  
+    "connection_limits":{
       "max_connections": 100,
       "max_keepalive_connections": 50,
       "keepalive_expiry": 300

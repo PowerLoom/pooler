@@ -58,12 +58,6 @@ class QueueConfig(BaseModel):
     num_instances: int
 
 
-class Epoch(BaseModel):
-    height: int
-    head_offset: int
-    block_time: int
-
-
 class RabbitMQConfig(BaseModel):
     exchange: str
 
@@ -81,12 +75,6 @@ class RabbitMQ(BaseModel):
     host: str
     port: int
     setup: RabbitMQSetup
-
-
-class AuditProtocolEngine(BaseModel):
-    url: str
-    retry: int
-    skip_anchor_proof: bool
 
 
 class Consensus(BaseModel):
@@ -113,11 +101,6 @@ class RedisReader(BaseModel):
     password: Union[str, None] = None
     ssl: bool = False
     cluster_mode: bool = False
-
-
-class WebhookListener(BaseModel):
-    host: str
-    port: int
 
 
 class Logs(BaseModel):
@@ -158,11 +141,9 @@ class Settings(BaseModel):
     issue_report_url: str
     rlimit: RLimit
     rabbitmq: RabbitMQ
-    audit_protocol_engine: AuditProtocolEngine
     consensus: Consensus
     redis: Redis
     redis_reader: RedisReader
-    webhook_listener: WebhookListener
     logs: Logs
     projects_config_path: str
     aggregator_config_path: str

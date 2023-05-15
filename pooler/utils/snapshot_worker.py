@@ -14,6 +14,7 @@ from pydantic import ValidationError
 from pooler.settings.config import projects_config
 from pooler.settings.config import settings
 from pooler.utils.callback_helpers import notify_on_task_failure_snapshot
+from pooler.utils.data_utils import get_source_chain_id
 from pooler.utils.generic_worker import GenericAsyncWorker
 from pooler.utils.models.message_models import PayloadCommitMessage
 from pooler.utils.models.message_models import PowerloomSnapshotProcessMessage
@@ -142,7 +143,11 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 ),
                 mapping={json.dumps(update_log): int(time.time())},
             )
-            source_chain_details = settings.chain_id
+            source_chain_details = await get_source_chain_id(
+                redis_conn=self._redis_conn,
+                rpc_helper=self._anchor_chain_rpc_helper,
+                state_contract_obj=protocol_state_contract,
+            )
 
             payload = snapshot.dict()
             project_id = f'{audit_stream}_{epoch.contract}_{settings.namespace}'

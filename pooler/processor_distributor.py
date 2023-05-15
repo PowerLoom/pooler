@@ -18,6 +18,7 @@ from pooler.settings.config import aggregator_config
 from pooler.settings.config import projects_config
 from pooler.settings.config import settings
 from pooler.utils.data_utils import get_source_chain_epoch_size
+from pooler.utils.data_utils import get_source_chain_id
 from pooler.utils.default_logger import logger
 from pooler.utils.models.message_models import EpochBroadcast
 from pooler.utils.models.message_models import PayloadCommitFinalizedMessage
@@ -45,6 +46,7 @@ class ProcessorDistributor(multiprocessing.Process):
         self._redis_conn = None
         self._aioredis_pool = None
         self._rpc_helper = None
+        self._source_chain_id = None
 
     async def _init_redis_pool(self):
         if not self._aioredis_pool:
@@ -65,9 +67,14 @@ class ProcessorDistributor(multiprocessing.Process):
                 abi=abi_dict,
             )
             await get_source_chain_epoch_size(
-                redis_conn= self._redis_conn,
+                redis_conn=self._redis_conn,
                 rpc_helper=self._anchor_chain_rpc_helper,
-                state_contract_obj=protocol_state_contract
+                state_contract_obj=protocol_state_contract,
+            )
+            self._source_chain_id = await get_source_chain_id(
+                redis_conn=self._redis_conn,
+                rpc_helper=self._anchor_chain_rpc_helper,
+                state_contract_obj=protocol_state_contract,
             )
 
     async def _warm_up_cache_for_epoch_data(
@@ -198,7 +205,7 @@ class ProcessorDistributor(multiprocessing.Process):
         process_unit = PayloadCommitFinalizedMessage(
             message=msg_obj,
             web3Storage=True,
-            sourceChainId=settings.chain_id,
+            sourceChainId=self._source_chain_id,
         )
 
         exchange = (
