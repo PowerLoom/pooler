@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import time
 from abc import ABC
 from abc import ABCMeta
@@ -13,7 +14,6 @@ from redis import asyncio as aioredis
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.models.data_models import SnapshotterIssue
-from pooler.utils.models.data_models import SnapshotterIssueSeverity
 from pooler.utils.models.message_models import PowerloomCalculateAggregateMessage
 from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
 from pooler.utils.models.message_models import PowerloomSnapshotProcessMessage
@@ -52,10 +52,6 @@ def misc_notification_callback_result_handler(fut: asyncio.Future):
         logger.debug('Callback or notification result:{}', r)
 
 
-# TODO: Update notification flow, send directly to slack and a copy to issue reporting service
-# (offchain consensus for now)
-
-
 def notify_on_task_failure_snapshot(fn):
     @wraps(fn)
     async def wrapper(self, *args, **kwargs):
@@ -70,27 +66,47 @@ def notify_on_task_failure_snapshot(fn):
                     'Error constructing snapshot against message {} for task type {} : {}', msg_obj, task_type, e,
                 )
             else:
-                logger.error('Error constructing snapshot against message {} for task type {} : {}', msg_obj, task_type, e)
+                logger.error(
+                    'Error constructing snapshot against message {} for task type {} : {}', msg_obj, task_type, e,
+                )
 
             # Sending the error details to the issue reporting service
             contract = msg_obj.contract
+            epoch_id = msg_obj.epochId
             project_id = f'{task_type}_{contract}_{settings.namespace}'
 
-            f = asyncio.ensure_future(
-                await self._client.post(
-                    url=settings.issue_report_url,
-                    json=SnapshotterIssue(
-                        instanceID=settings.instance_id,
-                        severity=SnapshotterIssueSeverity.medium,
-                        issueType='MISSED_SNAPSHOT',
-                        projectID=project_id if project_id else '*',
-                        timeOfReporting=int(time.time()),
-                        extra={'issueDetails': f'Error : {e}'},
-                        serviceName='Pooler|SnapshotWorker',
-                    ).dict(),
-                ),
-            )
-            f.add_done_callback(misc_notification_callback_result_handler)
+            if settings.reporting.service_url:
+                f = asyncio.ensure_future(
+                    await self._client.post(
+                        url=settings.reporting.service_url,
+                        json=SnapshotterIssue(
+                            instanceID=settings.instance_id,
+                            issueType='MISSED_SNAPSHOT',
+                            projectID=project_id,
+                            epochId=epoch_id,
+                            timeOfReporting=int(time.time()),
+                            extra={'issueDetails': f'Error : {e}'},
+                        ).dict(),
+                    ),
+                )
+                f.add_done_callback(misc_notification_callback_result_handler)
+
+            if settings.reporting.slack_url:
+                f = asyncio.ensure_future(
+                    await self._client.post(
+                        url=settings.reporting.slack_url,
+                        json=SnapshotterIssue(
+                            instanceID=settings.instance_id,
+                            issueType='MISSED_SNAPSHOT',
+                            projectID=project_id,
+                            epochId=epoch_id,
+                            timeOfReporting=int(time.time()),
+                            extra={'issueDetails': f'Error : {e}'},
+                        ).dict(),
+                    ),
+                )
+                f.add_done_callback(misc_notification_callback_result_handler)
+
     return wrapper
 
 
@@ -106,34 +122,62 @@ def notify_on_task_failure_aggregate(fn):
             # Logging the error trace
             if settings.logs.trace_enabled:
                 logger.opt(exception=True).error(
-                    'Error constructing snapshot or aggregate against message {} for task type {} : {}', msg_obj, task_type, e,
+                    'Error constructing snapshot or aggregate against message {} for task type {} : {}',
+                    msg_obj, task_type, e,
                 )
             else:
-                logger.error('Error constructing snapshot against message {} for task type {} : {}', msg_obj, task_type, e)
+                logger.error(
+                    'Error constructing snapshot against message {} for task type {} : {}',
+                    msg_obj, task_type, e,
+                )
 
             # Sending the error details to the issue reporting service
             if isinstance(msg_obj, PowerloomCalculateAggregateMessage):
-                project_id = f'{task_type}_*_{settings.namespace}'
-            elif isinstance(msg_obj, PowerloomSnapshotFinalizedMessage):
-                project_id = f'{task_type}_{msg_obj.projectId}_{settings.namespace}'
-            else:
-                project_id = f'{task_type}_{settings.namespace}'
+                underlying_project_ids = [project.projectId for project in msg_obj.messages]
+                unique_project_id = ''.join(sorted(underlying_project_ids))
 
-            f = asyncio.ensure_future(
-                await self._client.post(
-                    url=settings.issue_report_url,
-                    json=SnapshotterIssue(
-                        instanceID=settings.instance_id,
-                        severity=SnapshotterIssueSeverity.medium,
-                        issueType='MISSED_SNAPSHOT',
-                        projectID=project_id,
-                        timeOfReporting=int(time.time()),
-                        extra={'issueDetails': f'Error : {e}'},
-                        serviceName='Pooler|AggregateWorker',
-                    ).dict(),
-                ),
-            )
-            f.add_done_callback(misc_notification_callback_result_handler)
+                project_hash = hashlib.sha3_256(unique_project_id.encode()).hexdigest()
+
+                project_id = f'{type_}_{project_hash}_{settings.namespace}'
+
+            elif isinstance(msg_obj, PowerloomSnapshotFinalizedMessage):
+                contract = msg_obj.projectId.split('_')[-2]
+                project_id = f'{type_}_{contract}_{settings.namespace}'
+
+            else:
+                project_id = 'UNKNOWN'
+
+            if settings.reporting.service_url:
+                f = asyncio.ensure_future(
+                    await self._client.post(
+                        url=settings.reporting.service_url,
+                        json=SnapshotterIssue(
+                            instanceID=settings.instance_id,
+                            issueType='MISSED_SNAPSHOT',
+                            projectID=project_id,
+                            epochId=epoch_id,
+                            timeOfReporting=int(time.time()),
+                            extra={'issueDetails': f'Error : {e}'},
+                        ).dict(),
+                    ),
+                )
+                f.add_done_callback(misc_notification_callback_result_handler)
+
+            if settings.reporting.slack_url:
+                f = asyncio.ensure_future(
+                    await self._client.post(
+                        url=settings.reporting.slack_url,
+                        json=SnapshotterIssue(
+                            instanceID=settings.instance_id,
+                            issueType='MISSED_SNAPSHOT',
+                            projectID=project_id,
+                            epochId=epoch_id,
+                            timeOfReporting=int(time.time()),
+                            extra={'issueDetails': f'Error : {e}'},
+                        ).dict(),
+                    ),
+                )
+                f.add_done_callback(misc_notification_callback_result_handler)
 
     return wrapper
 

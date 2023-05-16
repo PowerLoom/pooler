@@ -27,7 +27,6 @@
       "keepalive_expiry": 300
     }
   },
-  "issue_report_url": "http://audit-protocol:9030/reportIssue",
   "rlimit": {
     "file_descriptors": 2048
   },
@@ -51,12 +50,9 @@
       }
     }
   },
-  "consensus": {
-    "url": "https://consensus-url",
-    "epoch_tracker_path": "/currentEpoch",
-    "polling_interval": 15,
-    "fall_behind_reset_num_blocks": 1000,
-    "sleep_secs_between_chunks": 60
+  "reporting": {
+    "slack_url": "",
+    "service_url": "http://reporting-service:9030/reportIssue"
   },
   "redis": {
     "host": "redis",

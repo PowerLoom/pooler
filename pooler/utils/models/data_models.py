@@ -1,6 +1,4 @@
-from enum import Enum
 from typing import Dict
-from typing import List
 from typing import Optional
 
 from pydantic import BaseModel
@@ -15,33 +13,13 @@ class PayloadCommitAPIRequest(BaseModel):
     sourceChainDetails: int
 
 
-class SnapshotterIssueSeverity(str, Enum):
-    high = 'HIGH'
-    medium = 'MEDIUM'
-    low = 'LOW'
-    cleared = 'CLEARED'
-
-
-class SnapshotterIssueType(str, Enum):
-    snapshotting_fallen_behind = 'SNAPSHOTTING_FALLEN_BEHIND'
-    missed_snapshot = 'MISSED_SNAPSHOT'
-    infra_issue = 'INFRA_ISSUE'
-    skip_epoch = 'SKIP_EPOCH'
-    dag_chain_stuck = 'DAG_CHAIN_STUCK'
-    pruning_failed = 'PRUNING_FAILED'
-
-
 class SnapshotterIssue(BaseModel):
     instanceID: str
-    namespace: Optional[str] = ""
-    severity: SnapshotterIssueSeverity
     issueType: str
     projectID: str
-    epochs: Optional[List[int]] = list()
+    epochId: int
     timeOfReporting: int
-    noOfEpochsBehind: Optional[int] = 0
     extra: Optional[Dict] = dict()
-    serviceName: str
 
 
 class TimeoutConfig(BaseModel):

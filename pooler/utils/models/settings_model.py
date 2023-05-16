@@ -77,12 +77,9 @@ class RabbitMQ(BaseModel):
     setup: RabbitMQSetup
 
 
-class Consensus(BaseModel):
-    url: str
-    epoch_tracker_path: str
-    polling_interval: int
-    fall_behind_reset_num_blocks: int
-    sleep_secs_between_chunks: int
+class ReportingConfig(BaseModel):
+    slack_url: str
+    service_url: str
 
 
 class Redis(BaseModel):
@@ -137,10 +134,9 @@ class Settings(BaseModel):
     core_api: CoreAPI
     instance_id: str
     rpc: RPCConfigFull
-    issue_report_url: str
     rlimit: RLimit
     rabbitmq: RabbitMQ
-    consensus: Consensus
+    reporting: ReportingConfig
     redis: Redis
     redis_reader: RedisReader
     logs: Logs
