@@ -82,7 +82,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             transformation_lambdas=stream_processor.transformation_lambdas,
         )
 
-        await self._send_audit_payload_commit_service(
+        await self._send_payload_commit_service_queue(
             audit_stream=task_type,
             epoch=msg_obj,
             snapshot=snapshot,
@@ -90,7 +90,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
 
         del self._running_callback_tasks[self_unique_id]
 
-    async def _send_audit_payload_commit_service(
+    async def _send_payload_commit_service_queue(
         self,
         audit_stream,
         epoch: PowerloomSnapshotProcessMessage,
@@ -150,7 +150,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             )
 
             payload = snapshot.dict()
-            project_id = f'{audit_stream}_{epoch.contract}_{settings.namespace}'
+            project_id = f'{audit_stream}:{epoch.contract}:{settings.namespace}'
 
             commit_payload = PayloadCommitMessage(
                 message=payload,

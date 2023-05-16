@@ -2,6 +2,7 @@
 
 #This script is run from high level docker-compose. Refer to https://github.com/PowerLoom/deploy
 
+# TODO: Update this script according to new settings.json changes
 set -e
 
 echo 'populating setting from environment values...';

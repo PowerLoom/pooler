@@ -73,7 +73,7 @@ def notify_on_task_failure_snapshot(fn):
             # Sending the error details to the issue reporting service
             contract = msg_obj.contract
             epoch_id = msg_obj.epochId
-            project_id = f'{task_type}_{contract}_{settings.namespace}'
+            project_id = f'{task_type}:{contract}:{settings.namespace}'
 
             if settings.reporting.service_url:
                 f = asyncio.ensure_future(
@@ -138,11 +138,11 @@ def notify_on_task_failure_aggregate(fn):
 
                 project_hash = hashlib.sha3_256(unique_project_id.encode()).hexdigest()
 
-                project_id = f'{type_}_{project_hash}_{settings.namespace}'
+                project_id = f'{type_}:{project_hash}:{settings.namespace}'
 
             elif isinstance(msg_obj, PowerloomSnapshotFinalizedMessage):
-                contract = msg_obj.projectId.split('_')[-2]
-                project_id = f'{type_}_{contract}_{settings.namespace}'
+                contract = msg_obj.projectId.split(':')[-2]
+                project_id = f'{type_}:{contract}:{settings.namespace}'
 
             else:
                 project_id = 'UNKNOWN'

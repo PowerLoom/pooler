@@ -72,11 +72,11 @@
     "trace_enabled": false,
     "write_to_files": true
   },
-  "projects_config_path": "pooler/static/projects.json",
-  "aggregator_config_path": "pooler/static/aggregator.json",
+  "projects_config_path": "config/projects.json",
+  "aggregator_config_path": "config/aggregator.json",
   "pair_contract_abi": "pooler/static/abis/UniswapV2Pair.json",
   "protocol_state": {
-    "abi": "pooler/static/abis/EventContract.json",
+    "abi": "pooler/static/abis/ProtocolContract.json",
     "address": "0x568355e16e1bf2fE3CcFe155B987f1D603188028"
   },
   "callback_worker_config": {

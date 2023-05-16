@@ -103,7 +103,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             transformation_lambdas=stream_processor.transformation_lambdas,
         )
 
-        await self._send_audit_payload_commit_service(
+        await self._send_payload_commit_service_queue(
             audit_stream=task_type,
             epoch=msg_obj,
             snapshot=snapshot,
@@ -112,8 +112,8 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         del self._running_callback_tasks[self_unique_id]
 
     def _gen_single_type_project_id(self, type_, epoch):
-        contract = epoch.projectId.split('_')[-2]
-        project_id = project_id = f'{type_}_{contract}_{settings.namespace}'
+        contract = epoch.projectId.split(':')[-2]
+        project_id = project_id = f'{type_}:{contract}:{settings.namespace}'
         return project_id
 
     def _gen_multiple_type_project_id(self, type_, epoch):
@@ -123,7 +123,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
 
         project_hash = hashlib.sha3_256(unique_project_id.encode()).hexdigest()
 
-        project_id = f'{type_}_{project_hash}_{settings.namespace}'
+        project_id = f'{type_}:{project_hash}:{settings.namespace}'
         return project_id
 
     def _gen_project_id(self, type_, epoch):
@@ -134,7 +134,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         else:
             raise ValueError(f'Unknown project type {type_}')
 
-    async def _send_audit_payload_commit_service(
+    async def _send_payload_commit_service_queue(
         self,
         audit_stream,
         epoch: Union[PowerloomSnapshotFinalizedMessage, PowerloomCalculateAggregateMessage],
