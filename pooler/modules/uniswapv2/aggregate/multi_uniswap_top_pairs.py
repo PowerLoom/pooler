@@ -51,7 +51,7 @@ class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
                 snapshot = UniswapTradesAggregateSnapshot.parse_raw(data)
             snapshot_mapping[msg.projectId] = snapshot
 
-            contract_address = msg.projectId.split('_')[-2]
+            contract_address = msg.projectId.split(':')[-2]
             if contract_address not in all_pair_metadata:
                 pair_metadata = await get_pair_metadata(
                     contract_address,
@@ -65,7 +65,7 @@ class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
         pair_data = {}
         for snapshot_project_id in snapshot_mapping.keys():
             snapshot = snapshot_mapping[snapshot_project_id]
-            contract = snapshot_project_id.split('_')[-2]
+            contract = snapshot_project_id.split(':')[-2]
             pair_metadata = all_pair_metadata[contract]
 
             if contract not in pair_data:

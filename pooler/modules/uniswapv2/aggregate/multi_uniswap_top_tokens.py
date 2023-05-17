@@ -53,7 +53,7 @@ class AggreagateTopTokensProcessor(GenericProcessorMultiProjectAggregate):
                 snapshot = UniswapTradesAggregateSnapshot.parse_raw(data)
             snapshot_mapping[msg.projectId] = snapshot
 
-            contract_address = msg.projectId.split('_')[-2]
+            contract_address = msg.projectId.split(':')[-2]
             pair_metadata = await get_pair_metadata(
                 contract_address,
                 redis_conn=redis,
