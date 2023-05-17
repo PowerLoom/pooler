@@ -190,8 +190,8 @@ class AggregationAsyncWorker(GenericAsyncWorker):
 
             source_chain_details = await get_source_chain_id(
                 redis_conn=self._redis_conn,
-                rpc_helper=self._anchor_chain_rpc_helper,
-                state_contract_obj=protocol_state_contract,
+                rpc_helper=self._anchor_rpc_helper,
+                state_contract_obj=self.protocol_state_contract,
             )
 
             payload = snapshot.dict()

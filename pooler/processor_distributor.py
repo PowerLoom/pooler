@@ -57,10 +57,10 @@ class ProcessorDistributor(multiprocessing.Process):
     async def _init_rpc_helper(self):
         if not self._rpc_helper:
             self._rpc_helper = RpcHelper()
-            self._anchor_chain_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
+            self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
             with open(settings.protocol_state.abi, 'r') as f:
                 abi_dict = json.load(f)
-            protocol_state_contract = self._anchor_chain_rpc_helper.get_current_node()['web3_client'].eth.contract(
+            protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
                 address=Web3.toChecksumAddress(
                     settings.protocol_state.address,
                 ),
@@ -68,12 +68,12 @@ class ProcessorDistributor(multiprocessing.Process):
             )
             await get_source_chain_epoch_size(
                 redis_conn=self._redis_conn,
-                rpc_helper=self._anchor_chain_rpc_helper,
+                rpc_helper=self._anchor_rpc_helper,
                 state_contract_obj=protocol_state_contract,
             )
             self._source_chain_id = await get_source_chain_id(
                 redis_conn=self._redis_conn,
-                rpc_helper=self._anchor_chain_rpc_helper,
+                rpc_helper=self._anchor_rpc_helper,
                 state_contract_obj=protocol_state_contract,
             )
 
