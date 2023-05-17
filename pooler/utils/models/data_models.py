@@ -17,9 +17,9 @@ class SnapshotterIssue(BaseModel):
     instanceID: str
     issueType: str
     projectID: str
-    epochId: int
-    timeOfReporting: int
-    extra: Optional[Dict] = dict()
+    epochId: str
+    timeOfReporting: str
+    extra: Optional[str] = ''
 
 
 class TimeoutConfig(BaseModel):

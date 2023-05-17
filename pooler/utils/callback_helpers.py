@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import json
 import time
 from abc import ABC
 from abc import ABCMeta
@@ -83,9 +84,9 @@ def notify_on_task_failure_snapshot(fn):
                             instanceID=settings.instance_id,
                             issueType='MISSED_SNAPSHOT',
                             projectID=project_id,
-                            epochId=epoch_id,
-                            timeOfReporting=int(time.time()),
-                            extra={'issueDetails': f'Error : {e}'},
+                            epochId=str(epoch_id),
+                            timeOfReporting=str(time.time()),
+                            extra=json.dumps({'issueDetails': f'Error : {e}'}),
                         ).dict(),
                     ),
                 )
@@ -99,9 +100,9 @@ def notify_on_task_failure_snapshot(fn):
                             instanceID=settings.instance_id,
                             issueType='MISSED_SNAPSHOT',
                             projectID=project_id,
-                            epochId=epoch_id,
-                            timeOfReporting=int(time.time()),
-                            extra={'issueDetails': f'Error : {e}'},
+                            epochId=str(epoch_id),
+                            timeOfReporting=str(time.time()),
+                            extra=json.dumps({'issueDetails': f'Error : {e}'}),
                         ).dict(),
                     ),
                 )
@@ -155,9 +156,9 @@ def notify_on_task_failure_aggregate(fn):
                             instanceID=settings.instance_id,
                             issueType='MISSED_SNAPSHOT',
                             projectID=project_id,
-                            epochId=epoch_id,
-                            timeOfReporting=int(time.time()),
-                            extra={'issueDetails': f'Error : {e}'},
+                            epochId=str(epoch_id),
+                            timeOfReporting=str(time.time()),
+                            extra=json.dumps({'issueDetails': f'Error : {e}'}),
                         ).dict(),
                     ),
                 )
@@ -171,9 +172,9 @@ def notify_on_task_failure_aggregate(fn):
                             instanceID=settings.instance_id,
                             issueType='MISSED_SNAPSHOT',
                             projectID=project_id,
-                            epochId=epoch_id,
-                            timeOfReporting=int(time.time()),
-                            extra={'issueDetails': f'Error : {e}'},
+                            epochId=str(epoch_id),
+                            timeOfReporting=str(time.time()),
+                            extra=json.dumps({'issueDetails': f'Error : {e}'}),
                         ).dict(),
                     ),
                 )
