@@ -17,6 +17,7 @@ from pooler.auth.helpers.helpers import rate_limit_auth_check
 from pooler.auth.helpers.redis_conn import RedisPoolCache as AuthRedisPoolCache
 from pooler.settings.config import settings
 from pooler.utils.data_utils import get_project_epoch_snapshot
+from pooler.utils.data_utils import get_project_finalized_cid
 from pooler.utils.default_logger import logger
 from pooler.utils.file_utils import read_json_file
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
@@ -234,3 +235,58 @@ async def get_data_for_project_id_epoch_id(
     await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
 
     return json.loads(data)
+
+# get finalized cid for epoch_id, project_id
+
+
+@app.get('/cid/{epoch_id}/{project_id}/')
+async def get_finalized_cid_for_project_id_epoch_id(
+    request: Request,
+    response: Response,
+    project_id: str,
+    epoch_id: int,
+    rate_limit_auth_dep: RateLimitAuthCheck = Depends(
+        rate_limit_auth_check,
+    ),
+):
+    """
+    This endpoint is used to fetch finalized cid for a given project_id and epoch_id.
+    """
+    if not (
+        rate_limit_auth_dep.rate_limit_passed and
+        rate_limit_auth_dep.authorized and
+        rate_limit_auth_dep.owner.active == UserStatusEnum.active
+    ):
+        return inject_rate_limit_fail_response(rate_limit_auth_dep)
+
+    try:
+        data = get_project_finalized_cid(
+            request.app.state.redis_pool,
+            request.app.state.protocol_state_contract,
+            request.app.state.anchor_rpc_helper,
+            epoch_id,
+            project_id,
+        )
+    except Exception as e:
+        rest_logger.exception(
+            'Exception in get_finalized_cid_for_project_id_epoch_id',
+            e=e,
+        )
+        response.status_code = 500
+        return {
+            'status': 'error',
+            'message': f'Unable to get finalized cid for project_id: {project_id},'
+            f' epoch_id: {epoch_id}, error: {e}',
+        }
+
+    if not data:
+        response.status_code = 404
+        return {
+            'status': 'error',
+            'message': f'No finalized cid found for project_id: {project_id},'
+            f' epoch_id: {epoch_id}',
+        }
+    auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
+    await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
+
+    return data
