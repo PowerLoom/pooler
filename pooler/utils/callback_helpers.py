@@ -77,7 +77,7 @@ def notify_on_task_failure_snapshot(fn):
 
             if settings.reporting.service_url:
                 f = asyncio.ensure_future(
-                    await self._client.post(
+                    self._client.post(
                         url=settings.reporting.service_url,
                         json=SnapshotterIssue(
                             instanceID=settings.instance_id,
@@ -93,7 +93,7 @@ def notify_on_task_failure_snapshot(fn):
 
             if settings.reporting.slack_url:
                 f = asyncio.ensure_future(
-                    await self._client.post(
+                    self._client.post(
                         url=settings.reporting.slack_url,
                         json=SnapshotterIssue(
                             instanceID=settings.instance_id,
@@ -149,7 +149,7 @@ def notify_on_task_failure_aggregate(fn):
 
             if settings.reporting.service_url:
                 f = asyncio.ensure_future(
-                    await self._client.post(
+                    self._client.post(
                         url=settings.reporting.service_url,
                         json=SnapshotterIssue(
                             instanceID=settings.instance_id,
@@ -165,7 +165,7 @@ def notify_on_task_failure_aggregate(fn):
 
             if settings.reporting.slack_url:
                 f = asyncio.ensure_future(
-                    await self._client.post(
+                    self._client.post(
                         url=settings.reporting.slack_url,
                         json=SnapshotterIssue(
                             instanceID=settings.instance_id,

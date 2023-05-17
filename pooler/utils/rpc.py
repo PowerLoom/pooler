@@ -5,6 +5,7 @@ from typing import List
 from typing import Union
 
 import eth_abi
+import tenacity
 from aiohttp import ClientSession
 from aiohttp import ClientTimeout
 from aiohttp import TCPConnector
@@ -20,7 +21,6 @@ from tenacity import retry
 from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
-import tenacity
 from web3 import Web3
 from web3._utils.abi import map_abi_data
 from web3._utils.events import get_event_data
@@ -207,11 +207,13 @@ class RpcHelper(object):
         retry_state.kwargs['node_idx'] = next_node_idx
         # self._current_node_index = (self._current_node_index + 1) % self._node_count
         self._logger.warning(
-            'Found exception while performing RPC {} on node {} at idx {}. Injecting next node {} at idx {} | exception: {} ', 
-            retry_state.fn, self._nodes[exc_idx], exc_idx, self._nodes[next_node_idx], next_node_idx, retry_state.outcome.exception()
+            'Found exception while performing RPC {} on node {} at idx {}. '
+            'Injecting next node {} at idx {} | exception: {} ',
+            retry_state.fn, self._nodes[exc_idx], exc_idx, self._nodes[next_node_idx],
+            next_node_idx, retry_state.outcome.exception(),
         )
 
-    async def _async_web3_call(self, contract_function, redis_conn, from_address=None, node_idx=0):
+    async def _async_web3_call(self, contract_function, redis_conn, from_address=None):
         """Make async web3 call"""
 
         @retry(
@@ -221,7 +223,7 @@ class RpcHelper(object):
             stop=stop_after_attempt(settings.rpc.retry),
             before_sleep=self._on_node_exception,
         )
-        async def f():
+        async def f(node_idx=0):
             try:
 
                 node = self._nodes[node_idx]
@@ -369,7 +371,7 @@ class RpcHelper(object):
             raise e
 
     @LruCacheRpc(maxsize=2500, args={'rpc_query'})
-    async def _make_rpc_jsonrpc_call(self, rpc_query, redis_conn, node_idx=0):
+    async def _make_rpc_jsonrpc_call(self, rpc_query, redis_conn):
         """Make a jsonrpc call to the given rpc_url"""
 
         @retry(
@@ -379,7 +381,7 @@ class RpcHelper(object):
             stop=stop_after_attempt(settings.rpc.retry),
             before_sleep=self._on_node_exception,
         )
-        async def f():
+        async def f(node_idx=0):
 
             node = self._nodes[node_idx]
             rpc_url = node.get('rpc_url')
@@ -545,7 +547,7 @@ class RpcHelper(object):
 
     @LruCacheRpc(maxsize=2500, args={'contract_address', 'to_block', 'from_block', 'topics', 'event_abi'})
     async def get_events_logs(
-        self, contract_address, to_block, from_block, topics, event_abi, redis_conn, node_idx=0
+        self, contract_address, to_block, from_block, topics, event_abi, redis_conn,
     ):
         if not self._initialized:
             await self.init(redis_conn)
@@ -557,7 +559,7 @@ class RpcHelper(object):
             stop=stop_after_attempt(settings.rpc.retry),
             before_sleep=self._on_node_exception,
         )
-        async def f():
+        async def f(node_idx=0):
             node = self._nodes[node_idx]
             rpc_url = node.get('rpc_url')
 
