@@ -60,7 +60,7 @@ def notify_on_task_failure_snapshot(fn):
         except Exception as e:
             # Logging the error trace
             msg_obj: PowerloomSnapshotProcessMessage = kwargs['msg_obj'] if 'msg_obj' in kwargs else args[0]
-            task_type = args[1]
+            task_type: str = kwargs['task_type'] if 'task_type' in kwargs else args[1]
             if settings.logs.trace_enabled:
                 logger.opt(exception=True).error(
                     'Error constructing snapshot against message {} for task type {} : {}', msg_obj, task_type, e,
@@ -118,7 +118,7 @@ def notify_on_task_failure_aggregate(fn):
 
         except Exception as e:
             msg_obj = kwargs['msg_obj'] if 'msg_obj' in kwargs else args[0]
-            task_type = args[1]
+            task_type = kwargs['task_type'] if 'task_type' in kwargs else args[1]
             # Logging the error trace
             if settings.logs.trace_enabled:
                 logger.opt(exception=True).error(

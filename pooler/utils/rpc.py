@@ -223,7 +223,7 @@ class RpcHelper(object):
             stop=stop_after_attempt(settings.rpc.retry),
             before_sleep=self._on_node_exception,
         )
-        async def f(node_idx=0):
+        async def f(node_idx):
             try:
 
                 node = self._nodes[node_idx]
@@ -309,7 +309,7 @@ class RpcHelper(object):
                 )
                 raise exc
 
-        return await f()
+        return await f(node_idx=0)
 
     async def get_current_block(self, redis_conn, node_idx=0):
         """Get the current block number.
@@ -381,7 +381,7 @@ class RpcHelper(object):
             stop=stop_after_attempt(settings.rpc.retry),
             before_sleep=self._on_node_exception,
         )
-        async def f(node_idx=0):
+        async def f(node_idx):
 
             node = self._nodes[node_idx]
             rpc_url = node.get('rpc_url')
@@ -453,7 +453,7 @@ class RpcHelper(object):
                 )
 
             return response_data
-        return await f()
+        return await f(node_idx=0)
 
     async def batch_eth_call_on_block_range(
         self,
@@ -559,7 +559,7 @@ class RpcHelper(object):
             stop=stop_after_attempt(settings.rpc.retry),
             before_sleep=self._on_node_exception,
         )
-        async def f(node_idx=0):
+        async def f(node_idx):
             node = self._nodes[node_idx]
             rpc_url = node.get('rpc_url')
 
@@ -628,4 +628,4 @@ class RpcHelper(object):
                 self._logger.trace('Error in get_events_logs, error {}', str(exc))
                 raise exc
 
-        return await f()
+        return await f(node_idx=0)
