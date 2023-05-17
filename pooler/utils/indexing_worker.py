@@ -1,12 +1,15 @@
 import asyncio
 import json
 import math
+import time
 from typing import Dict
+from typing import Union
 from uuid import uuid4
 
 import httpx._exceptions as httpx_exceptions
 import web3.contract
 from aio_pika import IncomingMessage
+from aio_pika import Message
 from pydantic import ValidationError
 from redis import asyncio as aioredis
 from tenacity import retry
@@ -27,9 +30,15 @@ from pooler.utils.models.data_models import CachedIndexMarker
 from pooler.utils.models.data_models import IndexSeek
 from pooler.utils.models.data_models import RetrievedDAGBlock
 from pooler.utils.models.data_models import TailAdjustmentCursor
-from pooler.utils.models.message_models import PowerloomIndexingProcessMessage
+from pooler.utils.models.message_models import IndexBase
+from pooler.utils.models.message_models import PayloadCommitMessage
+from pooler.utils.models.message_models import PayloadCommitMessageType
+from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
 from pooler.utils.redis import redis_keys
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
+from pooler.utils.redis.redis_keys import (
+    cb_broadcast_processing_logs_zset,
+)
 from pooler.utils.rpc import RpcHelper
 
 
@@ -44,6 +53,9 @@ class IndexingAsyncWorker(GenericAsyncWorker):
     _anchor_chain_submission_contract_obj: web3.contract.Contract
 
     def __init__(self, name, **kwargs):
+        self._q = f'powerloom-backend-cb-index:{settings.namespace}:{settings.instance_id}'
+        self._rmq_routing = f'powerloom-backend-callback:{settings.namespace}'
+        f':{settings.instance_id}:SnapshotFinalized.*'
         super(IndexingAsyncWorker, self).__init__(name=name, **kwargs)
 
         self._task_types = []
@@ -60,6 +72,7 @@ class IndexingAsyncWorker(GenericAsyncWorker):
         self._source_chain_rpc_helper = None
         self._anchor_chain_rpc_helper = None
         self._dummy_w3_obj = None
+        self._initialized = False
 
     @retry(
         reraise=True, wait=wait_random_exponential(multiplier=1, max=20),
@@ -77,7 +90,7 @@ class IndexingAsyncWorker(GenericAsyncWorker):
 
     # TODO: Add interfaces and notifiers for indexing failure
     # @notify_on_task_failure
-    async def _processor_task(self, msg_obj: PowerloomIndexingProcessMessage, task_type: str):
+    async def _processor_task(self, msg_obj: PowerloomSnapshotFinalizedMessage, task_type: str):
         """Function used to process the received message object."""
         self._logger.debug(
             'Processing callback: {}', msg_obj,
@@ -301,10 +314,10 @@ class IndexingAsyncWorker(GenericAsyncWorker):
 
     async def _index_building_dag_finalization_callback(
         self,
-        dag_finalization_cb: PowerloomIndexingProcessMessage,
+        dag_finalization_cb: PowerloomSnapshotFinalizedMessage,
         task_type: str,
     ):
-        callback_dag_height = dag_finalization_cb.DAGBlockHeight
+        callback_dag_height = dag_finalization_cb.epochId
         # consult protocol state stored on smart contract for finalized DAG CID at this height
         head_dag_cid = await self._get_dag_cid_at_height(callback_dag_height)
         project_id = dag_finalization_cb.projectId
@@ -342,14 +355,163 @@ class IndexingAsyncWorker(GenericAsyncWorker):
             )
             await redis_conn.zadd(
                 name=redis_keys.get_last_indexed_markers_zset(project_id),
-                mapping={index_record_to_cache.json(): dag_finalization_cb.DAGBlockHeight},
+                mapping={index_record_to_cache.json(): dag_finalization_cb.epochId},
             )
             # commit to index submission contract
-            # TODO: send to transaction manager
+            # TODO: send to audit protocol for contract submission
+            # await self._send_audit_payload_commit_service(
+            #     audit_stream=task_type,
+            #     epoch=dag_finalization_cb,
+            # snapshot={FILL HERE},
+            # )
         else:
             last_recorded_against_dag_head_height = int(last_recorded_dag_height_index[0][1])
             height_diff = callback_dag_height - last_recorded_against_dag_head_height - 1
             last_recorded_tail_source_chain_marker = CachedIndexMarker.parse_raw(last_recorded_dag_height_index[0][0])
+
+    async def _send_audit_payload_commit_service(
+        self,
+        audit_stream,
+        epoch: PowerloomSnapshotFinalizedMessage,
+        snapshot: Union[IndexBase, None],
+    ):
+
+        if not snapshot:
+            self._logger.error(
+                (
+                    'No index to commit. Construction of index'
+                    ' failed for {} against epoch {}'
+                ),
+                audit_stream,
+                epoch,
+            )
+            # TODO: standardize/unify update log data model
+            update_log = {
+                'worker': self._unique_id,
+                'update': {
+                    'action': f'IndexBuild-{audit_stream}',
+                    'info': {
+                        'epoch': epoch.dict(),
+                        'status': 'Failed',
+                    },
+                },
+            }
+
+            await self._redis_conn.zadd(
+                name=cb_broadcast_processing_logs_zset.format(
+                    epoch.broadcastId,
+                ),
+                mapping={json.dumps(update_log): int(time.time())},
+            )
+        else:
+            update_log = {
+                'worker': self._unique_id,
+                'update': {
+                    'action': f'IndexBuild-{audit_stream}',
+                    'info': {
+                        'epoch': epoch.dict(),
+                        'status': 'Success',
+                        'snapshot': snapshot.dict(),
+                    },
+                },
+            }
+
+            await self._redis_conn.zadd(
+                name=cb_broadcast_processing_logs_zset.format(
+                    epoch.broadcastId,
+                ),
+                mapping={json.dumps(update_log): int(time.time())},
+            )
+            source_chain_details = settings.chain_id
+
+            payload = snapshot.dict()
+            project_id = f'{epoch.projectId}'
+
+            commit_payload = PayloadCommitMessage(
+                messageType=PayloadCommitMessageType.INDEX,
+                message=payload,
+                web3Storage=True,
+                sourceChainId=source_chain_details,
+                projectId=project_id,
+                epochId=epoch.epochId,
+            )
+
+            # send through rabbitmq
+            exchange = (
+                f'{settings.rabbitmq.setup.commit_payload.exchange}:{settings.namespace}'
+            )
+            routing_key = f'powerloom-backend-commit-payload:{settings.namespace}:{settings.instance_id}.Data'
+
+            try:
+
+                async with self._rmq_connection_pool.acquire() as connection:
+                    async with self._rmq_channel_pool.acquire() as channel:
+                        # Prepare a message to send
+
+                        commit_payload_exchange = await channel.get_exchange(
+                            name=exchange,
+                        )
+                        message_data = commit_payload.json().encode()
+
+                        # Prepare a message to send
+                        message = Message(message_data)
+
+                        await commit_payload_exchange.publish(
+                            message=message,
+                            routing_key=routing_key,
+                        )
+
+                        self._logger.info(
+                            'Sent message to audit protocol: {}', commit_payload,
+                        )
+
+                        update_log = {
+                            'worker': self._unique_id,
+                            'update': {
+                                'action': f'IndexCommit-{audit_stream}',
+                                'info': {
+                                    'snapshot': payload,
+                                    'epoch': epoch.dict(),
+                                    'status': 'Success',
+                                },
+                            },
+                        }
+
+                        await self._redis_conn.zadd(
+                            name=cb_broadcast_processing_logs_zset.format(
+                                epoch.broadcastId,
+                            ),
+                            mapping={json.dumps(update_log): int(time.time())},
+                        )
+
+            except Exception as e:
+                self._logger.opt(exception=True).error(
+                    (
+                        'Exception committing snapshot to audit protocol:'
+                        ' {} | dump: {}'
+                    ),
+                    snapshot,
+                    e,
+                )
+                update_log = {
+                    'worker': self._unique_id,
+                    'update': {
+                        'action': f'IndexCommit-{audit_stream}',
+                        'info': {
+                            'snapshot': payload,
+                            'epoch': epoch.dict(),
+                            'status': 'Failed',
+                            'exception': e,
+                        },
+                    },
+                }
+
+                await self._redis_conn.zadd(
+                    name=cb_broadcast_processing_logs_zset.format(
+                        epoch.broadcastId,
+                    ),
+                    mapping={json.dumps(update_log): int(time.time())},
+                )
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
         task_type = message.routing_key.split('.')[-1]
@@ -361,7 +523,7 @@ class IndexingAsyncWorker(GenericAsyncWorker):
         self._logger.debug('task type: {}', task_type)
 
         try:
-            msg_obj = PowerloomIndexingProcessMessage.parse_raw(message.body)
+            msg_obj = PowerloomSnapshotFinalizedMessage.parse_raw(message.body)
         except ValidationError as e:
             self._logger.opt(exception=True).error(
                 (
@@ -407,8 +569,9 @@ class IndexingAsyncWorker(GenericAsyncWorker):
             )
 
     async def init(self):
-        await self._init_redis_pool()
-        await self._init_httpx_client()
-        await self._init_rpc_helper()
-        await self._init_indexing_worker()
-        # TODO: listen to rabbitmq queue
+        if not self._initialized:
+            await self._init_redis_pool()
+            await self._init_httpx_client()
+            await self._init_rpc_helper()
+            await self._init_indexing_worker()
+        self._initialized = True

@@ -19,7 +19,6 @@ from setproctitle import setproctitle
 
 from pooler.processor_distributor import ProcessorDistributor
 from pooler.settings.config import settings
-from pooler.system_epoch_detector import EpochDetectorProcess
 from pooler.system_event_detector import EventDetectorProcess
 from pooler.utils.aggregation_worker import AggregationAsyncWorker
 from pooler.utils.default_logger import logger
@@ -32,11 +31,6 @@ from pooler.utils.redis.redis_conn import provide_redis_conn
 from pooler.utils.snapshot_worker import SnapshotAsyncWorker
 
 PROC_STR_ID_TO_CLASS_MAP = {
-    'SystemEpochDetector': {
-        'class': EpochDetectorProcess,
-        'name': 'PowerLoom|SystemEpochDetector',
-        'target': None,
-    },
     'SystemEventDetector': {
         'class': EventDetectorProcess,
         'name': 'PowerLoom|SystemEventDetector',

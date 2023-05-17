@@ -1,5 +1,6 @@
 import json
 
+from pooler.utils.models.settings_model import AggregatorConfig
 from pooler.utils.models.settings_model import IndexerConfig
 from pooler.utils.models.settings_model import ProjectsConfig
 from pooler.utils.models.settings_model import Settings
@@ -24,3 +25,9 @@ indexer_config_path = settings.indexer_config_path
 indexer_config_file = open(indexer_config_path)
 indexer_config_dict = json.load(indexer_config_file)
 indexer_config = IndexerConfig(**indexer_config_dict).config
+
+
+aggregator_config_path = settings.aggregator_config_path
+aggregator_config_file = open(aggregator_config_path)
+aggregator_config_dict = json.load(aggregator_config_file)
+aggregator_config = AggregatorConfig(**aggregator_config_dict).config

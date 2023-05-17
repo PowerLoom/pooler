@@ -4,13 +4,13 @@ from redis import asyncio as aioredis
 
 from .utils.core import get_pair_trade_volume
 from .utils.models.message_models import UniswapTradesSnapshot
-from pooler.utils.callback_helpers import GenericProcessor
+from pooler.utils.callback_helpers import GenericProcessorSnapshot
 from pooler.utils.default_logger import logger
-from pooler.utils.models.message_models import EpochBase
+from pooler.utils.models.message_models import EpochBaseSnapshot
 from pooler.utils.rpc import RpcHelper
 
 
-class TradeVolumeProcessor(GenericProcessor):
+class TradeVolumeProcessor(GenericProcessorSnapshot):
     transformation_lambdas = None
 
     def __init__(self) -> None:
@@ -72,7 +72,7 @@ class TradeVolumeProcessor(GenericProcessor):
         trade_volume_snapshot = UniswapTradesSnapshot(
             **dict(
                 contract=data_source_contract_address,
-                chainHeightRange=EpochBase(begin=epoch_begin, end=epoch_end),
+                chainHeightRange=EpochBaseSnapshot(begin=epoch_begin, end=epoch_end),
                 timestamp=max_block_timestamp,
                 totalTrade=float(f'{total_trades_in_usd: .6f}'),
                 totalFee=float(f'{total_fee_in_usd: .6f}'),

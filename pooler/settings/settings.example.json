@@ -51,6 +51,9 @@
       "callbacks": {
         "exchange": "powerloom-backend-callbacks"
       },
+      "commit_payload": {
+        "exchange": "powerloom-backend-commit-payload"
+      },
       "event_detector": {
         "exchange": "powerloom-backend-event-detector"
       }
@@ -95,7 +98,7 @@
   },
   "projects_config_path": "pooler/static/projects.json",
   "indexer_config_path": "pooler/static/indexer.json",
-  "env": "<test/prod>",
+  "aggregator_config_path": "pooler/static/aggregator.json",
   "pair_contract_abi": "pooler/static/abis/UniswapV2Pair.json",
   "protocol_state": {
     "abi": "pooler/static/abis/EventContract.json",

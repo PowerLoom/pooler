@@ -117,11 +117,11 @@ Extracting data from blockchain state and generating the snapshot can be a compl
 Use cases can be anything really. They can be as simple as monitoring some event in a smart contract on some chain and doing some computation over it or complex like monitoring trade stats for all Uniswap top trading pairs. Pooler architecture takes care of most of the heavy lifting involved to make the snapshot creation process as simple as possible.
 
 ### Writing the Snapshot Extraction Logic
-Since the callback workers invoke the snapshot extraction logic, for every use case, no matter how complex or easy, developers need to write a class with `GenericProcessor` defined in `utils/callback_helpers.py` as parent.
+Since the callback workers invoke the snapshot extraction logic, for every use case, no matter how complex or easy, developers need to write a class with `GenericProcessorSnapshot` defined in `utils/callback_helpers.py` as parent.
 
 
 ```python
-class GenericProcessor(ABC):
+class GenericProcessorSnapshot(ABC):
     __metaclass__ = ABCMeta
 
     def __init__(self):
@@ -166,7 +166,7 @@ Output format can be anything depending on the usecase requirements. Although it
 Here's an example processor to calculate uniswap v2 pair reserves (simplified version) for a given smart contract.
 
 ```python
-class PairTotalReservesProcessor(GenericProcessor):
+class PairTotalReservesProcessor(GenericProcessorSnapshot):
     transformation_lambdas = None
 
     def __init__(self) -> None:

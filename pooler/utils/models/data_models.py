@@ -7,19 +7,13 @@ from typing import Union
 from pydantic import BaseModel
 
 
-class SourceChainDetails(BaseModel):
-    chainID: int
-    epochStartHeight: int
-    epochEndHeight: int
-
-
 class PayloadCommitAPIRequest(BaseModel):
     projectId: str
     payload: dict
     web3Storage: bool = False
     # skip anchor tx by default, unless passed
     skipAnchorProof: bool = True
-    sourceChainDetails: SourceChainDetails
+    sourceChainDetails: int
 
 
 class SnapshotterIssueSeverity(str, Enum):
@@ -61,51 +55,42 @@ class RLimitConfig(BaseModel):
     file_descriptors: int
 
 
-class EpochInfo(BaseModel):
-    chainId: int
-    epochStartBlockHeight: int
-    epochEndBlockHeight: int
-
-
-class ProjectRegistrationRequest(BaseModel):
-    projectIDs: List[str]
-
-
-class IndexingRegistrationData(BaseModel):
-    projectID: str
-    indexerConfig: Dict
-
-
-class ProjectRegistrationRequestForIndexing(BaseModel):
-    projects: List[IndexingRegistrationData]
-    namespace: str
-
-
 # Event detector related models
 class EventBase(BaseModel):
     timestamp: int
 
 
 class EpochReleasedEvent(EventBase):
+    epochId: int
     begin: int
     end: int
-    broadcast_id: str
+    broadcastId: str
 
 
-class EpochFinalizedEvent(EventBase):
-    DAGBlockHeight: int
+class SnapshotFinalizedEvent(EventBase):
+    epochId: int
+    epochEnd: int
     projectId: str
     snapshotCid: str
-    broadcast_id: str
+    broadcastId: str
 
 
 class IndexFinalizedEvent(EventBase):
+    epochId: int
+    epochEnd: int
     projectId: str
-    DAGBlockHeight: int
     indexTailDAGBlockHeight: int
     tailBlockEpochSourceChainHeight: int
     indexIdentifierHash: str
-    broadcast_id: str
+    broadcastId: str
+
+
+class AggregateFinalizedEvent(EventBase):
+    epochId: int
+    epochEnd: int
+    projectId: str
+    aggregateCid: str
+    broadcastId: str
 
 
 # Indexing and Aggregation related models
@@ -165,7 +150,7 @@ class TailAdjustmentCursor(BaseModel):
 
 class IndexFinalizedCallback(BaseModel):
     projectId: str
-    DAGBlockHeight: int
+    epochId: int
     indexTailDAGBlockHeight: int
     tailBlockEpochSourceChainHeight: int
     indexIdentifierHash: str

@@ -7,13 +7,13 @@ from redis import asyncio as aioredis
 
 from .utils.core import get_pair_reserves
 from .utils.models.message_models import UniswapPairTotalReservesSnapshot
-from pooler.utils.callback_helpers import GenericProcessor
+from pooler.utils.callback_helpers import GenericProcessorSnapshot
 from pooler.utils.default_logger import logger
-from pooler.utils.models.message_models import EpochBase
+from pooler.utils.models.message_models import EpochBaseSnapshot
 from pooler.utils.rpc import RpcHelper
 
 
-class PairTotalReservesProcessor(GenericProcessor):
+class PairTotalReservesProcessor(GenericProcessorSnapshot):
     transformation_lambdas = None
 
     def __init__(self) -> None:
@@ -85,7 +85,7 @@ class PairTotalReservesProcessor(GenericProcessor):
                 'token1Reserves': epoch_reserves_snapshot_map_token1,
                 'token0ReservesUSD': epoch_usd_reserves_snapshot_map_token0,
                 'token1ReservesUSD': epoch_usd_reserves_snapshot_map_token1,
-                'chainHeightRange': EpochBase(
+                'chainHeightRange': EpochBaseSnapshot(
                     begin=min_chain_height, end=max_chain_height,
                 ),
                 'timestamp': max_block_timestamp,
