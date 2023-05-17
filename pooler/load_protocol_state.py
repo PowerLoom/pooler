@@ -5,15 +5,14 @@ import io
 import json
 import resource
 import sys
-from collections import defaultdict
-
+from typing import Dict
+import loguru
 import pydantic
 import redis
 import uvloop
-from ipfs_client.main import AsyncIPFSClientSingleton
+from collections import defaultdict
 from redis import asyncio as aioredis
 from web3 import Web3
-
 from pooler.settings.config import settings
 from pooler.utils.data_utils import get_project_finalized_cid
 from pooler.utils.data_utils import get_project_first_epoch
@@ -30,14 +29,17 @@ from pooler.utils.redis.redis_keys import source_chain_epoch_size_key
 from pooler.utils.rpc import RpcHelper
 from pooler.utils.utility_functions import acquire_bounded_semaphore
 
-
 class ProtocolStateLoader:
     _anchor_rpc_helper: RpcHelper
     _redis_conn: aioredis.Redis
     _protocol_state_query_semaphore: asyncio.BoundedSemaphore
-
+    _logger: loguru.Logger
+    _protocol_state_contract: Web3.eth.contract
     @acquire_bounded_semaphore
-    async def _load_finalized_cids_from_contract(self, project_id, begin_epoch_id, cur_epoch_id, semaphore):
+    async def _load_finalized_cids_from_contract_in_epoch_range(self, project_id, begin_epoch_id, cur_epoch_id, semaphore):
+        """
+        Fetches finalized CIDs for a project against an epoch ID range from the contract and caches them in Redis
+        """
         epoch_id_fetch_batch_size = 20
         for e in range(begin_epoch_id, cur_epoch_id + 1, epoch_id_fetch_batch_size):
             self._logger.info(
@@ -64,20 +66,52 @@ class ProtocolStateLoader:
                     )
                 else:
                     self._logger.trace(
-                        'Fetched finalized CIDs for project {} in epoch {}',
+                        'Fetched finalized CIDs for project {} in epoch {}: e',
                         project_id, begin_epoch_id + idx,
                     )
-
+    @acquire_bounded_semaphore
+    async def _load_finalized_cids_from_contract(self, project_id, epoch_id_list, semaphore) -> Dict[int, str]:
+        """
+        Fetches finalized CIDs for a project against a given list of epoch IDs from the contract and caches them in Redis
+        """
+        batch_size = 20
+        self._logger.info(
+            'Fetching finalized CIDs for project {} in epoch ID list: {}',
+            project_id, epoch_id_list,
+        )
+        eid_cid_map = dict()
+        for i in range(0, len(epoch_id_list), batch_size):
+            r = await asyncio.gather(
+                *[
+                    w3_get_and_cache_finalized_cid(
+                        project_id=project_id,
+                        rpc_helper=self._anchor_rpc_helper,
+                        epoch_id=epoch_id,
+                        redis_conn=self._redis_conn,
+                        state_contract_obj=self._protocol_state_contract,
+                    )
+                    for epoch_id in epoch_id_list[i:i + batch_size]
+                ], return_exceptions=True,
+            )
+            for idx, e in enumerate(r):
+                if isinstance(e, Exception):
+                    self._logger.error(
+                        'Error fetching finalized CID for project {} in epoch {}: {}',
+                        project_id, epoch_id_list[i + idx], e,
+                    )
+                else:
+                    self._logger.trace(
+                        'Fetched finalized CID for project {} in epoch {}',
+                        project_id, epoch_id_list[i + idx],
+                    )
+                    eid_cid_map[epoch_id_list[i + idx]] = e
+        self._logger.error('Could not fetch finalized CIDs for project {} against epoch IDs: {}', project_id, list(filter(lambda x: x not in eid_cid_map, epoch_id_list)))
+        return eid_cid_map
+    
     async def _init_redis_pool(self):
         self._aioredis_pool = RedisPoolCache(pool_size=1000)
         await self._aioredis_pool.populate()
         self._redis_conn = self._aioredis_pool._aioredis_pool
-
-    async def _init_ipfs_client(self):
-        self._ipfs_singleton = AsyncIPFSClientSingleton(settings.ipfs)
-        await self._ipfs_singleton.init_sessions()
-        self._ipfs_writer_client = self._ipfs_singleton._ipfs_write_client
-        self._ipfs_reader_client = self._ipfs_singleton._ipfs_read_client
 
     async def _init_rpc_helper(self):
         self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
@@ -94,7 +128,6 @@ class ProtocolStateLoader:
             module=f'PowerLoom|ProtocolStateLoader|{settings.namespace}-{settings.instance_id[:5]}',
         )
         await self._init_redis_pool()
-        await self._init_ipfs_client()
         await self._init_rpc_helper()
         self._protocol_state_query_semaphore = asyncio.BoundedSemaphore(10)
 
@@ -142,6 +175,13 @@ class ProtocolStateLoader:
         )
         if cids_r:
             [project_state.finalized_cids.update({int(eid): cid}) for cid, eid in cids_r]
+        null_cid_epochs = list(filter(lambda x: 'null' in project_state.finalized_cids[x], project_state.finalized_cids.keys()))
+        # recheck on the contract if they are indeed null
+        self._logger.debug('Verifying CIDs against epoch IDs of project {} by re-fetching state from contract since they were found to be null in local cache: {}', project_id, null_cid_epochs)
+        rechecked_eid_cid_map = asyncio.get_event_loop().run_until_complete(self._load_finalized_cids_from_contract(
+            project_id, null_cid_epochs, self._protocol_state_query_semaphore,
+        ))
+        project_state.finalized_cids.update(rechecked_eid_cid_map)
         self._logger.debug('Exported {} finalized CIDs for project {}', len(project_state.finalized_cids), project_id)
         return project_state
 
@@ -227,6 +267,8 @@ if __name__ == '__main__':
         resource.RLIMIT_NOFILE,
         (settings.rlimit.file_descriptors, hard),
     )
+    state_loader_exporter = ProtocolStateLoader()
+    asyncio.get_event_loop().run_until_complete(state_loader_exporter.init())
     if sys.argv[1] == 'export':
         ProtocolStateLoader().export()
     elif sys.argv[1] == 'load':
