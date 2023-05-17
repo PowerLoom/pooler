@@ -1075,7 +1075,7 @@ starlette = "^0.26.1"
 
 [package.source]
 type = "git"
-url = "ssh://git@github.com/PowerLoom/py-ipfs-client"
+url = "https://git@github.com/PowerLoom/py-ipfs-client"
 reference = "HEAD"
 resolved_reference = "cc9bd2c02cd2c52c8400e906f569e3e4570a93ba"
 
@@ -1108,32 +1108,6 @@ zipp = {version = ">=3.1.0", markers = "python_version < \"3.10\""}
 [package.extras]
 docs = ["furo", "jaraco.packaging (>=9)", "jaraco.tidelift (>=1.4)", "rst.linker (>=1.9)", "sphinx (>=3.5)", "sphinx-lint"]
 testing = ["flake8 (<5)", "pytest (>=6)", "pytest-black (>=0.3.7)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=1.3)", "pytest-flake8", "pytest-mypy (>=0.9.1)"]
-
-[[package]]
-name = "IPFS-Toolkit"
-version = "0.3.2"
-description = ""
-category = "main"
-optional = false
-python-versions = ">=3.6"
-files = []
-develop = false
-
-[package.dependencies]
-appdirs = "*"
-httpcore = "*"
-httpx = "*"
-idna = "*"
-multiaddr = "*"
-requests = "*"
-setuptools = ">=42"
-wheel = "*"
-
-[package.source]
-type = "git"
-url = "https://github.com/anomit/IPFS-Toolkit-Python.git"
-reference = "76dc979dd8ca6c31b0fe07d41cf13d3c467072c8"
-resolved_reference = "76dc979dd8ca6c31b0fe07d41cf13d3c467072c8"
 
 [[package]]
 name = "ipfshttpclient"
@@ -2136,21 +2110,6 @@ files = [
 ]
 
 [[package]]
-name = "wheel"
-version = "0.40.0"
-description = "A built-package format for Python"
-category = "main"
-optional = false
-python-versions = ">=3.7"
-files = [
-    {file = "wheel-0.40.0-py3-none-any.whl", hash = "sha256:d236b20e7cb522daf2390fa84c55eea81c5c30190f90f29ae2ca1ad8355bf247"},
-    {file = "wheel-0.40.0.tar.gz", hash = "sha256:cd1196f3faee2b31968d626e1731c94f99cbdb67cf5a46e4f5656cbee7738873"},
-]
-
-[package.extras]
-test = ["pytest (>=6.0.0)"]
-
-[[package]]
 name = "win32-setctime"
 version = "1.1.0"
 description = "A small Python utility to set file creation time on Windows"
@@ -2357,4 +2316,4 @@ testing = ["big-O", "flake8 (<5)", "jaraco.functools", "jaraco.itertools", "more
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "8a7fdfdb0a8dfe5f767805b15eb95eb60fdbdeafee78ff6ebb0376035dcf16a9"
+content-hash = "76fa0d831e06d8f1339bf410d9f7df8a568a9cbc96b25baac2f4be231d84a612"
