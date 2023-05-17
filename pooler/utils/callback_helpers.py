@@ -139,14 +139,17 @@ def notify_on_task_failure_aggregate(fn):
 
                 project_hash = hashlib.sha3_256(unique_project_id.encode()).hexdigest()
 
-                project_id = f'{type_}:{project_hash}:{settings.namespace}'
+                project_id = f'{task_type}:{project_hash}:{settings.namespace}'
+                epoch_id = msg_obj.epochId
 
             elif isinstance(msg_obj, PowerloomSnapshotFinalizedMessage):
                 contract = msg_obj.projectId.split(':')[-2]
-                project_id = f'{type_}:{contract}:{settings.namespace}'
+                project_id = f'{task_type}:{contract}:{settings.namespace}'
+                epoch_id = msg_obj.epochId
 
             else:
                 project_id = 'UNKNOWN'
+                epoch_id = 'UNKNOWN'
 
             if settings.reporting.service_url:
                 f = asyncio.ensure_future(
