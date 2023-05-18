@@ -2,9 +2,7 @@ from ipfs_client.main import AsyncIPFSClient
 from redis import asyncio as aioredis
 
 from ..utils.helpers import get_pair_metadata
-from ..utils.models.message_models import UniswapPairTotalReservesSnapshot
-from ..utils.models.message_models import UniswapTopPairSnapshot
-from ..utils.models.message_models import UniswapTopPairsSnapshot
+from ..utils.models.message_models import UniswapTopPair7dSnapshot, UniswapTopPairs7dSnapshot
 from ..utils.models.message_models import UniswapTradesAggregateSnapshot
 from pooler.utils.callback_helpers import GenericProcessorMultiProjectAggregate
 from pooler.utils.data_utils import get_sumbmission_data_bulk
@@ -47,7 +45,7 @@ class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
         for msg, data in zip(msg_obj.messages, snapshot_data):
             if not data:
                 continue
-            snapshot = UniswapTradesAggregateSnapshot.parse_raw(data)
+            snapshot = UniswapTopPair7dSnapshot.parse_raw(data)
             snapshot_mapping[msg.projectId] = snapshot
 
             contract_address = msg.projectId.split(':')[-2]
@@ -71,27 +69,20 @@ class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
                 pair_data[contract] = {
                     'address': contract,
                     'name': pair_metadata['pair']['symbol'],
-                    'liquidity': 0,
-                    'volume24h': 0,
-                    'fee24h': 0,
+                    'volume7d': 0,
+                    'fee7d': 0,
                 }
 
-            if 'reserves' in snapshot_project_id:
-                max_epoch_block = snapshot.chainHeightRange.end
-                pair_data[contract]['liquidity'] += snapshot.token0ReservesUSD[f'block{max_epoch_block}'] + \
-                    snapshot.token1ReservesUSD[f'block{max_epoch_block}']
-
-            elif 'volume' in snapshot_project_id:
-                pair_data[contract]['volume24h'] += snapshot.totalTrade
-                pair_data[contract]['fee24h'] += snapshot.totalFee
+            pair_data[contract]['volume7d'] += snapshot.totalTrade
+            pair_data[contract]['fee7d'] += snapshot.totalFee
 
         top_pairs = []
         for pair in pair_data.values():
-            top_pairs.append(UniswapTopPairSnapshot.parse_obj(pair))
+            top_pairs.append(UniswapTopPair7dSnapshot.parse_obj(pair))
 
-        top_pairs = sorted(top_pairs, key=lambda x: x.liquidity, reverse=True)
+        top_pairs = sorted(top_pairs, key=lambda x: x.volume7d, reverse=True)
 
-        top_pairs_snapshot = UniswapTopPairsSnapshot(
+        top_pairs_snapshot = UniswapTopPairs7dSnapshot(
             epochId=epoch_id,
             pairs=top_pairs,
         )

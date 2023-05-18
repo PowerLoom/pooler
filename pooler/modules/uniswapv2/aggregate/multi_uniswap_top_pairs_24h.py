@@ -3,8 +3,8 @@ from redis import asyncio as aioredis
 
 from ..utils.helpers import get_pair_metadata
 from ..utils.models.message_models import UniswapPairTotalReservesSnapshot
-from ..utils.models.message_models import UniswapTopPairSnapshot
-from ..utils.models.message_models import UniswapTopPairsSnapshot
+from ..utils.models.message_models import UniswapTopPair24hSnapshot
+from ..utils.models.message_models import UniswapTopPairs24hSnapshot
 from ..utils.models.message_models import UniswapTradesAggregateSnapshot
 from pooler.utils.callback_helpers import GenericProcessorMultiProjectAggregate
 from pooler.utils.data_utils import get_sumbmission_data_bulk
@@ -90,11 +90,11 @@ class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
 
         top_pairs = []
         for pair in pair_data.values():
-            top_pairs.append(UniswapTopPairSnapshot.parse_obj(pair))
+            top_pairs.append(UniswapTopPair24hSnapshot.parse_obj(pair))
 
         top_pairs = sorted(top_pairs, key=lambda x: x.liquidity, reverse=True)
 
-        top_pairs_snapshot = UniswapTopPairsSnapshot(
+        top_pairs_snapshot = UniswapTopPairs24hSnapshot(
             epochId=epoch_id,
             pairs=top_pairs,
         )
