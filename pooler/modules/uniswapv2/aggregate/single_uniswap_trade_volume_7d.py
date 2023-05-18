@@ -69,8 +69,8 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
         )
 
         # source project tail epoch
-        [tail_epoch_id, extrapolated_flag] = await get_tail_epoch_id(
-            redis, protocol_state_contract, anchor_rpc_helper, msg_obj.epochId, 86400, msg_obj.projectId,
+        tail_epoch_id, extrapolated_flag = await get_tail_epoch_id(
+            redis, protocol_state_contract, anchor_rpc_helper, msg_obj.epochId, 7*86400, msg_obj.projectId,
         )
 
         # If no past snapshots exist, then aggregate will be current snapshot

@@ -31,7 +31,7 @@ class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
         project_id: str,
 
     ):
-        self._logger.info(f'Calculating top pairs data for {msg_obj}')
+        self._logger.info(f'Calculating 7d top pairs trade volume data for {msg_obj}')
 
         epoch_id = msg_obj.epochId
 
@@ -47,10 +47,7 @@ class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
         for msg, data in zip(msg_obj.messages, snapshot_data):
             if not data:
                 continue
-            if 'reserves' in msg.projectId:
-                snapshot = UniswapPairTotalReservesSnapshot.parse_raw(data)
-            elif 'volume' in msg.projectId:
-                snapshot = UniswapTradesAggregateSnapshot.parse_raw(data)
+            snapshot = UniswapTradesAggregateSnapshot.parse_raw(data)
             snapshot_mapping[msg.projectId] = snapshot
 
             contract_address = msg.projectId.split(':')[-2]
