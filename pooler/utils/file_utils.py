@@ -5,6 +5,7 @@ from typing import Optional
 
 from loguru import logger
 
+from pooler.settings.config import settings
 
 default_logger = logger.bind(module='PowerLoom|FileUtils')
 
@@ -14,11 +15,16 @@ def read_json_file(
     logger: logger = default_logger,
 ) -> Optional[dict]:
     """Read given json file and return its content as a dictionary."""
+    # check if file is present
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f'File {file_path} not found')
+
     try:
         f_ = open(file_path, 'r', encoding='utf-8')
     except Exception as exc:
         logger.warning(f'Unable to open the {file_path} file')
-        logger.opt(exception=True).error(exc)
+        if settings.logs.trace_enabled:
+            logger.opt(exception=True).error(exc)
         raise exc
     else:
         json_data = json.loads(f_.read())
@@ -32,12 +38,12 @@ def write_json_file(
     logger: logger = logger,
 ) -> None:
     try:
-        file_path = directory + file_name
+        file_path = os.path.join(directory, file_name)
         if not os.path.exists(directory):
             os.makedirs(directory)
         f_ = open(file_path, 'w', encoding='utf-8')
     except Exception as exc:
-        logger.error(f'Unable to open the {file_path} file')
+        logger.error(f'Unable to write to file {file_path}')
         raise exc
     else:
         json.dump(data, f_, ensure_ascii=False, indent=4)

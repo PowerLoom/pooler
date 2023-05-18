@@ -39,7 +39,9 @@ class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
         all_pair_metadata = {}
 
         snapshot_data = await get_sumbmission_data_bulk(
-            redis, [msg.snapshotCid for msg in msg_obj.messages], ipfs_reader,
+            redis, [msg.snapshotCid for msg in msg_obj.messages], ipfs_reader, [
+                msg.projectId for msg in msg_obj.messages
+            ],
         )
 
         for msg, data in zip(msg_obj.messages, snapshot_data):

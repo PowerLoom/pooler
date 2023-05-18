@@ -66,10 +66,6 @@ def project_first_epoch_hmap():
     return 'projectFirstEpoch'
 
 
-def cid_data(cid):
-    return f'cidData:{cid}'
-
-
 def source_chain_id_key():
     return 'sourceChainId'
 

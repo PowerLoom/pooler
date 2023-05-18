@@ -1,4 +1,5 @@
 import asyncio
+import os
 from typing import List
 
 import tenacity
@@ -9,8 +10,10 @@ from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
 
+from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
-from pooler.utils.redis.redis_keys import cid_data
+from pooler.utils.file_utils import read_json_file
+from pooler.utils.file_utils import write_json_file
 from pooler.utils.redis.redis_keys import project_finalized_data_zset
 from pooler.utils.redis.redis_keys import project_first_epoch_hmap
 from pooler.utils.redis.redis_keys import source_chain_block_time_key
@@ -116,8 +119,6 @@ async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj
         return first_epoch
 
 
-# TODO: cache IPFS payloads in local file system
-# TODO: warmup cache to reduce IPFS calls overhead
 @retry(
     reraise=True,
     retry=retry_if_exception_type(IPFSAsyncClientError),
@@ -125,28 +126,23 @@ async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj
     stop=stop_after_attempt(3),
     before_sleep=retry_state_callback,
 )
-async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader):
+async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, project_id: str):
     if not cid:
         return None
 
     if 'null' in cid:
         return None
 
-    submission_data = await redis_conn.get(
-        cid_data(cid),
-    )
-    if submission_data:
-        return submission_data
-    else:
+    cached_data_path = os.path.join(settings.ipfs.local_cache_path, project_id, 'snapshots')
+    filename = f'{cid}.json'
+    try:
+        submission_data = read_json_file(os.path.join(cached_data_path, filename))
+    except FileNotFoundError:
         # Fetch from IPFS
         logger.info('CID {}, fetching data from IPFS', cid)
         try:
             submission_data = await ipfs_reader.cat(cid)
-            await redis_conn.set(
-                cid_data(cid),
-                submission_data,
-                ex=60 * 60 * 24 * 7,
-            )
+            write_json_file(cached_data_path, filename, submission_data)
 
             return submission_data
         except Exception as e:
@@ -154,13 +150,17 @@ async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader):
             return None
 
 
-async def get_sumbmission_data_bulk(redis_conn: aioredis.Redis, cids: List, ipfs_reader):
+async def get_sumbmission_data_bulk(redis_conn: aioredis.Redis, cids: List, ipfs_reader, project_ids: List[str]):
     batch_size = 10
     all_snapshot_data = []
     for i in range(0, len(cids), batch_size):
         batch_cids = cids[i:i + batch_size]
+        batch_project_ids = project_ids[i:i + batch_size]
         batch_snapshot_data = await asyncio.gather(
-            *[get_submission_data(redis_conn, cid, ipfs_reader) for cid in batch_cids],
+            *[
+                get_submission_data(redis_conn, cid, ipfs_reader, project_id)
+                for cid, project_id in zip(batch_cids, batch_project_ids)
+            ],
         )
         all_snapshot_data.extend(batch_snapshot_data)
 
@@ -172,7 +172,7 @@ async def get_project_epoch_snapshot(
 ):
     cid = await get_project_finalized_cid(redis_conn, state_contract_obj, rpc_helper, epoch_id, project_id)
     if cid:
-        data = await get_submission_data(redis_conn, cid, ipfs_reader)
+        data = await get_submission_data(redis_conn, cid, ipfs_reader, project_id)
         return data
     else:
         return None
@@ -328,6 +328,12 @@ async def get_project_epoch_snapshot_bulk(
         if cid and 'null' not in cid:
             valid_cid_data_with_epochs.append((cid, epoch_id))
 
+    all_snapshot_data = get_sumbmission_data_bulk(
+        redis_conn, valid_cid_data_with_epochs, ipfs_reader, [
+            project_id,
+        ] * len(valid_cid_data_with_epochs),
+    )
+
     snapshot_data = await redis_conn.mget(
         *[
             cid_data(cid) for cid, _ in valid_cid_data_with_epochs
@@ -342,7 +348,7 @@ async def get_project_epoch_snapshot_bulk(
         batch_cid_data = valid_cid_data_with_epochs[i:i + batch_size]
         batch_snapshot_data = await asyncio.gather(
             *[
-                get_submission_data(redis_conn, cid, ipfs_reader) for cid, _ in batch_cid_data
+                get_submission_data(redis_conn, cid, ipfs_reader, project_id) for cid, _ in batch_cid_data
             ],
         )
         all_snapshot_data.extend(batch_snapshot_data)
