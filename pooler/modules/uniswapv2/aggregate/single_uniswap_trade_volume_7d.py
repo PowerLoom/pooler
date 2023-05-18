@@ -61,6 +61,7 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
         previous_aggregate_snapshot_data = await get_project_epoch_snapshot(
             redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader, msg_obj.epochId - 1, project_id,
         )
+        project_first_epoch = await get_project_first_epoch(redis, protocol_state_contract, rpc_helper, project_id)
         contract = project_id.split(':')[-2]
         
         pair_metadata = await get_pair_metadata(
@@ -73,27 +74,29 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
         snapshot_tasks = list()
         self._logger.debug('fetching 24hour aggregates spaced out by 1 day over 7 days...')
         # 1. find one day tail epoch
-        count = 1
+        count = 0
         self._logger.debug('fetch # {}: queueing task for 24h aggregate snapshot for project ID {} at currently received epoch ID {} with snasphot CID {}', count, msg_obj.projectId, msg_obj.epochId, msg_obj.snapshotCid)
         snapshot_tasks.append(get_project_epoch_snapshot(
             redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader, msg_obj.epochId, msg_obj.projectId
         ))
-        tail_epoch_id = msg_obj.epochId
         seek_stop_flag = False
+        head_epoch = msg_obj.epochId
         # 2. if not extrapolated, attempt to seek further back
-        while not seek_stop_flag or count <=7:
+        while not seek_stop_flag or count <7:
             tail_epoch_id, seek_stop_flag = await get_tail_epoch_id(
-                redis, protocol_state_contract, anchor_rpc_helper, tail_epoch_id, 86400, msg_obj.projectId
+                redis, protocol_state_contract, anchor_rpc_helper, head_epoch, 86400, msg_obj.projectId
             )
             count += 1
-            self._logger.debug('fetch # {}: queueing task for 24h aggregate snapshot for project ID {} at rewinded epoch ID {}', count, msg_obj.projectId, tail_epoch_id)
-            snapshot_tasks.append(get_project_epoch_snapshot(
-                redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id, msg_obj.projectId
-            ))
-        if count > 7:
+            if not seek_stop_flag or count > 1:
+                self._logger.debug('fetch # {}: for 7d aggregated trade volume calculations: queueing task for 24h aggregate snapshot for project ID {} at rewinded epoch ID {}', count, msg_obj.projectId, tail_epoch_id)
+                snapshot_tasks.append(get_project_epoch_snapshot(
+                    redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id, msg_obj.projectId
+                ))
+            head_epoch = tail_epoch_id - 1
+        if count == 7:
             self._logger.info('fetch # {}: reached 7 day limit for 24h aggregate snapshots for project ID {} at rewinded epoch ID {}', count, msg_obj.projectId, tail_epoch_id)
         all_snapshots = await asyncio.gather(*snapshot_tasks, return_exceptions=True)
-        self._logger.debug('fetched {} 24h aggregate snapshots for project ID {}: {}', len(all_snapshots), msg_obj.projectId, all_snapshots)
+        self._logger.debug('for 7d aggregated trade volume calculations: fetched {} 24h aggregated trade volume snapshots for project ID {}: {}', len(all_snapshots), msg_obj.projectId, all_snapshots)
         for idx, single_24h_snapshot in enumerate(all_snapshots):
             if not isinstance(single_24h_snapshot, BaseException):
                 snapshot = UniswapTopPair24hSnapshot.parse_raw(single_24h_snapshot)

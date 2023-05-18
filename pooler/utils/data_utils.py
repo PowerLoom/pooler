@@ -268,7 +268,7 @@ async def get_tail_epoch_id(
         tail_epoch_id = project_first_epoch
         return tail_epoch_id, True
 
-    logger.info('tail epoch_id: {}', tail_epoch_id)
+    logger.trace('project ID {} tail epoch_id: {} against head epoch ID {} ', project_id, tail_epoch_id, current_epoch_id)
 
     return tail_epoch_id, False
 
