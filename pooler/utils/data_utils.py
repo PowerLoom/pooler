@@ -126,6 +126,10 @@ async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj
     stop=stop_after_attempt(3),
     before_sleep=retry_state_callback,
 )
+async def fetch_file_from_ipfs(ipfs_reader, cid):
+    return await ipfs_reader.cat(cid)
+
+
 async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, project_id: str):
     if not cid:
         return None
@@ -137,17 +141,19 @@ async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, proj
     filename = f'{cid}.json'
     try:
         submission_data = read_json_file(os.path.join(cached_data_path, filename))
-    except FileNotFoundError:
+    except Exception as e:
         # Fetch from IPFS
+        logger.error('Error while reading from cache', error=e)
         logger.info('CID {}, fetching data from IPFS', cid)
         try:
-            submission_data = await ipfs_reader.cat(cid)
+            submission_data = await fetch_file_from_ipfs(ipfs_reader, cid)
+            # Cache it
             write_json_file(cached_data_path, filename, submission_data)
+        except:
+            logger.error('Error while fetching data from IPFS')
+            submission_data = None
 
-            return submission_data
-        except Exception as e:
-            logger.error(f'Error while fetching data from IPFS. Error: {e}')
-            return None
+    return submission_data
 
 
 async def get_sumbmission_data_bulk(redis_conn: aioredis.Redis, cids: List, ipfs_reader, project_ids: List[str]):
