@@ -75,7 +75,7 @@ class AggreagateStatsProcessor(GenericProcessorMultiProjectAggregate):
                 stats_data['fee24h'] += snapshot.totalFee
 
         # source project tail epoch
-        [tail_epoch_id, extrapolated_flag] = await get_tail_epoch_id(
+        tail_epoch_id, extrapolated_flag = await get_tail_epoch_id(
             redis, protocol_state_contract, anchor_rpc_helper, msg_obj.epochId, 86400, project_id,
         )
         if not extrapolated_flag:

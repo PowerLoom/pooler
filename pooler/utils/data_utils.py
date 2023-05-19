@@ -268,7 +268,10 @@ async def get_tail_epoch_id(
         tail_epoch_id = project_first_epoch
         return tail_epoch_id, True
 
-    logger.trace('project ID {} tail epoch_id: {} against head epoch ID {} ', project_id, tail_epoch_id, current_epoch_id)
+    logger.trace(
+        'project ID {} tail epoch_id: {} against head epoch ID {} ',
+        project_id, tail_epoch_id, current_epoch_id,
+    )
 
     return tail_epoch_id, False
 
@@ -284,13 +287,12 @@ async def get_project_epoch_snapshot_bulk(
 ):
 
     batch_size = 100
-    ipfs_fetch_batch_size = 10
 
     project_first_epoch = await get_project_first_epoch(
         redis_conn, state_contract_obj, rpc_helper, project_id,
     )
     if epoch_id_min < project_first_epoch:
-        return None
+        epoch_id_min = project_first_epoch
 
     # if data is present in finalzied data zset, return it
     cid_data_with_epochs = await redis_conn.zrangebyscore(
@@ -328,29 +330,10 @@ async def get_project_epoch_snapshot_bulk(
         if cid and 'null' not in cid:
             valid_cid_data_with_epochs.append((cid, epoch_id))
 
-    all_snapshot_data = get_sumbmission_data_bulk(
-        redis_conn, valid_cid_data_with_epochs, ipfs_reader, [
+    all_snapshot_data = await get_sumbmission_data_bulk(
+        redis_conn, [cid for cid, _ in valid_cid_data_with_epochs], ipfs_reader, [
             project_id,
         ] * len(valid_cid_data_with_epochs),
     )
-
-    snapshot_data = await redis_conn.mget(
-        *[
-            cid_data(cid) for cid, _ in valid_cid_data_with_epochs
-        ],
-    )
-
-    all_snapshot_data = []
-    ipfs_snapshot_tasks = []
-
-    for i in range(0, len(snapshot_data), ipfs_fetch_batch_size):
-        batch_snapshot_data = snapshot_data[i:i + batch_size]
-        batch_cid_data = valid_cid_data_with_epochs[i:i + batch_size]
-        batch_snapshot_data = await asyncio.gather(
-            *[
-                get_submission_data(redis_conn, cid, ipfs_reader, project_id) for cid, _ in batch_cid_data
-            ],
-        )
-        all_snapshot_data.extend(batch_snapshot_data)
 
     return all_snapshot_data

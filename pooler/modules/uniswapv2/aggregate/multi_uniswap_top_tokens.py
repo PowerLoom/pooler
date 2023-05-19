@@ -111,7 +111,7 @@ class AggreagateTopTokensProcessor(GenericProcessorMultiProjectAggregate):
                 token_data[token0['address']]['volume24h'] += snapshot.token0TradeVolumeUSD
                 token_data[token1['address']]['volume24h'] += snapshot.token1TradeVolumeUSD
 
-        [tail_epoch_id, extrapolated_flag] = await get_tail_epoch_id(
+        tail_epoch_id, extrapolated_flag = await get_tail_epoch_id(
             redis, protocol_state_contract, anchor_rpc_helper, msg_obj.epochId, 86400, project_id,
         )
 
