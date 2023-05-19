@@ -33,8 +33,6 @@ class ProtocolStateLoader:
     _anchor_rpc_helper: RpcHelper
     _redis_conn: aioredis.Redis
     _protocol_state_query_semaphore: asyncio.BoundedSemaphore
-    _logger: loguru.Logger
-    _protocol_state_contract: Web3.eth.contract
     @acquire_bounded_semaphore
     async def _load_finalized_cids_from_contract_in_epoch_range(self, project_id, begin_epoch_id, cur_epoch_id, semaphore):
         """
@@ -162,6 +160,7 @@ class ProtocolStateLoader:
         return cur_epoch_id, project_id_first_epoch_id_map, all_project_ids
 
     def _export_project_state(self, project_id, first_epoch_id, end_epoch_id, redis_conn: redis.Redis) -> ProjectSpecificState:
+        
         self._logger.debug('Exporting project state for {}', project_id)
         project_state = ProjectSpecificState.construct()
         project_state.first_epoch_id = first_epoch_id
@@ -175,14 +174,14 @@ class ProtocolStateLoader:
         )
         if cids_r:
             [project_state.finalized_cids.update({int(eid): cid}) for cid, eid in cids_r]
-        null_cid_epochs = list(filter(lambda x: 'null' in project_state.finalized_cids[x], project_state.finalized_cids.keys()))
-        # recheck on the contract if they are indeed null
-        self._logger.debug('Verifying CIDs against epoch IDs of project {} by re-fetching state from contract since they were found to be null in local cache: {}', project_id, null_cid_epochs)
-        rechecked_eid_cid_map = asyncio.get_event_loop().run_until_complete(self._load_finalized_cids_from_contract(
-            project_id, null_cid_epochs, self._protocol_state_query_semaphore,
-        ))
-        project_state.finalized_cids.update(rechecked_eid_cid_map)
-        self._logger.debug('Exported {} finalized CIDs for project {}', len(project_state.finalized_cids), project_id)
+        # null_cid_epochs = list(filter(lambda x: 'null' in project_state.finalized_cids[x], project_state.finalized_cids.keys()))
+        # # recheck on the contract if they are indeed null
+        # self._logger.debug('Verifying CIDs against epoch IDs of project {} by re-fetching state from contract since they were found to be null in local cache: {}', project_id, null_cid_epochs)
+        # rechecked_eid_cid_map = asyncio.get_event_loop().run_until_complete(self._load_finalized_cids_from_contract(
+        #     project_id, null_cid_epochs, self._protocol_state_query_semaphore,
+        # ))
+        # project_state.finalized_cids.update(rechecked_eid_cid_map)
+        # self._logger.debug('Exported {} finalized CIDs for project {}', len(project_state.finalized_cids), project_id)
         return project_state
 
     def export(self):
@@ -206,6 +205,14 @@ class ProtocolStateLoader:
             except Exception as exc:
                 exceptions['project'].update({project_id: str(exc)})
             else:
+                null_cid_epochs = list(filter(lambda x: 'null' in project_specific_state.finalized_cids[x], project_specific_state.finalized_cids.keys()))
+                # recheck on the contract if they are indeed null
+                self._logger.debug('Verifying CIDs against epoch IDs of project {} by re-fetching state from contract since they were found to be null in local cache: {}', project_id, null_cid_epochs)
+                rechecked_eid_cid_map = asyncio.get_event_loop().run_until_complete(self._load_finalized_cids_from_contract(
+                    project_id=project_id, epoch_id_list=null_cid_epochs, semaphore=self._protocol_state_query_semaphore,
+                ))
+                project_specific_state.finalized_cids.update(rechecked_eid_cid_map)
+                self._logger.debug('Exported {} finalized CIDs for project {}', len(project_specific_state.finalized_cids), project_id)
                 state.project_specific_states[project_id] = project_specific_state
         state_json = state.json()
         with bz2.open('state.json.bz2', 'wb') as f:

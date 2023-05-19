@@ -86,7 +86,7 @@ async def w3_get_and_cache_finalized_cid(
             project_finalized_data_zset(project_id),
             {f'null_{epoch_id}': epoch_id},
         )
-        return None, epoch_id
+        return f'null_{epoch_id}', epoch_id
 
 
 # TODO: warmup cache to reduce RPC calls overhead

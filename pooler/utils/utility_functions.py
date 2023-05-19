@@ -7,7 +7,7 @@ from pooler.utils.default_logger import logger
 def acquire_bounded_semaphore(fn):
     @wraps(fn)
     async def wrapped(self, *args, **kwargs):
-        sem: asyncio.BoundedSemaphore = kwargs['semaphore'] if 'semaphore' in kwargs else args[3]
+        sem: asyncio.BoundedSemaphore = kwargs['semaphore']
         await sem.acquire()
         result = None
         try:
