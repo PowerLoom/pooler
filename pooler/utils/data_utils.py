@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 from typing import List
 
@@ -130,12 +131,12 @@ async def fetch_file_from_ipfs(ipfs_reader, cid):
     return await ipfs_reader.cat(cid)
 
 
-async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, project_id: str):
+async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, project_id: str) -> dict:
     if not cid:
-        return None
+        return dict()
 
     if 'null' in cid:
-        return None
+        return dict()
 
     cached_data_path = os.path.join(settings.ipfs.local_cache_path, project_id, 'snapshots')
     filename = f'{cid}.json'
@@ -149,10 +150,10 @@ async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, proj
             submission_data = await fetch_file_from_ipfs(ipfs_reader, cid)
             # Cache it
             write_json_file(cached_data_path, filename, submission_data)
+            submission_data = json.loads(submission_data)
         except:
             logger.error('Error while fetching data from IPFS')
-            submission_data = None
-
+            submission_data = dict()
     return submission_data
 
 
@@ -175,13 +176,13 @@ async def get_sumbmission_data_bulk(redis_conn: aioredis.Redis, cids: List, ipfs
 
 async def get_project_epoch_snapshot(
     redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, ipfs_reader, epoch_id, project_id,
-):
+) -> dict:
     cid = await get_project_finalized_cid(redis_conn, state_contract_obj, rpc_helper, epoch_id, project_id)
     if cid:
         data = await get_submission_data(redis_conn, cid, ipfs_reader, project_id)
         return data
     else:
-        return None
+        return dict()
 
 
 async def get_source_chain_id(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper):

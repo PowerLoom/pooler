@@ -2,7 +2,8 @@ from ipfs_client.main import AsyncIPFSClient
 from redis import asyncio as aioredis
 
 from ..utils.helpers import get_pair_metadata
-from ..utils.models.message_models import UniswapTopPair7dSnapshot, UniswapTopPairs7dSnapshot
+from ..utils.models.message_models import UniswapTopPair7dSnapshot
+from ..utils.models.message_models import UniswapTopPairs7dSnapshot
 from ..utils.models.message_models import UniswapTradesAggregateSnapshot
 from pooler.utils.callback_helpers import GenericProcessorMultiProjectAggregate
 from pooler.utils.data_utils import get_sumbmission_data_bulk
@@ -45,7 +46,7 @@ class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
         for msg, data in zip(msg_obj.messages, snapshot_data):
             if not data:
                 continue
-            snapshot = UniswapTopPair7dSnapshot.parse_raw(data)
+            snapshot = UniswapTradesAggregateSnapshot.parse_obj(data)
             snapshot_mapping[msg.projectId] = snapshot
 
             contract_address = msg.projectId.split(':')[-2]

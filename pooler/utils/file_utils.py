@@ -13,7 +13,7 @@ default_logger = logger.bind(module='PowerLoom|FileUtils')
 def read_json_file(
     file_path: str,
     logger: logger = default_logger,
-) -> Optional[dict]:
+) -> dict:
     """Read given json file and return its content as a dictionary."""
     # check if file is present
     if not os.path.exists(file_path):

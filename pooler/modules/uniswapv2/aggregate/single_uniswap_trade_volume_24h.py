@@ -96,13 +96,13 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
             )
 
             if previous_aggregate_snapshot_data:
-                aggregate_snapshot = UniswapTradesAggregateSnapshot.parse_raw(previous_aggregate_snapshot_data)
+                aggregate_snapshot = UniswapTradesAggregateSnapshot.parse_obj(previous_aggregate_snapshot_data)
 
                 current_snapshot_data = await get_project_epoch_snapshot(
                     redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader, msg_obj.epochId, msg_obj.projectId,
                 )
 
-                current_snapshot = UniswapTradesSnapshot.parse_raw(current_snapshot_data)
+                current_snapshot = UniswapTradesSnapshot.parse_obj(current_snapshot_data)
 
                 if not extrapolated_flag:
                     current_tail_end_snapshot_data = await get_project_epoch_snapshot(
@@ -111,7 +111,7 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
                     )
 
                     if current_tail_end_snapshot_data:
-                        current_tail_end_snapshot = UniswapTradesSnapshot.parse_raw(current_tail_end_snapshot_data)
+                        current_tail_end_snapshot = UniswapTradesSnapshot.parse_obj(current_tail_end_snapshot_data)
 
                         aggregate_snapshot = self._remove_aggregate_snapshot(
                             aggregate_snapshot, current_tail_end_snapshot,
