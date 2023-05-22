@@ -52,13 +52,15 @@ class ProcessHubCommand(BaseModel):
 
 
 class SnapshotBase(BaseModel):
+    epochId: int
     contract: str
-    chainHeightRange: EpochBaseSnapshot
-    timestamp: float
+    blocks: Dict[str, int]
 
 
 class AggregateBase(BaseModel):
     epochId: int
+    tailEpochId: int
+    tailEpochIdBlockMarker: str
 
 
 class PayloadCommitMessage(BaseModel):

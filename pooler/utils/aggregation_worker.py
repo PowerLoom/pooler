@@ -3,8 +3,6 @@ import hashlib
 import importlib
 import json
 import time
-from typing import Callable
-from typing import List
 from typing import Union
 from uuid import uuid4
 
@@ -100,7 +98,6 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             msg_obj=msg_obj,
             cb_fn_async=stream_processor.compute,
             task_type=task_type,
-            transformation_lambdas=stream_processor.transformation_lambdas,
         )
 
         await self._send_payload_commit_service_queue(
@@ -287,7 +284,6 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         msg_obj: Union[PowerloomSnapshotFinalizedMessage, PowerloomCalculateAggregateMessage],
         cb_fn_async,
         task_type,
-        transformation_lambdas: List[Callable],
     ):
 
         try:
@@ -303,10 +299,6 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 protocol_state_contract=self.protocol_state_contract,
                 project_id=project_id,
             )
-
-            if transformation_lambdas:
-                for each_lambda in transformation_lambdas:
-                    result = each_lambda(result, msg_obj)
 
             return result
 

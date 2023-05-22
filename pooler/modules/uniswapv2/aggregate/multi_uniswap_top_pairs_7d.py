@@ -2,8 +2,8 @@ from ipfs_client.main import AsyncIPFSClient
 from redis import asyncio as aioredis
 
 from ..utils.helpers import get_pair_metadata
-from ..utils.models.message_models import UniswapTopPair7dSnapshot, UniswapTopPairs7dSnapshot
-from ..utils.models.message_models import UniswapTradesAggregateSnapshot
+from ..utils.models.message_models import UniswapTopPair7dSnapshot
+from ..utils.models.message_models import UniswapTopPairs7dSnapshot
 from pooler.utils.callback_helpers import GenericProcessorMultiProjectAggregate
 from pooler.utils.data_utils import get_sumbmission_data_bulk
 from pooler.utils.default_logger import logger
@@ -12,10 +12,8 @@ from pooler.utils.rpc import RpcHelper
 
 
 class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
-    transformation_lambdas = None
 
     def __init__(self) -> None:
-        self.transformation_lambdas = []
         self._logger = logger.bind(module='AggregateTopPairsProcessor')
 
     async def compute(

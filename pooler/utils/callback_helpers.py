@@ -5,7 +5,6 @@ import time
 from abc import ABC
 from abc import ABCMeta
 from abc import abstractmethod
-from abc import abstractproperty
 from functools import wraps
 
 import aio_pika
@@ -192,16 +191,10 @@ class GenericProcessorSnapshot(ABC):
     def __init__(self):
         pass
 
-    @abstractproperty
-    def transformation_lambdas(self):
-        pass
-
     @abstractmethod
     async def compute(
         self,
-        min_chain_height: int,
-        max_chain_height: int,
-        data_source_contract_address: str,
+        msg_obj: PowerloomSnapshotProcessMessage,
         redis: aioredis.Redis,
         rpc_helper: RpcHelper,
     ):
@@ -212,10 +205,6 @@ class GenericProcessorSingleProjectAggregate(ABC):
     __metaclass__ = ABCMeta
 
     def __init__(self):
-        pass
-
-    @abstractproperty
-    def transformation_lambdas(self):
         pass
 
     @abstractmethod
@@ -236,10 +225,6 @@ class GenericProcessorMultiProjectAggregate(ABC):
     __metaclass__ = ABCMeta
 
     def __init__(self):
-        pass
-
-    @abstractproperty
-    def transformation_lambdas(self):
         pass
 
     @abstractmethod

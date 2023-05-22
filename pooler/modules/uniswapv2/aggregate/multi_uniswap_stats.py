@@ -14,10 +14,8 @@ from pooler.utils.rpc import RpcHelper
 
 
 class AggreagateStatsProcessor(GenericProcessorMultiProjectAggregate):
-    transformation_lambdas = None
 
     def __init__(self) -> None:
-        self.transformation_lambdas = []
         self._logger = logger.bind(module='AggregateStatsProcessor')
 
     async def compute(

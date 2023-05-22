@@ -127,10 +127,6 @@ class GenericProcessorSnapshot(ABC):
     def __init__(self):
         pass
 
-    @abstractproperty
-    def transformation_lambdas(self):
-        pass
-
     @abstractmethod
     async def compute(
         self,
@@ -152,12 +148,6 @@ There are two main components developers need to focus on.
 - `redis` (async redis connection)
 - `rpc_helper` (RpcHelper instance to help with any blockchain calls necessary)
 
-2. `transformation_lambdas` provide an additional layer for computation on top of the generated snapshot (if needed). If `compute` function handles everything you can just set `transformation_lambdas` to `[]` otherwise pass the list of transformation function sequence. Each function referenced in `transformation_lambdas` must have same input interface. It should receive the following inputs -
- - `snapshot` (the generated snapshot to apply transformation on)
- - `data_source_contract_address` (contract address to extract data from)
- - `epoch_begin` (epoch begin block)
- - `epoch_end` (epoch end block)
-
 Output format can be anything depending on the usecase requirements. Although it is recommended to use proper pydantic models to define the snapshot interface.
 
 
@@ -167,10 +157,8 @@ Here's an example processor to calculate uniswap v2 pair reserves (simplified ve
 
 ```python
 class PairTotalReservesProcessor(GenericProcessorSnapshot):
-    transformation_lambdas = None
 
     def __init__(self) -> None:
-        self.transformation_lambdas = []
         self._logger = logger.bind(module='PairTotalReservesProcessor')
 
     async def compute(

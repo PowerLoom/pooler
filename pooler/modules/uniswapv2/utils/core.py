@@ -8,9 +8,8 @@ from .constants import pair_contract_abi
 from .constants import UNISWAP_EVENTS_ABI
 from .constants import UNISWAP_TRADE_EVENT_SIGS
 from .helpers import get_pair_metadata
-from .models.data_models import epoch_event_trade_data
-from .models.data_models import event_trade_data
-from .models.data_models import trade_data
+from .models.data_models import TradeData
+from .models.data_models import TradeEventLogs
 from .pricing import (
     get_token_price_in_block_range,
 )
@@ -267,7 +266,7 @@ def extract_trade_volume_log(
         log['trade_amount_usd'] = trade_volume_usd
 
         return (
-            trade_data(
+            TradeData(
                 totalTradesUSD=trade_volume_usd,
                 totalFeeUSD=trade_fee_usd,
                 token0TradeVolume=token0_amount,
@@ -284,7 +283,7 @@ def extract_trade_volume_log(
     log['trade_amount_usd'] = trade_volume_usd
 
     return (
-        trade_data(
+        TradeData(
             totalTradesUSD=trade_volume_usd,
             totalFeeUSD=0.0,
             token0TradeVolume=token0_amount,
@@ -303,32 +302,29 @@ async def get_pair_trade_volume(
     max_chain_height,
     redis_conn: aioredis.Redis,
     rpc_helper: RpcHelper,
-    fetch_timestamp=True,
 ):
 
     data_source_contract_address = Web3.toChecksumAddress(
         data_source_contract_address,
     )
-    block_details_dict = dict()
 
-    if fetch_timestamp:
-        try:
-            block_details_dict = await get_block_details_in_block_range(
-                from_block=min_chain_height,
-                to_block=max_chain_height,
-                redis_conn=redis_conn,
-                rpc_helper=rpc_helper,
-            )
-        except Exception as err:
-            core_logger.opt(exception=True).error(
-                (
-                    'Error attempting to get block details of to_block {}:'
-                    ' {}, retrying again'
-                ),
-                max_chain_height,
-                err,
-            )
-            raise err
+    try:
+        block_details_dict = await get_block_details_in_block_range(
+            from_block=min_chain_height,
+            to_block=max_chain_height,
+            redis_conn=redis_conn,
+            rpc_helper=rpc_helper,
+        )
+    except Exception as err:
+        core_logger.opt(exception=True).error(
+            (
+                'Error attempting to get block details of to_block {}:'
+                ' {}, retrying again'
+            ),
+            max_chain_height,
+            err,
+        )
+        raise err
 
     pair_per_token_metadata = await get_pair_metadata(
         pair_address=data_source_contract_address,
@@ -353,7 +349,6 @@ async def get_pair_trade_volume(
             debug_log=False,
         ),
     )
-
     # fetch logs for swap, mint & burn
     event_sig, event_abi = get_event_sig_and_abi(
         UNISWAP_TRADE_EVENT_SIGS,
@@ -380,70 +375,43 @@ async def get_pair_trade_volume(
         for log in events_log
     ]
 
-    # init data models with empty/0 values
-    epoch_results = epoch_event_trade_data(
-        Swap=event_trade_data(
-            logs=[],
-            trades=trade_data(
+    # Initializing empty trade_volume data structure
+    trade_volume_data = {}
+    for block_num in block_details_dict:
+        trade_volume_data[block_num] = {
+            'timestamp': block_details_dict[block_num]['timestamp'],
+            'eventLogs': TradeEventLogs(
+                Swap=[],
+                Mint=[],
+                Burn=[],
+            ),
+            'trades': TradeData(
                 totalTradesUSD=float(),
                 totalFeeUSD=float(),
                 token0TradeVolume=float(),
                 token1TradeVolume=float(),
                 token0TradeVolumeUSD=float(),
                 token1TradeVolumeUSD=float(),
-                recent_transaction_logs=list(),
             ),
-        ),
-        Mint=event_trade_data(
-            logs=[],
-            trades=trade_data(
-                totalTradesUSD=float(),
-                totalFeeUSD=float(),
-                token0TradeVolume=float(),
-                token1TradeVolume=float(),
-                token0TradeVolumeUSD=float(),
-                token1TradeVolumeUSD=float(),
-                recent_transaction_logs=list(),
-            ),
-        ),
-        Burn=event_trade_data(
-            logs=[],
-            trades=trade_data(
-                totalTradesUSD=float(),
-                totalFeeUSD=float(),
-                token0TradeVolume=float(),
-                token1TradeVolume=float(),
-                token0TradeVolumeUSD=float(),
-                token1TradeVolumeUSD=float(),
-                recent_transaction_logs=list(),
-            ),
-        ),
-        Trades=trade_data(
-            totalTradesUSD=float(),
-            totalFeeUSD=float(),
-            token0TradeVolume=float(),
-            token1TradeVolume=float(),
-            token0TradeVolumeUSD=float(),
-            token1TradeVolumeUSD=float(),
-            recent_transaction_logs=list(),
-        ),
-    )
+        }
 
     # prepare final trade logs structure
     for tx_hash, logs in grouped_by_tx.items():
         # init temporary trade object to track trades at txHash level
-        tx_hash_trades = trade_data(
+        tx_hash_trades = TradeData(
             totalTradesUSD=float(),
             totalFeeUSD=float(),
             token0TradeVolume=float(),
             token1TradeVolume=float(),
             token0TradeVolumeUSD=float(),
             token1TradeVolumeUSD=float(),
-            recent_transaction_logs=list(),
         )
         # shift Burn logs in end of list to check if equal size of mint already exist
         # and then cancel out burn with mint
         logs = sorted(logs, key=lambda x: x.event, reverse=True)
+
+        # since 1 txn will be in a single block, we can use any log to get block number
+        block_number = logs[0].blockNumber
 
         # iterate over each txHash logs
         for log in logs:
@@ -458,24 +426,18 @@ async def get_pair_trade_volume(
             )
 
             if log.event == 'Swap':
-                epoch_results.Swap.logs.append(processed_log)
-                epoch_results.Swap.trades += trades_result
+                trade_volume_data[block_number]['eventLogs'].Swap.append(processed_log)
+
                 tx_hash_trades += (
                     trades_result  # swap in single txHash should be added
                 )
 
             elif log.event == 'Mint':
-                epoch_results.Mint.logs.append(processed_log)
-                epoch_results.Mint.trades += trades_result
-
+                trade_volume_data[block_number]['eventLogs'].Mint.append(processed_log)
             elif log.event == 'Burn':
-                epoch_results.Burn.logs.append(processed_log)
-                epoch_results.Burn.trades += trades_result
+                trade_volume_data[block_number]['eventLogs'].Burn.append(processed_log)
 
         # At the end of txHash logs we must normalize trade values, so it don't affect result of other txHash logs
-        epoch_results.Trades += abs(tx_hash_trades)
-    epoch_trade_logs = epoch_results.dict()
-    max_block_details = block_details_dict.get(max_chain_height, {})
-    max_block_timestamp = max_block_details.get('timestamp', None)
-    epoch_trade_logs.update({'timestamp': max_block_timestamp})
-    return epoch_trade_logs
+        trade_volume_data[block_number]['trades'] += abs(tx_hash_trades)
+
+    return trade_volume_data

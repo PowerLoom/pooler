@@ -14,10 +14,8 @@ from pooler.utils.rpc import RpcHelper
 
 
 class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
-    transformation_lambdas = None
 
     def __init__(self) -> None:
-        self.transformation_lambdas = []
         self._logger = logger.bind(module='AggregateTradeVolumeProcessor')
 
     def _add_aggregate_snapshot(
@@ -26,8 +24,8 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
         current_snapshot: UniswapTradesSnapshot,
     ):
 
-        previous_aggregate_snapshot.totalTrade += current_snapshot.totalTrade
-        previous_aggregate_snapshot.totalFee += current_snapshot.totalFee
+        previous_aggregate_snapshot.totalTrade += current_snapshot.totalTradesUSD
+        previous_aggregate_snapshot.totalFee += current_snapshot.totalFeesUSD
         previous_aggregate_snapshot.token0TradeVolume += current_snapshot.token0TradeVolume
         previous_aggregate_snapshot.token1TradeVolume += current_snapshot.token1TradeVolume
         previous_aggregate_snapshot.token0TradeVolumeUSD += current_snapshot.token0TradeVolumeUSD
@@ -41,8 +39,8 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
         current_snapshot: UniswapTradesSnapshot,
     ):
 
-        previous_aggregate_snapshot.totalTrade -= current_snapshot.totalTrade
-        previous_aggregate_snapshot.totalFee -= current_snapshot.totalFee
+        previous_aggregate_snapshot.totalTrade -= current_snapshot.totalTradesUSD
+        previous_aggregate_snapshot.totalFee -= current_snapshot.totalFeesUSD
         previous_aggregate_snapshot.token0TradeVolume -= current_snapshot.token0TradeVolume
         previous_aggregate_snapshot.token1TradeVolume -= current_snapshot.token1TradeVolume
         previous_aggregate_snapshot.token0TradeVolumeUSD -= current_snapshot.token0TradeVolumeUSD

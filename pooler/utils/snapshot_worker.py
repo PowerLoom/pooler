@@ -2,8 +2,6 @@ import asyncio
 import importlib
 import json
 import time
-from typing import Callable
-from typing import List
 from typing import Union
 from uuid import uuid4
 
@@ -77,9 +75,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         snapshot = await self._map_processed_epochs_to_adapters(
             epoch=msg_obj,
             cb_fn_async=stream_processor.compute,
-            data_source_contract_address=msg_obj.contract,
             task_type=task_type,
-            transformation_lambdas=stream_processor.transformation_lambdas,
         )
 
         await self._send_payload_commit_service_queue(
@@ -237,34 +233,26 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
 
     async def _map_processed_epochs_to_adapters(
         self,
-        epoch: PowerloomSnapshotProcessMessage,
+        msg_obj: PowerloomSnapshotProcessMessage,
         cb_fn_async,
-        data_source_contract_address,
         task_type,
-        transformation_lambdas: List[Callable],
     ):
         try:
             result = await cb_fn_async(
-                min_chain_height=epoch.begin,
-                max_chain_height=epoch.end,
-                data_source_contract_address=data_source_contract_address,
+                msg_obj=msg_obj,
                 redis_conn=self._redis_conn,
                 rpc_helper=self._rpc_helper,
             )
-
-            if transformation_lambdas:
-                for each_lambda in transformation_lambdas:
-                    result = each_lambda(result, data_source_contract_address, epoch.begin, epoch.end)
 
             return result
 
         except Exception as e:
             self._logger.opt(exception=True).error(
                 (
-                    'Error while processing epoch {} for callback processor'
+                    'Error while processing msg_obj {} for callback processor'
                     ' of type {}'
                 ),
-                epoch,
+                msg_obj,
                 task_type,
             )
             raise e
