@@ -27,7 +27,11 @@ def read_json_file(
             logger.opt(exception=True).error(exc)
         raise exc
     else:
-        json_data = json.loads(f_.read())
+        json_data = json.load(f_)
+        if type(json_data) != dict:
+            # logger.warning(f'Upon JSON decoding File {file_path}, content does not contain a dictionary. Actual content: {json_data}')
+            while type(json_data) != dict and type(json_data) == str:
+                json_data = json.loads(json_data)
         return json_data
 
 

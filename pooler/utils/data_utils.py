@@ -46,7 +46,7 @@ async def get_project_finalized_cid(redis_conn: aioredis.Redis, state_contract_o
     if cid_data:
         cid = cid_data[0].decode('utf-8')
     else:
-        cid = await w3_get_and_cache_finalized_cid(redis_conn, state_contract_obj, rpc_helper, epoch_id, project_id)
+        cid, _ = await w3_get_and_cache_finalized_cid(redis_conn, state_contract_obj, rpc_helper, epoch_id, project_id)
 
     if 'null' not in cid:
         return cid
@@ -148,16 +148,17 @@ async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, proj
         logger.info('Project {} CID {}, fetching data from IPFS', project_id, cid)
         try:
             submission_data = await fetch_file_from_ipfs(ipfs_reader, cid)
+        except:
+            logger.error('Error while fetching data from IPFS | Project {} | CID {}', project_id, cid) 
+            submission_data = dict()
+        else:
             # Cache it
             write_json_file(cached_data_path, filename, submission_data)
             submission_data = json.loads(submission_data)
-        except:
-            logger.error('Error while fetching data from IPFS')
-            submission_data = dict()
     return submission_data
 
 
-async def get_sumbmission_data_bulk(redis_conn: aioredis.Redis, cids: List, ipfs_reader, project_ids: List[str]) -> List[dict]:
+async def get_sumbmission_data_bulk(redis_conn: aioredis.Redis, cids: List[str], ipfs_reader, project_ids: List[str]) -> List[dict]:
     batch_size = 10
     all_snapshot_data = []
     for i in range(0, len(cids), batch_size):
@@ -312,10 +313,8 @@ async def get_project_epoch_snapshot_bulk(
     cid_data_with_epochs = [(cid.decode('utf-8'), int(epoch_id)) for cid, epoch_id in cid_data_with_epochs]
 
     all_epochs = set(range(epoch_id_min, epoch_id_max + 1))
-    for cid, epoch_id in cid_data_with_epochs:
-        all_epochs.remove(int(epoch_id))
 
-    missing_epochs = list(all_epochs)
+    missing_epochs = list(all_epochs.difference(set([epoch_id for _, epoch_id in cid_data_with_epochs])))
     if missing_epochs:
         logger.info('found {} missing_epochs, fetching from contract', len(missing_epochs))
 
@@ -327,13 +326,12 @@ async def get_project_epoch_snapshot_bulk(
             ) for epoch_id in missing_epochs[i:i + batch_size]
         ]
 
-        batch_cid_data_with_epochs = await asyncio.gather(*tasks)
+        batch_cid_data_with_epochs = list(zip(await asyncio.gather(*tasks), missing_epochs))
 
         cid_data_with_epochs += batch_cid_data_with_epochs
 
     valid_cid_data_with_epochs = []
-    for data in cid_data_with_epochs:
-        cid, epoch_id = data
+    for cid, epoch_id in cid_data_with_epochs:
         if cid and 'null' not in cid:
             valid_cid_data_with_epochs.append((cid, epoch_id))
 
