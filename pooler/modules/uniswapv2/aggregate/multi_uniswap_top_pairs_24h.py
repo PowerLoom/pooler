@@ -48,9 +48,9 @@ class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
             if not data:
                 continue
             if 'reserves' in msg.projectId:
-                snapshot = UniswapPairTotalReservesSnapshot.parse_raw(data)
+                snapshot = UniswapPairTotalReservesSnapshot.parse_obj(data)
             elif 'volume' in msg.projectId:
-                snapshot = UniswapTradesAggregateSnapshot.parse_raw(data)
+                snapshot = UniswapTradesAggregateSnapshot.parse_obj(data)
             snapshot_mapping[msg.projectId] = snapshot
 
             contract_address = msg.projectId.split(':')[-2]

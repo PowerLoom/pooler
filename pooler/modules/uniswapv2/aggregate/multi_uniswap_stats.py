@@ -47,9 +47,9 @@ class AggreagateStatsProcessor(GenericProcessorMultiProjectAggregate):
             if not data:
                 continue
             if 'reserves' in msg.projectId:
-                snapshot = UniswapPairTotalReservesSnapshot.parse_raw(data)
+                snapshot = UniswapPairTotalReservesSnapshot.parse_obj(data)
             elif 'volume' in msg.projectId:
-                snapshot = UniswapTradesAggregateSnapshot.parse_raw(data)
+                snapshot = UniswapTradesAggregateSnapshot.parse_obj(data)
             snapshot_mapping[msg.projectId] = snapshot
 
         stats_data = {
@@ -84,7 +84,7 @@ class AggreagateStatsProcessor(GenericProcessorMultiProjectAggregate):
             )
 
             if previous_stats_snapshot_data:
-                previous_stats_snapshot = UniswapStatsSnapshot.parse_raw(previous_stats_snapshot_data)
+                previous_stats_snapshot = UniswapStatsSnapshot.parse_obj(previous_stats_snapshot_data)
 
                 # calculate change in percentage
                 stats_data['volumeChange24h'] = (stats_data['volume24h'] - previous_stats_snapshot.volume24h) / \

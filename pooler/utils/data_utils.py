@@ -157,7 +157,7 @@ async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, proj
     return submission_data
 
 
-async def get_sumbmission_data_bulk(redis_conn: aioredis.Redis, cids: List, ipfs_reader, project_ids: List[str]):
+async def get_sumbmission_data_bulk(redis_conn: aioredis.Redis, cids: List, ipfs_reader, project_ids: List[str]) -> List[dict]:
     batch_size = 10
     all_snapshot_data = []
     for i in range(0, len(cids), batch_size):

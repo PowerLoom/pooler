@@ -3,6 +3,7 @@ from math import e
 from unittest.mock import Base
 
 from ipfs_client.main import AsyncIPFSClient
+import pydantic
 from redis import asyncio as aioredis
 
 from ..utils.models.message_models import UniswapTopPair24hSnapshot
@@ -121,6 +122,10 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
         )
         for single_24h_snapshot in all_snapshots:
             if not isinstance(single_24h_snapshot, BaseException):
-                snapshot = UniswapTradesAggregateSnapshot.parse_obj(single_24h_snapshot)
-                aggregate_snapshot = self._add_aggregate_snapshot(aggregate_snapshot, snapshot)
+                try:
+                    snapshot = UniswapTradesAggregateSnapshot.parse_obj(single_24h_snapshot)
+                except pydantic.ValidationError:
+                    pass
+                else:
+                    aggregate_snapshot = self._add_aggregate_snapshot(aggregate_snapshot, snapshot)
         return aggregate_snapshot

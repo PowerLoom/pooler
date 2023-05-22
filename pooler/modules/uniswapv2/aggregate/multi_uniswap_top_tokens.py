@@ -50,9 +50,9 @@ class AggreagateTopTokensProcessor(GenericProcessorMultiProjectAggregate):
             if not data:
                 continue
             if 'reserves' in msg.projectId:
-                snapshot = UniswapPairTotalReservesSnapshot.parse_raw(data)
+                snapshot = UniswapPairTotalReservesSnapshot.parse_obj(data)
             elif 'volume' in msg.projectId:
-                snapshot = UniswapTradesAggregateSnapshot.parse_raw(data)
+                snapshot = UniswapTradesAggregateSnapshot.parse_obj(data)
             snapshot_mapping[msg.projectId] = snapshot
 
             contract_address = msg.projectId.split(':')[-2]
@@ -121,7 +121,7 @@ class AggreagateTopTokensProcessor(GenericProcessorMultiProjectAggregate):
             )
 
             if previous_top_tokens_snapshot_data:
-                previous_top_tokens_snapshot = UniswapTopTokensSnapshot.parse_raw(previous_top_tokens_snapshot_data)
+                previous_top_tokens_snapshot = UniswapTopTokensSnapshot.parse_obj(previous_top_tokens_snapshot_data)
                 for token in previous_top_tokens_snapshot.tokens:
                     if token.address in token_data:
                         price_before_24h = token.price
