@@ -131,7 +131,7 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
 
                 for snapshot_data in snapshots_data:
                     if snapshot_data:
-                        snapshot = UniswapTradesSnapshot.parse_raw(snapshot_data)
+                        snapshot = UniswapTradesSnapshot.parse_obj(snapshot_data)
                         aggregate_snapshot = self._add_aggregate_snapshot(aggregate_snapshot, snapshot)
 
         return aggregate_snapshot

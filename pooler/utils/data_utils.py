@@ -144,8 +144,8 @@ async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, proj
         submission_data = read_json_file(os.path.join(cached_data_path, filename))
     except Exception as e:
         # Fetch from IPFS
-        logger.error('Error while reading from cache', error=e)
-        logger.info('CID {}, fetching data from IPFS', cid)
+        logger.trace('Error while reading from cache', error=e)
+        logger.info('Project {} CID {}, fetching data from IPFS', project_id, cid)
         try:
             submission_data = await fetch_file_from_ipfs(ipfs_reader, cid)
             # Cache it
