@@ -59,8 +59,9 @@ class SnapshotBase(BaseModel):
 
 class AggregateBase(BaseModel):
     epochId: int
-    tailEpochId: int
-    tailEpochIdBlockMarker: str
+    tailEpochId: Optional[int]
+    tailEpochIdBlockMarker: Optional[str]
+    tailEpochIdBlockMarkerTimestamp: Optional[int]
 
 
 class PayloadCommitMessage(BaseModel):
