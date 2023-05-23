@@ -258,7 +258,7 @@ async def get_finalized_cid_for_project_id_epoch_id(
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
 
     try:
-        data = get_project_finalized_cid(
+        data = await get_project_finalized_cid(
             request.app.state.redis_pool,
             request.app.state.protocol_state_contract,
             request.app.state.anchor_rpc_helper,
