@@ -1,5 +1,3 @@
-import json
-
 from fastapi import Depends
 from fastapi import FastAPI
 from fastapi import Request
@@ -234,7 +232,7 @@ async def get_data_for_project_id_epoch_id(
     auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
     await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
 
-    return json.loads(data)
+    return data
 
 # get finalized cid for epoch_id, project_id
 
