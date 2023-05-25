@@ -141,6 +141,7 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
                             )
 
                     aggregate_snapshot = self._add_aggregate_snapshot(aggregate_snapshot, current_snapshot)
+                    aggregate_snapshot.epochId = msg_obj.epochId
 
                 else:
                     return await self._calculate_from_scratch(
