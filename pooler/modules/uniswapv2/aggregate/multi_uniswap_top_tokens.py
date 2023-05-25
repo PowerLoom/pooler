@@ -126,9 +126,10 @@ class AggreagateTopTokensProcessor(GenericProcessorMultiProjectAggregate):
                     if token.address in token_data:
                         price_before_24h = token.price
 
-                        token_data[token.address]['priceChange24h'] = (
-                            token_data[token.address]['price'] - price_before_24h
-                        ) / price_before_24h * 100
+                        if price_before_24h > 0:
+                            token_data[token.address]['priceChange24h'] = (
+                                token_data[token.address]['price'] - price_before_24h
+                            ) / price_before_24h * 100
 
         top_tokens = []
         for token in token_data.values():
