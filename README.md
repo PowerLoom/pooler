@@ -137,7 +137,7 @@ class GenericProcessorSnapshot(ABC):
         min_chain_height: int,
         max_chain_height: int,
         data_source_contract_address: str,
-        redis: aioredis,
+        redis: aioredis.Redis,
         rpc_helper: RpcHelper,
     ):
         pass
@@ -178,7 +178,7 @@ class PairTotalReservesProcessor(GenericProcessorSnapshot):
         min_chain_height: int,
         max_chain_height: int,
         data_source_contract_address: str,
-        redis_conn: aioredis,
+        redis_conn: aioredis.Redis,
         rpc_helper: RpcHelper,
 
     ) -> Optional[Dict[str, Union[int, float]]]:

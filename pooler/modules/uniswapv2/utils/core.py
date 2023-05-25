@@ -132,6 +132,9 @@ async def get_pair_reserves(
         token0USD = token0Amount * token0_price_map.get(block_num, 0)
         token1USD = token1Amount * token1_price_map.get(block_num, 0)
 
+        token0Price = token0_price_map.get(block_num, 0)
+        token1Price = token1_price_map.get(block_num, 0)
+
         current_block_details = block_details_dict.get(block_num, None)
         timestamp = (
             current_block_details.get(
@@ -147,6 +150,8 @@ async def get_pair_reserves(
             'token1': token1Amount,
             'token0USD': token0USD,
             'token1USD': token1USD,
+            'token0Price': token0Price,
+            'token1Price': token1Price,
             'timestamp': timestamp,
         }
         block_count += 1

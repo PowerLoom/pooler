@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import importlib
 import json
 import time
@@ -9,16 +10,21 @@ from uuid import uuid4
 
 from aio_pika import IncomingMessage
 from aio_pika import Message
+from ipfs_client.main import AsyncIPFSClient
+from ipfs_client.main import AsyncIPFSClientSingleton
 from pydantic import ValidationError
 
 from pooler.settings.config import aggregator_config
 from pooler.settings.config import projects_config
 from pooler.settings.config import settings
 from pooler.utils.callback_helpers import notify_on_task_failure_aggregate
+from pooler.utils.data_utils import get_source_chain_id
 from pooler.utils.generic_worker import GenericAsyncWorker
 from pooler.utils.models.message_models import AggregateBase
+from pooler.utils.models.message_models import PayloadCommitMessage
 from pooler.utils.models.message_models import PowerloomCalculateAggregateMessage
-from pooler.utils.models.message_models import PowerloomIndexFinalizedMessage
+from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
+from pooler.utils.models.settings_model import AggregateOn
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 from pooler.utils.redis.redis_keys import (
     cb_broadcast_processing_logs_zset,
@@ -26,6 +32,9 @@ from pooler.utils.redis.redis_keys import (
 
 
 class AggregationAsyncWorker(GenericAsyncWorker):
+    _ipfs_singleton: AsyncIPFSClientSingleton
+    _ipfs_writer_client: AsyncIPFSClient
+    _ipfs_reader_client: AsyncIPFSClient
 
     def __init__(self, name, **kwargs):
         self._q = f'powerloom-backend-cb-aggregate:{settings.namespace}:{settings.instance_id}'
@@ -34,18 +43,23 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         super(AggregationAsyncWorker, self).__init__(name=name, **kwargs)
 
         self._project_calculation_mapping = None
-        self._task_types = []
-        self._task_type_event_mapping = {}
-        for project_config in aggregator_config:
-            type_ = project_config.project_type
-            self._task_type_event_mapping[type_] = project_config.init_on_event
-            self._task_types.append(type_)
         self._initialized = False
+        self._single_project_types = set()
+        self._multi_project_types = set()
+        self._task_types = set()
+        self._ipfs_singleton = None
+
+        for config in aggregator_config:
+            if config.aggregate_on == AggregateOn.single_project:
+                self._single_project_types.add(config.project_type)
+            elif config.aggregate_on == AggregateOn.multi_project:
+                self._multi_project_types.add(config.project_type)
+            self._task_types.add(config.project_type)
 
     @notify_on_task_failure_aggregate
     async def _processor_task(
         self,
-        msg_obj: Union[PowerloomIndexFinalizedMessage, PowerloomCalculateAggregateMessage],
+        msg_obj: Union[PowerloomSnapshotFinalizedMessage, PowerloomCalculateAggregateMessage],
         task_type: str,
     ):
         """Function used to process the received message object."""
@@ -89,7 +103,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             transformation_lambdas=stream_processor.transformation_lambdas,
         )
 
-        await self._send_audit_payload_commit_service(
+        await self._send_payload_commit_service_queue(
             audit_stream=task_type,
             epoch=msg_obj,
             snapshot=snapshot,
@@ -97,10 +111,33 @@ class AggregationAsyncWorker(GenericAsyncWorker):
 
         del self._running_callback_tasks[self_unique_id]
 
-    async def _send_audit_payload_commit_service(
+    def _gen_single_type_project_id(self, type_, epoch):
+        contract = epoch.projectId.split(':')[-2]
+        project_id = project_id = f'{type_}:{contract}:{settings.namespace}'
+        return project_id
+
+    def _gen_multiple_type_project_id(self, type_, epoch):
+
+        underlying_project_ids = [project.projectId for project in epoch.messages]
+        unique_project_id = ''.join(sorted(underlying_project_ids))
+
+        project_hash = hashlib.sha3_256(unique_project_id.encode()).hexdigest()
+
+        project_id = f'{type_}:{project_hash}:{settings.namespace}'
+        return project_id
+
+    def _gen_project_id(self, type_, epoch):
+        if type_ in self._single_project_types:
+            return self._gen_single_type_project_id(type_, epoch)
+        elif type_ in self._multi_project_types:
+            return self._gen_multiple_type_project_id(type_, epoch)
+        else:
+            raise ValueError(f'Unknown project type {type_}')
+
+    async def _send_payload_commit_service_queue(
         self,
         audit_stream,
-        epoch: Union[PowerloomIndexFinalizedMessage, PowerloomCalculateAggregateMessage],
+        epoch: Union[PowerloomSnapshotFinalizedMessage, PowerloomCalculateAggregateMessage],
         snapshot: Union[AggregateBase, None],
     ):
 
@@ -150,15 +187,18 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 ),
                 mapping={json.dumps(update_log): int(time.time())},
             )
-            source_chain_details = settings.chain_id
+
+            source_chain_details = await get_source_chain_id(
+                redis_conn=self._redis_conn,
+                rpc_helper=self._anchor_rpc_helper,
+                state_contract_obj=self.protocol_state_contract,
+            )
 
             payload = snapshot.dict()
 
-            project_hash = hash([project.projectId for project in epoch.messages])
-            project_id = f'{audit_stream}_{project_hash}_{settings.namespace}'
+            project_id = self._gen_project_id(audit_stream, epoch)
 
             commit_payload = PayloadCommitMessage(
-                messageType=PayloadCommitMessageType.AGGREGATE,
                 message=payload,
                 web3Storage=True,
                 sourceChainId=source_chain_details,
@@ -191,7 +231,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                         )
 
                         self._logger.info(
-                            'Sent message to audit protocol: {}', commit_payload,
+                            'Sent message to commit payload queue: {}', commit_payload,
                         )
 
                         update_log = {
@@ -244,17 +284,24 @@ class AggregationAsyncWorker(GenericAsyncWorker):
 
     async def _map_processed_epochs_to_adapters(
         self,
-        msg_obj: Union[PowerloomIndexFinalizedMessage, PowerloomCalculateAggregateMessage],
+        msg_obj: Union[PowerloomSnapshotFinalizedMessage, PowerloomCalculateAggregateMessage],
         cb_fn_async,
         task_type,
         transformation_lambdas: List[Callable],
     ):
 
         try:
+
+            project_id = self._gen_project_id(task_type, msg_obj)
+
             result = await cb_fn_async(
                 msg_obj=msg_obj,
                 redis=self._redis_conn,
                 rpc_helper=self._rpc_helper,
+                anchor_rpc_helper=self._anchor_rpc_helper,
+                ipfs_reader=self._ipfs_reader_client,
+                protocol_state_contract=self.protocol_state_contract,
+                project_id=project_id,
             )
 
             if transformation_lambdas:
@@ -291,11 +338,11 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         await self.init()
 
         self._logger.debug('task type: {}', task_type)
-
-        if self._task_type_event_mapping[task_type] == 'IndexFinalized':
+        # TODO: Update based on new single project based design
+        if task_type in self._single_project_types:
             try:
-                msg_obj: PowerloomIndexFinalizedMessage = (
-                    PowerloomIndexFinalizedMessage.parse_raw(message.body)
+                msg_obj: PowerloomSnapshotFinalizedMessage = (
+                    PowerloomSnapshotFinalizedMessage.parse_raw(message.body)
                 )
             except ValidationError as e:
                 self._logger.opt(exception=True).error(
@@ -313,7 +360,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                     e,
                 )
                 return
-        elif self._task_type_event_mapping[task_type] == 'AggregateFinalized':
+        elif task_type in self._multi_project_types:
             try:
                 msg_obj: PowerloomCalculateAggregateMessage = (
                     PowerloomCalculateAggregateMessage.parse_raw(message.body)
@@ -362,10 +409,18 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             class_ = getattr(module, project_config.processor.class_name)
             self._project_calculation_mapping[key] = class_()
 
+    async def _init_ipfs_client(self):
+        if not self._ipfs_singleton:
+            self._ipfs_singleton = AsyncIPFSClientSingleton(settings.ipfs)
+            await self._ipfs_singleton.init_sessions()
+            self._ipfs_writer_client = self._ipfs_singleton._ipfs_write_client
+            self._ipfs_reader_client = self._ipfs_singleton._ipfs_read_client
+
     async def init(self):
         if not self._initialized:
             await self._init_redis_pool()
             await self._init_httpx_client()
             await self._init_rpc_helper()
             await self._init_project_calculation_mapping()
+            await self._init_ipfs_client()
         self._initialized = True

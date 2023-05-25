@@ -183,7 +183,9 @@ async def rate_limit_auth_check(
             passed, retry_after, violated_limit = await generic_rate_limiter(
                 parsed_limits=parse_many(auth_check.owner.rate_limit),
                 key_bits=[
-                    str(request.app.state.core_settings.chain_id),
+                    # using instance_id instead of chain_id because we just need a unique identifier
+                    # for shared auth redis(don't really need chain id)
+                    str(request.app.state.core_settings.instance_id),
                     auth_check.owner.email,
                 ],
                 redis_conn=auth_redis_conn,

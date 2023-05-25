@@ -55,13 +55,24 @@ rpc_blocknumber_calls = (
 )
 
 
-def get_last_indexed_markers_zset(project_id: str):
-    return f'projectID:{project_id}:indexMarkers'
+# project finalzed data zset
+def project_finalized_data_zset(project_id):
+    return f'projectID:{project_id}:finalizedData'
+
+# project first epoch hashmap
 
 
-def get_project_epoch_size(project_id):
-    return f'projectID:{project_id}:epochSize'
+def project_first_epoch_hmap():
+    return 'projectFirstEpoch'
 
 
-def get_last_aggregate_cache(project_id: str, aggregate_name: str, time_series_identifier: str):
-    return f'projectID:{project_id}:{time_series_identifier}:{aggregate_name}:aggregateCache'
+def source_chain_id_key():
+    return 'sourceChainId'
+
+
+def source_chain_block_time_key():
+    return 'sourceChainBlockTime'
+
+
+def source_chain_epoch_size_key():
+    return 'sourceChainEpochSize'

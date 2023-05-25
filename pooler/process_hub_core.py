@@ -24,7 +24,6 @@ from pooler.utils.aggregation_worker import AggregationAsyncWorker
 from pooler.utils.default_logger import logger
 from pooler.utils.exceptions import SelfExitException
 from pooler.utils.helper_functions import cleanup_children_procs
-from pooler.utils.indexing_worker import IndexingAsyncWorker
 from pooler.utils.models.message_models import ProcessHubCommand
 from pooler.utils.rabbitmq_helpers import RabbitmqSelectLoopInteractor
 from pooler.utils.redis.redis_conn import provide_redis_conn
@@ -102,10 +101,6 @@ class ProcessHubCore(Process):
 
                     if callback_worker_class == 'snapshot_workers':
                         worker_obj: Process = SnapshotAsyncWorker(
-                            name=callback_worker_name,
-                        )
-                    elif callback_worker_class == 'indexing_workers':
-                        worker_obj: Process = IndexingAsyncWorker(
                             name=callback_worker_name,
                         )
                     elif callback_worker_class == 'aggregation_workers':
@@ -258,31 +253,6 @@ class ProcessHubCore(Process):
                 unique_name,
                 'snapshot_workers',
                 snapshot_worker_obj.pid,
-            )
-
-        # Starting Indexing workers
-        self._spawned_cb_processes_map['indexing_workers'] = dict()
-
-        for _ in range(settings.callback_worker_config.num_indexing_workers):
-            unique_id = str(uuid.uuid4())[:5]
-            unique_name = (
-                f'PowerLoom|IndexingWorker:{settings.namespace}:{settings.instance_id}' +
-                '-' +
-                unique_id
-            )
-            indexing_worker_obj: Process = IndexingAsyncWorker(name=unique_name)
-            indexing_worker_obj.start()
-            self._spawned_cb_processes_map['indexing_workers'].update(
-                {unique_id: {'id': unique_name, 'process': indexing_worker_obj}},
-            )
-            self._logger.debug(
-                (
-                    'Process Hub Core launched process {} for indexing'
-                    ' worker {} with PID: {}'
-                ),
-                unique_name,
-                'indexing_workers',
-                indexing_worker_obj.pid,
             )
 
         # Starting Aggregate workers

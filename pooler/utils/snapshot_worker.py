@@ -14,9 +14,9 @@ from pydantic import ValidationError
 from pooler.settings.config import projects_config
 from pooler.settings.config import settings
 from pooler.utils.callback_helpers import notify_on_task_failure_snapshot
+from pooler.utils.data_utils import get_source_chain_id
 from pooler.utils.generic_worker import GenericAsyncWorker
 from pooler.utils.models.message_models import PayloadCommitMessage
-from pooler.utils.models.message_models import PayloadCommitMessageType
 from pooler.utils.models.message_models import PowerloomSnapshotProcessMessage
 from pooler.utils.models.message_models import SnapshotBase
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
@@ -82,7 +82,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             transformation_lambdas=stream_processor.transformation_lambdas,
         )
 
-        await self._send_audit_payload_commit_service(
+        await self._send_payload_commit_service_queue(
             audit_stream=task_type,
             epoch=msg_obj,
             snapshot=snapshot,
@@ -90,7 +90,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
 
         del self._running_callback_tasks[self_unique_id]
 
-    async def _send_audit_payload_commit_service(
+    async def _send_payload_commit_service_queue(
         self,
         audit_stream,
         epoch: PowerloomSnapshotProcessMessage,
@@ -143,13 +143,16 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 ),
                 mapping={json.dumps(update_log): int(time.time())},
             )
-            source_chain_details = settings.chain_id
+            source_chain_details = await get_source_chain_id(
+                redis_conn=self._redis_conn,
+                rpc_helper=self._anchor_rpc_helper,
+                state_contract_obj=self.protocol_state_contract,
+            )
 
             payload = snapshot.dict()
-            project_id = f'{audit_stream}_{epoch.contract}_{settings.namespace}'
+            project_id = f'{audit_stream}:{epoch.contract}:{settings.namespace}'
 
             commit_payload = PayloadCommitMessage(
-                messageType=PayloadCommitMessageType.SNAPSHOT,
                 message=payload,
                 web3Storage=True,
                 sourceChainId=source_chain_details,
@@ -181,7 +184,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                         )
 
                         self._logger.info(
-                            'Sent message to audit protocol: {}', commit_payload,
+                            'Sent message to commit payload queue: {}', commit_payload,
                         )
 
                         update_log = {

@@ -1,9 +1,7 @@
-from enum import Enum
 from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
-from typing import Union
 
 from pydantic import BaseModel
 
@@ -39,26 +37,9 @@ class PowerloomSnapshotFinalizedMessage(BaseModel):
     timestamp: int
 
 
-class PowerloomIndexFinalizedMessage(BaseModel):
-    epochId: int
-    projectId: str
-    indexTailDAGBlockHeight: int
-    tailBlockEpochSourceChainHeight: int
-    indexIdentifierHash: str
-    broadcastId: str
-    timestamp: int
-
-
-class PowerloomAggregateFinalizedMessage(BaseModel):
-    epochId: int
-    projectId: str
-    aggregateCid: str
-    broadcastId: str
-    timestamp: int
-
-
 class PowerloomCalculateAggregateMessage(BaseModel):
-    messages: List[PowerloomAggregateFinalizedMessage]
+    messages: List[PowerloomSnapshotFinalizedMessage]
+    epochId: int
     broadcastId: str
     timestamp: int
 
@@ -76,22 +57,11 @@ class SnapshotBase(BaseModel):
     timestamp: float
 
 
-class IndexBase(BaseModel):
-    epochId: int
-
-
 class AggregateBase(BaseModel):
     epochId: int
 
 
-class PayloadCommitMessageType(Enum):
-    SNAPSHOT = 'SNAPSHOT'
-    INDEX = 'INDEX'
-    AGGREGATE = 'AGGREGATE'
-
-
 class PayloadCommitMessage(BaseModel):
-    messageType: PayloadCommitMessageType
     message: Dict[Any, Any]
     web3Storage: bool
     sourceChainId: int
@@ -99,18 +69,7 @@ class PayloadCommitMessage(BaseModel):
     epochId: int
 
 
-class PayloadCommitFinalizedMessageType(Enum):
-    SNAPSHOTFINALIZED = 'SNAPSHOTFINALIZED'
-    INDEXFINALIZED = 'INDEXFINALIZED'
-    AGGREGATEFINALIZED = 'AGGREGATEFINALIZED'
-
-
 class PayloadCommitFinalizedMessage(BaseModel):
-    messageType: PayloadCommitFinalizedMessageType
-    message: Union[
-        PowerloomSnapshotFinalizedMessage,
-        PowerloomIndexFinalizedMessage,
-        PowerloomAggregateFinalizedMessage,
-    ]
+    message: PowerloomSnapshotFinalizedMessage
     web3Storage: bool
     sourceChainId: int

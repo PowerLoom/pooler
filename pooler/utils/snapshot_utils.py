@@ -4,9 +4,10 @@ import json
 from redis import asyncio as aioredis
 
 from pooler.settings.config import settings
+from pooler.utils.data_utils import get_source_chain_epoch_size
 from pooler.utils.default_logger import logger
 from pooler.utils.file_utils import read_json_file
-from pooler.utils.redis.redis_keys import cached_block_details_at_height
+from pooler.utils.redis.redis_keys import cached_block_details_at_height, source_chain_epoch_size_key
 from pooler.utils.redis.redis_keys import uniswap_eth_usd_price_zset
 from pooler.utils.rpc import get_contract_abi_dict
 from pooler.utils.rpc import RpcHelper
@@ -152,6 +153,7 @@ async def get_eth_price_usd(
             block_count += 1
 
         # cache price at height
+        source_chain_epoch_size = int(await redis_conn.get(source_chain_epoch_size_key()))
         await asyncio.gather(
             redis_conn.zadd(
                 name=uniswap_eth_usd_price_zset,
@@ -160,7 +162,7 @@ async def get_eth_price_usd(
             redis_conn.zremrangebyscore(
                 name=uniswap_eth_usd_price_zset,
                 min=0,
-                max=int(from_block) - settings.epoch.height * 4,
+                max=int(from_block) - source_chain_epoch_size* 4,
             ),
         )
 
@@ -230,6 +232,7 @@ async def get_block_details_in_block_range(
             block_num += 1
 
         # add new block details and prune all block details older than latest 3 epochs
+        source_chain_epoch_size = int(await redis_conn.get(source_chain_epoch_size_key()))
         await asyncio.gather(
             redis_conn.zadd(
                 name=cached_block_details_at_height,
@@ -238,7 +241,7 @@ async def get_block_details_in_block_range(
             redis_conn.zremrangebyscore(
                 name=cached_block_details_at_height,
                 min=0,
-                max=int(from_block) - settings.epoch.height * 3,
+                max=int(from_block) - source_chain_epoch_size * 3,
             ),
         )
 

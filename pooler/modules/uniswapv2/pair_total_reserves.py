@@ -25,11 +25,13 @@ class PairTotalReservesProcessor(GenericProcessorSnapshot):
         min_chain_height: int,
         max_chain_height: int,
         data_source_contract_address: str,
-        redis_conn: aioredis,
+        redis_conn: aioredis.Redis,
         rpc_helper: RpcHelper,
 
     ) -> Optional[Dict[str, Union[int, float]]]:
         epoch_reserves_snapshot_map_token0 = dict()
+        epoch_prices_snapshot_map_token0 = dict()
+        epoch_prices_snapshot_map_token1 = dict()
         epoch_reserves_snapshot_map_token1 = dict()
         epoch_usd_reserves_snapshot_map_token0 = dict()
         epoch_usd_reserves_snapshot_map_token1 = dict()
@@ -62,6 +64,14 @@ class PairTotalReservesProcessor(GenericProcessorSnapshot):
                 f'block{block_num}'
             ] = block_pair_total_reserves['token1USD']
 
+            epoch_prices_snapshot_map_token0[
+                f'block{block_num}'
+            ] = block_pair_total_reserves['token0Price']
+
+            epoch_prices_snapshot_map_token1[
+                f'block{block_num}'
+            ] = block_pair_total_reserves['token1Price']
+
             if fetch_ts:
                 if not block_pair_total_reserves.get('timestamp', None):
                     self._logger.error(
@@ -85,6 +95,8 @@ class PairTotalReservesProcessor(GenericProcessorSnapshot):
                 'token1Reserves': epoch_reserves_snapshot_map_token1,
                 'token0ReservesUSD': epoch_usd_reserves_snapshot_map_token0,
                 'token1ReservesUSD': epoch_usd_reserves_snapshot_map_token1,
+                'token0Prices': epoch_prices_snapshot_map_token0,
+                'token1Prices': epoch_prices_snapshot_map_token1,
                 'chainHeightRange': EpochBaseSnapshot(
                     begin=min_chain_height, end=max_chain_height,
                 ),

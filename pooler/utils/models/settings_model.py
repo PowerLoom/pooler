@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import List
 from typing import Optional
 from typing import Union
@@ -23,12 +24,19 @@ class RPCNodeConfig(BaseModel):
     rate_limit: str
 
 
+class ConnectionLimits(BaseModel):
+    max_connections: int = 100
+    max_keepalive_connections: int = 50
+    keepalive_expiry: int = 300
+
+
 class RPCConfigBase(BaseModel):
     full_nodes: List[RPCNodeConfig]
     archive_nodes: Optional[List[RPCNodeConfig]]
     force_archive_blocks: Optional[int]
     retry: int
     request_time_out: int
+    connection_limits: ConnectionLimits
 
 
 class RPCConfigFull(RPCConfigBase):
@@ -50,12 +58,6 @@ class QueueConfig(BaseModel):
     num_instances: int
 
 
-class Epoch(BaseModel):
-    height: int
-    head_offset: int
-    block_time: int
-
-
 class RabbitMQConfig(BaseModel):
     exchange: str
 
@@ -75,18 +77,9 @@ class RabbitMQ(BaseModel):
     setup: RabbitMQSetup
 
 
-class AuditProtocolEngine(BaseModel):
-    url: str
-    retry: int
-    skip_anchor_proof: bool
-
-
-class Consensus(BaseModel):
-    url: str
-    epoch_tracker_path: str
-    polling_interval: int
-    fall_behind_reset_num_blocks: int
-    sleep_secs_between_chunks: int
+class ReportingConfig(BaseModel):
+    slack_url: str
+    service_url: str
 
 
 class Redis(BaseModel):
@@ -107,11 +100,6 @@ class RedisReader(BaseModel):
     cluster_mode: bool = False
 
 
-class WebhookListener(BaseModel):
-    host: str
-    port: int
-
-
 class Logs(BaseModel):
     trace_enabled: bool
     write_to_files: bool
@@ -124,7 +112,6 @@ class EventContract(BaseModel):
 
 class CallbackWorkerConfig(BaseModel):
     num_snapshot_workers: int
-    num_indexing_workers: int
     num_aggregation_workers: int
 
 
@@ -139,29 +126,21 @@ class IPFSconfig(BaseModel):
     write_rate_limit: IPFSWriterRateLimit
     timeout: int
     local_cache_path: str
+    connection_limits: ConnectionLimits
 
 
 class Settings(BaseModel):
     namespace: str
     core_api: CoreAPI
-    chain_id: int
     instance_id: str
-    ipfs_url: str
-    logs_prune_time: int
     rpc: RPCConfigFull
-    issue_report_url: str
     rlimit: RLimit
-    timeouts: Timeouts
-    epoch: Epoch
     rabbitmq: RabbitMQ
-    audit_protocol_engine: AuditProtocolEngine
-    consensus: Consensus
+    reporting: ReportingConfig
     redis: Redis
     redis_reader: RedisReader
-    webhook_listener: WebhookListener
     logs: Logs
     projects_config_path: str
-    indexer_config_path: str
     aggregator_config_path: str
     pair_contract_abi: str
     protocol_state: EventContract
@@ -186,24 +165,18 @@ class ProjectsConfig(BaseModel):
     config: List[ProjectConfig]
 
 
-# Indexer related models
-class IndexingConfig(BaseModel):
-    project_type: str
-    duration_in_seconds: int
-
-
-class IndexerConfig(BaseModel):
-    config: List[IndexingConfig]
-
-
 class AggregateFilterConfig(BaseModel):
-    indexIdentifierHash: str
     projectId: str
+
+
+class AggregateOn(str, Enum):
+    single_project = 'SingleProject'
+    multi_project = 'MultiProject'
 
 
 class AggregationConfig(BaseModel):
     project_type: str
-    init_on_event: str
+    aggregate_on: AggregateOn
     filters: Optional[AggregateFilterConfig]
     projects_to_wait_for: Optional[List[str]]
     processor: ProcessorConfig

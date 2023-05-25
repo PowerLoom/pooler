@@ -12,25 +12,26 @@ from uuid import uuid4
 from eth_utils import keccak
 from pydantic import ValidationError
 from setproctitle import setproctitle
+from web3 import Web3
 
 from pooler.settings.config import aggregator_config
-from pooler.settings.config import indexer_config
 from pooler.settings.config import projects_config
 from pooler.settings.config import settings
+from pooler.utils.data_utils import get_source_chain_epoch_size
+from pooler.utils.data_utils import get_source_chain_id
 from pooler.utils.default_logger import logger
 from pooler.utils.models.message_models import EpochBroadcast
 from pooler.utils.models.message_models import PayloadCommitFinalizedMessage
-from pooler.utils.models.message_models import PayloadCommitFinalizedMessageType
-from pooler.utils.models.message_models import PowerloomAggregateFinalizedMessage
 from pooler.utils.models.message_models import PowerloomCalculateAggregateMessage
-from pooler.utils.models.message_models import PowerloomIndexFinalizedMessage
 from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
 from pooler.utils.models.message_models import PowerloomSnapshotProcessMessage
+from pooler.utils.models.settings_model import AggregateOn
 from pooler.utils.rabbitmq_helpers import RabbitmqSelectLoopInteractor
 from pooler.utils.redis.redis_conn import RedisPoolCache
 from pooler.utils.redis.redis_keys import (
     cb_broadcast_processing_logs_zset,
 )
+from pooler.utils.redis.redis_keys import project_finalized_data_zset
 from pooler.utils.rpc import RpcHelper
 from pooler.utils.snapshot_utils import warm_up_cache_for_snapshot_constructors
 
@@ -45,6 +46,7 @@ class ProcessorDistributor(multiprocessing.Process):
         self._redis_conn = None
         self._aioredis_pool = None
         self._rpc_helper = None
+        self._source_chain_id = None
 
     async def _init_redis_pool(self):
         if not self._aioredis_pool:
@@ -55,6 +57,25 @@ class ProcessorDistributor(multiprocessing.Process):
     async def _init_rpc_helper(self):
         if not self._rpc_helper:
             self._rpc_helper = RpcHelper()
+            self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
+            with open(settings.protocol_state.abi, 'r') as f:
+                abi_dict = json.load(f)
+            protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
+                address=Web3.toChecksumAddress(
+                    settings.protocol_state.address,
+                ),
+                abi=abi_dict,
+            )
+            await get_source_chain_epoch_size(
+                redis_conn=self._redis_conn,
+                rpc_helper=self._anchor_rpc_helper,
+                state_contract_obj=protocol_state_contract,
+            )
+            self._source_chain_id = await get_source_chain_id(
+                redis_conn=self._redis_conn,
+                rpc_helper=self._anchor_rpc_helper,
+                state_contract_obj=protocol_state_contract,
+            )
 
     async def _warm_up_cache_for_epoch_data(
         self, msg_obj: PowerloomSnapshotProcessMessage,
@@ -125,35 +146,6 @@ class ProcessorDistributor(multiprocessing.Process):
             delivery_tag=method.delivery_tag,
         )
 
-    def _distribute_callbacks_indexing(self, dont_use_ch, method, properties, body):
-        try:
-            process_unit: PowerloomSnapshotFinalizedMessage = (
-                PowerloomSnapshotFinalizedMessage.parse_raw(body)
-            )
-        except ValidationError:
-            self._logger.opt(exception=True).error(
-                'Bad message structure of event callback',
-            )
-            return
-        except Exception:
-            self._logger.opt(exception=True).error(
-                'Unexpected message format of event callback',
-            )
-            return
-        self._logger.debug(f'Indexing Task Distribution time - {int(time.time())}')
-
-        for config in indexer_config:
-            type_ = config.project_type
-            self._send_message_for_processing(
-                process_unit,
-                type_,
-                f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}:SnapshotFinalized.{type_}',
-            )
-
-        self._rabbitmq_interactor._channel.basic_ack(
-            delivery_tag=method.delivery_tag,
-        )
-
     def _send_message_for_processing(self, process_unit, type_, routing_key):
         self._rabbitmq_interactor.enqueue_msg_delivery(
             exchange=f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}',
@@ -188,32 +180,32 @@ class ProcessorDistributor(multiprocessing.Process):
             ),
         )
 
-    def _build_and_forward_to_payload_commit_queue(self, dont_use_ch, method, properties, body):
+    def _cache_and_forward_to_payload_commit_queue(self, dont_use_ch, method, properties, body):
         event_type = method.routing_key.split('.')[-1]
 
-        if event_type == 'IndexFinalized':
-            msg_obj: PowerloomIndexFinalizedMessage = (
-                PowerloomIndexFinalizedMessage.parse_raw(body)
-            )
-            msg_type = PayloadCommitFinalizedMessageType.INDEXFINALIZED
-        elif event_type == 'AggregateFinalized':
-            msg_obj: PowerloomAggregateFinalizedMessage = (
-                PowerloomAggregateFinalizedMessage.parse_raw(body)
-            )
-            msg_type = PayloadCommitFinalizedMessageType.AGGREGATEFINALIZED
-        elif event_type == 'SnapshotFinalized':
+        if event_type == 'SnapshotFinalized':
             msg_obj: PowerloomSnapshotFinalizedMessage = (
                 PowerloomSnapshotFinalizedMessage.parse_raw(body)
             )
-            msg_type = PayloadCommitFinalizedMessageType.SNAPSHOTFINALIZED
+        else:
+            return
+
+        # Add to project finalized data zset
+        self.ev_loop.run_until_complete(
+            self._redis_conn.zadd(
+                project_finalized_data_zset(project_id=msg_obj.projectId),
+                {msg_obj.snapshotCid: msg_obj.epochId},
+            ),
+        )
+
+        # TODO: prune zset
 
         self._logger.debug(f'Payload Commit Message Distribution time - {int(time.time())}')
 
         process_unit = PayloadCommitFinalizedMessage(
-            messageType=msg_type,
             message=msg_obj,
             web3Storage=True,
-            sourceChainId=settings.chain_id,
+            sourceChainId=self._source_chain_id,
         )
 
         exchange = (
@@ -236,17 +228,13 @@ class ProcessorDistributor(multiprocessing.Process):
     def _distribute_callbacks_aggregate(self, dont_use_ch, method, properties, body):
         event_type = method.routing_key.split('.')[-1]
         try:
-            if event_type == 'IndexFinalized':
-                process_unit: PowerloomIndexFinalizedMessage = (
-                    PowerloomIndexFinalizedMessage.parse_raw(body)
-                )
-            elif event_type == 'AggregateFinalized':
-                process_unit: PowerloomAggregateFinalizedMessage = (
-                    PowerloomAggregateFinalizedMessage.parse_raw(body)
-                )
-            else:
+            if event_type != 'SnapshotFinalized':
                 self._logger.error(f'Unknown event type {event_type}')
                 return
+
+            process_unit: PowerloomSnapshotFinalizedMessage = (
+                PowerloomSnapshotFinalizedMessage.parse_raw(body)
+            )
 
         except ValidationError:
             self._logger.opt(exception=True).error(
@@ -262,17 +250,9 @@ class ProcessorDistributor(multiprocessing.Process):
 
         # go through aggregator config, if it matches then send appropriate message
         for config in aggregator_config:
-            if config.init_on_event != event_type:
-                continue
             type_ = config.project_type
 
-            if event_type == 'IndexFinalized':
-                if process_unit.indexIdentifierHash != config.filters.indexIdentifierHash:
-                    self._logger.info(
-                        f'indexIdentifierHash mismatch {process_unit.indexIdentifierHash}'
-                        f' {config.filters.indexIdentifierHash}',
-                    )
-                    continue
+            if config.aggregate_on == AggregateOn.single_project:
                 if config.filters.projectId not in process_unit.projectId:
                     self._logger.info(f'projectId mismatch {process_unit.projectId} {config.filters.projectId}')
                     continue
@@ -282,10 +262,12 @@ class ProcessorDistributor(multiprocessing.Process):
                     f'powerloom-backend-callback:{settings.namespace}:'
                     f'{settings.instance_id}:CalculateAggregate.{type_}',
                 )
-            if event_type == 'AggregateFinalized':
+            elif config.aggregate_on == AggregateOn.multi_project:
                 if process_unit.projectId not in config.projects_to_wait_for:
-                    self._logger.info(f'projectId not required for  {process_unit.projectId}: {config.project_type}')
+                    self._logger.info(f'projectId not required for {config.project_type}: {process_unit.projectId}')
+                    continue
 
+                # TODO: use a sync redis library
                 # store event in redis zset
                 self.ev_loop.run_until_complete(
                     self._redis_conn.zadd(
@@ -310,7 +292,7 @@ class ProcessorDistributor(multiprocessing.Process):
                 finalized_messages = list()
 
                 for event in events:
-                    event = PowerloomAggregateFinalizedMessage.parse_raw(event)
+                    event = PowerloomSnapshotFinalizedMessage.parse_raw(event)
                     event_project_ids.add(event.projectId)
                     finalized_messages.append(event)
 
@@ -318,6 +300,7 @@ class ProcessorDistributor(multiprocessing.Process):
                     self._logger.info(f'All projects present for {process_unit.epochId}, aggregating')
                     final_msg = PowerloomCalculateAggregateMessage(
                         messages=finalized_messages,
+                        epochId=process_unit.epochId,
                         timestamp=int(time.time()),
                         broadcastId=str(uuid4()),
                     )
@@ -363,14 +346,10 @@ class ProcessorDistributor(multiprocessing.Process):
 
         if (
             method.routing_key ==
-            f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.SnapshotFinalized' or
-            method.routing_key ==
-            f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.IndexFinalized' or
-            method.routing_key ==
-            f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.AggregateFinalized'
+            f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.SnapshotFinalized'
         ):
             {
-                self._build_and_forward_to_payload_commit_queue(dont_use_ch, method, properties, body),
+                self._cache_and_forward_to_payload_commit_queue(dont_use_ch, method, properties, body),
             }
 
         if (
@@ -385,16 +364,7 @@ class ProcessorDistributor(multiprocessing.Process):
             method.routing_key ==
             f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.SnapshotFinalized'
         ):
-            self._distribute_callbacks_indexing(
-                dont_use_ch, method, properties, body,
-            )
-
-        elif (
-            method.routing_key ==
-            f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.IndexFinalized' or
-            method.routing_key ==
-            f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.AggregateFinalized'
-        ):
+            # TODO: Check project type and submit to snapshot worker or aggregation worker
             self._distribute_callbacks_aggregate(
                 dont_use_ch, method, properties, body,
             )

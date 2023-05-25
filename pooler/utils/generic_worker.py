@@ -16,11 +16,13 @@ from httpx import Limits
 from httpx import Timeout
 from redis import asyncio as aioredis
 from setproctitle import setproctitle
+from web3 import Web3
 
 from pooler.settings.config import settings
 from pooler.utils.callback_helpers import get_rabbitmq_channel
 from pooler.utils.callback_helpers import get_rabbitmq_connection
 from pooler.utils.default_logger import logger
+from pooler.utils.file_utils import read_json_file
 from pooler.utils.redis.redis_conn import RedisPoolCache
 from pooler.utils.rpc import RpcHelper
 
@@ -47,8 +49,17 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._aioredis_pool = None
         self._async_transport = None
         self._rpc_helper = None
+        self._anchor_rpc_helper = None
+        self.protocol_state_contract = None
+
         self._rate_limiting_lua_scripts = None
         self._shutdown_signal_received_count = 0
+
+        self.protocol_state_contract_abi = read_json_file(
+            settings.protocol_state.abi,
+            self._logger,
+        )
+        self.protocol_state_contract_address = settings.protocol_state.address
 
     async def _shutdown_handler(self, sig, loop: asyncio.AbstractEventLoop):
         self._shutdown_signal_received_count += 1
@@ -156,6 +167,20 @@ class GenericAsyncWorker(multiprocessing.Process):
         await self._aioredis_pool.populate()
         self._redis_conn = self._aioredis_pool._aioredis_pool
 
+    async def _init_rpc_helper(self):
+        if self._rpc_helper is None:
+            self._rpc_helper = RpcHelper()
+
+        if self._anchor_rpc_helper is None:
+            self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
+
+            self.protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
+                address=Web3.toChecksumAddress(
+                    self.protocol_state_contract_address,
+                ),
+                abi=self.protocol_state_contract_abi,
+            )
+
     async def _init_httpx_client(self):
         if self._async_transport is not None:
             return
@@ -172,11 +197,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             transport=self._async_transport,
         )
 
-    async def _init_rpc_helper(self):
-        if self._rpc_helper is not None:
-            return
-        self._rpc_helper = RpcHelper()
-
+    
     def run(self) -> None:
         setproctitle(self._unique_id)
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
