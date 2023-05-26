@@ -129,6 +129,11 @@ class IPFSconfig(BaseModel):
     connection_limits: ConnectionLimits
 
 
+class Web3Storage(BaseModel):
+    upload_snapshots: bool
+    upload_aggregates: bool
+
+
 class Settings(BaseModel):
     namespace: str
     core_api: CoreAPI
@@ -146,6 +151,7 @@ class Settings(BaseModel):
     protocol_state: EventContract
     callback_worker_config: CallbackWorkerConfig
     ipfs: IPFSconfig
+    web3storage: Web3Storage
     anchor_chain_rpc: RPCConfigBase
 
 
