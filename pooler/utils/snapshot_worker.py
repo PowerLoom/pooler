@@ -154,7 +154,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
 
             commit_payload = PayloadCommitMessage(
                 message=payload,
-                web3Storage=True,
+                web3Storage=settings.web3storage.upload_snapshots,
                 sourceChainId=source_chain_details,
                 projectId=project_id,
                 epochId=epoch.epochId,

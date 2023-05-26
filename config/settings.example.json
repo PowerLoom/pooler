@@ -98,6 +98,10 @@
       "keepalive_expiry": 300
     }
   },
+  "web3storage":{
+    "upload_snapshots": true,
+    "upload_aggregates": true
+  },
   "anchor_chain_rpc": {
     "full_nodes": [{
       "url": "https://rpc-url",
