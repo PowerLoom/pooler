@@ -85,7 +85,15 @@
   },
   "ipfs": {
     "url": "/dns/ipfs/tcp/5001",
+    "url_auth": {
+      "apiKey": "",
+      "apiSecret": ""
+    },
     "reader_url": "/dns/ipfs/tcp/5001",
+    "reader_url_auth": {
+      "apiKey": "",
+      "apiSecret": ""
+    },
     "write_rate_limit": {
       "req_per_sec": 10,
       "burst": 10
