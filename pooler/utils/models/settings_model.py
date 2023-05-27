@@ -120,6 +120,12 @@ class IPFSWriterRateLimit(BaseModel):
     burst: int
 
 
+class ExternalAPIAuth(BaseModel):
+    # this is most likely used as a basic auth tuple of (username, password)
+    apiKey: str
+    apiSecret: str = ''
+
+
 class IPFSconfig(BaseModel):
     url: str
     url_auth: Optional[ExternalAPIAuth] = None
@@ -134,12 +140,6 @@ class IPFSconfig(BaseModel):
 class Web3Storage(BaseModel):
     upload_snapshots: bool
     upload_aggregates: bool
-
-
-class ExternalAPIAuth(BaseModel):
-    # this is most likely used as a basic auth tuple of (username, password)
-    apiKey: str
-    apiSecret: str = ''
 
 
 class Settings(BaseModel):
