@@ -1,8 +1,6 @@
 #!/bin/bash
 
 #This script is run from high level docker-compose. Refer to https://github.com/PowerLoom/deploy
-source .env
-
 set -e
 
 echo 'populating setting from environment values...';
@@ -74,7 +72,7 @@ echo "Using protocol state contract: ${protocol_state_contract}"
 echo "Using slack reporting url: ${slack_reporting_url}"
 echo "Using powerloom reporting url: ${powerloom_reporting_url}"
 
-sed -i'.bac' "s#relevant-namespace#$namespace#" config/settings.json
+sed -i'.backup' "s#relevant-namespace#$namespace#" config/settings.json
 
 sed -i'.backup' "s#account-address#$SIGNER_ACCOUNT_ADDRESS#" config/settings.json
 
