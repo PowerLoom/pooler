@@ -24,7 +24,7 @@ from pooler.utils.redis.redis_keys import source_chain_id_key
 logger = logger.bind(module='data_helper')
 
 
-async def retry_state_callback(retry_state: tenacity.RetryCallState):
+def retry_state_callback(retry_state: tenacity.RetryCallState):
     logger.warning(f'Encountered IPFS cat exception: {retry_state.outcome.exception()}')
 
 
@@ -149,7 +149,7 @@ async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, proj
         try:
             submission_data = await fetch_file_from_ipfs(ipfs_reader, cid)
         except:
-            logger.error('Error while fetching data from IPFS | Project {} | CID {}', project_id, cid) 
+            logger.error('Error while fetching data from IPFS | Project {} | CID {}', project_id, cid)
             submission_data = dict()
         else:
             # Cache it
@@ -158,7 +158,12 @@ async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, proj
     return submission_data
 
 
-async def get_sumbmission_data_bulk(redis_conn: aioredis.Redis, cids: List[str], ipfs_reader, project_ids: List[str]) -> List[dict]:
+async def get_sumbmission_data_bulk(
+    redis_conn: aioredis.Redis,
+    cids: List[str],
+    ipfs_reader,
+    project_ids: List[str],
+) -> List[dict]:
     batch_size = 10
     all_snapshot_data = []
     for i in range(0, len(cids), batch_size):
