@@ -92,7 +92,7 @@
     "reader_url": "ipfs-reader-url",
     "reader_url_auth": {
       "apiKey": "ipfs-reader-key",
-      "apiSecret": "ifps-reader-secret"
+      "apiSecret": "ipfs-reader-secret"
     },
     "write_rate_limit": {
       "req_per_sec": 10,
