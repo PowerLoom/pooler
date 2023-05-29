@@ -3,25 +3,12 @@
       "project_type": "uniswap_pairContract_pair_total_reserves",
       "projects":[
         "0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc",
-        "0x21b8065d10f73ee2e260e5b47d3344d3ced7596e",
-        "0x9928e4046d7c6513326ccea028cd3e7a91c7590a",
         "0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5",
         "0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852",
-        "0xe1573b9d29e2183b1af0e743dc2754979a40d237",
-        "0xccb63225a7b19dcf66717e4d40c9a72b39331d61",
-        "0x61b62c5d56ccd158a38367ef2f539668a06356ab",
         "0x3041cbd36888becc7bbcbc0045e3b1f144466f5f",
-        "0x9c4fe5ffd9a9fc5678cfbd93aa2d4fd684b67c4c",
         "0xd3d2e2692501a5c9ca623199d38826e513033a17",
-        "0x149148acc3b06b8cc73af3a10e84189243a35925",
         "0xbb2b8038a1640196fbe3e38816f3e67cba72d940",
-        "0xa478c2975ab1ea89e8196811f51a7b7ade33eb11",
-        "0x11181bd3baf5ce2a478e98361985d42625de35d1",
-        "0x7b73644935b8e68019ac6356c40661e1bc315860",
-        "0x0af81cd5d9c124b4859d65697a4cd10ee223746a",
-        "0x252b9a9ad1e85d9eff8a3e4782491f87e7109e3a",
-        "0x470e8de2ebaef52014a47cb5e6af86884947f08c",
-        "0x582e3da39948c6339433008703211ad2c13eb2ac"
+        "0xa478c2975ab1ea89e8196811f51a7b7ade33eb11"
         ],
       "processor":{
         "module": "pooler.modules.uniswapv2.pair_total_reserves",
@@ -32,25 +19,12 @@
       "project_type": "uniswap_pairContract_trade_volume",
       "projects":[
         "0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc",
-        "0x21b8065d10f73ee2e260e5b47d3344d3ced7596e",
-        "0x9928e4046d7c6513326ccea028cd3e7a91c7590a",
         "0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5",
         "0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852",
-        "0xe1573b9d29e2183b1af0e743dc2754979a40d237",
-        "0xccb63225a7b19dcf66717e4d40c9a72b39331d61",
-        "0x61b62c5d56ccd158a38367ef2f539668a06356ab",
         "0x3041cbd36888becc7bbcbc0045e3b1f144466f5f",
-        "0x9c4fe5ffd9a9fc5678cfbd93aa2d4fd684b67c4c",
         "0xd3d2e2692501a5c9ca623199d38826e513033a17",
-        "0x149148acc3b06b8cc73af3a10e84189243a35925",
         "0xbb2b8038a1640196fbe3e38816f3e67cba72d940",
-        "0xa478c2975ab1ea89e8196811f51a7b7ade33eb11",
-        "0x11181bd3baf5ce2a478e98361985d42625de35d1",
-        "0x7b73644935b8e68019ac6356c40661e1bc315860",
-        "0x0af81cd5d9c124b4859d65697a4cd10ee223746a",
-        "0x252b9a9ad1e85d9eff8a3e4782491f87e7109e3a",
-        "0x470e8de2ebaef52014a47cb5e6af86884947f08c",
-        "0x582e3da39948c6339433008703211ad2c13eb2ac"
+        "0xa478c2975ab1ea89e8196811f51a7b7ade33eb11"
         ],
         "processor":{
           "module": "pooler.modules.uniswapv2.trade_volume",
