@@ -98,7 +98,7 @@
       "req_per_sec": 10,
       "burst": 10
     },
-    "timeout": 20,
+    "timeout": 60,
     "local_cache_path": "/home/ubuntu/local_cache/",
     "connection_limits":{
       "max_connections": 100,
