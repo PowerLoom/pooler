@@ -1,0 +1,126 @@
+{
+  "namespace": "relevant-namespace",
+  "core_api": {
+    "host": "0.0.0.0",
+    "port": 8002,
+    "auth": {
+      "enabled": false,
+      "header_key": "X-API-KEY"
+    },
+    "public_rate_limit": "10000/day;200/minute;5/second"
+  },
+  "instance_id": "account-address",
+  "rpc": {
+    "full_nodes": [{
+      "url": "https://rpc-url",
+      "rate_limit": "10000000/day;2000/minute;100/second"
+    }],
+    "archive_nodes": [],
+    "force_archive_blocks": 100,
+    "retry": 5,
+    "request_time_out": 5,
+    "skip_epoch_threshold_blocks": 30,
+    "polling_interval": 15,
+    "connection_limits":{
+      "max_connections": 100,
+      "max_keepalive_connections": 50,
+      "keepalive_expiry": 300
+    }
+  },
+  "rlimit": {
+    "file_descriptors": 2048
+  },
+  "rabbitmq": {
+    "user": "guest",
+    "password": "guest",
+    "host": "rabbitmq",
+    "port": 5672,
+    "setup": {
+      "core": {
+        "exchange": "powerloom-backend"
+      },
+      "callbacks": {
+        "exchange": "powerloom-backend-callbacks"
+      },
+      "commit_payload": {
+        "exchange": "powerloom-backend-commit-payload"
+      },
+      "event_detector": {
+        "exchange": "powerloom-backend-event-detector"
+      }
+    }
+  },
+  "reporting": {
+    "slack_url": "https://slack-reporting-url",
+    "service_url": "https://powerloom-reporting-url"
+  },
+  "redis": {
+    "host": "redis",
+    "port": 6379,
+    "db": 0,
+    "password": null,
+    "ssl": false,
+    "cluster_mode": false
+  },
+  "redis_reader": {
+    "host": "redis",
+    "port": 6379,
+    "db": 0,
+    "password": null
+  },
+  "logs": {
+    "trace_enabled": false,
+    "write_to_files": true
+  },
+  "projects_config_path": "config/projects.json",
+  "aggregator_config_path": "config/aggregator.json",
+  "pair_contract_abi": "pooler/static/abis/UniswapV2Pair.json",
+  "protocol_state": {
+    "abi": "pooler/static/abis/ProtocolContract.json",
+    "address": "protocol-state-contract"
+  },
+  "callback_worker_config": {
+    "num_snapshot_workers": 8,
+    "num_aggregation_workers": 16
+  },
+  "ipfs": {
+    "url": "ipfs-writer-url",
+    "url_auth": {
+      "apiKey": "ipfs-writer-key",
+      "apiSecret": "ipfs-writer-secret"
+    },
+    "reader_url": "ipfs-reader-url",
+    "reader_url_auth": {
+      "apiKey": "ipfs-reader-key",
+      "apiSecret": "ipfs-reader-secret"
+    },
+    "write_rate_limit": {
+      "req_per_sec": 10,
+      "burst": 10
+    },
+    "timeout": 60,
+    "local_cache_path": "/home/ubuntu/local_cache/",
+    "connection_limits":{
+      "max_connections": 100,
+      "max_keepalive_connections": 50,
+      "keepalive_expiry": 300
+    }
+  },
+  "web3storage":{
+    "upload_snapshots": true,
+    "upload_aggregates": true
+  },
+  "anchor_chain_rpc": {
+    "full_nodes": [{
+      "url": "https://prost-rpc-url",
+      "rate_limit": "100000000/day;18000/minute;300/second"
+    }],
+    "retry": 5,
+    "request_time_out": 5,
+    "connection_limits":{
+      "max_connections": 100,
+      "max_keepalive_connections": 50,
+      "keepalive_expiry": 300
+    }
+  }
+}
