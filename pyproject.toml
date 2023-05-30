@@ -30,7 +30,7 @@ uvloop = "^0.17.0"
 loguru = "^0.7.0"
 httpx = "^0.24.0"
 fastapi = "^0.95.1"
-ifps-client = {git = "https://git@github.com/PowerLoom/py-ipfs-client"}
+ifps-client = {git = "https://git@github.com/PowerLoom/py-ipfs-client.git"}
 
 
 [build-system]

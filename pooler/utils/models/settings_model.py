@@ -120,9 +120,17 @@ class IPFSWriterRateLimit(BaseModel):
     burst: int
 
 
+class ExternalAPIAuth(BaseModel):
+    # this is most likely used as a basic auth tuple of (username, password)
+    apiKey: str
+    apiSecret: str = ''
+
+
 class IPFSconfig(BaseModel):
     url: str
+    url_auth: Optional[ExternalAPIAuth] = None
     reader_url: str
+    reader_url_auth: Optional[ExternalAPIAuth] = None
     write_rate_limit: IPFSWriterRateLimit
     timeout: int
     local_cache_path: str
