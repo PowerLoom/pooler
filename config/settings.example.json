@@ -107,7 +107,7 @@
     }
   },
   "web3storage":{
-    "upload_snapshots": true,
+    "upload_snapshots": false,
     "upload_aggregates": true
   },
   "anchor_chain_rpc": {
