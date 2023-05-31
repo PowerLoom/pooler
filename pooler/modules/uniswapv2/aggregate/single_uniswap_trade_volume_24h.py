@@ -18,7 +18,7 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
 
     def __init__(self) -> None:
         self.transformation_lambdas = []
-        self._logger = logger.bind(module='AggregateTradeVolumeProcessor')
+        self._logger = logger.bind(module='AggregateTradeVolumeProcessor24h')
 
     def _add_aggregate_snapshot(
         self,

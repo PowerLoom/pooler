@@ -1,15 +1,10 @@
 import asyncio
-from math import e
-from unittest.mock import Base
 
-from ipfs_client.main import AsyncIPFSClient
 import pydantic
+from ipfs_client.main import AsyncIPFSClient
 from redis import asyncio as aioredis
 
-from ..utils.models.message_models import UniswapTopPair24hSnapshot
-from ..utils.models.message_models import UniswapTopPair7dSnapshot
 from ..utils.models.message_models import UniswapTradesAggregateSnapshot
-from ..utils.models.message_models import UniswapTradesSnapshot
 from pooler.modules.uniswapv2.utils.helpers import get_pair_metadata
 from pooler.utils.callback_helpers import GenericProcessorSingleProjectAggregate
 from pooler.utils.data_utils import get_project_epoch_snapshot
@@ -24,33 +19,37 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
 
     def __init__(self) -> None:
         self.transformation_lambdas = []
-        self._logger = logger.bind(module='AggregateTradeVolumeProcessor')
+        self._logger = logger.bind(module='AggregateTradeVolumeProcessor7d')
 
     def _add_aggregate_snapshot(
         self,
         previous_aggregate_snapshot: UniswapTradesAggregateSnapshot,
         current_snapshot: UniswapTradesAggregateSnapshot,
     ):
-        current_snapshot.totalFee += previous_aggregate_snapshot.totalFee
-        current_snapshot.totalTrade += previous_aggregate_snapshot.totalTrade
-        current_snapshot.token0TradeVolume += previous_aggregate_snapshot.token0TradeVolume
-        current_snapshot.token1TradeVolume += previous_aggregate_snapshot.token1TradeVolume
-        current_snapshot.token0TradeVolumeUSD += previous_aggregate_snapshot.token0TradeVolumeUSD
-        current_snapshot.token1TradeVolumeUSD += previous_aggregate_snapshot.token1TradeVolumeUSD
-        return current_snapshot
+
+        previous_aggregate_snapshot.totalTrade += current_snapshot.totalTrade
+        previous_aggregate_snapshot.totalFee += current_snapshot.totalFee
+        previous_aggregate_snapshot.token0TradeVolume += current_snapshot.token0TradeVolume
+        previous_aggregate_snapshot.token1TradeVolume += current_snapshot.token1TradeVolume
+        previous_aggregate_snapshot.token0TradeVolumeUSD += current_snapshot.token0TradeVolumeUSD
+        previous_aggregate_snapshot.token1TradeVolumeUSD += current_snapshot.token1TradeVolumeUSD
+
+        return previous_aggregate_snapshot
 
     def _remove_aggregate_snapshot(
         self,
         previous_aggregate_snapshot: UniswapTradesAggregateSnapshot,
         current_snapshot: UniswapTradesAggregateSnapshot,
     ):
-        current_snapshot.totalFee -= previous_aggregate_snapshot.totalFee
-        current_snapshot.totalTrade -= previous_aggregate_snapshot.totalTrade
-        current_snapshot.token0TradeVolume -= previous_aggregate_snapshot.token0TradeVolume
-        current_snapshot.token1TradeVolume -= previous_aggregate_snapshot.token1TradeVolume
-        current_snapshot.token0TradeVolumeUSD -= previous_aggregate_snapshot.token0TradeVolumeUSD
-        current_snapshot.token1TradeVolumeUSD -= previous_aggregate_snapshot.token1TradeVolumeUSD
-        return current_snapshot
+
+        previous_aggregate_snapshot.totalTrade -= current_snapshot.totalTrade
+        previous_aggregate_snapshot.totalFee -= current_snapshot.totalFee
+        previous_aggregate_snapshot.token0TradeVolume -= current_snapshot.token0TradeVolume
+        previous_aggregate_snapshot.token1TradeVolume -= current_snapshot.token1TradeVolume
+        previous_aggregate_snapshot.token0TradeVolumeUSD -= current_snapshot.token0TradeVolumeUSD
+        previous_aggregate_snapshot.token1TradeVolumeUSD -= current_snapshot.token1TradeVolumeUSD
+
+        return previous_aggregate_snapshot
 
     async def compute(
         self,
@@ -81,7 +80,8 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
         # 1. find one day tail epoch
         count = 0
         self._logger.debug(
-            'fetch # {}: queueing task for 24h aggregate snapshot for project ID {} at currently received epoch ID {} with snasphot CID {}',
+            'fetch # {}: queueing task for 24h aggregate snapshot for project ID {}'
+            ' at currently received epoch ID {} with snasphot CID {}',
             count, msg_obj.projectId, msg_obj.epochId, msg_obj.snapshotCid,
         )
         snapshot_tasks.append(
@@ -99,11 +99,14 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
             count += 1
             if not seek_stop_flag or count > 1:
                 self._logger.debug(
-                    'fetch # {}: for 7d aggregated trade volume calculations: queueing task for 24h aggregate snapshot for project ID {} at rewinded epoch ID {}', count, msg_obj.projectId, tail_epoch_id,
+                    'fetch # {}: for 7d aggregated trade volume calculations: '
+                    'queueing task for 24h aggregate snapshot for project ID {} at rewinded epoch ID {}',
+                    count, msg_obj.projectId, tail_epoch_id,
                 )
                 snapshot_tasks.append(
                     get_project_epoch_snapshot(
-                        redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id, msg_obj.projectId,
+                        redis, protocol_state_contract, anchor_rpc_helper,
+                        ipfs_reader, tail_epoch_id, msg_obj.projectId,
                     ),
                 )
             head_epoch = tail_epoch_id - 1
@@ -114,9 +117,9 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
             )
         all_snapshots = await asyncio.gather(*snapshot_tasks, return_exceptions=True)
         self._logger.debug(
-            'for 7d aggregated trade volume calculations: fetched {} 24h aggregated trade volume snapshots for project ID {}: {}', len(
-                all_snapshots,
-            ), msg_obj.projectId, all_snapshots,
+            'for 7d aggregated trade volume calculations: fetched {} '
+            '24h aggregated trade volume snapshots for project ID {}: {}',
+            len(all_snapshots), msg_obj.projectId, all_snapshots,
         )
         for single_24h_snapshot in all_snapshots:
             if not isinstance(single_24h_snapshot, BaseException):
