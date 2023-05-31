@@ -70,17 +70,15 @@ class TradeVolumeProcessor(GenericProcessorSnapshot):
         max_block_timestamp = snapshot.get('timestamp')
         snapshot.pop('timestamp', None)
         trade_volume_snapshot = UniswapTradesSnapshot(
-            **dict(
-                contract=data_source_contract_address,
-                chainHeightRange=EpochBaseSnapshot(begin=epoch_begin, end=epoch_end),
-                timestamp=max_block_timestamp,
-                totalTrade=float(f'{total_trades_in_usd: .6f}'),
-                totalFee=float(f'{total_fee_in_usd: .6f}'),
-                token0TradeVolume=float(f'{total_token0_vol: .6f}'),
-                token1TradeVolume=float(f'{total_token1_vol: .6f}'),
-                token0TradeVolumeUSD=float(f'{total_token0_vol_usd: .6f}'),
-                token1TradeVolumeUSD=float(f'{total_token1_vol_usd: .6f}'),
-                events=snapshot,
-            ),
+            contract=data_source_contract_address,
+            chainHeightRange=EpochBaseSnapshot(begin=epoch_begin, end=epoch_end),
+            timestamp=max_block_timestamp,
+            totalTrade=float(f'{total_trades_in_usd: .6f}'),
+            totalFee=float(f'{total_fee_in_usd: .6f}'),
+            token0TradeVolume=float(f'{total_token0_vol: .6f}'),
+            token1TradeVolume=float(f'{total_token1_vol: .6f}'),
+            token0TradeVolumeUSD=float(f'{total_token0_vol_usd: .6f}'),
+            token1TradeVolumeUSD=float(f'{total_token1_vol_usd: .6f}'),
+            events=snapshot
         )
         return trade_volume_snapshot
