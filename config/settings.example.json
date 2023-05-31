@@ -51,8 +51,8 @@
     }
   },
   "reporting": {
-    "slack_url": "",
-    "service_url": "http://reporting-service:9030/reportIssue"
+    "slack_url": "https://slack-reporting-url",
+    "service_url": "https://powerloom-reporting-url"
   },
   "redis": {
     "host": "redis",
@@ -77,28 +77,28 @@
   "pair_contract_abi": "pooler/static/abis/UniswapV2Pair.json",
   "protocol_state": {
     "abi": "pooler/static/abis/ProtocolContract.json",
-    "address": "0x568355e16e1bf2fE3CcFe155B987f1D603188028"
+    "address": "protocol-state-contract"
   },
   "callback_worker_config": {
     "num_snapshot_workers": 8,
     "num_aggregation_workers": 16
   },
   "ipfs": {
-    "url": "/dns/ipfs/tcp/5001",
+    "url": "ipfs-writer-url",
     "url_auth": {
-      "apiKey": "",
-      "apiSecret": ""
+      "apiKey": "ipfs-writer-key",
+      "apiSecret": "ipfs-writer-secret"
     },
-    "reader_url": "/dns/ipfs/tcp/5001",
+    "reader_url": "ipfs-reader-url",
     "reader_url_auth": {
-      "apiKey": "",
-      "apiSecret": ""
+      "apiKey": "ipfs-reader-key",
+      "apiSecret": "ipfs-reader-secret"
     },
     "write_rate_limit": {
       "req_per_sec": 10,
       "burst": 10
     },
-    "timeout": 20,
+    "timeout": 60,
     "local_cache_path": "/home/ubuntu/local_cache/",
     "connection_limits":{
       "max_connections": 100,
@@ -107,13 +107,13 @@
     }
   },
   "web3storage":{
-    "upload_snapshots": true,
+    "upload_snapshots": false,
     "upload_aggregates": true
   },
   "anchor_chain_rpc": {
     "full_nodes": [{
-      "url": "https://rpc-url",
-      "rate_limit": "10000000/day;2000/minute;100/second"
+      "url": "https://prost-rpc-url",
+      "rate_limit": "100000000/day;18000/minute;300/second"
     }],
     "retry": 5,
     "request_time_out": 5,

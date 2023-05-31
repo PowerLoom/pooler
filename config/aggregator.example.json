@@ -1,6 +1,5 @@
 {
-  "config": [
-    {
+  "config": [{
       "project_type": "aggregate_uniswap_pairContract_24h_trade_volume",
       "aggregate_on": "SingleProject",
       "filters": {
@@ -23,13 +22,23 @@
       }
     },
     {
-      "project_type": "aggregate_uniswap_24h_top_pairs",
+      "project_type": "aggregate_uniswap_24h_top_pairs_lite",
       "aggregate_on": "MultiProject",
       "projects_to_wait_for": [
+        "aggregate_uniswap_pairContract_24h_trade_volume:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2-ph15-prod",
+        "uniswap_pairContract_pair_total_reserves:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2-ph15-prod",
+        "aggregate_uniswap_pairContract_24h_trade_volume:0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5:UNISWAPV2-ph15-prod",
+        "uniswap_pairContract_pair_total_reserves:0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5:UNISWAPV2-ph15-prod",
+        "aggregate_uniswap_pairContract_24h_trade_volume:0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852:UNISWAPV2-ph15-prod",
+        "uniswap_pairContract_pair_total_reserves:0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852:UNISWAPV2-ph15-prod",
+        "aggregate_uniswap_pairContract_24h_trade_volume:0x3041cbd36888becc7bbcbc0045e3b1f144466f5f:UNISWAPV2-ph15-prod",
+        "uniswap_pairContract_pair_total_reserves:0x3041cbd36888becc7bbcbc0045e3b1f144466f5f:UNISWAPV2-ph15-prod",
+        "aggregate_uniswap_pairContract_24h_trade_volume:0xd3d2e2692501a5c9ca623199d38826e513033a17:UNISWAPV2-ph15-prod",
+        "uniswap_pairContract_pair_total_reserves:0xd3d2e2692501a5c9ca623199d38826e513033a17:UNISWAPV2-ph15-prod",
+        "aggregate_uniswap_pairContract_24h_trade_volume:0xbb2b8038a1640196fbe3e38816f3e67cba72d940:UNISWAPV2-ph15-prod",
+        "uniswap_pairContract_pair_total_reserves:0xbb2b8038a1640196fbe3e38816f3e67cba72d940:UNISWAPV2-ph15-prod",
         "aggregate_uniswap_pairContract_24h_trade_volume:0xa478c2975ab1ea89e8196811f51a7b7ade33eb11:UNISWAPV2-ph15-prod",
-        "uniswap_pairContract_pair_total_reserves:0xa478c2975ab1ea89e8196811f51a7b7ade33eb11:UNISWAPV2-ph15-prod",
-        "aggregate_uniswap_pairContract_24h_trade_volume:0x11181bd3baf5ce2a478e98361985d42625de35d1:UNISWAPV2-ph15-prod",
-        "uniswap_pairContract_pair_total_reserves:0x11181bd3baf5ce2a478e98361985d42625de35d1:UNISWAPV2-ph15-prod"
+        "uniswap_pairContract_pair_total_reserves:0xa478c2975ab1ea89e8196811f51a7b7ade33eb11:UNISWAPV2-ph15-prod"
       ],
       "processor": {
         "module": "pooler.modules.uniswapv2.aggregate.multi_uniswap_top_pairs_24h",
@@ -37,25 +46,23 @@
       }
     },
     {
-      "project_type": "aggregate_uniswap_7d_top_pairs",
+      "project_type": "aggregate_uniswap_24h_top_tokens_lite",
       "aggregate_on": "MultiProject",
       "projects_to_wait_for": [
-        "aggregate_uniswap_pairContract_7d_trade_volume:0xa478c2975ab1ea89e8196811f51a7b7ade33eb11:UNISWAPV2-ph15-prod",
-        "aggregate_uniswap_pairContract_7d_trade_volume:0x11181bd3baf5ce2a478e98361985d42625de35d1:UNISWAPV2-ph15-prod"
-      ],
-      "processor": {
-        "module": "pooler.modules.uniswapv2.aggregate.multi_uniswap_top_pairs_7d",
-        "class_name": "AggreagateTopPairsProcessor"
-      }
-    },
-    {
-      "project_type": "aggregate_uniswap_24h_top_tokens",
-      "aggregate_on": "MultiProject",
-      "projects_to_wait_for": [
+        "aggregate_uniswap_pairContract_24h_trade_volume:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2-ph15-prod",
+        "uniswap_pairContract_pair_total_reserves:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2-ph15-prod",
+        "aggregate_uniswap_pairContract_24h_trade_volume:0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5:UNISWAPV2-ph15-prod",
+        "uniswap_pairContract_pair_total_reserves:0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5:UNISWAPV2-ph15-prod",
+        "aggregate_uniswap_pairContract_24h_trade_volume:0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852:UNISWAPV2-ph15-prod",
+        "uniswap_pairContract_pair_total_reserves:0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852:UNISWAPV2-ph15-prod",
+        "aggregate_uniswap_pairContract_24h_trade_volume:0x3041cbd36888becc7bbcbc0045e3b1f144466f5f:UNISWAPV2-ph15-prod",
+        "uniswap_pairContract_pair_total_reserves:0x3041cbd36888becc7bbcbc0045e3b1f144466f5f:UNISWAPV2-ph15-prod",
+        "aggregate_uniswap_pairContract_24h_trade_volume:0xd3d2e2692501a5c9ca623199d38826e513033a17:UNISWAPV2-ph15-prod",
+        "uniswap_pairContract_pair_total_reserves:0xd3d2e2692501a5c9ca623199d38826e513033a17:UNISWAPV2-ph15-prod",
+        "aggregate_uniswap_pairContract_24h_trade_volume:0xbb2b8038a1640196fbe3e38816f3e67cba72d940:UNISWAPV2-ph15-prod",
+        "uniswap_pairContract_pair_total_reserves:0xbb2b8038a1640196fbe3e38816f3e67cba72d940:UNISWAPV2-ph15-prod",
         "aggregate_uniswap_pairContract_24h_trade_volume:0xa478c2975ab1ea89e8196811f51a7b7ade33eb11:UNISWAPV2-ph15-prod",
-        "uniswap_pairContract_pair_total_reserves:0xa478c2975ab1ea89e8196811f51a7b7ade33eb11:UNISWAPV2-ph15-prod",
-        "aggregate_uniswap_pairContract_24h_trade_volume:0x11181bd3baf5ce2a478e98361985d42625de35d1:UNISWAPV2-ph15-prod",
-        "uniswap_pairContract_pair_total_reserves:0x11181bd3baf5ce2a478e98361985d42625de35d1:UNISWAPV2-ph15-prod"
+        "uniswap_pairContract_pair_total_reserves:0xa478c2975ab1ea89e8196811f51a7b7ade33eb11:UNISWAPV2-ph15-prod"
       ],
       "processor": {
         "module": "pooler.modules.uniswapv2.aggregate.multi_uniswap_top_tokens",
@@ -63,13 +70,40 @@
       }
     },
     {
-      "project_type": "aggregate_uniswap_24h_stats",
+      "project_type": "aggregate_uniswap_7d_top_pairs_lite",
       "aggregate_on": "MultiProject",
       "projects_to_wait_for": [
+        "aggregate_uniswap_pairContract_7d_trade_volume:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2-ph15-prod",
+        "aggregate_uniswap_pairContract_7d_trade_volume:0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5:UNISWAPV2-ph15-prod",
+        "aggregate_uniswap_pairContract_7d_trade_volume:0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852:UNISWAPV2-ph15-prod",
+        "aggregate_uniswap_pairContract_7d_trade_volume:0x3041cbd36888becc7bbcbc0045e3b1f144466f5f:UNISWAPV2-ph15-prod",
+        "aggregate_uniswap_pairContract_7d_trade_volume:0xd3d2e2692501a5c9ca623199d38826e513033a17:UNISWAPV2-ph15-prod",
+        "aggregate_uniswap_pairContract_7d_trade_volume:0xbb2b8038a1640196fbe3e38816f3e67cba72d940:UNISWAPV2-ph15-prod",
+        "aggregate_uniswap_pairContract_7d_trade_volume:0xa478c2975ab1ea89e8196811f51a7b7ade33eb11:UNISWAPV2-ph15-prod"
+      ],
+      "processor": {
+        "module": "pooler.modules.uniswapv2.aggregate.multi_uniswap_top_pairs_7d",
+        "class_name": "AggreagateTopPairsProcessor"
+      }
+    },
+    {
+      "project_type": "aggregate_uniswap_24h_stats_lite",
+      "aggregate_on": "MultiProject",
+      "projects_to_wait_for": [
+        "aggregate_uniswap_pairContract_24h_trade_volume:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2-ph15-prod",
+        "uniswap_pairContract_pair_total_reserves:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2-ph15-prod",
+        "aggregate_uniswap_pairContract_24h_trade_volume:0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5:UNISWAPV2-ph15-prod",
+        "uniswap_pairContract_pair_total_reserves:0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5:UNISWAPV2-ph15-prod",
+        "aggregate_uniswap_pairContract_24h_trade_volume:0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852:UNISWAPV2-ph15-prod",
+        "uniswap_pairContract_pair_total_reserves:0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852:UNISWAPV2-ph15-prod",
+        "aggregate_uniswap_pairContract_24h_trade_volume:0x3041cbd36888becc7bbcbc0045e3b1f144466f5f:UNISWAPV2-ph15-prod",
+        "uniswap_pairContract_pair_total_reserves:0x3041cbd36888becc7bbcbc0045e3b1f144466f5f:UNISWAPV2-ph15-prod",
+        "aggregate_uniswap_pairContract_24h_trade_volume:0xd3d2e2692501a5c9ca623199d38826e513033a17:UNISWAPV2-ph15-prod",
+        "uniswap_pairContract_pair_total_reserves:0xd3d2e2692501a5c9ca623199d38826e513033a17:UNISWAPV2-ph15-prod",
+        "aggregate_uniswap_pairContract_24h_trade_volume:0xbb2b8038a1640196fbe3e38816f3e67cba72d940:UNISWAPV2-ph15-prod",
+        "uniswap_pairContract_pair_total_reserves:0xbb2b8038a1640196fbe3e38816f3e67cba72d940:UNISWAPV2-ph15-prod",
         "aggregate_uniswap_pairContract_24h_trade_volume:0xa478c2975ab1ea89e8196811f51a7b7ade33eb11:UNISWAPV2-ph15-prod",
-        "uniswap_pairContract_pair_total_reserves:0xa478c2975ab1ea89e8196811f51a7b7ade33eb11:UNISWAPV2-ph15-prod",
-        "aggregate_uniswap_pairContract_24h_trade_volume:0x11181bd3baf5ce2a478e98361985d42625de35d1:UNISWAPV2-ph15-prod",
-        "uniswap_pairContract_pair_total_reserves:0x11181bd3baf5ce2a478e98361985d42625de35d1:UNISWAPV2-ph15-prod"
+        "uniswap_pairContract_pair_total_reserves:0xa478c2975ab1ea89e8196811f51a7b7ade33eb11:UNISWAPV2-ph15-prod"
       ],
       "processor": {
         "module": "pooler.modules.uniswapv2.aggregate.multi_uniswap_stats",
