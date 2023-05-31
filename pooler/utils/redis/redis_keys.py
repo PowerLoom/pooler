@@ -15,10 +15,6 @@ failed_commit_epochs_redis_q = (
     ':{}:{}'
 )
 
-cb_broadcast_processing_logs_zset = (
-    'broadcastID:' + settings.namespace + ':{}:processLogs'
-)
-
 cached_block_details_at_height = (
     'uniswap:blockDetail:' + settings.namespace + ':blockDetailZset'
 )

@@ -28,9 +28,6 @@ from pooler.utils.models.message_models import PowerloomSnapshotProcessMessage
 from pooler.utils.models.settings_model import AggregateOn
 from pooler.utils.rabbitmq_helpers import RabbitmqSelectLoopInteractor
 from pooler.utils.redis.redis_conn import RedisPoolCache
-from pooler.utils.redis.redis_keys import (
-    cb_broadcast_processing_logs_zset,
-)
 from pooler.utils.redis.redis_keys import project_finalized_data_zset
 from pooler.utils.rpc import RpcHelper
 from pooler.utils.snapshot_utils import warm_up_cache_for_snapshot_constructors
@@ -156,27 +153,6 @@ class ProcessorDistributor(multiprocessing.Process):
             (
                 'Sent out message to be processed by worker'
                 f' {type_} : {process_unit}'
-            ),
-        )
-
-        update_log = {
-            'worker': self.name,
-            'update': {
-                'action': 'RabbitMQ.Publish',
-                'info': {
-                    'routing_key': f'powerloom-backend-callback:{settings.namespace}'
-                    f':{settings.instance_id}.{type_}',
-                    'exchange': f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}',
-                    'msg': process_unit.dict(),
-                },
-            },
-        }
-        self.ev_loop.run_until_complete(
-            self._redis_conn.zadd(
-                cb_broadcast_processing_logs_zset.format(
-                    process_unit.broadcastId,
-                ),
-                {json.dumps(update_log): int(time.time())},
             ),
         )
 

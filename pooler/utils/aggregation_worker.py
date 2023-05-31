@@ -1,8 +1,6 @@
 import asyncio
 import hashlib
 import importlib
-import json
-import time
 from typing import Callable
 from typing import List
 from typing import Union
@@ -26,9 +24,6 @@ from pooler.utils.models.message_models import PowerloomCalculateAggregateMessag
 from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
 from pooler.utils.models.settings_model import AggregateOn
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
-from pooler.utils.redis.redis_keys import (
-    cb_broadcast_processing_logs_zset,
-)
 
 
 class AggregationAsyncWorker(GenericAsyncWorker):
@@ -150,43 +145,8 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 audit_stream,
                 epoch,
             )
-            # TODO: standardize/unify update log data model
-            update_log = {
-                'worker': self._unique_id,
-                'update': {
-                    'action': f'AggregateBuild-{audit_stream}',
-                    'info': {
-                        'epoch': epoch.dict(),
-                        'status': 'Failed',
-                    },
-                },
-            }
 
-            await self._redis_conn.zadd(
-                name=cb_broadcast_processing_logs_zset.format(
-                    epoch.broadcastId,
-                ),
-                mapping={json.dumps(update_log): int(time.time())},
-            )
         else:
-            update_log = {
-                'worker': self._unique_id,
-                'update': {
-                    'action': f'AggregateBuild-{audit_stream}',
-                    'info': {
-                        'epoch': epoch.dict(),
-                        'status': 'Success',
-                        'snapshot': snapshot.dict(),
-                    },
-                },
-            }
-
-            await self._redis_conn.zadd(
-                name=cb_broadcast_processing_logs_zset.format(
-                    epoch.broadcastId,
-                ),
-                mapping={json.dumps(update_log): int(time.time())},
-            )
 
             source_chain_details = await get_source_chain_id(
                 redis_conn=self._redis_conn,
@@ -234,25 +194,6 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                             'Sent message to commit payload queue: {}', commit_payload,
                         )
 
-                        update_log = {
-                            'worker': self._unique_id,
-                            'update': {
-                                'action': f'AggregateCommit-{audit_stream}',
-                                'info': {
-                                    'snapshot': payload,
-                                    'epoch': epoch.dict(),
-                                    'status': 'Success',
-                                },
-                            },
-                        }
-
-                        await self._redis_conn.zadd(
-                            name=cb_broadcast_processing_logs_zset.format(
-                                epoch.broadcastId,
-                            ),
-                            mapping={json.dumps(update_log): int(time.time())},
-                        )
-
             except Exception as e:
                 self._logger.opt(exception=True).error(
                     (
@@ -261,25 +202,6 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                     ),
                     snapshot,
                     e,
-                )
-                update_log = {
-                    'worker': self._unique_id,
-                    'update': {
-                        'action': f'AggregateCommit-{audit_stream}',
-                        'info': {
-                            'snapshot': payload,
-                            'epoch': epoch.dict(),
-                            'status': 'Failed',
-                            'exception': e,
-                        },
-                    },
-                }
-
-                await self._redis_conn.zadd(
-                    name=cb_broadcast_processing_logs_zset.format(
-                        epoch.broadcastId,
-                    ),
-                    mapping={json.dumps(update_log): int(time.time())},
                 )
 
     async def _map_processed_epochs_to_adapters(
@@ -320,15 +242,6 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 task_type,
             )
             raise e
-
-    async def _update_broadcast_processing_status(
-        self, broadcast_id, update_state,
-    ):
-        await self._redis_conn.hset(
-            cb_broadcast_processing_logs_zset.format(self.name),
-            broadcast_id,
-            json.dumps(update_state),
-        )
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
         task_type = message.routing_key.split('.')[-1]
