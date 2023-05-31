@@ -20,6 +20,7 @@ from pooler.utils.default_logger import logger
 from pooler.utils.file_utils import read_json_file
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 from pooler.utils.redis.redis_conn import RedisPoolCache
+from pooler.utils.redis.redis_keys import project_last_finalized_epoch_key
 from pooler.utils.rpc import RpcHelper
 
 
@@ -180,7 +181,71 @@ async def get_epoch_info(
     return epoch_info
 
 
+@app.get('/last_finalized_epoch/{project_id}')
+async def get_project_last_finalized_epoch_info(
+    request: Request,
+    response: Response,
+    project_id: str,
+    rate_limit_auth_dep: RateLimitAuthCheck = Depends(
+        rate_limit_auth_check,
+    ),
+):
+    """
+    This endpoint is used to fetch epoch info for the last finalized epoch for a given project.
+    """
+    if not (
+        rate_limit_auth_dep.rate_limit_passed and
+        rate_limit_auth_dep.authorized and
+        rate_limit_auth_dep.owner.active == UserStatusEnum.active
+    ):
+        return inject_rate_limit_fail_response(rate_limit_auth_dep)
+
+    try:
+
+        # get project last finalized epoch from redis
+        project_last_finalized_epoch = await request.app.state.redis_pool.get(
+            project_last_finalized_epoch_key(project_id),
+        )
+
+        if project_last_finalized_epoch is None:
+            response.status_code = 404
+            return {
+                'status': 'error',
+                'message': f'Unable to find last finalized epoch for project {project_id}',
+            }
+
+        project_last_finalized_epoch = int(project_last_finalized_epoch.decode('utf-8'))
+
+        [epoch_info_data] = await request.app.state.anchor_rpc_helper.web3_call(
+            [request.app.state.protocol_state_contract.functions.epochInfo(project_last_finalized_epoch)],
+            redis_conn=request.app.state.redis_pool,
+        )
+        epoch_info = {
+            'epochId': project_last_finalized_epoch,
+            'timestamp': epoch_info_data[0],
+            'blocknumber': epoch_info_data[1],
+            'epochEnd': epoch_info_data[2],
+        }
+
+    except Exception as e:
+        rest_logger.exception(
+            'Exception in get_project_last_finalized_epoch_info',
+            e=e,
+        )
+        response.status_code = 500
+        return {
+            'status': 'error',
+            'message': f'Unable to get last finalized epoch for project {project_id}, error: {e}',
+        }
+
+    auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
+    await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
+
+    return epoch_info
+
 # get data for epoch_id, project_id
+
+
 @app.get('/data/{epoch_id}/{project_id}/')
 async def get_data_for_project_id_epoch_id(
     request: Request,
