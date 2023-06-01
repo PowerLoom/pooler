@@ -139,10 +139,6 @@ class ProcessorDistributor(multiprocessing.Process):
                     f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}:EpochReleased.{type_}',
                 )
 
-        self._rabbitmq_interactor._channel.basic_ack(
-            delivery_tag=method.delivery_tag,
-        )
-
     def _send_message_for_processing(self, process_unit, type_, routing_key):
         self._rabbitmq_interactor.enqueue_msg_delivery(
             exchange=f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}',
@@ -199,9 +195,6 @@ class ProcessorDistributor(multiprocessing.Process):
                 'Sent out Event to Payload Commit Queue'
                 f' {event_type} : {process_unit}'
             ),
-        )
-        self._rabbitmq_interactor._channel.basic_ack(
-            delivery_tag=method.delivery_tag,
         )
 
     def _distribute_callbacks_aggregate(self, dont_use_ch, method, properties, body):
@@ -304,9 +297,6 @@ class ProcessorDistributor(multiprocessing.Process):
                         f'Not all projects present for {process_unit.epochId},'
                         f' {len(set(config.projects_to_wait_for)) - len(event_project_ids)} missing',
                     )
-        self._rabbitmq_interactor._channel.basic_ack(
-            delivery_tag=method.delivery_tag,
-        )
 
     def _distribute_callbacks(self, dont_use_ch, method, properties, body):
         self._logger.debug(
@@ -354,6 +344,9 @@ class ProcessorDistributor(multiprocessing.Process):
                 ),
                 method.routing_key,
             )
+        self._rabbitmq_interactor._channel.basic_ack(
+            delivery_tag=method.delivery_tag,
+        )
 
     def _exit_signal_handler(self, signum, sigframe):
         if (
