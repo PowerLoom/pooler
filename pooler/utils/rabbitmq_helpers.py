@@ -446,11 +446,7 @@ class RabbitmqSelectLoopInteractor(object):
                     msg,
                 )
                 pushed_outputs.append(unique_id)
-            self.queued_messages = {
-                k: self.queued_messages[k]
-                for k in self.queued_messages
-                if k not in pushed_outputs
-            }
+            [self.queued_messages.pop(unique_id) for unique_id in pushed_outputs]
         except Exception as err:
             logger.opt(exception=True).error(
                 (
