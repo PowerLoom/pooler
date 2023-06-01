@@ -200,6 +200,9 @@ class ProcessorDistributor(multiprocessing.Process):
                 f' {event_type} : {process_unit}'
             ),
         )
+        self._rabbitmq_interactor._channel.basic_ack(
+            delivery_tag=method.delivery_tag,
+        )
 
     def _distribute_callbacks_aggregate(self, dont_use_ch, method, properties, body):
         event_type = method.routing_key.split('.')[-1]
