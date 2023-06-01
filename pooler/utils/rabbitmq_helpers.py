@@ -83,7 +83,6 @@ class RabbitmqSelectLoopInteractor(object):
         self.was_consuming = False
         self._consumer_tag = None
         self.queued_messages: dict = dict()
-        self._deliveries = None
         self._acked = None
         self._nacked = None
         self._message_number = None
@@ -317,7 +316,7 @@ class RabbitmqSelectLoopInteractor(object):
             ),
             self._consumer_worker_name,
         )
-        self.enable_delivery_confirmations()
+        # self.enable_delivery_confirmations()
         self.schedule_next_message()
 
     def enable_delivery_confirmations(self):
@@ -367,18 +366,6 @@ class RabbitmqSelectLoopInteractor(object):
             self._acked += 1
         elif confirmation_type == 'nack':
             self._nacked += 1
-        self._deliveries.remove(method_frame.method.delivery_tag)
-        logger.info(
-            (
-                '{}: RabbitMQ select loop interactor: Published {} messages, {}'
-                ' have yet to be confirmed, {} were acked and {} were nacked'
-            ),
-            self._consumer_worker_name,
-            self._message_number,
-            len(self._deliveries),
-            self._acked,
-            self._nacked,
-        )
 
     def enqueue_msg_delivery(self, exchange, routing_key, msg_body):
         # NOTE: if used in a multi threaded/multi processing context, this will introduce a race condition given that
@@ -447,7 +434,6 @@ class RabbitmqSelectLoopInteractor(object):
                     properties=properties,
                 )
                 self._message_number += 1
-                self._deliveries.append(self._message_number)
                 logger.info(
                     (
                         '{}: RabbitMQ select loop interactor: Published message'
@@ -494,7 +480,6 @@ class RabbitmqSelectLoopInteractor(object):
                 attempt,
             )
             self._connection = None
-            self._deliveries = []
             self._acked = 0
             self._nacked = 0
             self._message_number = 0

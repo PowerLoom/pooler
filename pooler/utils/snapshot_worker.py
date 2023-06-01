@@ -59,31 +59,33 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         )
         self._running_callback_tasks[self_unique_id] = cur_task
 
-        if not self._rate_limiting_lua_scripts:
-            self._rate_limiting_lua_scripts = await load_rate_limiter_scripts(
-                self._redis_conn,
+        try:
+            if not self._rate_limiting_lua_scripts:
+                self._rate_limiting_lua_scripts = await load_rate_limiter_scripts(
+                    self._redis_conn,
+                )
+            self._logger.debug(
+                'Got epoch to process for {}: {}',
+                task_type, msg_obj,
             )
-        self._logger.debug(
-            'Got epoch to process for {}: {}',
-            task_type, msg_obj,
-        )
 
-        stream_processor = self._project_calculation_mapping[task_type]
-        snapshot = await self._map_processed_epochs_to_adapters(
-            epoch=msg_obj,
-            cb_fn_async=stream_processor.compute,
-            data_source_contract_address=msg_obj.contract,
-            task_type=task_type,
-            transformation_lambdas=stream_processor.transformation_lambdas,
-        )
+            stream_processor = self._project_calculation_mapping[task_type]
+            snapshot = await self._map_processed_epochs_to_adapters(
+                epoch=msg_obj,
+                cb_fn_async=stream_processor.compute,
+                data_source_contract_address=msg_obj.contract,
+                task_type=task_type,
+                transformation_lambdas=stream_processor.transformation_lambdas,
+            )
 
-        await self._send_payload_commit_service_queue(
-            audit_stream=task_type,
-            epoch=msg_obj,
-            snapshot=snapshot,
-        )
-
-        del self._running_callback_tasks[self_unique_id]
+            await self._send_payload_commit_service_queue(
+                audit_stream=task_type,
+                epoch=msg_obj,
+                snapshot=snapshot,
+            )
+        except Exception as e:
+            del self._running_callback_tasks[self_unique_id]
+            raise e
 
     async def _send_payload_commit_service_queue(
         self,
@@ -195,6 +197,8 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         if task_type not in self._task_types:
             return
 
+        await message.ack()
+
         await self.init()
 
         self._logger.debug('task type: {}', task_type)
@@ -221,7 +225,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             return
 
         asyncio.ensure_future(self._processor_task(msg_obj=msg_obj, task_type=task_type))
-        await message.ack()
 
     async def _init_project_calculation_mapping(self):
         if self._project_calculation_mapping is not None:
