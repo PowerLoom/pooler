@@ -6,21 +6,22 @@
   - [Epoch Generation](#epoch-generation)
   - [Base Snapshot Generation](#base-snapshot-generation)
   - [Snapshot Finalization](#snapshot-finalization)
-  - [Aggregation and data composition - snapshot generation](#aggregation-and-data-composition---snapshot-generation)
+  - [Aggregation and data composition - snapshot generation of higher order datapoints on base snapshots](#aggregation-and-data-composition---snapshot-generation-of-higher-order-datapoints-on-base-snapshots)
 - [Development Instructions](#development-instructions)
   - [Configuration](#configuration)
 - [Monitoring and Debugging](#monitoring-and-debugging)
 - [For Contributors](#for-contributors)
 - [Extending pooler with a Uniswap v2 data point](#extending-pooler-with-a-uniswap-v2-data-point)
-  - [Review: Base snapshot extraction logic for trade information](#review-base-snapshot-extraction-logic-for-trade-information)
-  - [Review: 24 hour aggregate of trade volume snapshots over a single pair contract](#review-24-hour-aggregate-of-trade-volume-snapshots-over-a-single-pair-contract)
-  - [New Datapoint: 2 hours aggregate of only swap events](#new-datapoint-2-hours-aggregate-of-only-swap-events)
+  - [Step 1. Review: Base snapshot extraction logic for trade information](#step-1-review-base-snapshot-extraction-logic-for-trade-information)
+  - [Step 2. Review: 24 hour aggregate of trade volume snapshots over a single pair contract](#step-2-review-24-hour-aggregate-of-trade-volume-snapshots-over-a-single-pair-contract)
+  - [Step 3. New Datapoint: 2 hours aggregate of only swap events](#step-3-new-datapoint-2-hours-aggregate-of-only-swap-events)
 - [Major Components](#major-components)
   - [System Event Detector](#system-event-detector)
   - [Process Hub Core](#process-hub-core)
   - [Processor Distributor](#processor-distributor)
   - [Callback Workers](#callback-workers)
   - [RPC Helper](#rpc-helper)
+  - [Core API](#core-api)
 - [Find us](#find-us)
 
 ## Overview
@@ -104,7 +105,7 @@ This helps us in building sophisticated aggregates, super-aggregates, filters an
 event SnapshotFinalized(uint256 indexed epochId, uint256 epochEnd, string projectId, string snapshotCid, uint256 timestamp);
 ```
 
-### Aggregation and data composition - snapshot generation
+### Aggregation and data composition - snapshot generation of higher order datapoints on base snapshots
 
 Workers as defined in `config/aggregator.json` are triggered by the appropriate signals forwarded to [`Processor Distributor`](pooler/processor_distributor.py) corresponding to the project ID filters as explained in the [Configuration](#configuration) section.
 
@@ -132,7 +133,7 @@ Pooler needs the following config files to be present
             }
         }
         ```
-        Copy over [`config/projects.example.json`](config/projects.example.json) to `config/projects.json`. For more details, read on in the [section below on extending a use case](#configuring-poolersettingssettingsjson).
+        Copy over [`config/projects.example.json`](config/projects.example.json) to `config/projects.json`. For more details, read on in the [section below on extending a use case](#extending-pooler-with-a-uniswap-v2-data-point).
     * **`config/aggregator.json`** : This lists out different type of aggregation work to be performed over a span of snapshots. Copy over [`config/aggregator.example.json`](config/aggregator.example.json) to `config/aggregator.json`. The span is usually calculated as a function of the epoch size and average block time on the data source network. For eg, 
         * the following configuration calculates a snapshot of total trade volume over a 24 hour time period, based on the [snapshot finalization](#snapshot-finalization) of a project ID corresponding to a pair contract. This can be seen by the `aggregate_on` key being set to `SingleProject`.
             * This is specified by the `filters` key below. If a [snapshot finalization](#snapshot-finalization) is achieved for an epoch over a project ID [(ref:generation of project ID for snapshot building workers)](#epoch-generation) `uniswap_pairContract_trade_volume:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2-ph15-prod`, this would trigger the worker [`AggreagateTradeVolumeProcessor`](pooler/modules/uniswapv2/aggregate/single_uniswap_trade_volume_24h.py) as defined in the `processor` section of the config against the pair contract `0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc`. 
@@ -209,11 +210,12 @@ Now, whenever you commit anything, it'll automatically check the files you've ch
 
 In this section, let us take a look at the data composition abilities of Pooler to build on the base snapshot being built that captures information on Uniswap trades. 
 
-### Review: Base snapshot extraction logic for trade information
+### Step 1. Review: Base snapshot extraction logic for trade information
 
 Required reading: 
 * [Base Snapshot Generation](#base-snapshot-generation) and 
 * [configuring `config/projects.json`](#configuration)
+* [Aggregation and data composition](#aggregation-and-data-composition---snapshot-generation-of-higher-order-datapoints-on-base-snapshots)
 
 As you can notice in [`config/projects.example.json`](config/projects.example.json), each project config needs to have the following components
 
@@ -233,14 +235,14 @@ https://github.com/PowerLoom/pooler/blob/1452c166bef7534568a61b3a2ab0ff94535d722
 
 
 There are a couple of important concepts here necessary to write your extraction logic:
-1. `compute` is the main function where most of the snapshot extraction and generation logic needs to be written. It receives the following inputs:
+* `compute` is the main function where most of the snapshot extraction and generation logic needs to be written. It receives the following inputs:
 - `max_chain_height` (epoch end block)
 - `min_chain_height` (epoch start block)
 - `data_source_contract_address` (contract address to extract data from)
 - `redis` (async redis connection)
 - `rpc_helper` ([`RpcHelper`](pooler/utils/rpc.py) instance to help with any calls to the data source contract's chain)
 
-2. `transformation_lambdas` provide an additional layer for computation on top of the generated snapshot (if needed). If `compute` function handles everything you can just set `transformation_lambdas` to `[]` otherwise pass the list of transformation function sequence. Each function referenced in `transformation_lambdas` must have same input interface. It should receive the following inputs -
+* `transformation_lambdas` provide an additional layer for computation on top of the generated snapshot (if needed). If `compute` function handles everything you can just set `transformation_lambdas` to `[]` otherwise pass the list of transformation function sequence. Each function referenced in `transformation_lambdas` must have same input interface. It should receive the following inputs -
  - `snapshot` (the generated snapshot to apply transformation on)
  - `data_source_contract_address` (contract address to extract data from)
  - `epoch_begin` (epoch begin block)
@@ -253,7 +255,7 @@ The resultant output model in this specific example is `UniswapTradesSnapshot` a
 https://github.com/PowerLoom/pooler/blob/1452c166bef7534568a61b3a2ab0ff94535d7229/pooler/modules/uniswapv2/utils/models/message_models.py#L37-L44
 
 
-### Review: 24 hour aggregate of trade volume snapshots over a single pair contract
+### Step 2. Review: 24 hour aggregate of trade volume snapshots over a single pair contract
 
 * As demonstrated in the previous section, the `TradeVolumeProcessor` logic takes care of capturing a snapshot of information regarding Uniswap v2 trades between the block heights of `min_chain_height` and `max_chain_height`. 
 
@@ -284,7 +286,7 @@ https://github.com/PowerLoom/pooler/blob/1452c166bef7534568a61b3a2ab0ff94535d722
 https://github.com/PowerLoom/pooler/blob/1452c166bef7534568a61b3a2ab0ff94535d7229/pooler/modules/uniswapv2/aggregate/single_uniswap_trade_volume_24h.py#L84-L157
 
 
-### New Datapoint: 2 hours aggregate of only swap events
+### Step 3. New Datapoint: 2 hours aggregate of only swap events
 
 From the information provided above, the following is left as an exercise for the reader to generate aggregate datasets at every `epochId` finalization for a pair contract, spanning 2 hours worth of snapshots and containing only `Swap` event logs and the trade volume generated from them as a result.
 
@@ -334,8 +336,27 @@ The callback workers are basically the ones that build the base snapshot and agg
 * [Aggregation Snapshot builder](pooler/utils/aggregation_worker.py)
 
 ### RPC Helper
+
 Extracting data from blockchain state and generating the snapshot can be a complex task. The `RpcHelper`, defined in [`utils/rpc.py`](pooler/utils/rpc.py), has a bunch of helper functions to make this process easier. It handles all the `retry` and `caching` logic so that developers can focus on building their use cases in an efficient way.
 
+
+### Core API
+
+This component is one of the most important and allows you to access the finalized protocol state on the smart contract running on the anchor chain. Find it in [`core_api.py`](pooler/core_api.py).
+
+The [pooler-frontend](https://github.com/powerloom/pooler-frontend) that serves the Uniswap v2 dashboards hosted by the PowerLoom foundation on locations like https://uniswapv2.powerloom.io/ .
+
+Among many thing, it allows you to **access the finalized CID as well as its contents at a given epoch ID for a project**.
+
+The endpoint implementations can be found as follows:
+
+https://github.com/PowerLoom/pooler/blob/1452c166bef7534568a61b3a2ab0ff94535d7229/pooler/core_api.py#L305-L355
+
+https://github.com/PowerLoom/pooler/blob/1452c166bef7534568a61b3a2ab0ff94535d7229/pooler/core_api.py#L250-L300
+
+You can observe the way it is used in `pooler-frontend` repo to fetch the dataset for the aggregate projects of top pairs trade volume and token reserves summary:
+
+https://github.com/PowerLoom/pooler-frontend/blob/361268d27584520450bf33353f7519982d638f8a/src/routes/index.svelte#L85-L94
 
 ## Find us
 
