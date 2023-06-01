@@ -4,6 +4,7 @@ import multiprocessing
 import queue
 import time
 from functools import partial
+from typing import Union
 from uuid import uuid4
 
 from aio_pika import IncomingMessage
@@ -113,7 +114,12 @@ class ProcessorDistributor(multiprocessing.Process):
                 ),
             )
 
-    async def _publish_message_to_queue(self, exchange, routing_key, message):
+    async def _publish_message_to_queue(
+        self,
+        exchange,
+        routing_key,
+        message: Union[EpochBroadcast, PowerloomCalculateAggregateMessage, PowerloomSnapshotFinalizedMessage],
+    ):
         """
         Publishes a message to a rabbitmq queue
         """
@@ -127,10 +133,10 @@ class ProcessorDistributor(multiprocessing.Process):
                     message_data = message.json().encode()
 
                     # Prepare a message to send
-                    message = Message(message_data)
+                    queue_message = Message(message_data)
 
                     await exchange.publish(
-                        message=message,
+                        message=queue_message,
                         routing_key=routing_key,
                     )
 
