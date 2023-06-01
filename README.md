@@ -354,9 +354,25 @@ https://github.com/PowerLoom/pooler/blob/1452c166bef7534568a61b3a2ab0ff94535d722
 
 https://github.com/PowerLoom/pooler/blob/1452c166bef7534568a61b3a2ab0ff94535d7229/pooler/core_api.py#L250-L300
 
-You can observe the way it is used in `pooler-frontend` repo to fetch the dataset for the aggregate projects of top pairs trade volume and token reserves summary:
+You can observe the way it is [used in `pooler-frontend` repo](https://github.com/PowerLoom/pooler-frontend/blob/361268d27584520450bf33353f7519982d638f8a/src/routes/index.svelte#L85) to fetch the dataset for the aggregate projects of top pairs trade volume and token reserves summary:
 
-https://github.com/PowerLoom/pooler-frontend/blob/361268d27584520450bf33353f7519982d638f8a/src/routes/index.svelte#L85-L94
+
+```javascript
+try {
+      response = await axios.get(API_PREFIX+`/data/${epochInfo.epochId}/${top_pairs_7d_project_id}/`);
+      console.log('got 7d top pairs', response.data);
+      if (response.data) {
+        for (let pair of response.data.pairs) {
+          pairsData7d[pair.name] = pair;
+        }
+      } else {
+        throw new Error(JSON.stringify(response.data));
+      }
+    }
+    catch (e){
+      console.error('7d top pairs', e);
+    }
+```
 
 ## Find us
 
