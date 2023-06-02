@@ -50,6 +50,7 @@ class ProcessorDistributor(multiprocessing.Process):
         self._consume_queue_name = (
             f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}'
         )
+        self._initialized = False
         self._consume_queue_routing_key = f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.*'
         self._callback_exchange_name = (
             f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}'
@@ -338,11 +339,10 @@ class ProcessorDistributor(multiprocessing.Process):
             message.body,
         )
 
-        if not self._redis_conn:
+        if not self._initialized:
             await self._init_redis_pool()
-
-        if not self._rpc_helper:
             await self._init_rpc_helper()
+            self._initialized = True
 
         if message_type == 'EpochReleased':
             await self._distribute_callbacks_snapshotting(
