@@ -370,7 +370,7 @@ class RpcHelper(object):
         except Exception as e:
             raise e
 
-    @LruCacheRpc(maxsize=2500, args={'rpc_query'})
+    @LruCacheRpc(maxsize=100, args={'rpc_query'})
     async def _make_rpc_jsonrpc_call(self, rpc_query, redis_conn):
         """Make a jsonrpc call to the given rpc_url"""
 
@@ -545,7 +545,7 @@ class RpcHelper(object):
         response_data = await self._make_rpc_jsonrpc_call(rpc_query, redis_conn=redis_conn)
         return response_data
 
-    @LruCacheRpc(maxsize=2500, args={'contract_address', 'to_block', 'from_block', 'topics', 'event_abi'})
+    @LruCacheRpc(maxsize=100, args={'contract_address', 'to_block', 'from_block', 'topics', 'event_abi'})
     async def get_events_logs(
         self, contract_address, to_block, from_block, topics, event_abi, redis_conn,
     ):
