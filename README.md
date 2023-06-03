@@ -43,7 +43,7 @@ Pooler is a Uniswap specific implementation of what is known as a 'snapshotter' 
 
 
 
-In its last release (link to github commit or tag here), pooler was a *self contained* system that would provide access to the above. The present implementation differs from that in some major ways:
+In its [last release](https://github.com/PowerLoom/pooler/releases/tag/v0.1.3-alpha), pooler was a *self contained* system that would provide access to the above. The present implementation differs from that in some major ways:
 
 * each data point is calculated, updated and synchronized with other snapshotter peers participating in the network for this Uniswap v2 use case
 * synchronization of data points is defined as a function of an epoch ID(entifier) where epoch refers to an equally spaced collection of blocks on the data source smart contract's chain (Ethereum mainnet in case of Uniswap v2). This simplifies building of use cases that are stateful (i.e. can be accessed according to their state at a given height of the data source chain), synchronized and depend on reliable data. For example,
@@ -376,7 +376,7 @@ try {
 
 ## Find us
 
-* [Discord](https://discord.gg/QCpVhshdtt)
+* [Discord](https://powerloom.io/discord)
 * [Twitter](https://twitter.com/PowerLoomHQ)
 * [Github](https://github.com/PowerLoom)
 * [Careers](https://wellfound.com/company/powerloom/jobs)
