@@ -37,8 +37,16 @@ if __name__ == '__main__':
 
     logger.configure(
         handlers=[
-            {'sink': sys.stdout, 'serialize': JSON_LOGS, 'level': logging.DEBUG},
-            {'sink': sys.stderr, 'serialize': JSON_LOGS, 'level': logging.ERROR},
+            {
+                'sink': sys.stdout,
+                'serialize': JSON_LOGS,
+                'level': logging.DEBUG,
+            },
+            {
+                'sink': sys.stderr,
+                'serialize': JSON_LOGS,
+                'level': logging.ERROR,
+            },
         ],
     )
 

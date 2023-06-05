@@ -1,5 +1,4 @@
 import contextlib
-import logging
 from functools import wraps
 
 import redis
@@ -24,8 +23,10 @@ REDIS_CONN_CONF = {
 
 def construct_redis_url():
     if REDIS_CONN_CONF['password']:
-        return f'redis://{REDIS_CONN_CONF["password"]}@{REDIS_CONN_CONF["host"]}:{REDIS_CONN_CONF["port"]}'\
-               f'/{REDIS_CONN_CONF["db"]}'
+        return (
+            f'redis://{REDIS_CONN_CONF["password"]}@{REDIS_CONN_CONF["host"]}:{REDIS_CONN_CONF["port"]}'
+            f'/{REDIS_CONN_CONF["db"]}'
+        )
     else:
         return f'redis://{REDIS_CONN_CONF["host"]}:{REDIS_CONN_CONF["port"]}/{REDIS_CONN_CONF["db"]}'
 
@@ -39,7 +40,9 @@ async def get_aioredis_pool(pool_size=200):
 
 
 @contextlib.contextmanager
-def create_redis_conn(connection_pool: redis.BlockingConnectionPool) -> redis.Redis:
+def create_redis_conn(
+    connection_pool: redis.BlockingConnectionPool,
+) -> redis.Redis:
     """
     Contextmanager that will create and teardown a session.
     """
@@ -63,17 +66,22 @@ def provide_redis_conn(fn):
     def wrapper(*args, **kwargs):
         arg_conn = 'redis_conn'
         func_params = fn.__code__.co_varnames
-        conn_in_args = arg_conn in func_params and func_params.index(arg_conn) < len(args)
+        conn_in_args = arg_conn in func_params and func_params.index(
+            arg_conn,
+        ) < len(args)
         conn_in_kwargs = arg_conn in kwargs
         if conn_in_args or conn_in_kwargs:
             return fn(*args, **kwargs)
         else:
             connection_pool = redis.BlockingConnectionPool(**REDIS_CONN_CONF)
-            # logging.debug('Created Redis connection Pool')
+
             with create_redis_conn(connection_pool) as redis_obj:
                 kwargs[arg_conn] = redis_obj
-                logging.debug('Returning after populating redis connection object')
+                logger.debug(
+                    'Returning after populating redis connection object',
+                )
                 return fn(*args, **kwargs)
+
     return wrapper
 
 
@@ -90,6 +98,7 @@ def provide_async_redis_conn(fn):
             return {'error': 'Internal Server Error'}
         finally:
             kwargs['request'].app.redis_pool.release(redis_conn_raw)
+
     return async_redis_conn_wrapper
 
 
@@ -135,14 +144,17 @@ def provide_async_redis_conn_insta(fn):
                     await connection.close()
                 except:
                     pass
+
     return wrapped
 
 
 class RedisPoolCache:
-    def __init__(self, pool_size=500):
+    def __init__(self, pool_size=2000):
         self._aioredis_pool = None
         self._pool_size = pool_size
 
     async def populate(self):
         if not self._aioredis_pool:
-            self._aioredis_pool: aioredis.Redis = await get_aioredis_pool(self._pool_size)
+            self._aioredis_pool: aioredis.Redis = await get_aioredis_pool(
+                self._pool_size,
+            )

@@ -1,7 +1,25 @@
 from typing import Dict
-from typing import List
+from typing import Optional
 
 from pydantic import BaseModel
+
+
+class PayloadCommitAPIRequest(BaseModel):
+    projectId: str
+    payload: Dict
+    web3Storage: bool = False
+    # skip anchor tx by default, unless passed
+    skipAnchorProof: bool = True
+    sourceChainDetails: int
+
+
+class SnapshotterIssue(BaseModel):
+    instanceID: str
+    issueType: str
+    projectID: str
+    epochId: str
+    timeOfReporting: str
+    extra: Optional[str] = ''
 
 
 class TimeoutConfig(BaseModel):
@@ -14,86 +32,40 @@ class RLimitConfig(BaseModel):
     file_descriptors: int
 
 
-class liquidityProcessedData(BaseModel):
-    contractAddress: str
-    name: str
-    liquidity: str
-    volume_24h: str
-    volume_7d: str
-    cid_volume_24h: str
-    cid_volume_7d: str
-    fees_24h: str
-    block_height: int
-    deltaToken0Reserves: float
-    deltaToken1Reserves: float
-    deltaTime: float
-    latestTimestamp: float
-    earliestTimestamp: float
+# Event detector related models
+class EventBase(BaseModel):
+    timestamp: int
 
 
-class trade_data(BaseModel):
-    totalTradesUSD: float
-    totalFeeUSD: float
-    token0TradeVolume: float
-    token1TradeVolume: float
-    token0TradeVolumeUSD: float
-    token1TradeVolumeUSD: float
-
-    def __add__(self, other: 'trade_data') -> 'trade_data':
-        self.totalTradesUSD += other.totalTradesUSD
-        self.totalFeeUSD += other.totalFeeUSD
-        self.token0TradeVolume += other.token0TradeVolume
-        self.token1TradeVolume += other.token1TradeVolume
-        self.token0TradeVolumeUSD += other.token0TradeVolumeUSD
-        self.token1TradeVolumeUSD += other.token1TradeVolumeUSD
-        return self
-
-    def __sub__(self, other: 'trade_data') -> 'trade_data':
-        self.totalTradesUSD -= other.totalTradesUSD
-        self.totalFeeUSD -= other.totalFeeUSD
-        self.token0TradeVolume -= other.token0TradeVolume
-        self.token1TradeVolume -= other.token1TradeVolume
-        self.token0TradeVolumeUSD -= other.token0TradeVolumeUSD
-        self.token1TradeVolumeUSD -= other.token1TradeVolumeUSD
-        return self
-
-    def __abs__(self) -> 'trade_data':
-        self.totalTradesUSD = abs(self.totalTradesUSD)
-        self.totalFeeUSD = abs(self.totalFeeUSD)
-        self.token0TradeVolume = abs(self.token0TradeVolume)
-        self.token1TradeVolume = abs(self.token1TradeVolume)
-        self.token0TradeVolumeUSD = abs(self.token0TradeVolumeUSD)
-        self.token1TradeVolumeUSD = abs(self.token1TradeVolumeUSD)
-        return self
+class EpochReleasedEvent(EventBase):
+    epochId: int
+    begin: int
+    end: int
+    broadcastId: str
 
 
-class event_trade_data(BaseModel):
-    logs: List[dict]
-    trades: trade_data
+class SnapshotFinalizedEvent(EventBase):
+    epochId: int
+    epochEnd: int
+    projectId: str
+    snapshotCid: str
+    broadcastId: str
 
 
-class epoch_event_trade_data(BaseModel):
-    Swap: event_trade_data
-    Mint: event_trade_data
-    Burn: event_trade_data
-    Trades: trade_data
+class PairTradeVolume(BaseModel):
+    total_volume: int = 0
+    fees: int = 0
+    token0_volume: int = 0
+    token1_volume: int = 0
+    token0_volume_usd: int = 0
+    token1_volume_usd: int = 0
 
 
-class EpochInfo(BaseModel):
-    chainId: int
-    epochStartBlockHeight: int
-    epochEndBlockHeight: int
+class ProjectSpecificState(BaseModel):
+    first_epoch_id: int
+    finalized_cids: Dict[int, str]  # mapping of epoch ID to snapshot CID
 
 
-class ProjectRegistrationRequest(BaseModel):
-    projectIDs: List[str]
-
-
-class IndexingRegistrationData(BaseModel):
-    projectID: str
-    indexerConfig: Dict
-
-
-class ProjectRegistrationRequestForIndexing(BaseModel):
-    projects: List[IndexingRegistrationData]
-    namespace: str
+class ProtocolState(BaseModel):
+    project_specific_states: Dict[str, ProjectSpecificState]  # project ID -> project specific state
+    synced_till_epoch_id: int

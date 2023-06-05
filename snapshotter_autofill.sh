@@ -1,46 +1,97 @@
 #!/bin/bash
 
 #This script is run from high level docker-compose. Refer to https://github.com/PowerLoom/deploy
-
 set -e
 
 echo 'populating setting from environment values...';
 
-if [ -z "$RPC_URL" ]; then
+if [ -z "$SOURCE_RPC_URL" ]; then
     echo "RPC URL not found, please set this in your .env!";
     exit 1;
 fi
 
-if [ -z "$UUID" ]; then
-    echo "UUID not found, please set this in your .env!";
+if [ -z "$SIGNER_ACCOUNT_ADDRESS" ]; then
+    echo "SIGNER_ACCOUNT_ADDRESS not found, please set this in your .env!";
     exit 1;
 fi
 
-echo "Got RPC URL: ${RPC_URL}"
+echo "Found SOURCE RPC URL ${SOURCE_RPC_URL}";
 
-echo "Got UUID: ${UUID}"
+echo "Found SIGNER ACCOUNT ADDRESS ${SIGNER_ACCOUNT_ADDRESS}";
 
-echo "Got CONSENSUS_URL: ${CONSENSUS_URL}"
-cp pooler/settings/settings.example.json pooler/settings/settings.json
+if [ "$PROST_RPC_URL" ]; then
+    echo "Found PROST_RPC_URL ${PROST_RPC_URL}";
+fi
+
+if [ "$IPFS_URL" ]; then
+    echo "Found IPFS_URL ${IPFS_URL}";
+fi
+
+if [ "$PROTOCOL_STATE_CONTRACT" ]; then
+    echo "Found PROTOCOL_STATE_CONTRACT ${PROTOCOL_STATE_CONTRACT}";
+fi
+
+if [ "$SLACK_REPORTING_URL" ]; then
+    echo "Found SLACK_REPORTING_URL ${SLACK_REPORTING_URL}";
+fi
+
+if [ "$POWERLOOM_REPORTING_URL" ]; then
+    echo "Found SLACK_REPORTING_URL ${POWERLOOM_REPORTING_URL}";
+fi
+
+
+cp config/projects.example.json config/projects.json
+cp config/aggregator.example.json config/aggregator.json
+cp config/auth_settings.example.json config/auth_settings.json
+cp config/settings.example.json config/settings.json
 
 export namespace=UNISWAPV2-ph15-prod
-export consensus_url="${CONSENSUS_URL:-https://offchain-consensus-api.powerloom.io}"
+export prost_rpc_url="${PROST_RPC_URL:-https://rpc-prost1b.powerloom.io}"
+
+export ipfs_url="${IPFS_URL:-/dns/ipfs/tcp/5001}"
+export ipfs_api_key="${IPFS_API_KEY:-}"
+export ipfs_api_secret="${IPFS_API_SECRET:-}"
+
+export protocol_state_contract="${PROTOCOL_STATE_CONTRACT:-0xb71EAc336ffd776BAe4b1F861E58FaF13aB7c34B}"
+export slack_reporting_url="${SLACK_REPORTING_URL:-}"
+export powerloom_reporting_url="${POWERLOOM_REPORTING_URL:-}"
+
+
+
+# If IPFS_URL is empty, clear IPFS API key and secret
+if [ -z "$IPFS_URL" ]; then
+    ipfs_api_key=""
+    ipfs_api_secret=""
+fi
 
 echo "Using Namespace: ${namespace}"
-echo "Using CONSENSUS_URL: ${consensus_url}"
+echo "Using Prost RPC URL: ${prost_rpc_url}"
+echo "Using IPFS URL: ${ipfs_url}"
+echo "Using IPFS API KEY: ${ipfs_api_key}"
+echo "Using protocol state contract: ${protocol_state_contract}"
+echo "Using slack reporting url: ${slack_reporting_url}"
+echo "Using powerloom reporting url: ${powerloom_reporting_url}"
 
-sed -i "s|relevant-namespace|$namespace|" pooler/settings/settings.json
+sed -i'.backup' "s#relevant-namespace#$namespace#" config/settings.json
 
-sed -i "s|https://rpc-url|$RPC_URL|" pooler/settings/settings.json
+sed -i'.backup' "s#account-address#$SIGNER_ACCOUNT_ADDRESS#" config/settings.json
 
-sed -i "s|generated-uuid|$UUID|" pooler/settings/settings.json
+sed -i'.backup' "s#https://rpc-url#$SOURCE_RPC_URL#" config/settings.json
 
-sed -i "s|http://offchain-consensus:9030|$consensus_url|" pooler/settings/settings.json
+sed -i'.backup' "s#https://prost-rpc-url#$prost_rpc_url#" config/settings.json
 
-#rm pooler/settings/settings.json.old
+sed -i'.backup' "s#ipfs-writer-url#$ipfs_url#" config/settings.json
+sed -i'.backup' "s#ipfs-writer-key#$ipfs_api_key#" config/settings.json
+sed -i'.backup' "s#ipfs-writer-secret#$ipfs_api_secret#" config/settings.json
 
-cp pooler/auth/settings/auth_settings.example.json pooler/auth/settings/auth_settings.json
+sed -i'.backup' "s#ipfs-reader-url#$ipfs_url#" config/settings.json
+sed -i'.backup' "s#ipfs-reader-key#$ipfs_api_key#" config/settings.json
+sed -i'.backup' "s#ipfs-reader-secret#$ipfs_api_secret#" config/settings.json
 
-cp pooler/static/cached_pair_addresses_docker.json pooler/static/cached_pair_addresses.json
+sed -i'.backup' "s#protocol-state-contract#$protocol_state_contract#" config/settings.json
+
+sed -i'.backup' "s#https://slack-reporting-url#$slack_reporting_url#" config/settings.json
+
+sed -i'.backup' "s#https://powerloom-reporting-url#$powerloom_reporting_url#" config/settings.json
 
 echo 'settings has been populated!'
