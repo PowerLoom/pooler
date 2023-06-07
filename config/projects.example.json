@@ -1,6 +1,6 @@
 {
   "config": [{
-      "project_type": "uniswap_pairContract_pair_total_reserves",
+      "project_type": "pairContract_pair_total_reserves",
       "projects":[
         "0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc",
         "0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5",
@@ -16,7 +16,7 @@
       }
     },
     {
-      "project_type": "uniswap_pairContract_trade_volume",
+      "project_type": "pairContract_trade_volume",
       "projects":[
         "0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc",
         "0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5",
