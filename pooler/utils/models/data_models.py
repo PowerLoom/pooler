@@ -3,6 +3,8 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from pooler.utils.models.message_models import AggregateBase
+
 
 class PayloadCommitAPIRequest(BaseModel):
     projectId: str
@@ -66,6 +68,6 @@ class ProjectSpecificState(BaseModel):
     finalized_cids: Dict[int, str]  # mapping of epoch ID to snapshot CID
 
 
-class ProtocolState(BaseModel):
+class ProtocolState(AggregateBase):
     project_specific_states: Dict[str, ProjectSpecificState]  # project ID -> project specific state
     synced_till_epoch_id: int

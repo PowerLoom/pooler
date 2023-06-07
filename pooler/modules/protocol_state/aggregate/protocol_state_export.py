@@ -122,6 +122,7 @@ class ProtocolStateProcessor(GenericProcessorMultiProjectAggregate):
             redis, anchor_rpc_helper, protocol_state_contract,
         )
         state = ProtocolState.construct()
+        state.epoch_id = state_export_head_marker
         state.synced_till_epoch_id = state_export_head_marker
         state.project_specific_states = dict()
 
