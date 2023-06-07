@@ -1,7 +1,4 @@
 import asyncio
-import concurrent.futures
-from collections import defaultdict
-from typing import Dict
 
 from ipfs_client.main import AsyncIPFSClient
 from redis import asyncio as aioredis
@@ -9,14 +6,12 @@ from redis import asyncio as aioredis
 from pooler.utils.callback_helpers import GenericProcessorMultiProjectAggregate
 from pooler.utils.data_utils import get_project_first_epoch
 from pooler.utils.data_utils import get_tail_epoch_id
-from pooler.utils.data_utils import w3_get_and_cache_finalized_cid
 from pooler.utils.default_logger import logger
 from pooler.utils.models.data_models import ProjectSpecificState
 from pooler.utils.models.data_models import ProtocolState
 from pooler.utils.models.message_models import PowerloomCalculateAggregateMessage
 from pooler.utils.redis.redis_keys import project_finalized_data_zset
 from pooler.utils.rpc import RpcHelper
-from pooler.utils.utility_functions import acquire_bounded_semaphore
 
 
 class ProtocolStateProcessor(GenericProcessorMultiProjectAggregate):
@@ -25,7 +20,7 @@ class ProtocolStateProcessor(GenericProcessorMultiProjectAggregate):
     def __init__(self) -> None:
         self.transformation_lambdas = []
         self._logger = logger.bind(module='ProtocolStateProcessor')
-        self.export_time_window_in_seconds = 3600
+        self.export_time_window_in_seconds = 86400 * 7
 
     async def compute(
         self,
@@ -79,57 +74,6 @@ class ProtocolStateProcessor(GenericProcessorMultiProjectAggregate):
         project_id_first_epoch_id_map = dict(zip(all_project_ids, project_to_first_epoch_id_results))
         return project_id_first_epoch_id_map, all_project_ids
 
-    @acquire_bounded_semaphore
-    async def _load_finalized_cids_from_contract(
-        self,
-        project_id,
-        epoch_id_list,
-        semaphore,
-        redis: aioredis.Redis,
-        anchor_rpc_helper: RpcHelper,
-        protocol_state_contract,
-    ) -> Dict[int, str]:
-        """
-        Fetches finalized CIDs for a project against a given list of epoch IDs from the contract
-        and caches them in Redis
-        """
-        batch_size = 20
-        self._logger.info(
-            'Fetching finalized CIDs for project {} in epoch ID list: {}',
-            project_id, epoch_id_list,
-        )
-        eid_cid_map = dict()
-        for i in range(0, len(epoch_id_list), batch_size):
-            r = await asyncio.gather(
-                *[
-                    w3_get_and_cache_finalized_cid(
-                        project_id=project_id,
-                        rpc_helper=anchor_rpc_helper,
-                        epoch_id=epoch_id,
-                        redis_conn=redis,
-                        state_contract_obj=protocol_state_contract,
-                    )
-                    for epoch_id in epoch_id_list[i:i + batch_size]
-                ], return_exceptions=True,
-            )
-            for idx, e in enumerate(r):
-                if isinstance(e, Exception):
-                    self._logger.error(
-                        'Error fetching finalized CID for project {} in epoch {}: {}',
-                        project_id, epoch_id_list[i + idx], e,
-                    )
-                else:
-                    self._logger.trace(
-                        'Fetched finalized CID for project {} in epoch {}',
-                        project_id, epoch_id_list[i + idx],
-                    )
-                    eid_cid_map[epoch_id_list[i + idx]] = e
-        self._logger.error(
-            'Could not fetch finalized CIDs for project {} against epoch IDs: {}',
-            project_id, list(filter(lambda x: x not in eid_cid_map, epoch_id_list)),
-        )
-        return eid_cid_map
-
     async def _export_project_state(
         self,
         project_id,
@@ -146,7 +90,7 @@ class ProtocolStateProcessor(GenericProcessorMultiProjectAggregate):
         self._logger.debug('Project {} first epoch ID: {}', project_id, first_epoch_id)
         project_state.finalized_cids = dict()
 
-        state_export_tail_marker = await get_tail_epoch_id(
+        state_export_tail_marker, _ = await get_tail_epoch_id(
             redis_conn=redis,
             state_contract_obj=protocol_state_contract,
             rpc_helper=anchor_rpc_helper,
@@ -157,7 +101,7 @@ class ProtocolStateProcessor(GenericProcessorMultiProjectAggregate):
 
         cids_r = await redis.zrangebyscore(
             name=project_finalized_data_zset(project_id),
-            min=first_epoch_id,
+            min=max(first_epoch_id, state_export_tail_marker),
             max=end_epoch_id,
             withscores=True,
         )
@@ -180,47 +124,37 @@ class ProtocolStateProcessor(GenericProcessorMultiProjectAggregate):
         state = ProtocolState.construct()
         state.synced_till_epoch_id = state_export_head_marker
         state.project_specific_states = dict()
-        exceptions = defaultdict()
-        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-            future_to_project = {
-                executor.submit(
-                    self._export_project_state, project_id, project_id_first_epoch_id_map[
-                        project_id
-                    ], state_export_head_marker, redis, anchor_rpc_helper, protocol_state_contract,
-                ): project_id for project_id in all_project_ids
-            }
-        for future in concurrent.futures.as_completed(future_to_project):
-            project_id = future_to_project[future]
-            try:
-                project_specific_state = future.result()
-            except Exception as exc:
-                exceptions['project'].update({project_id: str(exc)})
-            else:
-                null_cid_epochs = list(
-                    filter(
-                        lambda x: 'null' in project_specific_state.finalized_cids[x],
-                        project_specific_state.finalized_cids.keys(),
-                    ),
+
+        # Generate project specific state in batches
+        batch_size = 10
+        project_states = []
+        for i in range(0, len(all_project_ids), batch_size):
+            project_state_tasks = [
+                self._export_project_state(
+                    project_id,
+                    project_id_first_epoch_id_map[project_id],
+                    state_export_head_marker,
+                    redis,
+                    anchor_rpc_helper,
+                    protocol_state_contract,
                 )
-                # recheck on the contract if they are indeed null
-                self._logger.debug(
-                    'Verifying CIDs against epoch IDs of project {} by re-fetching state from'
-                    ' contract since they were found to be null in local cache: {}', project_id, null_cid_epochs,
+                for project_id in all_project_ids[i:i + batch_size]
+
+            ]
+            project_state_results = await asyncio.gather(*project_state_tasks, return_exceptions=True)
+            project_states.extend(project_state_results)
+
+        for project_id, project_state in zip(all_project_ids, project_states):
+
+            if isinstance(project_state, Exception):
+                self._logger.error(
+                    'Error exporting project state for project {}: {}',
+                    project_id, project_state,
                 )
-                rechecked_eid_cid_map = await self._load_finalized_cids_from_contract(
-                    project_id=project_id,
-                    epoch_id_list=null_cid_epochs,
-                    semaphore=self._protocol_state_query_semaphore,
-                    redis=redis,
-                    anchor_rpc_helper=anchor_rpc_helper,
-                    protocol_state_contract=protocol_state_contract,
-                )
-                project_specific_state.finalized_cids.update(rechecked_eid_cid_map)
-                self._logger.debug(
-                    'Exported {} finalized CIDs for project {}',
-                    len(project_specific_state.finalized_cids), project_id,
-                )
-                state.project_specific_states[project_id] = project_specific_state
+                continue
+
+            state.project_specific_states.update({project_id: project_state})
+
         state_json = state.json()
 
         self._logger.error(state_json)
