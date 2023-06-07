@@ -20,7 +20,7 @@ class ProtocolStateProcessor(GenericProcessorMultiProjectAggregate):
     def __init__(self) -> None:
         self.transformation_lambdas = []
         self._logger = logger.bind(module='ProtocolStateProcessor')
-        self.export_time_window_in_seconds = 86400 * 7
+        self.export_time_window_in_seconds = 86400
 
     async def compute(
         self,
