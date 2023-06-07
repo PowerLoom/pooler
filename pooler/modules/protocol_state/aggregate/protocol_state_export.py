@@ -40,6 +40,8 @@ class ProtocolStateProcessor(GenericProcessorMultiProjectAggregate):
 
         state = await self.export(epoch_id - 1, redis, anchor_rpc_helper, protocol_state_contract)
 
+        return state
+
     async def prelim_load(self, redis: aioredis.Redis, anchor_rpc_helper: RpcHelper, protocol_state_contract):
         state_query_call_tasks = []
         all_project_ids_task = protocol_state_contract.functions.getProjects()
@@ -122,7 +124,7 @@ class ProtocolStateProcessor(GenericProcessorMultiProjectAggregate):
             redis, anchor_rpc_helper, protocol_state_contract,
         )
         state = ProtocolState.construct()
-        state.epoch_id = state_export_head_marker
+        state.epochId = state_export_head_marker
         state.synced_till_epoch_id = state_export_head_marker
         state.project_specific_states = dict()
 
@@ -156,8 +158,6 @@ class ProtocolStateProcessor(GenericProcessorMultiProjectAggregate):
 
             state.project_specific_states.update({project_id: project_state})
 
-        state_json = state.json()
+        self._logger.info('Exported state for {} projects', len(state.project_specific_states))
 
-        self._logger.error(state_json)
-
-        return state_json
+        return state
