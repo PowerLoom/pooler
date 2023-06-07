@@ -110,7 +110,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
 
     def _gen_single_type_project_id(self, type_, epoch):
         contract = epoch.projectId.split(':')[-2]
-        project_id = project_id = f'{type_}:{contract}:{settings.namespace}'
+        project_id = f'{type_}:{contract}:{settings.namespace}'
         return project_id
 
     def _gen_multiple_type_project_id(self, type_, epoch):
