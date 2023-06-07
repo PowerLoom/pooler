@@ -87,6 +87,17 @@
       }
     },
     {
+      "project_type": "protocol_state_7d_lite",
+      "aggregate_on": "MultiProject",
+      "projects_to_wait_for": [
+        "aggregate_uniswap_pairContract_7d_trade_volume:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2-ph15-prod"
+      ],
+      "processor": {
+        "module": "pooler.modules.protocol_state.aggregate.protocol_state_export",
+        "class_name": "ProtocolStateProcessor"
+      }
+    },
+    {
       "project_type": "aggregate_uniswap_24h_stats_lite",
       "aggregate_on": "MultiProject",
       "projects_to_wait_for": [
