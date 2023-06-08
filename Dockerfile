@@ -1,4 +1,4 @@
-FROM nikolaik/python-nodejs:python3.9-nodejs18-bullseye
+FROM nikolaik/python-nodejs:python3.10-nodejs18
 
 # Install the PM2 process manager for Node.js
 RUN npm install pm2 -g
