@@ -398,6 +398,7 @@ async def get_snapshotter_project_level_status(
     request: Request,
     response: Response,
     project_id: str,
+    data: bool = False,
     rate_limit_auth_dep: RateLimitAuthCheck = Depends(
         rate_limit_auth_check,
     ),
@@ -413,6 +414,7 @@ async def get_snapshotter_project_level_status(
         snapshotter_project_status = await get_snapshotter_project_status(
             request.app.state.redis_pool,
             project_id=project_id,
+            with_data=data,
         )
     except Exception as e:
         rest_logger.exception(
@@ -435,4 +437,4 @@ async def get_snapshotter_project_level_status(
     auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
     await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
 
-    return snapshotter_project_status
+    return snapshotter_project_status.dict(exclude_none=True, exclude_unset=True)

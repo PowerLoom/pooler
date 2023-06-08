@@ -114,6 +114,21 @@ class SnapshotterStatusReport(BaseModel):
     reason: str = ''
 
 
+class SnapshotterMissedSnapshotSubmission(BaseModel):
+    epochId: int
+    finalizedSnapshotCid: str
+    reason: str
+
+
+class SnapshotterIncorrectSnapshotSubmission(BaseModel):
+    epochId: int
+    submittedSnapshotCid: str
+    submittedSnapshot: Optional[Dict[str, Any]]
+    finalizedSnapshotCid: str
+    finalizedSnapshot: Optional[Dict[str, Any]]
+    reason: str = ''
+
+
 class SnapshotterProjectStatus(BaseModel):
-    missedSubmissions: List[SnapshotterStatusReport]
-    incorrectSubmissions: List[SnapshotterStatusReport]
+    missedSubmissions: List[SnapshotterMissedSnapshotSubmission]
+    incorrectSubmissions: List[SnapshotterIncorrectSnapshotSubmission]

@@ -16,6 +16,8 @@ from pooler.utils.default_logger import logger
 from pooler.utils.file_utils import read_json_file
 from pooler.utils.file_utils import write_json_file
 from pooler.utils.models.data_models import ProjectStatus
+from pooler.utils.models.data_models import SnapshotterIncorrectSnapshotSubmission
+from pooler.utils.models.data_models import SnapshotterMissedSnapshotSubmission
 from pooler.utils.models.data_models import SnapshotterProjectStatus
 from pooler.utils.models.data_models import SnapshotterReportState
 from pooler.utils.models.data_models import SnapshotterStatus
@@ -412,20 +414,35 @@ async def get_snapshotter_status(redis_conn: aioredis.Redis):
 
 
 # gets snapshotter status for a particular project
-async def get_snapshotter_project_status(redis_conn: aioredis.Redis, project_id: str):
+async def get_snapshotter_project_status(redis_conn: aioredis.Redis, project_id: str, with_data: bool):
     reports = await redis_conn.hgetall(project_snapshotter_status_report_key(project_id))
 
     reports = {
-        int(key.decode('utf-8')): SnapshotterStatusReport(**json.loads(value.decode('utf-8')))
-        for key, value in reports.items()
+        int(k.decode('utf-8')): SnapshotterStatusReport.parse_raw(v.decode('utf-8'))
+        for k, v in reports.items()
     }
 
     project_status = SnapshotterProjectStatus(missedSubmissions=[], incorrectSubmissions=[])
 
     for epoch_id, report in reports.items():
         if report.state is SnapshotterReportState.MISSED_SNAPSHOT:
-            project_status.missedSubmissions.append(report)
+            project_status.missedSubmissions.append(
+                SnapshotterMissedSnapshotSubmission(
+                    epochId=epoch_id,
+                    reason=report.reason,
+                    finalizedSnapshotCid=report.finalizedSnapshotCid,
+                ),
+            )
         elif report.state is SnapshotterReportState.SUBMITTED_INCORRECT_SNAPSHOT:
-            project_status.incorrectSubmissions.append(report)
+            project_status.incorrectSubmissions.append(
+                SnapshotterIncorrectSnapshotSubmission(
+                    epochId=epoch_id,
+                    reason=report.reason,
+                    submittedSnapshotCid=report.submittedSnapshotCid,
+                    submittedSnapshot=report.submittedSnapshot if with_data else None,
+                    finalizedSnapshotCid=report.finalizedSnapshotCid,
+                    finalizedSnapshot=report.finalizedSnapshot if with_data else None,
+                ),
+            )
 
     return project_status
