@@ -15,8 +15,14 @@ from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.file_utils import read_json_file
 from pooler.utils.file_utils import write_json_file
+from pooler.utils.models.data_models import ProjectStatus
+from pooler.utils.models.data_models import SnapshotterProjectStatus
+from pooler.utils.models.data_models import SnapshotterReportState
+from pooler.utils.models.data_models import SnapshotterStatus
+from pooler.utils.models.data_models import SnapshotterStatusReport
 from pooler.utils.redis.redis_keys import project_finalized_data_zset
 from pooler.utils.redis.redis_keys import project_first_epoch_hmap
+from pooler.utils.redis.redis_keys import project_snapshotter_status_report_key
 from pooler.utils.redis.redis_keys import source_chain_block_time_key
 from pooler.utils.redis.redis_keys import source_chain_epoch_size_key
 from pooler.utils.redis.redis_keys import source_chain_id_key
@@ -347,3 +353,79 @@ async def get_project_epoch_snapshot_bulk(
     )
 
     return all_snapshot_data
+
+
+# get snapshotter high level status for all the projects
+async def get_snapshotter_status(redis_conn: aioredis.Redis):
+    status_keys = []
+
+    all_projects = await redis_conn.smembers('storedProjectIds')
+    all_projects = [project_id.decode('utf-8') for project_id in all_projects]
+
+    for project_id in all_projects:
+        status_keys.append(f'projectID:{project_id}:totalSuccessfulSnapshotCount')
+        status_keys.append(f'projectID:{project_id}:totalIncorrectSnapshotCount')
+        status_keys.append(f'projectID:{project_id}:totalMissedSnapshotCount')
+
+    all_projects_status = await redis_conn.mget(status_keys)
+
+    total_successful_submissions = 0
+    total_incorrect_submissions = 0
+    total_missed_submissions = 0
+    overall_status = SnapshotterStatus(projects=[])
+
+    # project level data
+    project_index = 0
+    successful_submissions = 0
+    incorrect_submissions = 0
+    missed_submissions = 0
+
+    for index, count in enumerate(all_projects_status):
+        if count is None:
+            count = 0
+
+        # as each project has three counts viz. successful, incorrect and missed
+        if index % 3 == 0:
+            successful_submissions = int(count)
+            total_successful_submissions += int(count)
+        elif index % 3 == 1:
+            incorrect_submissions = int(count)
+            total_incorrect_submissions += int(count)
+        else:
+            missed_submissions = int(count)
+            total_missed_submissions += int(count)
+            overall_status.projects.append(
+                ProjectStatus(
+                    projectId=all_projects[project_index],
+                    successfulSubmissions=successful_submissions,
+                    incorrectSubmissions=incorrect_submissions,
+                    missedSubmissions=missed_submissions,
+                ),
+            )
+            project_index += 1
+
+    overall_status.totalSuccessfulSubmissions = total_successful_submissions
+    overall_status.totalIncorrectSubmissions = total_incorrect_submissions
+    overall_status.totalMissedSubmissions = total_missed_submissions
+
+    return overall_status
+
+
+# gets snapshotter status for a particular project
+async def get_snapshotter_project_status(redis_conn: aioredis.Redis, project_id: str):
+    reports = await redis_conn.hgetall(project_snapshotter_status_report_key(project_id))
+
+    reports = {
+        int(key.decode('utf-8')): SnapshotterStatusReport(**json.loads(value.decode('utf-8')))
+        for key, value in reports.items()
+    }
+
+    project_status = SnapshotterProjectStatus(missedSubmissions=[], incorrectSubmissions=[])
+
+    for epoch_id, report in reports.items():
+        if report.state is SnapshotterReportState.MISSED_SNAPSHOT:
+            project_status.missedSubmissions.append(report)
+        elif report.state is SnapshotterReportState.SUBMITTED_INCORRECT_SNAPSHOT:
+            project_status.incorrectSubmissions.append(report)
+
+    return project_status

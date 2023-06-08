@@ -16,6 +16,8 @@ from pooler.auth.helpers.redis_conn import RedisPoolCache as AuthRedisPoolCache
 from pooler.settings.config import settings
 from pooler.utils.data_utils import get_project_epoch_snapshot
 from pooler.utils.data_utils import get_project_finalized_cid
+from pooler.utils.data_utils import get_snapshotter_project_status
+from pooler.utils.data_utils import get_snapshotter_status
 from pooler.utils.default_logger import logger
 from pooler.utils.file_utils import read_json_file
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
@@ -353,3 +355,84 @@ async def get_finalized_cid_for_project_id_epoch_id(
     await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
 
     return data
+
+
+@app.get('/internal/snapshotter/status')
+async def get_snapshotter_overall_status(
+    request: Request,
+    response: Response,
+    rate_limit_auth_dep: RateLimitAuthCheck = Depends(
+        rate_limit_auth_check,
+    ),
+):
+    if not (
+        rate_limit_auth_dep.rate_limit_passed and
+        rate_limit_auth_dep.authorized and
+        rate_limit_auth_dep.owner.active == UserStatusEnum.active
+    ):
+        return inject_rate_limit_fail_response(rate_limit_auth_dep)
+
+    try:
+        snapshotter_status = await get_snapshotter_status(
+            request.app.state.redis_pool,
+        )
+    except Exception as e:
+        rest_logger.exception(
+            'Exception in get_snapshotter_overall_status',
+            e=e,
+        )
+        response.status_code = 500
+        return {
+            'status': 'error',
+            'message': f'Unable to get snapshotter status, error: {e}',
+        }
+
+    auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
+    await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
+
+    return snapshotter_status
+
+
+@app.get('/internal/snapshotter/status/{project_id}')
+async def get_snapshotter_project_level_status(
+    request: Request,
+    response: Response,
+    project_id: str,
+    rate_limit_auth_dep: RateLimitAuthCheck = Depends(
+        rate_limit_auth_check,
+    ),
+):
+    if not (
+        rate_limit_auth_dep.rate_limit_passed and
+        rate_limit_auth_dep.authorized and
+        rate_limit_auth_dep.owner.active == UserStatusEnum.active
+    ):
+        return inject_rate_limit_fail_response(rate_limit_auth_dep)
+
+    try:
+        snapshotter_project_status = await get_snapshotter_project_status(
+            request.app.state.redis_pool,
+            project_id=project_id,
+        )
+    except Exception as e:
+        rest_logger.exception(
+            'Exception in get_snapshotter_project_level_status',
+            e=e,
+        )
+        response.status_code = 500
+        return {
+            'status': 'error',
+            'message': f'Unable to get snapshotter status for project_id: {project_id}, error: {e}',
+        }
+
+    if not snapshotter_project_status:
+        response.status_code = 404
+        return {
+            'status': 'error',
+            'message': f'No snapshotter status found for project_id: {project_id}',
+        }
+
+    auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
+    await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
+
+    return snapshotter_project_status
