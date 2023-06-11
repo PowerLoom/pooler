@@ -118,7 +118,7 @@ Workers as defined in `config/aggregator.json` are triggered by the appropriate 
 
 In case of aggregation over multiple projects, their project IDs are generated with a combination of the hash of the dependee project IDs along with the namespace
 
-https://github.com/PowerLoom/pooler/blob/e7a5bd62debfe726d1473f0dfb68856dab43ef25/pooler/utils/aggregation_worker.py#L116-L124
+https://github.com/PowerLoom/pooler/blob/939dd41a87e964ec754d955f0c9988983164254e/pooler/utils/aggregation_worker.py#L116-L124
 
 ## Development Instructions
 These instructions are needed if you're planning to run the system using `build-dev.sh` from [deploy](https://github.com/PowerLoom/deploy).
@@ -140,8 +140,8 @@ Pooler needs the following config files to be present
         ```
         Copy over [`config/projects.example.json`](config/projects.example.json) to `config/projects.json`. For more details, read on in the [section below on extending a use case](#extending-pooler-with-a-uniswap-v2-data-point).
     * **`config/aggregator.json`** : This lists out different type of aggregation work to be performed over a span of snapshots. Copy over [`config/aggregator.example.json`](config/aggregator.example.json) to `config/aggregator.json`. The span is usually calculated as a function of the epoch size and average block time on the data source network. For eg,
-        * the following configuration calculates a snapshot of total trade volume over a 24 hour time period, based on the [snapshot finalization](#snapshot-finalization) of a project ID corresponding to a pair contract. This can be seen by the `aggregate_on` key being set to `SingleProject`.
-            * This is specified by the `filters` key below. If a [snapshot finalization](#snapshot-finalization) is achieved for an epoch over a project ID [(ref:generation of project ID for snapshot building workers)](#epoch-generation) `pairContract_trade_volume:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2`, this would trigger the worker [`AggreagateTradeVolumeProcessor`](pooler/modules/uniswapv2/aggregate/single_uniswap_trade_volume_24h.py) as defined in the `processor` section of the config against the pair contract `0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc`.
+        * the following configuration calculates a snapshot of total trade volume over a 24 hour time period, at `epochId-1` considering an `EpochReleased` protocol event at `epochId`. This can be seen by the `aggregate_on` key being set to `SingleProject`.
+            * the `filters` key configures the aggregation of trade volume snapshots across epochs that span ~24 hours for each project ID corresponding to contracts specified in **config/projects.json** as explained above. The worker for this is [`AggreagateTradeVolumeProcessor`](pooler/modules/uniswapv2/aggregate/single_uniswap_trade_volume_24h.py) as defined in the `processor` section of the config.
         ```javascript
         {
             "config": [
@@ -149,9 +149,8 @@ Pooler needs the following config files to be present
                     "project_type": "aggregate_pairContract_24h_trade_volume",
                     "aggregate_on": "SingleProject",
                     "filters": {
-                        // this triggers the compute() contained in the processor class at the module location
-                        // every time a `SnapshotFinalized` event is received for project IDs containing the prefix `pairContract_trade_volume`
-                        // at each epoch ID
+                        // this triggers the compute() contained in the processor class at the module location for project IDs prefixed with `pairContract_trade_volume` on each pair contract address
+                        // every time an `EpochReleased` event is received, at (epoch ID - 1)
                         "projectId": "pairContract_trade_volume"
                     },
                     "processor": {
@@ -163,7 +162,8 @@ Pooler needs the following config files to be present
         }
         ```
         * The following configuration generates a collection of data sets of 24 hour trade volume as calculated by the worker above across multiple pair contracts. This can be seen by the `aggregate_on` key being set to `MultiProject`.
-            * `projects_to_calculate_on` specifies the exact project IDs on which this collection will be generated once a [snapshot finalized event](#snapshot-finalization) has been received for an [`epochId`](#epoch-generation).
+            * `projects_to_calculate_on` specifies the exact project IDs on which this collection will be generated at `epochId - 1` once an `EpochReleased` event has been received for an [`epochId`](#epoch-generation). 
+            
         ```javascript
         {
             "config": [
@@ -171,7 +171,8 @@ Pooler needs the following config files to be present
                 "aggregate_on": "MultiProject",
                 "projects_to_calculate_on": [
                     // this triggers the compute() contained in the processor class at the module location
-                    // after `SnapshotFinalized` events are received for project IDs containing the prefix `pairContract_trade_volume`
+                    // after `EpochReleased` event is received for an epochId 
+                    // which collects the aggregate datasets of the following projects finalized at epochId - 1
                     "aggregate_pairContract_24h_trade_volume:0xa478c2975ab1ea89e8196811f51a7b7ade33eb11:UNISWAPV2",
                     "pairContract_pair_total_reserves:0xa478c2975ab1ea89e8196811f51a7b7ade33eb11:UNISWAPV2",
                     "aggregate_pairContract_24h_trade_volume:0x11181bd3baf5ce2a478e98361985d42625de35d1:UNISWAPV2",
@@ -330,9 +331,7 @@ The Processor Distributor, defined in [`processor_distributor.py`](pooler/proces
 * It creates and distributes processing messages based on project configuration present in `config/projects.json` and `config/aggregator.json`, and the topic pattern used in the routing key received from the topic exchange
   * For [`EpochReleased` events](#epoch-generation), it forwards such messages to base snapshot builders for data source contracts as configured in `config/projects.json` for the current epoch information contained in the event.
     https://github.com/PowerLoom/pooler/blob/1452c166bef7534568a61b3a2ab0ff94535d7229/pooler/processor_distributor.py#L125-L141
-  * For [`SnapshotFinalized` events](#snapshot-finalization), it forwards such messages to single and multi project aggregate topic routing keys.
-    https://github.com/PowerLoom/pooler/blob/1452c166bef7534568a61b3a2ab0ff94535d7229/pooler/processor_distributor.py#L228-L303
-
+  * For [`SnapshotFinalized` events](#snapshot-finalization), there are no workflow triggers as of now.
 ### Callback Workers
 
 The callback workers are basically the ones that build the base snapshot and aggregation snapshots and as explained above, are launched by the [processor distributor](#processor-distributor) according to the configurations in `aggregator/projects.json` and `config/aggregator.json`. They listen to new messages on the `powerloom-backend-callback` topic queue. Upon receiving a message, the workers do most of the heavy lifting along with some sanity checks and then calls the actual `compute` function defined in the project configuration to read blockchain state and generate the snapshot.
