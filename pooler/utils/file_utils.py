@@ -44,7 +44,7 @@ def write_json_file(
     try:
         file_path = os.path.join(directory, file_name)
         if not os.path.exists(directory):
-            os.makedirs(directory)
+            os.makedirs(directory, exist_ok=True)
         f_ = open(file_path, 'w', encoding='utf-8')
     except Exception as exc:
         logger.error(f'Unable to write to file {file_path}')

@@ -1,3 +1,5 @@
+import asyncio
+
 from ipfs_client.main import AsyncIPFSClient
 from redis import asyncio as aioredis
 
@@ -6,9 +8,9 @@ from ..utils.models.message_models import UniswapTopPair7dSnapshot
 from ..utils.models.message_models import UniswapTopPairs7dSnapshot
 from ..utils.models.message_models import UniswapTradesAggregateSnapshot
 from pooler.utils.callback_helpers import GenericProcessorMultiProjectAggregate
-from pooler.utils.data_utils import get_sumbmission_data_bulk
+from pooler.utils.data_utils import get_project_epoch_snapshot
 from pooler.utils.default_logger import logger
-from pooler.utils.models.message_models import PowerloomCalculateAggregateMessage
+from pooler.utils.models.message_models import PowerloomCalculateMultiAggregateMessage
 from pooler.utils.rpc import RpcHelper
 
 
@@ -21,7 +23,7 @@ class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
 
     async def compute(
         self,
-        msg_obj: PowerloomCalculateAggregateMessage,
+        msg_obj: PowerloomCalculateMultiAggregateMessage,
         redis: aioredis.Redis,
         rpc_helper: RpcHelper,
         anchor_rpc_helper: RpcHelper,
@@ -32,16 +34,20 @@ class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
     ):
         self._logger.info(f'Calculating 7d top pairs trade volume data for {msg_obj}')
 
-        epoch_id = msg_obj.epochId
+        finalized_epoch_head = msg_obj.epochId - 1
 
         snapshot_mapping = {}
         all_pair_metadata = {}
 
-        snapshot_data = await get_sumbmission_data_bulk(
-            redis, [msg.snapshotCid for msg in msg_obj.messages], ipfs_reader, [
-                msg.projectId for msg in msg_obj.messages
-            ],
-        )
+        snapshot_tasks = [
+            get_project_epoch_snapshot(
+                redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader, finalized_epoch_head, msg.projectId,
+            )
+            for msg in msg_obj.messages
+        ]
+
+        # Intentionally not returning exception here because snapshot generation should fail if not able to fetch data
+        snapshot_data = await asyncio.gather(*snapshot_tasks)
 
         for msg, data in zip(msg_obj.messages, snapshot_data):
             if not data:
@@ -84,7 +90,7 @@ class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
         top_pairs = sorted(top_pairs, key=lambda x: x.volume7d, reverse=True)
 
         top_pairs_snapshot = UniswapTopPairs7dSnapshot(
-            epochId=epoch_id,
+            epochId=msg_obj.epochId,
             pairs=top_pairs,
         )
 

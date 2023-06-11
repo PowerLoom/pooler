@@ -1,3 +1,5 @@
+import asyncio
+
 from ipfs_client.main import AsyncIPFSClient
 from redis import asyncio as aioredis
 
@@ -8,10 +10,9 @@ from ..utils.models.message_models import UniswapTopTokensSnapshot
 from ..utils.models.message_models import UniswapTradesAggregateSnapshot
 from pooler.utils.callback_helpers import GenericProcessorMultiProjectAggregate
 from pooler.utils.data_utils import get_project_epoch_snapshot
-from pooler.utils.data_utils import get_sumbmission_data_bulk
 from pooler.utils.data_utils import get_tail_epoch_id
 from pooler.utils.default_logger import logger
-from pooler.utils.models.message_models import PowerloomCalculateAggregateMessage
+from pooler.utils.models.message_models import PowerloomCalculateMultiAggregateMessage
 from pooler.utils.rpc import RpcHelper
 
 
@@ -24,7 +25,7 @@ class AggreagateTopTokensProcessor(GenericProcessorMultiProjectAggregate):
 
     async def compute(
         self,
-        msg_obj: PowerloomCalculateAggregateMessage,
+        msg_obj: PowerloomCalculateMultiAggregateMessage,
         redis: aioredis.Redis,
         rpc_helper: RpcHelper,
         anchor_rpc_helper: RpcHelper,
@@ -35,16 +36,21 @@ class AggreagateTopTokensProcessor(GenericProcessorMultiProjectAggregate):
     ):
 
         self._logger.info(f'Calculating top tokens data for {msg_obj}')
-        epoch_id = msg_obj.epochId
+
+        finalized_epoch_head = msg_obj.epochId - 1
 
         snapshot_mapping = {}
         projects_metadata = {}
 
-        snapshot_data = await get_sumbmission_data_bulk(
-            redis, [msg.snapshotCid for msg in msg_obj.messages], ipfs_reader, [
-                msg.projectId for msg in msg_obj.messages
-            ],
-        )
+        snapshot_tasks = [
+            get_project_epoch_snapshot(
+                redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader, finalized_epoch_head, msg.projectId,
+            )
+            for msg in msg_obj.messages
+        ]
+
+        # Intentionally not returning exception here because snapshot generation should fail if not able to fetch data
+        snapshot_data = await asyncio.gather(*snapshot_tasks)
 
         for msg, data in zip(msg_obj.messages, snapshot_data):
             if not data:
@@ -112,7 +118,7 @@ class AggreagateTopTokensProcessor(GenericProcessorMultiProjectAggregate):
                 token_data[token1['address']]['volume24h'] += snapshot.token1TradeVolumeUSD
 
         tail_epoch_id, extrapolated_flag = await get_tail_epoch_id(
-            redis, protocol_state_contract, anchor_rpc_helper, msg_obj.epochId, 86400, project_id,
+            redis, protocol_state_contract, anchor_rpc_helper, finalized_epoch_head, 86400, project_id,
         )
 
         if not extrapolated_flag:
@@ -138,7 +144,7 @@ class AggreagateTopTokensProcessor(GenericProcessorMultiProjectAggregate):
         top_tokens = sorted(top_tokens, key=lambda x: x.liquidity, reverse=True)
 
         top_tokens_snapshot = UniswapTopTokensSnapshot(
-            epochId=epoch_id,
+            epochId=msg_obj.epochId,
             tokens=top_tokens,
         )
 

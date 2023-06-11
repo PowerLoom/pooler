@@ -20,8 +20,8 @@ from pooler.utils.data_utils import get_source_chain_id
 from pooler.utils.generic_worker import GenericAsyncWorker
 from pooler.utils.models.message_models import AggregateBase
 from pooler.utils.models.message_models import PayloadCommitMessage
-from pooler.utils.models.message_models import PowerloomCalculateAggregateMessage
-from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
+from pooler.utils.models.message_models import PowerloomCalculateMultiAggregateMessage
+from pooler.utils.models.message_models import PowerloomCalculateSingleAggregateMessage
 from pooler.utils.models.settings_model import AggregateOn
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 
@@ -54,7 +54,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
     @notify_on_task_failure_aggregate
     async def _processor_task(
         self,
-        msg_obj: Union[PowerloomSnapshotFinalizedMessage, PowerloomCalculateAggregateMessage],
+        msg_obj: Union[PowerloomCalculateSingleAggregateMessage, PowerloomCalculateMultiAggregateMessage],
         task_type: str,
     ):
         """Function used to process the received message object."""
@@ -134,7 +134,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
     async def _send_payload_commit_service_queue(
         self,
         audit_stream,
-        epoch: Union[PowerloomSnapshotFinalizedMessage, PowerloomCalculateAggregateMessage],
+        epoch: Union[PowerloomCalculateSingleAggregateMessage, PowerloomCalculateMultiAggregateMessage],
         snapshot: Union[AggregateBase, None],
     ):
 
@@ -208,7 +208,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
 
     async def _map_processed_epochs_to_adapters(
         self,
-        msg_obj: Union[PowerloomSnapshotFinalizedMessage, PowerloomCalculateAggregateMessage],
+        msg_obj: Union[PowerloomCalculateSingleAggregateMessage, PowerloomCalculateMultiAggregateMessage],
         cb_fn_async,
         task_type,
         transformation_lambdas: List[Callable],
@@ -258,8 +258,8 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         # TODO: Update based on new single project based design
         if task_type in self._single_project_types:
             try:
-                msg_obj: PowerloomSnapshotFinalizedMessage = (
-                    PowerloomSnapshotFinalizedMessage.parse_raw(message.body)
+                msg_obj: PowerloomCalculateSingleAggregateMessage = (
+                    PowerloomCalculateSingleAggregateMessage.parse_raw(message.body)
                 )
             except ValidationError as e:
                 self._logger.opt(exception=True).error(
@@ -279,8 +279,8 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 return
         elif task_type in self._multi_project_types:
             try:
-                msg_obj: PowerloomCalculateAggregateMessage = (
-                    PowerloomCalculateAggregateMessage.parse_raw(message.body)
+                msg_obj: PowerloomCalculateMultiAggregateMessage = (
+                    PowerloomCalculateMultiAggregateMessage.parse_raw(message.body)
                 )
             except ValidationError as e:
                 self._logger.opt(exception=True).error(

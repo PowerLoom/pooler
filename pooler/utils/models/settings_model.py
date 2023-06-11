@@ -192,7 +192,7 @@ class AggregationConfig(BaseModel):
     project_type: str
     aggregate_on: AggregateOn
     filters: Optional[AggregateFilterConfig]
-    projects_to_wait_for: Optional[List[str]]
+    projects_to_calculate_on: Optional[List[str]]
     processor: ProcessorConfig
 
 

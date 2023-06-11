@@ -163,13 +163,13 @@ Pooler needs the following config files to be present
         }
         ```
         * The following configuration generates a collection of data sets of 24 hour trade volume as calculated by the worker above across multiple pair contracts. This can be seen by the `aggregate_on` key being set to `MultiProject`.
-            * `projects_to_wait_for` specifies the exact project IDs on which this collection will be generated once a [snapshot finalized event](#snapshot-finalization) has been received for an [`epochId`](#epoch-generation).
+            * `projects_to_calculate_on` specifies the exact project IDs on which this collection will be generated once a [snapshot finalized event](#snapshot-finalization) has been received for an [`epochId`](#epoch-generation).
         ```javascript
         {
             "config": [
                 "project_type": "aggregate_24h_top_pairs",
                 "aggregate_on": "MultiProject",
-                "projects_to_wait_for": [
+                "projects_to_calculate_on": [
                     // this triggers the compute() contained in the processor class at the module location
                     // after `SnapshotFinalized` events are received for project IDs containing the prefix `pairContract_trade_volume`
                     "aggregate_pairContract_24h_trade_volume:0xa478c2975ab1ea89e8196811f51a7b7ade33eb11:UNISWAPV2",

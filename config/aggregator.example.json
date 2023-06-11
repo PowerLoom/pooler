@@ -24,7 +24,7 @@
     {
       "project_type": "aggregate_24h_top_pairs_lite",
       "aggregate_on": "MultiProject",
-      "projects_to_wait_for": [
+      "projects_to_calculate_on": [
         "aggregate_pairContract_24h_trade_volume:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2",
         "pairContract_pair_total_reserves:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2",
         "aggregate_pairContract_24h_trade_volume:0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5:UNISWAPV2",
@@ -48,7 +48,7 @@
     {
       "project_type": "aggregate_24h_top_tokens_lite",
       "aggregate_on": "MultiProject",
-      "projects_to_wait_for": [
+      "projects_to_calculate_on": [
         "aggregate_pairContract_24h_trade_volume:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2",
         "pairContract_pair_total_reserves:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2",
         "aggregate_pairContract_24h_trade_volume:0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5:UNISWAPV2",
@@ -72,7 +72,7 @@
     {
       "project_type": "aggregate_7d_top_pairs_lite",
       "aggregate_on": "MultiProject",
-      "projects_to_wait_for": [
+      "projects_to_calculate_on": [
         "aggregate_pairContract_7d_trade_volume:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2",
         "aggregate_pairContract_7d_trade_volume:0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5:UNISWAPV2",
         "aggregate_pairContract_7d_trade_volume:0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852:UNISWAPV2",
@@ -89,7 +89,7 @@
     {
       "project_type": "aggregate_24h_stats_lite",
       "aggregate_on": "MultiProject",
-      "projects_to_wait_for": [
+      "projects_to_calculate_on": [
         "aggregate_pairContract_24h_trade_volume:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2",
         "pairContract_pair_total_reserves:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2",
         "aggregate_pairContract_24h_trade_volume:0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5:UNISWAPV2",

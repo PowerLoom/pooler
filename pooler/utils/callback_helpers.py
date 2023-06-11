@@ -15,8 +15,8 @@ from redis import asyncio as aioredis
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.models.data_models import SnapshotterIssue
-from pooler.utils.models.message_models import PowerloomCalculateAggregateMessage
-from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
+from pooler.utils.models.message_models import PowerloomCalculateMultiAggregateMessage
+from pooler.utils.models.message_models import PowerloomCalculateSingleAggregateMessage
 from pooler.utils.models.message_models import PowerloomSnapshotProcessMessage
 from pooler.utils.rpc import RpcHelper
 
@@ -133,7 +133,7 @@ def notify_on_task_failure_aggregate(fn):
                 )
 
             # Sending the error details to the issue reporting service
-            if isinstance(msg_obj, PowerloomCalculateAggregateMessage):
+            if isinstance(msg_obj, PowerloomCalculateMultiAggregateMessage):
                 underlying_project_ids = [project.projectId for project in msg_obj.messages]
                 unique_project_id = ''.join(sorted(underlying_project_ids))
 
@@ -142,7 +142,7 @@ def notify_on_task_failure_aggregate(fn):
                 project_id = f'{task_type}:{project_hash}:{settings.namespace}'
                 epoch_id = msg_obj.epochId
 
-            elif isinstance(msg_obj, PowerloomSnapshotFinalizedMessage):
+            elif isinstance(msg_obj, PowerloomCalculateSingleAggregateMessage):
                 contract = msg_obj.projectId.split(':')[-2]
                 project_id = f'{task_type}:{contract}:{settings.namespace}'
                 epoch_id = msg_obj.epochId
@@ -221,7 +221,7 @@ class GenericProcessorSingleProjectAggregate(ABC):
     @abstractmethod
     async def compute(
         self,
-        msg_obj: PowerloomSnapshotFinalizedMessage,
+        msg_obj: PowerloomCalculateSingleAggregateMessage,
         redis: aioredis.Redis,
         rpc_helper: RpcHelper,
         anchor_rpc_helper: RpcHelper,
@@ -245,7 +245,7 @@ class GenericProcessorMultiProjectAggregate(ABC):
     @abstractmethod
     async def compute(
         self,
-        msg_obj: PowerloomCalculateAggregateMessage,
+        msg_obj: PowerloomCalculateMultiAggregateMessage,
         redis: aioredis.Redis,
         rpc_helper: RpcHelper,
         anchor_rpc_helper: RpcHelper,

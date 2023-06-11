@@ -9,7 +9,7 @@ from pooler.utils.data_utils import get_project_epoch_snapshot_bulk
 from pooler.utils.data_utils import get_project_first_epoch
 from pooler.utils.data_utils import get_tail_epoch_id
 from pooler.utils.default_logger import logger
-from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
+from pooler.utils.models.message_models import PowerloomCalculateSingleAggregateMessage
 from pooler.utils.rpc import RpcHelper
 
 
@@ -52,7 +52,7 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
 
     async def _calculate_from_scratch(
         self,
-        msg_obj: PowerloomSnapshotFinalizedMessage,
+        msg_obj: PowerloomCalculateSingleAggregateMessage,
         redis: aioredis.Redis,
         rpc_helper: RpcHelper,
         anchor_rpc_helper: RpcHelper,
@@ -62,14 +62,15 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
     ):
         self._logger.info('project_first_epoch is 0, building aggregate from scratch')
 
+        finalized_epoch_head = msg_obj.epochId - 1
         # source project tail epoch
         tail_epoch_id, extrapolated_flag = await get_tail_epoch_id(
-            redis, protocol_state_contract, anchor_rpc_helper, msg_obj.epochId, 86400, msg_obj.projectId,
+            redis, protocol_state_contract, anchor_rpc_helper, finalized_epoch_head, 86400, msg_obj.projectId,
         )
 
         snapshots_data = await get_project_epoch_snapshot_bulk(
             redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader,
-            tail_epoch_id, msg_obj.epochId, msg_obj.projectId,
+            tail_epoch_id, finalized_epoch_head, msg_obj.projectId,
         )
 
         aggregate_snapshot = UniswapTradesAggregateSnapshot.parse_obj({'epochId': msg_obj.epochId})
@@ -83,7 +84,7 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
 
     async def compute(
         self,
-        msg_obj: PowerloomSnapshotFinalizedMessage,
+        msg_obj: PowerloomCalculateSingleAggregateMessage,
         redis: aioredis.Redis,
         rpc_helper: RpcHelper,
         anchor_rpc_helper: RpcHelper,
@@ -94,6 +95,7 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
     ):
         self._logger.info(f'Building trade volume aggregate snapshot for {msg_obj}')
 
+        finalized_epoch_head = msg_obj.epochId - 1
         # aggregate project first epoch
         project_first_epoch = await get_project_first_epoch(
             redis, protocol_state_contract, anchor_rpc_helper, project_id,
@@ -101,7 +103,7 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
 
         # source project tail epoch
         tail_epoch_id, extrapolated_flag = await get_tail_epoch_id(
-            redis, protocol_state_contract, anchor_rpc_helper, msg_obj.epochId, 86400, msg_obj.projectId,
+            redis, protocol_state_contract, anchor_rpc_helper, finalized_epoch_head, 86400, msg_obj.projectId,
         )
 
         # If no past snapshots exist, then aggregate will be current snapshot
@@ -114,14 +116,15 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
             # if epoch window is not complete, just add current snapshot to the aggregate
             self._logger.info('project_first_epoch is not 0, building aggregate from previous aggregate')
             previous_aggregate_snapshot_data = await get_project_epoch_snapshot(
-                redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader, msg_obj.epochId - 1, project_id,
+                redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader, finalized_epoch_head - 1, project_id,
             )
 
             if previous_aggregate_snapshot_data:
                 aggregate_snapshot = UniswapTradesAggregateSnapshot.parse_obj(previous_aggregate_snapshot_data)
 
                 current_snapshot_data = await get_project_epoch_snapshot(
-                    redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader, msg_obj.epochId, msg_obj.projectId,
+                    redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader,
+                    finalized_epoch_head, msg_obj.projectId,
                 )
 
                 if current_snapshot_data:

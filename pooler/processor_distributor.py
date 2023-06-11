@@ -25,7 +25,8 @@ from pooler.utils.data_utils import get_source_chain_id
 from pooler.utils.default_logger import logger
 from pooler.utils.models.message_models import EpochBroadcast
 from pooler.utils.models.message_models import PayloadCommitFinalizedMessage
-from pooler.utils.models.message_models import PowerloomCalculateAggregateMessage
+from pooler.utils.models.message_models import PowerloomCalculateMultiAggregateMessage
+from pooler.utils.models.message_models import PowerloomCalculateSingleAggregateMessage
 from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
 from pooler.utils.models.message_models import PowerloomSnapshotProcessMessage
 from pooler.utils.models.settings_model import AggregateOn
@@ -58,7 +59,8 @@ class ProcessorDistributor(multiprocessing.Process):
         self._payload_commit_exchange_name = (
             f'{settings.rabbitmq.setup.commit_payload.exchange}:{settings.namespace}'
         )
-        self._payload_commit_routing_key = f'powerloom-backend-commit-payload:{settings.namespace}:{settings.instance_id}.Finalized'
+        self._payload_commit_routing_key = f'powerloom-backend-commit-payload:{settings.namespace}'\
+            f':{settings.instance_id}.Finalized'
 
     async def _init_redis_pool(self):
         if not self._aioredis_pool:
@@ -119,7 +121,11 @@ class ProcessorDistributor(multiprocessing.Process):
         self,
         exchange,
         routing_key,
-        message: Union[EpochBroadcast, PowerloomCalculateAggregateMessage, PowerloomSnapshotFinalizedMessage],
+        message: Union[
+            EpochBroadcast,
+            PowerloomCalculateSingleAggregateMessage,
+            PowerloomCalculateMultiAggregateMessage,
+        ],
     ):
         """
         Publishes a message to a rabbitmq queue
@@ -188,7 +194,8 @@ class ProcessorDistributor(multiprocessing.Process):
 
                 await self._publish_message_to_queue(
                     exchange=self._callback_exchange_name,
-                    routing_key=f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}:EpochReleased.{type_}',
+                    routing_key=f'powerloom-backend-callback:{settings.namespace}:'
+                    f'{settings.instance_id}:EpochReleased.{type_}',
                     message=process_unit,
                 )
 
@@ -237,24 +244,18 @@ class ProcessorDistributor(multiprocessing.Process):
         )
 
     async def _distribute_callbacks_aggregate(self, message: IncomingMessage):
-        event_type = message.routing_key.split('.')[-1]
         try:
-            if event_type != 'SnapshotFinalized':
-                self._logger.error(f'Unknown event type {event_type}')
-                return
-
-            process_unit: PowerloomSnapshotFinalizedMessage = (
-                PowerloomSnapshotFinalizedMessage.parse_raw(message.body)
+            msg_obj: EpochBroadcast = (
+                EpochBroadcast.parse_raw(message.body)
             )
-
         except ValidationError:
             self._logger.opt(exception=True).error(
-                'Bad message structure of event callback',
+                'Bad message structure of epoch callback',
             )
             return
         except Exception:
             self._logger.opt(exception=True).error(
-                'Unexpected message format of event callback',
+                'Unexpected message format of epoch callback',
             )
             return
         self._logger.debug(f'Aggregation Task Distribution time - {int(time.time())}')
@@ -264,71 +265,56 @@ class ProcessorDistributor(multiprocessing.Process):
             type_ = config.project_type
 
             if config.aggregate_on == AggregateOn.single_project:
-                if config.filters.projectId not in process_unit.projectId:
-                    self._logger.info(f'projectId mismatch {process_unit.projectId} {config.filters.projectId}')
-                    continue
+                for project_config in projects_config:
+                    if config.filters.projectId in project_config.project_type:
+                        for project in project_config.projects:
+                            contract = project.lower()
+                            project_id = f'{project_config.project_type}:{contract}:{settings.namespace}'
+
+                            process_unit = PowerloomCalculateSingleAggregateMessage(
+                                epochId=msg_obj.epochId,
+                                projectId=project_id,
+                                broadcastId=msg_obj.broadcastId,
+                                timestamp=int(time.time()),
+                            )
+                            await self._publish_message_to_queue(
+                                exchange=self._callback_exchange_name,
+                                routing_key=f'powerloom-backend-callback:{settings.namespace}:'
+                                f'{settings.instance_id}:CalculateAggregate.{type_}',
+                                message=process_unit,
+                            )
+
+                            self._logger.debug(
+                                'Sent out message to be processed by worker'
+                                f' {type_} : {process_unit}',
+                            )
+
+            elif config.aggregate_on == AggregateOn.multi_project:
+
+                aggregate_messages = []
+                for project_ in config.projects_to_calculate_on:
+                    aggregate_messages.append(
+                        PowerloomCalculateSingleAggregateMessage(
+                            epochId=msg_obj.epochId,
+                            projectId=project_,
+                            broadcastId=msg_obj.broadcastId,
+                            timestamp=int(time.time()),
+                        ),
+                    )
+
+                process_unit = PowerloomCalculateMultiAggregateMessage(
+                    epochId=msg_obj.epochId,
+                    timestamp=int(time.time()),
+                    broadcastId=msg_obj.broadcastId,
+                    messages=aggregate_messages,
+                )
+
                 await self._publish_message_to_queue(
                     exchange=self._callback_exchange_name,
-                    routing_key=f'powerloom-backend-callback:{settings.namespace}:'
-                    f'{settings.instance_id}:CalculateAggregate.{type_}',
+                    routing_key=f'powerloom-backend-callback:{settings.namespace}'
+                    f':{settings.instance_id}:CalculateAggregate.{type_}',
                     message=process_unit,
                 )
-            elif config.aggregate_on == AggregateOn.multi_project:
-                if process_unit.projectId not in config.projects_to_wait_for:
-                    self._logger.info(f'projectId not required for {config.project_type}: {process_unit.projectId}')
-                    continue
-
-                await self._redis_conn.zadd(
-                    f'powerloom:aggregator:{config.project_type}:events',
-                    {process_unit.json(): process_unit.epochId},
-                )
-
-                events = await self._redis_conn.zrangebyscore(
-                    f'powerloom:aggregator:{config.project_type}:events',
-                    process_unit.epochId,
-                    process_unit.epochId,
-                )
-
-                if not events:
-                    self._logger.info(f'No events found for {process_unit.epochId}')
-                    continue
-
-                event_project_ids = set()
-                finalized_messages = list()
-
-                for event in events:
-                    event = PowerloomSnapshotFinalizedMessage.parse_raw(event)
-                    event_project_ids.add(event.projectId)
-                    finalized_messages.append(event)
-
-                if event_project_ids == set(config.projects_to_wait_for):
-                    self._logger.info(f'All projects present for {process_unit.epochId}, aggregating')
-                    final_msg = PowerloomCalculateAggregateMessage(
-                        messages=finalized_messages,
-                        epochId=process_unit.epochId,
-                        timestamp=int(time.time()),
-                        broadcastId=str(uuid4()),
-                    )
-
-                    await self._publish_message_to_queue(
-                        exchange=self._callback_exchange_name,
-                        routing_key=f'powerloom-backend-callback:{settings.namespace}'
-                        f':{settings.instance_id}:CalculateAggregate.{type_}',
-                        message=final_msg,
-                    )
-
-                    # Cleanup redis
-                    await self._redis_conn.zremrangebyscore(
-                        f'powerloom:aggregator:{config.project_type}:events',
-                        process_unit.epochId,
-                        process_unit.epochId,
-                    )
-
-                else:
-                    self._logger.info(
-                        f'Not all projects present for {process_unit.epochId},'
-                        f' {len(set(config.projects_to_wait_for)) - len(event_project_ids)} missing',
-                    )
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
         message_type = message.routing_key.split('.')[-1]
@@ -348,12 +334,11 @@ class ProcessorDistributor(multiprocessing.Process):
             await self._distribute_callbacks_snapshotting(
                 message,
             )
-
-        elif message_type == 'SnapshotFinalized':
             await self._distribute_callbacks_aggregate(
                 message,
             )
 
+        elif message_type == 'SnapshotFinalized':
             await self._cache_and_forward_to_payload_commit_queue(message),
 
         else:
