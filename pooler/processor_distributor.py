@@ -265,29 +265,49 @@ class ProcessorDistributor(multiprocessing.Process):
             type_ = config.project_type
 
             if config.aggregate_on == AggregateOn.single_project:
-                for project_config in projects_config:
-                    if config.filters.projectId in project_config.project_type:
-                        for project in project_config.projects:
-                            contract = project.lower()
-                            project_id = f'{project_config.project_type}:{contract}:{settings.namespace}'
+                if config.projects_to_calculate_on:
+                    for project_id in config.projects_to_calculate_on:
+                        process_unit = PowerloomCalculateSingleAggregateMessage(
+                            epochId=msg_obj.epochId,
+                            projectId=project_id,
+                            broadcastId=msg_obj.broadcastId,
+                            timestamp=int(time.time()),
+                        )
+                        await self._publish_message_to_queue(
+                            exchange=self._callback_exchange_name,
+                            routing_key=f'powerloom-backend-callback:{settings.namespace}:'
+                            f'{settings.instance_id}:CalculateAggregate.{type_}',
+                            message=process_unit,
+                        )
 
-                            process_unit = PowerloomCalculateSingleAggregateMessage(
-                                epochId=msg_obj.epochId,
-                                projectId=project_id,
-                                broadcastId=msg_obj.broadcastId,
-                                timestamp=int(time.time()),
-                            )
-                            await self._publish_message_to_queue(
-                                exchange=self._callback_exchange_name,
-                                routing_key=f'powerloom-backend-callback:{settings.namespace}:'
-                                f'{settings.instance_id}:CalculateAggregate.{type_}',
-                                message=process_unit,
-                            )
+                        self._logger.debug(
+                            'Sent out message to be processed by worker'
+                            f' {type_} : {process_unit}',
+                        )
+                elif config.filters:
+                    for project_config in projects_config:
+                        if config.filters.projectId in project_config.project_type:
+                            for project in project_config.projects:
+                                contract = project.lower()
+                                project_id = f'{project_config.project_type}:{contract}:{settings.namespace}'
 
-                            self._logger.debug(
-                                'Sent out message to be processed by worker'
-                                f' {type_} : {process_unit}',
-                            )
+                                process_unit = PowerloomCalculateSingleAggregateMessage(
+                                    epochId=msg_obj.epochId,
+                                    projectId=project_id,
+                                    broadcastId=msg_obj.broadcastId,
+                                    timestamp=int(time.time()),
+                                )
+                                await self._publish_message_to_queue(
+                                    exchange=self._callback_exchange_name,
+                                    routing_key=f'powerloom-backend-callback:{settings.namespace}:'
+                                    f'{settings.instance_id}:CalculateAggregate.{type_}',
+                                    message=process_unit,
+                                )
+
+                                self._logger.debug(
+                                    'Sent out message to be processed by worker'
+                                    f' {type_} : {process_unit}',
+                                )
 
             elif config.aggregate_on == AggregateOn.multi_project:
 
