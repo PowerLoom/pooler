@@ -278,8 +278,6 @@ class ProcessorDistributor(multiprocessing.Process):
 
         # go through aggregator config, if it matches then send appropriate message
 
-        queuing_tasks = []
-
         for config in aggregator_config:
             type_ = config.project_type
 
@@ -287,13 +285,12 @@ class ProcessorDistributor(multiprocessing.Process):
                 if config.filters.projectId not in process_unit.projectId:
                     self._logger.info(f'projectId mismatch {process_unit.projectId} {config.filters.projectId}')
                     continue
-                queuing_tasks.append(
-                    self._publish_message_to_queue(
-                        exchange=self._callback_exchange_name,
-                        routing_key=f'powerloom-backend-callback:{settings.namespace}:'
-                        f'{settings.instance_id}:CalculateAggregate.{type_}',
-                        message=process_unit,
-                    ),
+
+                await self._publish_message_to_queue(
+                    exchange=self._callback_exchange_name,
+                    routing_key=f'powerloom-backend-callback:{settings.namespace}:'
+                    f'{settings.instance_id}:CalculateAggregate.{type_}',
+                    message=process_unit,
                 )
             elif config.aggregate_on == AggregateOn.multi_project:
                 if process_unit.projectId not in config.projects_to_wait_for:
@@ -339,13 +336,11 @@ class ProcessorDistributor(multiprocessing.Process):
                         broadcastId=str(uuid4()),
                     )
 
-                    queuing_tasks.append(
-                        self._publish_message_to_queue(
-                            exchange=self._callback_exchange_name,
-                            routing_key=f'powerloom-backend-callback:{settings.namespace}'
-                            f':{settings.instance_id}:CalculateAggregate.{type_}',
-                            message=final_msg,
-                        ),
+                    await self._publish_message_to_queue(
+                        exchange=self._callback_exchange_name,
+                        routing_key=f'powerloom-backend-callback:{settings.namespace}'
+                        f':{settings.instance_id}:CalculateAggregate.{type_}',
+                        message=final_msg,
                     )
 
                     # Cleanup redis for current epoch
@@ -360,14 +355,6 @@ class ProcessorDistributor(multiprocessing.Process):
                     self._logger.info(
                         f'Not all projects present for {process_unit.epochId},'
                         f' {len(set(config.projects_to_wait_for)) - len(event_project_ids)} missing',
-                    )
-
-            results = await asyncio.gather(*queuing_tasks, return_exceptions=True)
-            for result in results:
-                if isinstance(result, Exception):
-                    self._logger.error(
-                        'Error while distributing callback message, Error: {}',
-                        result,
                     )
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
@@ -387,24 +374,18 @@ class ProcessorDistributor(multiprocessing.Process):
             self._initialized = True
 
         if message_type == 'EpochReleased':
-            asyncio.ensure_future(
-                self._distribute_callbacks_snapshotting(
-                    message,
-                ),
+            await self._distribute_callbacks_snapshotting(
+                message,
             )
 
         elif message_type == 'SnapshotSubmitted':
-            asyncio.ensure_future(
-                self._distribute_callbacks_aggregate(
-                    message,
-                ),
+            await self._distribute_callbacks_aggregate(
+                message,
             )
 
         elif message_type == 'SnapshotFinalized':
-            asyncio.ensure_future(
-                self._cache_and_forward_to_payload_commit_queue(
-                    message,
-                ),
+            await self._cache_and_forward_to_payload_commit_queue(
+                message,
             )
 
         else:
@@ -422,7 +403,7 @@ class ProcessorDistributor(multiprocessing.Process):
             loop=loop,
         )
         async with self._rmq_channel_pool.acquire() as channel:
-            await channel.set_qos(20)
+            await channel.set_qos(100)
             exchange = await channel.get_exchange(
                 name=self._consume_exchange_name,
             )
