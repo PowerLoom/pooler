@@ -211,8 +211,9 @@ class ProcessorDistributor(multiprocessing.Process):
 
         for result in results:
             if isinstance(result, Exception):
-                self._logger.opt(exception=True).error(
-                    'Error while sending message to queue',
+                self._logger.error(
+                    'Error while sending message to queue. Error - {}',
+                    result,
                 )
 
     async def _cache_and_forward_to_payload_commit_queue(self, message: IncomingMessage):
@@ -364,8 +365,9 @@ class ProcessorDistributor(multiprocessing.Process):
             results = await asyncio.gather(*queuing_tasks, return_exceptions=True)
             for result in results:
                 if isinstance(result, Exception):
-                    self._logger.opt(exception=True).error(
-                        'Error while distributing callback message',
+                    self._logger.error(
+                        'Error while distributing callback message, Error: {}',
+                        result,
                     )
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
@@ -385,17 +387,25 @@ class ProcessorDistributor(multiprocessing.Process):
             self._initialized = True
 
         if message_type == 'EpochReleased':
-            await self._distribute_callbacks_snapshotting(
-                message,
+            asyncio.ensure_future(
+                self._distribute_callbacks_snapshotting(
+                    message,
+                ),
             )
 
         elif message_type == 'SnapshotSubmitted':
-            await self._distribute_callbacks_aggregate(
-                message,
+            asyncio.ensure_future(
+                self._distribute_callbacks_aggregate(
+                    message,
+                ),
             )
 
         elif message_type == 'SnapshotFinalized':
-            await self._cache_and_forward_to_payload_commit_queue(message),
+            asyncio.ensure_future(
+                self._cache_and_forward_to_payload_commit_queue(
+                    message,
+                ),
+            )
 
         else:
             self._logger.error(
