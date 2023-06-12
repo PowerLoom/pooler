@@ -52,6 +52,13 @@ class SnapshotFinalizedEvent(EventBase):
     broadcastId: str
 
 
+class SnapshotSubmittedEvent(EventBase):
+    snapshotCid: str
+    epochId: int
+    projectId: str
+    broadcastId: str
+
+
 class PairTradeVolume(BaseModel):
     total_volume: int = 0
     fees: int = 0

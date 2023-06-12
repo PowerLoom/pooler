@@ -21,7 +21,7 @@ from pooler.utils.generic_worker import GenericAsyncWorker
 from pooler.utils.models.message_models import AggregateBase
 from pooler.utils.models.message_models import PayloadCommitMessage
 from pooler.utils.models.message_models import PowerloomCalculateAggregateMessage
-from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
+from pooler.utils.models.message_models import PowerloomSnapshotSubmittedMessage
 from pooler.utils.models.settings_model import AggregateOn
 from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 
@@ -54,7 +54,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
     @notify_on_task_failure_aggregate
     async def _processor_task(
         self,
-        msg_obj: Union[PowerloomSnapshotFinalizedMessage, PowerloomCalculateAggregateMessage],
+        msg_obj: Union[PowerloomSnapshotSubmittedMessage, PowerloomCalculateAggregateMessage],
         task_type: str,
     ):
         """Function used to process the received message object."""
@@ -134,7 +134,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
     async def _send_payload_commit_service_queue(
         self,
         audit_stream,
-        epoch: Union[PowerloomSnapshotFinalizedMessage, PowerloomCalculateAggregateMessage],
+        epoch: Union[PowerloomSnapshotSubmittedMessage, PowerloomCalculateAggregateMessage],
         snapshot: Union[AggregateBase, None],
     ):
 
@@ -208,7 +208,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
 
     async def _map_processed_epochs_to_adapters(
         self,
-        msg_obj: Union[PowerloomSnapshotFinalizedMessage, PowerloomCalculateAggregateMessage],
+        msg_obj: Union[PowerloomSnapshotSubmittedMessage, PowerloomCalculateAggregateMessage],
         cb_fn_async,
         task_type,
         transformation_lambdas: List[Callable],
@@ -258,8 +258,8 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         # TODO: Update based on new single project based design
         if task_type in self._single_project_types:
             try:
-                msg_obj: PowerloomSnapshotFinalizedMessage = (
-                    PowerloomSnapshotFinalizedMessage.parse_raw(message.body)
+                msg_obj: PowerloomSnapshotSubmittedMessage = (
+                    PowerloomSnapshotSubmittedMessage.parse_raw(message.body)
                 )
             except ValidationError as e:
                 self._logger.opt(exception=True).error(

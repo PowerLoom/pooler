@@ -21,6 +21,7 @@ from pooler.utils.file_utils import read_json_file
 from pooler.utils.models.data_models import EpochReleasedEvent
 from pooler.utils.models.data_models import EventBase
 from pooler.utils.models.data_models import SnapshotFinalizedEvent
+from pooler.utils.models.data_models import SnapshotSubmittedEvent
 from pooler.utils.rabbitmq_helpers import RabbitmqThreadedSelectLoopInteractor
 from pooler.utils.redis.redis_conn import RedisPoolCache
 from pooler.utils.redis.redis_keys import event_detector_last_processed_block
@@ -114,15 +115,19 @@ class EventDetectorProcess(multiprocessing.Process):
 # event EpochReleased(uint256 indexed epochId, uint256 begin, uint256 end, uint256 timestamp);
 # event SnapshotFinalized(uint256 indexed epochId, uint256 epochEnd, string projectId,
 #     string snapshotCid, uint256 timestamp);
+# event SnapshotSubmitted(address snapshotterAddr, string snapshotCid, uint256 indexed epochId,
+#     string projectId, uint256 timestamp);
 
         EVENTS_ABI = {
             'EpochReleased': self.contract.events.EpochReleased._get_event_abi(),
             'SnapshotFinalized': self.contract.events.SnapshotFinalized._get_event_abi(),
+            'SnapshotSubmitted': self.contract.events.SnapshotSubmitted._get_event_abi(),
         }
 
         EVENT_SIGS = {
             'EpochReleased': 'EpochReleased(uint256,uint256,uint256,uint256)',
             'SnapshotFinalized': 'SnapshotFinalized(uint256,uint256,string,string,uint256)',
+            'SnapshotSubmitted': 'SnapshotSubmitted(address,string,uint256,string,uint256)',
         }
 
         self.event_sig, self.event_abi = get_event_sig_and_abi(
@@ -179,6 +184,17 @@ class EventDetectorProcess(multiprocessing.Process):
                     broadcastId=str(uuid.uuid4()),
                 )
                 events.append((log.event, event))
+
+            elif log.event == 'SnapshotSubmitted':
+                if log.args.snapshotterAddr.lower() == settings.instance_id.lower():
+                    event = SnapshotSubmittedEvent(
+                        snapshotCid=log.args.snapshotCid,
+                        epochId=log.args.epochId,
+                        projectId=log.args.projectId,
+                        timestamp=log.args.timestamp,
+                        broadcastId=str(uuid.uuid4()),
+                    )
+                    events.append((log.event, event))
 
         self._logger.info('Events: {}', events)
         return events
