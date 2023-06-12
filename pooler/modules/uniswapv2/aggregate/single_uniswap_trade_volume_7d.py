@@ -10,7 +10,7 @@ from pooler.utils.callback_helpers import GenericProcessorSingleProjectAggregate
 from pooler.utils.data_utils import get_project_epoch_snapshot
 from pooler.utils.data_utils import get_tail_epoch_id
 from pooler.utils.default_logger import logger
-from pooler.utils.models.message_models import PowerloomCalculateSingleAggregateMessage
+from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
 from pooler.utils.rpc import RpcHelper
 
 
@@ -53,7 +53,7 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
 
     async def compute(
         self,
-        msg_obj: PowerloomCalculateSingleAggregateMessage,
+        msg_obj: PowerloomSnapshotFinalizedMessage,
         redis: aioredis.Redis,
         rpc_helper: RpcHelper,
         anchor_rpc_helper: RpcHelper,
@@ -66,7 +66,6 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
 
         contract = project_id.split(':')[-2]
 
-        finalized_epoch_head = msg_obj.epochId - 1
         pair_metadata = await get_pair_metadata(
             pair_address=contract,
             redis_conn=redis,
@@ -82,17 +81,16 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
         count = 0
         self._logger.debug(
             'fetch # {}: queueing task for 24h aggregate snapshot for project ID {}'
-            ' at currently received epoch ID {}',
-            count, msg_obj.projectId, msg_obj.epochId,
+            ' at currently received epoch ID {} with snasphot CID {}',
+            count, msg_obj.projectId, msg_obj.epochId, msg_obj.snapshotCid,
         )
         snapshot_tasks.append(
             get_project_epoch_snapshot(
-                redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader,
-                finalized_epoch_head, msg_obj.projectId,
+                redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader, msg_obj.epochId, msg_obj.projectId,
             ),
         )
         seek_stop_flag = False
-        head_epoch = finalized_epoch_head
+        head_epoch = msg_obj.epochId
         # 2. if not extrapolated, attempt to seek further back
         while not seek_stop_flag or count < 7:
             tail_epoch_id, seek_stop_flag = await get_tail_epoch_id(
