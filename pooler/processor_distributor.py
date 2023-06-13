@@ -28,6 +28,7 @@ from pooler.utils.models.message_models import PayloadCommitFinalizedMessage
 from pooler.utils.models.message_models import PowerloomCalculateAggregateMessage
 from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
 from pooler.utils.models.message_models import PowerloomSnapshotProcessMessage
+from pooler.utils.models.message_models import PowerloomSnapshotSubmittedMessage
 from pooler.utils.models.settings_model import AggregateOn
 from pooler.utils.redis.redis_conn import RedisPoolCache
 from pooler.utils.redis.redis_keys import project_finalized_data_zset
@@ -119,7 +120,12 @@ class ProcessorDistributor(multiprocessing.Process):
         self,
         exchange,
         routing_key,
-        message: Union[EpochBroadcast, PowerloomCalculateAggregateMessage, PowerloomSnapshotFinalizedMessage],
+        message: Union[
+            EpochBroadcast,
+            PowerloomSnapshotSubmittedMessage,
+            PowerloomCalculateAggregateMessage,
+            PowerloomSnapshotFinalizedMessage,
+        ],
     ):
         """
         Publishes a message to a rabbitmq queue
@@ -174,6 +180,8 @@ class ProcessorDistributor(multiprocessing.Process):
         # warm-up cache before constructing snapshots
         await self._warm_up_cache_for_epoch_data(msg_obj=msg_obj)
 
+        queuing_tasks = []
+
         for project_config in projects_config:
             type_ = project_config.project_type
             for project in project_config.projects:
@@ -186,15 +194,26 @@ class ProcessorDistributor(multiprocessing.Process):
                     broadcastId=msg_obj.broadcastId,
                 )
 
-                await self._publish_message_to_queue(
-                    exchange=self._callback_exchange_name,
-                    routing_key=f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}:EpochReleased.{type_}',
-                    message=process_unit,
+                queuing_tasks.append(
+                    self._publish_message_to_queue(
+                        exchange=self._callback_exchange_name,
+                        routing_key=f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}:EpochReleased.{type_}',
+                        message=process_unit,
+                    ),
                 )
 
                 self._logger.debug(
                     'Sent out message to be processed by worker'
                     f' {type_} : {process_unit}',
+                )
+
+        results = await asyncio.gather(*queuing_tasks, return_exceptions=True)
+
+        for result in results:
+            if isinstance(result, Exception):
+                self._logger.error(
+                    'Error while sending message to queue. Error - {}',
+                    result,
                 )
 
     async def _cache_and_forward_to_payload_commit_queue(self, message: IncomingMessage):
@@ -212,8 +231,6 @@ class ProcessorDistributor(multiprocessing.Process):
             project_finalized_data_zset(project_id=msg_obj.projectId),
             {msg_obj.snapshotCid: msg_obj.epochId},
         )
-
-        # TODO: prune zset
 
         self._logger.debug(f'Payload Commit Message Distribution time - {int(time.time())}')
 
@@ -239,12 +256,12 @@ class ProcessorDistributor(multiprocessing.Process):
     async def _distribute_callbacks_aggregate(self, message: IncomingMessage):
         event_type = message.routing_key.split('.')[-1]
         try:
-            if event_type != 'SnapshotFinalized':
+            if event_type != 'SnapshotSubmitted':
                 self._logger.error(f'Unknown event type {event_type}')
                 return
 
-            process_unit: PowerloomSnapshotFinalizedMessage = (
-                PowerloomSnapshotFinalizedMessage.parse_raw(message.body)
+            process_unit: PowerloomSnapshotSubmittedMessage = (
+                PowerloomSnapshotSubmittedMessage.parse_raw(message.body)
             )
 
         except ValidationError:
@@ -260,6 +277,7 @@ class ProcessorDistributor(multiprocessing.Process):
         self._logger.debug(f'Aggregation Task Distribution time - {int(time.time())}')
 
         # go through aggregator config, if it matches then send appropriate message
+
         for config in aggregator_config:
             type_ = config.project_type
 
@@ -267,6 +285,7 @@ class ProcessorDistributor(multiprocessing.Process):
                 if config.filters.projectId not in process_unit.projectId:
                     self._logger.info(f'projectId mismatch {process_unit.projectId} {config.filters.projectId}')
                     continue
+
                 await self._publish_message_to_queue(
                     exchange=self._callback_exchange_name,
                     routing_key=f'powerloom-backend-callback:{settings.namespace}:'
@@ -277,6 +296,13 @@ class ProcessorDistributor(multiprocessing.Process):
                 if process_unit.projectId not in config.projects_to_wait_for:
                     self._logger.info(f'projectId not required for {config.project_type}: {process_unit.projectId}')
                     continue
+
+                # cleanup redis for all previous epochs (5 buffer)
+                await self._redis_conn.zremrangebyscore(
+                    f'powerloom:aggregator:{config.project_type}:events',
+                    0,
+                    process_unit.epochId - 5,
+                )
 
                 await self._redis_conn.zadd(
                     f'powerloom:aggregator:{config.project_type}:events',
@@ -297,7 +323,7 @@ class ProcessorDistributor(multiprocessing.Process):
                 finalized_messages = list()
 
                 for event in events:
-                    event = PowerloomSnapshotFinalizedMessage.parse_raw(event)
+                    event = PowerloomSnapshotSubmittedMessage.parse_raw(event)
                     event_project_ids.add(event.projectId)
                     finalized_messages.append(event)
 
@@ -317,7 +343,8 @@ class ProcessorDistributor(multiprocessing.Process):
                         message=final_msg,
                     )
 
-                    # Cleanup redis
+                    # Cleanup redis for current epoch
+
                     await self._redis_conn.zremrangebyscore(
                         f'powerloom:aggregator:{config.project_type}:events',
                         process_unit.epochId,
@@ -331,6 +358,8 @@ class ProcessorDistributor(multiprocessing.Process):
                     )
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
+        await message.ack()
+
         message_type = message.routing_key.split('.')[-1]
         self._logger.debug(
             (
@@ -349,12 +378,15 @@ class ProcessorDistributor(multiprocessing.Process):
                 message,
             )
 
-        elif message_type == 'SnapshotFinalized':
+        elif message_type == 'SnapshotSubmitted':
             await self._distribute_callbacks_aggregate(
                 message,
             )
 
-            await self._cache_and_forward_to_payload_commit_queue(message),
+        elif message_type == 'SnapshotFinalized':
+            await self._cache_and_forward_to_payload_commit_queue(
+                message,
+            )
 
         else:
             self._logger.error(
@@ -364,8 +396,6 @@ class ProcessorDistributor(multiprocessing.Process):
                 message.routing_key,
             )
 
-        await message.ack()
-
     async def _rabbitmq_consumer(self, loop):
         self._rmq_connection_pool = Pool(get_rabbitmq_connection, max_size=5, loop=loop)
         self._rmq_channel_pool = Pool(
@@ -373,7 +403,7 @@ class ProcessorDistributor(multiprocessing.Process):
             loop=loop,
         )
         async with self._rmq_channel_pool.acquire() as channel:
-            await channel.set_qos(20)
+            await channel.set_qos(100)
             exchange = await channel.get_exchange(
                 name=self._consume_exchange_name,
             )

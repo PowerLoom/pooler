@@ -16,8 +16,8 @@ from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.models.data_models import SnapshotterIssue
 from pooler.utils.models.message_models import PowerloomCalculateAggregateMessage
-from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
 from pooler.utils.models.message_models import PowerloomSnapshotProcessMessage
+from pooler.utils.models.message_models import PowerloomSnapshotSubmittedMessage
 from pooler.utils.rpc import RpcHelper
 
 # setup logger
@@ -142,7 +142,7 @@ def notify_on_task_failure_aggregate(fn):
                 project_id = f'{task_type}:{project_hash}:{settings.namespace}'
                 epoch_id = msg_obj.epochId
 
-            elif isinstance(msg_obj, PowerloomSnapshotFinalizedMessage):
+            elif isinstance(msg_obj, PowerloomSnapshotSubmittedMessage):
                 contract = msg_obj.projectId.split(':')[-2]
                 project_id = f'{task_type}:{contract}:{settings.namespace}'
                 epoch_id = msg_obj.epochId
@@ -221,7 +221,7 @@ class GenericProcessorSingleProjectAggregate(ABC):
     @abstractmethod
     async def compute(
         self,
-        msg_obj: PowerloomSnapshotFinalizedMessage,
+        msg_obj: PowerloomSnapshotSubmittedMessage,
         redis: aioredis.Redis,
         rpc_helper: RpcHelper,
         anchor_rpc_helper: RpcHelper,

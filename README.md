@@ -111,7 +111,7 @@ event SnapshotFinalized(uint256 indexed epochId, uint256 epochEnd, string projec
 
 Workers as defined in `config/aggregator.json` are triggered by the appropriate signals forwarded to [`Processor Distributor`](pooler/processor_distributor.py) corresponding to the project ID filters as explained in the [Configuration](#configuration) section.
 
-![Data composition](pooler/static/docs/assets/DataComposition.png)
+![Data composition](pooler/static/docs/assets/DependencyDataComposition.png)
 
 
 ![Aggregation Workflow](pooler/static/docs/assets/AggregationWorkflow.png)
@@ -141,7 +141,7 @@ Pooler needs the following config files to be present
         Copy over [`config/projects.example.json`](config/projects.example.json) to `config/projects.json`. For more details, read on in the [section below on extending a use case](#extending-pooler-with-a-uniswap-v2-data-point).
     * **`config/aggregator.json`** : This lists out different type of aggregation work to be performed over a span of snapshots. Copy over [`config/aggregator.example.json`](config/aggregator.example.json) to `config/aggregator.json`. The span is usually calculated as a function of the epoch size and average block time on the data source network. For eg,
         * the following configuration calculates a snapshot of total trade volume over a 24 hour time period, based on the [snapshot finalization](#snapshot-finalization) of a project ID corresponding to a pair contract. This can be seen by the `aggregate_on` key being set to `SingleProject`.
-            * This is specified by the `filters` key below. If a [snapshot finalization](#snapshot-finalization) is achieved for an epoch over a project ID [(ref:generation of project ID for snapshot building workers)](#epoch-generation) `pairContract_trade_volume:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2`, this would trigger the worker [`AggreagateTradeVolumeProcessor`](pooler/modules/uniswapv2/aggregate/single_uniswap_trade_volume_24h.py) as defined in the `processor` section of the config against the pair contract `0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc`.
+            * This is specified by the `filters` key below. When a snapshot build is achieved for an epoch over a project ID [(ref:generation of project ID for snapshot building workers)](#epoch-generation). For eg, a snapshot build on `pairContract_trade_volume:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2` triggers the worker [`AggreagateTradeVolumeProcessor`](pooler/modules/uniswapv2/aggregate/single_uniswap_trade_volume_24h.py) as defined in the `processor` section of the config against the pair contract `0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc`.
         ```javascript
         {
             "config": [
@@ -163,19 +163,27 @@ Pooler needs the following config files to be present
         }
         ```
         * The following configuration generates a collection of data sets of 24 hour trade volume as calculated by the worker above across multiple pair contracts. This can be seen by the `aggregate_on` key being set to `MultiProject`.
-            * `projects_to_wait_for` specifies the exact project IDs on which this collection will be generated once a [snapshot finalized event](#snapshot-finalization) has been received for an [`epochId`](#epoch-generation).
+            * `projects_to_wait_for` specifies the exact project IDs on which this collection will be generated once a snapshot build has been achieved for an [`epochId`](#epoch-generation).
         ```javascript
         {
             "config": [
-                "project_type": "aggregate_24h_top_pairs",
+                "project_type": "aggregate_24h_top_pairs_lite",
                 "aggregate_on": "MultiProject",
                 "projects_to_wait_for": [
-                    // this triggers the compute() contained in the processor class at the module location
-                    // after `SnapshotFinalized` events are received for project IDs containing the prefix `pairContract_trade_volume`
+                    "aggregate_pairContract_24h_trade_volume:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2",
+                    "pairContract_pair_total_reserves:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2",
+                    "aggregate_pairContract_24h_trade_volume:0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5:UNISWAPV2",
+                    "pairContract_pair_total_reserves:0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5:UNISWAPV2",
+                    "aggregate_pairContract_24h_trade_volume:0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852:UNISWAPV2",
+                    "pairContract_pair_total_reserves:0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852:UNISWAPV2",
+                    "aggregate_pairContract_24h_trade_volume:0x3041cbd36888becc7bbcbc0045e3b1f144466f5f:UNISWAPV2",
+                    "pairContract_pair_total_reserves:0x3041cbd36888becc7bbcbc0045e3b1f144466f5f:UNISWAPV2",
+                    "aggregate_pairContract_24h_trade_volume:0xd3d2e2692501a5c9ca623199d38826e513033a17:UNISWAPV2",
+                    "pairContract_pair_total_reserves:0xd3d2e2692501a5c9ca623199d38826e513033a17:UNISWAPV2",
+                    "aggregate_pairContract_24h_trade_volume:0xbb2b8038a1640196fbe3e38816f3e67cba72d940:UNISWAPV2",
+                    "pairContract_pair_total_reserves:0xbb2b8038a1640196fbe3e38816f3e67cba72d940:UNISWAPV2",
                     "aggregate_pairContract_24h_trade_volume:0xa478c2975ab1ea89e8196811f51a7b7ade33eb11:UNISWAPV2",
-                    "pairContract_pair_total_reserves:0xa478c2975ab1ea89e8196811f51a7b7ade33eb11:UNISWAPV2",
-                    "aggregate_pairContract_24h_trade_volume:0x11181bd3baf5ce2a478e98361985d42625de35d1:UNISWAPV2",
-                    "pairContract_pair_total_reserves:0x11181bd3baf5ce2a478e98361985d42625de35d1:UNISWAPV2"
+                    "pairContract_pair_total_reserves:0xa478c2975ab1ea89e8196811f51a7b7ade33eb11:UNISWAPV2"
                 ],
                 "processor": {
                     "module": "pooler.modules.uniswapv2.aggregate.multi_uniswap_top_pairs_24h",

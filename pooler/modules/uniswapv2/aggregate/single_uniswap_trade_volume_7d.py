@@ -8,9 +8,10 @@ from ..utils.models.message_models import UniswapTradesAggregateSnapshot
 from pooler.modules.uniswapv2.utils.helpers import get_pair_metadata
 from pooler.utils.callback_helpers import GenericProcessorSingleProjectAggregate
 from pooler.utils.data_utils import get_project_epoch_snapshot
+from pooler.utils.data_utils import get_submission_data
 from pooler.utils.data_utils import get_tail_epoch_id
 from pooler.utils.default_logger import logger
-from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
+from pooler.utils.models.message_models import PowerloomSnapshotSubmittedMessage
 from pooler.utils.rpc import RpcHelper
 
 
@@ -53,7 +54,7 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
 
     async def compute(
         self,
-        msg_obj: PowerloomSnapshotFinalizedMessage,
+        msg_obj: PowerloomSnapshotSubmittedMessage,
         redis: aioredis.Redis,
         rpc_helper: RpcHelper,
         anchor_rpc_helper: RpcHelper,
@@ -84,9 +85,10 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
             ' at currently received epoch ID {} with snasphot CID {}',
             count, msg_obj.projectId, msg_obj.epochId, msg_obj.snapshotCid,
         )
+
         snapshot_tasks.append(
-            get_project_epoch_snapshot(
-                redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader, msg_obj.epochId, msg_obj.projectId,
+            get_submission_data(
+                redis, msg_obj.snapshotCid, ipfs_reader, msg_obj.projectId,
             ),
         )
         seek_stop_flag = False

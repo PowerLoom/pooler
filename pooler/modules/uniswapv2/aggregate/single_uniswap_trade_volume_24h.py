@@ -7,9 +7,10 @@ from pooler.utils.callback_helpers import GenericProcessorSingleProjectAggregate
 from pooler.utils.data_utils import get_project_epoch_snapshot
 from pooler.utils.data_utils import get_project_epoch_snapshot_bulk
 from pooler.utils.data_utils import get_project_first_epoch
+from pooler.utils.data_utils import get_submission_data
 from pooler.utils.data_utils import get_tail_epoch_id
 from pooler.utils.default_logger import logger
-from pooler.utils.models.message_models import PowerloomSnapshotFinalizedMessage
+from pooler.utils.models.message_models import PowerloomSnapshotSubmittedMessage
 from pooler.utils.rpc import RpcHelper
 
 
@@ -52,7 +53,7 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
 
     async def _calculate_from_scratch(
         self,
-        msg_obj: PowerloomSnapshotFinalizedMessage,
+        msg_obj: PowerloomSnapshotSubmittedMessage,
         redis: aioredis.Redis,
         rpc_helper: RpcHelper,
         anchor_rpc_helper: RpcHelper,
@@ -67,12 +68,21 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
             redis, protocol_state_contract, anchor_rpc_helper, msg_obj.epochId, 86400, msg_obj.projectId,
         )
 
+        # for the first epoch, using submitted cid
+        current_epoch_underlying_data = await get_submission_data(
+            redis, msg_obj.snapshotCid, ipfs_reader, project_id,
+        )
+
         snapshots_data = await get_project_epoch_snapshot_bulk(
             redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader,
-            tail_epoch_id, msg_obj.epochId, msg_obj.projectId,
+            tail_epoch_id, msg_obj.epochId - 1, msg_obj.projectId,
         )
 
         aggregate_snapshot = UniswapTradesAggregateSnapshot.parse_obj({'epochId': msg_obj.epochId})
+
+        if current_epoch_underlying_data:
+            current_snapshot = UniswapTradesSnapshot.parse_obj(current_epoch_underlying_data)
+            aggregate_snapshot = self._add_aggregate_snapshot(aggregate_snapshot, current_snapshot)
 
         for snapshot_data in snapshots_data:
             if snapshot_data:
@@ -83,7 +93,7 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
 
     async def compute(
         self,
-        msg_obj: PowerloomSnapshotFinalizedMessage,
+        msg_obj: PowerloomSnapshotSubmittedMessage,
         redis: aioredis.Redis,
         rpc_helper: RpcHelper,
         anchor_rpc_helper: RpcHelper,
@@ -120,8 +130,8 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
             if previous_aggregate_snapshot_data:
                 aggregate_snapshot = UniswapTradesAggregateSnapshot.parse_obj(previous_aggregate_snapshot_data)
 
-                current_snapshot_data = await get_project_epoch_snapshot(
-                    redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader, msg_obj.epochId, msg_obj.projectId,
+                current_snapshot_data = await get_submission_data(
+                    redis, msg_obj.snapshotCid, ipfs_reader, project_id,
                 )
 
                 if current_snapshot_data:
