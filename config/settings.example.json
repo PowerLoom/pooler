@@ -7,7 +7,7 @@
       "enabled": false,
       "header_key": "X-API-KEY"
     },
-    "public_rate_limit": "100000/day;1200/minute;20/second"
+    "public_rate_limit": "20000/day;300/minute;10/second"
   },
   "instance_id": "account-address",
   "rpc": {
