@@ -1,4 +1,7 @@
+from enum import Enum
+from typing import Any
 from typing import Dict
+from typing import List
 from typing import Optional
 
 from pydantic import BaseModel
@@ -52,6 +55,13 @@ class SnapshotFinalizedEvent(EventBase):
     broadcastId: str
 
 
+class SnapshotSubmittedEvent(EventBase):
+    snapshotCid: str
+    epochId: int
+    projectId: str
+    broadcastId: str
+
+
 class PairTradeVolume(BaseModel):
     total_volume: int = 0
     fees: int = 0
@@ -69,3 +79,63 @@ class ProjectSpecificState(BaseModel):
 class ProtocolState(BaseModel):
     project_specific_states: Dict[str, ProjectSpecificState]  # project ID -> project specific state
     synced_till_epoch_id: int
+
+
+class SnapshotterReportState(Enum):
+    MISSED_SNAPSHOT = 'MISSED_SNAPSHOT'
+    SUBMITTED_INCORRECT_SNAPSHOT = 'SUBMITTED_INCORRECT_SNAPSHOT'
+
+
+class ProjectStatus(BaseModel):
+    projectId: str
+    successfulSubmissions: int = 0
+    incorrectSubmissions: int = 0
+    missedSubmissions: int = 0
+
+
+class SnapshotterStatus(BaseModel):
+    totalSuccessfulSubmissions: int = 0
+    totalIncorrectSubmissions: int = 0
+    totalMissedSubmissions: int = 0
+    projects: List[ProjectStatus]
+
+
+class SnapshotterMissedSubmission(BaseModel):
+    epochId: int
+    reason: str
+
+
+class SnapshotterIncorrectSubmission(BaseModel):
+    epochId: int
+    incorrectCid: str
+    payloadDump: str
+    reason: str = ''
+
+
+class SnapshotterStatusReport(BaseModel):
+    submittedSnapshotCid: str
+    submittedSnapshot: Dict[str, Any] = {}
+    finalizedSnapshotCid: str
+    finalizedSnapshot: Dict[str, Any] = {}
+    state: SnapshotterReportState
+    reason: str = ''
+
+
+class SnapshotterMissedSnapshotSubmission(BaseModel):
+    epochId: int
+    finalizedSnapshotCid: str
+    reason: str
+
+
+class SnapshotterIncorrectSnapshotSubmission(BaseModel):
+    epochId: int
+    submittedSnapshotCid: str
+    submittedSnapshot: Optional[Dict[str, Any]]
+    finalizedSnapshotCid: str
+    finalizedSnapshot: Optional[Dict[str, Any]]
+    reason: str = ''
+
+
+class SnapshotterProjectStatus(BaseModel):
+    missedSubmissions: List[SnapshotterMissedSnapshotSubmission]
+    incorrectSubmissions: List[SnapshotterIncorrectSnapshotSubmission]

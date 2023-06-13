@@ -37,8 +37,16 @@ class PowerloomSnapshotFinalizedMessage(BaseModel):
     timestamp: int
 
 
+class PowerloomSnapshotSubmittedMessage(BaseModel):
+    snapshotCid: str
+    epochId: int
+    projectId: str
+    broadcastId: str
+    timestamp: int
+
+
 class PowerloomCalculateAggregateMessage(BaseModel):
-    messages: List[PowerloomSnapshotFinalizedMessage]
+    messages: List[PowerloomSnapshotSubmittedMessage]
     epochId: int
     broadcastId: str
     timestamp: int

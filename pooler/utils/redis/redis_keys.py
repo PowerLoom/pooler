@@ -55,6 +55,7 @@ rpc_blocknumber_calls = (
 def project_finalized_data_zset(project_id):
     return f'projectID:{project_id}:finalizedData'
 
+
 # project first epoch hashmap
 
 
@@ -76,3 +77,23 @@ def source_chain_epoch_size_key():
 
 def project_last_finalized_epoch_key(project_id):
     return f'projectID:{project_id}:lastFinalizedEpoch'
+
+
+def project_successful_snapshot_submissions_suffix():
+    return 'totalSuccessfulSnapshotCount'
+
+
+def project_incorrect_snapshot_submissions_suffix():
+    return 'totalIncorrectSnapshotCount'
+
+
+def project_missed_snapshot_submissions_suffix():
+    return 'totalMissedSnapshotCount'
+
+
+def project_snapshotter_status_report_key(project_id):
+    return f'projectID:{project_id}:snapshotterStatusReport'
+
+
+def stored_projects_key():
+    return 'storedProjectIds'
