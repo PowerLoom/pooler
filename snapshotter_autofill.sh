@@ -52,7 +52,7 @@ export ipfs_url="${IPFS_URL:-/dns/ipfs/tcp/5001}"
 export ipfs_api_key="${IPFS_API_KEY:-}"
 export ipfs_api_secret="${IPFS_API_SECRET:-}"
 
-export protocol_state_contract="${PROTOCOL_STATE_CONTRACT:-0xb1983E8ce013F62fC503AA5C7704B91a3bf25eC8}"
+export protocol_state_contract="${PROTOCOL_STATE_CONTRACT:-0x19B7f6c458bBd6faDc36D39Ae77B132CC3b5B159}"
 export slack_reporting_url="${SLACK_REPORTING_URL:-}"
 export powerloom_reporting_url="${POWERLOOM_REPORTING_URL:-}"
 
