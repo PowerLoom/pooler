@@ -76,7 +76,6 @@ class UniswapTopPair24hSnapshot(BaseModel):
     fee24h: float
 
 
-
 class UniswapTopPairs24hSnapshot(AggregateBase):
     pairs: List[UniswapTopPair24hSnapshot] = []
 

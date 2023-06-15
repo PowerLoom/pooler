@@ -98,7 +98,9 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 task_type=task_type,
                 transformation_lambdas=stream_processor.transformation_lambdas,
             )
-
+            # TODO: according to config, if necessary,
+            # upload from within this worker to IPFS and submit snapshot as well
+            # without sending over queue to commit service
             await self._send_payload_commit_service_queue(
                 audit_stream=task_type,
                 epoch=msg_obj,

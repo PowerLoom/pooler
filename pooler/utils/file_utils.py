@@ -28,11 +28,50 @@ def read_json_file(
         raise exc
     else:
         json_data = json.load(f_)
-        if type(json_data) != dict:
+        if not isinstance(json_data, dict):
             # logger.warning(f'Upon JSON decoding File {file_path}, content does not contain a dictionary. Actual content: {json_data}')
-            while type(json_data) != dict and type(json_data) == str:
+            while not isinstance(json_data, dict) and isinstance(json_data, str):
                 json_data = json.loads(json_data)
         return json_data
+
+
+def read_general_bytes(
+    file_path: str,
+    logger: logger = default_logger,
+) -> bytes:
+    """Read given file and return the read bytes in form of a string."""
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f'File {file_path} not found')
+
+    try:
+        file_obj = open(file_path, 'rb')
+    except Exception as exc:
+        logger.warning('Unable to open the {} file', file_path)
+        if settings.logs.trace_enabled:
+            logger.opt(exception=True).error(exc)
+        raise exc
+    else:
+        return file_obj.read()    
+
+
+def write_general_bytes(
+    directory: str,
+    file_name: str,
+    data: bytes,
+    logger: logger = default_logger,
+) -> None:
+    file_path: str = os.path.join(directory, file_name)
+    try:
+        file_obj = open(file_path, 'wb')
+    except Exception as exc:
+        logger.warning('Unable to open the {} file', file_path)
+        if settings.logs.trace_enabled:
+            logger.opt(exception=True).error(exc)
+        raise exc
+    else:
+        bytes_written = file_obj.write(data)
+        logger.debug('Wrote {} bytes to file {}', bytes_written, file_path)
+        file_obj.close()
 
 
 def write_json_file(

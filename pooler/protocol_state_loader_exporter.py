@@ -29,10 +29,12 @@ from pooler.utils.redis.redis_keys import source_chain_epoch_size_key
 from pooler.utils.rpc import RpcHelper
 from pooler.utils.utility_functions import acquire_bounded_semaphore
 
+
 class ProtocolStateLoader:
     _anchor_rpc_helper: RpcHelper
     _redis_conn: aioredis.Redis
     _protocol_state_query_semaphore: asyncio.BoundedSemaphore
+
     @acquire_bounded_semaphore
     async def _load_finalized_cids_from_contract_in_epoch_range(self, project_id, begin_epoch_id, cur_epoch_id, semaphore):
         """
@@ -67,6 +69,7 @@ class ProtocolStateLoader:
                         'Fetched finalized CIDs for project {} in epoch {}: e',
                         project_id, begin_epoch_id + idx,
                     )
+
     @acquire_bounded_semaphore
     async def _load_finalized_cids_from_contract(self, project_id, epoch_id_list, semaphore) -> Dict[int, str]:
         """
@@ -103,9 +106,10 @@ class ProtocolStateLoader:
                         project_id, epoch_id_list[i + idx],
                     )
                     eid_cid_map[epoch_id_list[i + idx]] = e
-        self._logger.error('Could not fetch finalized CIDs for project {} against epoch IDs: {}', project_id, list(filter(lambda x: x not in eid_cid_map, epoch_id_list)))
+        self._logger.error('Could not fetch finalized CIDs for project {} against epoch IDs: {}',
+                           project_id, list(filter(lambda x: x not in eid_cid_map, epoch_id_list)))
         return eid_cid_map
-    
+
     async def _init_redis_pool(self):
         self._aioredis_pool = RedisPoolCache(pool_size=1000)
         await self._aioredis_pool.populate()
@@ -139,7 +143,8 @@ class ProtocolStateLoader:
         results = await self._anchor_rpc_helper.web3_call(state_query_call_tasks, self._redis_conn)
         # print(results)
         # current epoch ID query returned as a list representing the ordered array of elements (begin, end, epochID) of the struct
-        # and the other list has only element corresponding to the single level structure of the struct EpochInfo in the contract
+        # and the other list has only element corresponding to the single level
+        # structure of the struct EpochInfo in the contract
         cur_epoch_id = results[0][-1]
         all_project_ids: list = results[1]
         self._logger.debug('Getting first epoch ID against all projects')
@@ -159,8 +164,9 @@ class ProtocolStateLoader:
         project_id_first_epoch_id_map = dict(zip(all_project_ids, project_to_first_epoch_id_results))
         return cur_epoch_id, project_id_first_epoch_id_map, all_project_ids
 
-    def _export_project_state(self, project_id, first_epoch_id, end_epoch_id, redis_conn: redis.Redis) -> ProjectSpecificState:
-        
+    def _export_project_state(self, project_id, first_epoch_id, end_epoch_id,
+                              redis_conn: redis.Redis) -> ProjectSpecificState:
+
         self._logger.debug('Exporting project state for {}', project_id)
         project_state = ProjectSpecificState.construct()
         project_state.first_epoch_id = first_epoch_id
@@ -205,14 +211,22 @@ class ProtocolStateLoader:
             except Exception as exc:
                 exceptions['project'].update({project_id: str(exc)})
             else:
-                null_cid_epochs = list(filter(lambda x: 'null' in project_specific_state.finalized_cids[x], project_specific_state.finalized_cids.keys()))
+                null_cid_epochs = list(
+                    filter(
+                        lambda x: 'null' in project_specific_state.finalized_cids[x],
+                        project_specific_state.finalized_cids.keys()))
                 # recheck on the contract if they are indeed null
-                self._logger.debug('Verifying CIDs against epoch IDs of project {} by re-fetching state from contract since they were found to be null in local cache: {}', project_id, null_cid_epochs)
+                self._logger.debug(
+                    'Verifying CIDs against epoch IDs of project {} by re-fetching state from contract since they were found to be null in local cache: {}',
+                    project_id,
+                    null_cid_epochs)
                 rechecked_eid_cid_map = asyncio.get_event_loop().run_until_complete(self._load_finalized_cids_from_contract(
                     project_id=project_id, epoch_id_list=null_cid_epochs, semaphore=self._protocol_state_query_semaphore,
                 ))
                 project_specific_state.finalized_cids.update(rechecked_eid_cid_map)
-                self._logger.debug('Exported {} finalized CIDs for project {}', len(project_specific_state.finalized_cids), project_id)
+                self._logger.debug(
+                    'Exported {} finalized CIDs for project {}', len(
+                        project_specific_state.finalized_cids), project_id)
                 state.project_specific_states[project_id] = project_specific_state
         state_json = state.json()
         with bz2.open('state.json.bz2', 'wb') as f:

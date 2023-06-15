@@ -434,7 +434,7 @@ class RpcHelper(object):
                 )
 
             response_exceptions = []
-            if type(response_data) is list:
+            if isinstance(response_data, list):
                 for response_item in response_data:
                     if 'error' in response_item:
                         response_exceptions.append(

@@ -41,7 +41,9 @@ async def retrieve_block_data(
         else:
             return RetrievedDAGBlockPayload()
     logger.trace('Retrieved dag block with CID %s: %s', block_dag_cid, block)
-    # the data field may not be present in the dag block because of the DAG finalizer omitting null fields in DAG block model while converting to JSON
+    # the data field may not be present in the dag block because of the DAG
+    # finalizer omitting null fields in DAG block model while converting to
+    # JSON
     if 'data' not in block.keys() or block['data'] is None:
         if data_flag == BlockRetrievalFlags.dag_block_and_payload_data:
             block['data'] = RetrievedDAGBlockPayload()
@@ -87,10 +89,10 @@ async def retrieve_payload_data(
     """
         - Given a payload_cid, get its data from ipfs, at the same time increase its hit
     """
-    #payload_key = redis_keys.get_hits_payload_data_key()
+    # payload_key = redis_keys.get_hits_payload_data_key()
     # if writer_redis_conn:
     # r = await writer_redis_conn.zincrby(payload_key, 1.0, payload_cid)
-    #retrieval_utils_logger.debug("Payload Data hit for: ")
+    # retrieval_utils_logger.debug("Payload Data hit for: ")
     # retrieval_utils_logger.debug(payload_cid)
     payload_data = None
     if project_id is not None:

@@ -12,7 +12,7 @@ from pooler.utils.file_utils import write_bytes_to_file
 
 
 async def send_commit_callback(httpx_session: AsyncClient, url, payload):
-    if type(url) is bytes:
+    if isinstance(url, bytes):
         url = url.decode('utf-8')
     resp = await httpx_session.post(url=url, json=payload)
     json_response = resp.json()

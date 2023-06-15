@@ -162,7 +162,7 @@ async def get_eth_price_usd(
             redis_conn.zremrangebyscore(
                 name=uniswap_eth_usd_price_zset,
                 min=0,
-                max=int(from_block) - source_chain_epoch_size* 4,
+                max=int(from_block) - source_chain_epoch_size * 4,
             ),
         )
 

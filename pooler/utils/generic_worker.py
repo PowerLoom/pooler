@@ -197,7 +197,6 @@ class GenericAsyncWorker(multiprocessing.Process):
             transport=self._async_transport,
         )
 
-    
     def run(self) -> None:
         setproctitle(self._unique_id)
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)

@@ -194,6 +194,7 @@ class AggregationConfig(BaseModel):
     filters: Optional[AggregateFilterConfig]
     projects_to_wait_for: Optional[List[str]]
     processor: ProcessorConfig
+    commit_service_upload: bool = True
 
 
 class AggregatorConfig(BaseModel):

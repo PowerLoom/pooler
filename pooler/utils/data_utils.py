@@ -1,7 +1,8 @@
 import asyncio
 import json
 import os
-from typing import List
+from re import L
+from typing import List, Union
 
 import tenacity
 from ipfs_client.dag import IPFSAsyncClientError
@@ -13,7 +14,7 @@ from tenacity import wait_random_exponential
 
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
-from pooler.utils.file_utils import read_json_file
+from pooler.utils.file_utils import read_general_bytes, read_json_file, write_general_bytes
 from pooler.utils.file_utils import write_json_file
 from pooler.utils.models.data_models import ProjectStatus
 from pooler.utils.models.data_models import SnapshotterIncorrectSnapshotSubmission
@@ -135,11 +136,11 @@ async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj
     stop=stop_after_attempt(3),
     before_sleep=retry_state_callback,
 )
-async def fetch_file_from_ipfs(ipfs_reader, cid):
-    return await ipfs_reader.cat(cid)
+async def fetch_file_from_ipfs(ipfs_reader, cid, bytes_mode: bool):
+    return await ipfs_reader.cat(cid, bytes_mode=bytes_mode)
 
 
-async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, project_id: str) -> dict:
+async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, project_id: str, bytes_mode=False) -> Union[bytes, dict]:
     if not cid:
         return dict()
 
@@ -147,23 +148,30 @@ async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, proj
         return dict()
 
     cached_data_path = os.path.join(settings.ipfs.local_cache_path, project_id, 'snapshots')
-    filename = f'{cid}.json'
+    filename = f'{cid}.json' if not bytes_mode else f'{cid}.json.bz2'
+    read_method = read_json_file if not bytes_mode else read_general_bytes
     try:
-        submission_data = read_json_file(os.path.join(cached_data_path, filename))
+        submission_data = read_method(os.path.join(cached_data_path, filename))
     except Exception as e:
         # Fetch from IPFS
         logger.trace('Error while reading from cache', error=e)
         logger.info('Project {} CID {}, fetching data from IPFS', project_id, cid)
         try:
-            submission_data = await fetch_file_from_ipfs(ipfs_reader, cid)
-        except:
-            logger.error('Error while fetching data from IPFS | Project {} | CID {}', project_id, cid)
+            submission_data = await fetch_file_from_ipfs(ipfs_reader, cid, bytes_mode)
+        except Exception as e:
+            logger.error('Error while fetching data from IPFS | Project {} | CID {}: {}', project_id, cid, e)
+            if settings.logs.trace_enabled:
+                logger.opt(exception=True).error(e)
             submission_data = dict()
         else:
             # Cache it
-            write_json_file(cached_data_path, filename, submission_data)
-            submission_data = json.loads(submission_data)
-    return submission_data
+            write_method = write_json_file if filename.endswith('.json') else write_general_bytes
+            write_method(cached_data_path, filename, submission_data)
+            submission_data = json.loads(submission_data) if not bytes_mode else submission_data
+            return submission_data
+    else:
+        return submission_data
+    return dict()
 
 
 async def get_sumbmission_data_bulk(
@@ -189,11 +197,11 @@ async def get_sumbmission_data_bulk(
 
 
 async def get_project_epoch_snapshot(
-    redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, ipfs_reader, epoch_id, project_id,
-) -> dict:
+    redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, ipfs_reader, epoch_id, project_id, bytes_mode=False
+) -> Union[bytes, dict]:
     cid = await get_project_finalized_cid(redis_conn, state_contract_obj, rpc_helper, epoch_id, project_id)
     if cid:
-        data = await get_submission_data(redis_conn, cid, ipfs_reader, project_id)
+        data = await get_submission_data(redis_conn, cid, ipfs_reader, project_id, bytes_mode=bytes_mode)
         return data
     else:
         return dict()

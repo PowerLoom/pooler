@@ -46,6 +46,18 @@
       }
     },
     {
+      "project_type": "protocol_state_24h_lite",
+      "aggregate_on": "MultiProject",
+      "projects_to_wait_for": [
+        "aggregate_24h_top_pairs_lite:35ee1886fa4665255a0d0486c6079c4719c82f0f62ef9e96a98f26fde2e8a106:UNISWAPV2"
+      ],
+      "processor": {
+        "module": "pooler.modules.protocol_state.aggregate.protocol_state_export",
+        "class_name": "ProtocolStateProcessor"
+      },
+      "commit_service_upload": false
+    },
+    {
       "project_type": "aggregate_24h_top_tokens_lite",
       "aggregate_on": "MultiProject",
       "projects_to_wait_for": [
