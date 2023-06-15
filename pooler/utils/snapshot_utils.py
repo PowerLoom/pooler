@@ -4,10 +4,10 @@ import json
 from redis import asyncio as aioredis
 
 from pooler.settings.config import settings
-from pooler.utils.data_utils import get_source_chain_epoch_size
 from pooler.utils.default_logger import logger
 from pooler.utils.file_utils import read_json_file
-from pooler.utils.redis.redis_keys import cached_block_details_at_height, source_chain_epoch_size_key
+from pooler.utils.redis.redis_keys import cached_block_details_at_height
+from pooler.utils.redis.redis_keys import source_chain_epoch_size_key
 from pooler.utils.redis.redis_keys import uniswap_eth_usd_price_zset
 from pooler.utils.rpc import get_contract_abi_dict
 from pooler.utils.rpc import RpcHelper
@@ -15,9 +15,9 @@ from pooler.utils.rpc import RpcHelper
 
 snapshot_util_logger = logger.bind(module='PowerLoom|Uniswap|SnapshotUtilLogger')
 
-DAI_WETH_PAIR = '0xa478c2975ab1ea89e8196811f51a7b7ade33eb11'
-USDC_WETH_PAIR = '0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc'
-USDT_WETH_PAIR = '0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852'
+DAI_WETH_PAIR = '0x60594a405d53811d3BC4766596EFD80fd545A270'
+USDC_WETH_PAIR = '0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640'
+USDT_WETH_PAIR = '0x11b815efB8f581194ae79006d24E0d814B7697F6'
 
 TOKENS_DECIMALS = {
     'USDT': 6,
@@ -31,6 +31,30 @@ pair_contract_abi = read_json_file(
     settings.pair_contract_abi,
     snapshot_util_logger,
 )
+
+Q192 = 2 ** 192
+
+# Define the exponentToBigDecimal function
+
+
+def exponentToBigDecimal(decimals):
+    return Decimal(10) ** (-1 * decimals)
+
+# Define the safeDiv function
+
+
+def safeDiv(numerator, denominator):
+    if denominator == 0:
+        return Decimal(0)
+    return numerator / denominator
+
+
+def sqrtPriceX96ToTokenPrices(sqrtPriceX96, token0_decimals, token1_decimals):
+    num = Decimal(sqrtPriceX96) ** 2
+    denom = Decimal(Q192)
+    price1 = num / denom * exponentToBigDecimal(token0_decimals) / exponentToBigDecimal(token1_decimals)
+    price0 = safeDiv(Decimal('1'), price1)
+    return [price0, price1]
 
 
 async def get_eth_price_usd(
@@ -69,27 +93,32 @@ async def get_eth_price_usd(
 
         pair_abi_dict = get_contract_abi_dict(pair_contract_abi)
 
+        # Get the current sqrtPriceX96 value from the pool
+        sqrtPriceX96 = pair_contract.functions.slot0().call()[0]
         # NOTE: We can further optimize below call by batching them all,
         # but that would be a large batch call for RPC node
-        dai_eth_pair_reserves_list = await rpc_helper.batch_eth_call_on_block_range(
+
+        dai_eth_slot0_list = await rpc_helper.batch_eth_call_on_block_range(
             abi_dict=pair_abi_dict,
-            function_name='getReserves',
+            function_name='slot0',
             contract_address=DAI_WETH_PAIR,
             from_block=from_block,
             to_block=to_block,
             redis_conn=redis_conn,
         )
-        usdc_eth_pair_reserves_list = await rpc_helper.batch_eth_call_on_block_range(
+
+        usdc_eth_slot0_list = await rpc_helper.batch_eth_call_on_block_range(
             abi_dict=pair_abi_dict,
-            function_name='getReserves',
+            function_name='slot0',
             contract_address=USDC_WETH_PAIR,
             from_block=from_block,
             to_block=to_block,
             redis_conn=redis_conn,
         )
-        eth_usdt_pair_reserves_list = await rpc_helper.batch_eth_call_on_block_range(
+
+        usdt_eth_slot0_list = await rpc_helper.batch_eth_call_on_block_range(
             abi_dict=pair_abi_dict,
-            function_name='getReserves',
+            function_name='slot0',
             contract_address=USDT_WETH_PAIR,
             from_block=from_block,
             to_block=to_block,
@@ -98,51 +127,42 @@ async def get_eth_price_usd(
 
         block_count = 0
         for block_num in range(from_block, to_block + 1):
-            dai_eth_pair_dai_reserve = (
-                dai_eth_pair_reserves_list[block_count][0] /
-                10 ** TOKENS_DECIMALS['DAI']
-            )
-            dai_eth_pair_eth_reserve = (
-                dai_eth_pair_reserves_list[block_count][1] /
-                10 ** TOKENS_DECIMALS['WETH']
-            )
-            dai_price = dai_eth_pair_dai_reserve / dai_eth_pair_eth_reserve
 
-            usdc_eth_pair_usdc_reserve = (
-                usdc_eth_pair_reserves_list[block_count][0] /
-                10 ** TOKENS_DECIMALS['USDC']
-            )
-            usdc_eth_pair_eth_reserve = (
-                usdc_eth_pair_reserves_list[block_count][1] /
-                10 ** TOKENS_DECIMALS['WETH']
-            )
-            usdc_price = usdc_eth_pair_usdc_reserve / usdc_eth_pair_eth_reserve
+            dai_eth_sqrt_price_x96 = dai_eth_slot0_list[block_count][0]
+            usdc_eth_sqrt_price_x96 = usdc_eth_slot0_list[block_count][0]
+            usdt_eth_sqrt_price_x96 = usdt_eth_slot0_list[block_count][0]
 
-            usdt_eth_pair_usdt_reserve = (
-                eth_usdt_pair_reserves_list[block_count][1] /
-                10 ** TOKENS_DECIMALS['USDT']
-            )
-            usdt_eth_pair_eth_reserve = (
-                eth_usdt_pair_reserves_list[block_count][0] /
-                10 ** TOKENS_DECIMALS['WETH']
-            )
-            usdt_price = usdt_eth_pair_usdt_reserve / usdt_eth_pair_eth_reserve
-
-            total_eth_liquidity = (
-                dai_eth_pair_eth_reserve +
-                usdc_eth_pair_eth_reserve +
-                usdt_eth_pair_eth_reserve
+            eth_dai_price, dai_eth_price = sqrtPriceX96ToTokenPrices(
+                sqrtPriceX96=dai_eth_sqrt_price_x96,
+                token0_decimals=TOKENS_DECIMALS['DAI'],
+                token1_decimals=TOKENS_DECIMALS['WETH'],
             )
 
-            daiWeight = dai_eth_pair_eth_reserve / total_eth_liquidity
-            usdcWeight = usdc_eth_pair_eth_reserve / total_eth_liquidity
-            usdtWeight = usdt_eth_pair_eth_reserve / total_eth_liquidity
+            eth_usdc_price_, usdc_eth_price_ = sqrtPriceX96ToTokenPrices(
+                sqrtPriceX96=usdc_eth_sqrt_price_x96,
+                token0_decimals=TOKENS_DECIMALS['USDC'],
+                token1_decimals=TOKENS_DECIMALS['WETH'],
+            )
+
+            eth_usdc_price, usdc_eth_price = float(
+                price0,
+            ) * 10**(token0.decimals + token1.decimals), float(price1) / 10**(token0.decimals + token1.decimals)
+
+            eth_usdt_price_, usdt_eth_price_ = sqrtPriceX96ToTokenPrices(
+                sqrtPriceX96=usdt_eth_sqrt_price_x96,
+                token0_decimals=TOKENS_DECIMALS['USDT'],
+                token1_decimals=TOKENS_DECIMALS['WETH'],
+            )
+
+            eth_usdt_price, usdt_eth_price = float(
+                price1,
+            ) / 10**(token0.decimals + token1.decimals), float(price0) * 10**(token0.decimals + token1.decimals)
+
+            # using fixed weightage for now, will use liquidity based weightage later
 
             eth_price_usd = (
-                daiWeight * dai_price +
-                usdcWeight * usdc_price +
-                usdtWeight * usdt_price
-            )
+                eth_dai_price + eth_usdc_price + eth_usdt_price
+            ) / 3
 
             eth_price_usd_dict[block_num] = float(eth_price_usd)
             redis_cache_mapping[
@@ -162,7 +182,7 @@ async def get_eth_price_usd(
             redis_conn.zremrangebyscore(
                 name=uniswap_eth_usd_price_zset,
                 min=0,
-                max=int(from_block) - source_chain_epoch_size* 4,
+                max=int(from_block) - source_chain_epoch_size * 4,
             ),
         )
 
