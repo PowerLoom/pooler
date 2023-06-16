@@ -1,27 +1,79 @@
 import asyncio
-from typing import Optional
+from typing import Dict, Optional
 
 from ipfs_client.main import AsyncIPFSClient
 from redis import asyncio as aioredis
 from pooler.modules.protocol_state.utils.bz2_transform import bz2_archive_transformation, bz2_unzip
 
 from pooler.utils.callback_helpers import GenericProcessorMultiProjectAggregate
-from pooler.utils.data_utils import get_project_epoch_snapshot, get_project_first_epoch
+from pooler.utils.data_utils import get_project_epoch_snapshot, get_project_first_epoch, w3_get_and_cache_finalized_cid
 from pooler.utils.data_utils import get_tail_epoch_id
 from pooler.utils.default_logger import logger
-from pooler.utils.models.data_models import ProjectSpecificState
+from pooler.utils.models.data_models import ProjectSpecificState, WrappedProtocolState
 from pooler.utils.models.data_models import ProtocolState
 from pooler.utils.models.message_models import PowerloomCalculateAggregateMessage
 from pooler.utils.redis.redis_keys import project_finalized_data_zset
 from pooler.utils.rpc import RpcHelper
+from pooler.utils.utility_functions import acquire_bounded_semaphore
 
 
 class ProtocolStateProcessor(GenericProcessorMultiProjectAggregate):
     def __init__(self) -> None:
         # TODO: correctly configure transformation lambdas
-        self.transformation_lambdas = [bz2_archive_transformation]
+        self._transformation_lambdas = [bz2_archive_transformation]
         self._logger = logger.bind(module='ProtocolStateProcessor')
         self.export_time_window_in_seconds = 86400
+
+    def transformation_lambdas(self):
+        return self._transformation_lambdas
+
+    @acquire_bounded_semaphore
+    async def _load_finalized_cids_from_contract(
+        self, 
+        project_id, 
+        epoch_id_list,
+        anchor_rpc_helper,
+        redis_conn,
+        protocol_state_contract,
+        semaphore: asyncio.BoundedSemaphore
+    ) -> Dict[int, str]:
+        """
+        Fetches finalized CIDs for a project against a given list of epoch IDs from the contract and caches them in Redis
+        """
+        batch_size = 20
+        self._logger.info(
+            'Fetching finalized CIDs for project {} in epoch ID list: {}',
+            project_id, epoch_id_list,
+        )
+        eid_cid_map = dict()
+        for i in range(0, len(epoch_id_list), batch_size):
+            r = await asyncio.gather(
+                *[
+                    w3_get_and_cache_finalized_cid(
+                        project_id=project_id,
+                        rpc_helper=anchor_rpc_helper,
+                        epoch_id=epoch_id,
+                        redis_conn=redis_conn,
+                        state_contract_obj=protocol_state_contract,
+                    )
+                    for epoch_id in epoch_id_list[i:i + batch_size]
+                ], return_exceptions=True,
+            )
+            for idx, e in enumerate(r):
+                if isinstance(e, Exception):
+                    self._logger.error(
+                        'Error fetching finalized CID for project {} in epoch {}: {}',
+                        project_id, epoch_id_list[i + idx], e,
+                    )
+                else:
+                    self._logger.trace(
+                        'Fetched finalized CID for project {} in epoch {}',
+                        project_id, epoch_id_list[i + idx],
+                    )
+                    eid_cid_map[epoch_id_list[i + idx]] = e
+        self._logger.error('Could not fetch finalized CIDs for project {} against epoch IDs: {}',
+                           project_id, list(filter(lambda x: x not in eid_cid_map, epoch_id_list)))
+        return eid_cid_map
 
     async def compute(
         self,
@@ -29,7 +81,7 @@ class ProtocolStateProcessor(GenericProcessorMultiProjectAggregate):
         redis: aioredis.Redis,
         rpc_helper: RpcHelper,
         anchor_rpc_helper: RpcHelper,
-        ipfs_reader: AsyncIPFSClient,
+        async_ipfs_client: AsyncIPFSClient,
         protocol_state_contract,
         project_id: str,
 
@@ -47,22 +99,59 @@ class ProtocolStateProcessor(GenericProcessorMultiProjectAggregate):
         # build state from scratch
         if protocol_state_project_first_epoch_id == 0:
             self._logger.info('Protocol state project\'s first epoch is 0, building state from scratch')
-            state = await self.export(epoch_id - 1, redis, anchor_rpc_helper, protocol_state_contract)
-            return state
+            state_uncompressed_bytes = await self.export(epoch_id - 1, redis, anchor_rpc_helper, protocol_state_contract)
         else:
             self._logger.info('Protocol state project\'s first epoch is {}, building from previous state', protocol_state_project_first_epoch_id)
             previous_protocol_snapshot_data = await get_project_epoch_snapshot(
-                redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader, msg_obj.epochId - 1, project_id, bytes_mode=True,
+                redis, protocol_state_contract, anchor_rpc_helper, async_ipfs_client, msg_obj.epochId - 1, project_id
             )
             if previous_protocol_snapshot_data:
-                protocol_snapshot_data = bz2_unzip(previous_protocol_snapshot_data)
-                state = ProtocolState.parse_raw(protocol_snapshot_data)
-                last_head_marker = state.synced_till_epoch_id
+                previous_protocol_state_wrapped = WrappedProtocolState.parse_obj(previous_protocol_snapshot_data)
+                self._logger.info('Previous protocol state at CID {}, attempting to fetch', previous_protocol_state_wrapped.protocol_state_cid)
+                # TODO: fetch protocl state snapshot from local file system cache
+                prev_state_uncompressed_bytes = await async_ipfs_client.cat(previous_protocol_state_wrapped.protocol_state_cid, bytes_mode=True)
+                prev_protocol_state_bytes = bz2_unzip(prev_state_uncompressed_bytes)
+                prev_protocol_state = ProtocolState.parse_raw(prev_protocol_state_bytes)
+                prev_protocol_state.synced_till_epoch_id = epoch_id - 1
+                all_project_ids = list(prev_protocol_state.project_specific_states.keys())
+                batch_size = 10
+                project_states = list()
+                for i in range(0, len(all_project_ids), batch_size):
+                    project_state_tasks = [
+                        self._export_project_state(
+                            project_id,
+                            prev_protocol_state.project_specific_states[project_id].first_epoch_id,
+                            epoch_id - 1,
+                            redis,
+                            anchor_rpc_helper,
+                            protocol_state_contract,
+                        )
+                        for project_id in all_project_ids[i:i + batch_size]
 
+                    ]
+                    project_state_results = await asyncio.gather(*project_state_tasks, return_exceptions=True)
+                    project_states.extend(project_state_results)
 
-        state = await self.export(epoch_id - 1, redis, anchor_rpc_helper, protocol_state_contract)
-
-        return state
+                for project_id, project_state in zip(all_project_ids, project_states):
+                    if isinstance(project_state, Exception):
+                        self._logger.error(
+                            'Error exporting project state for project {}: {}',
+                            project_id, project_state,
+                        )
+                        continue
+                    prev_protocol_state.project_specific_states.update({project_id: project_state})
+                state_uncompressed_bytes = prev_protocol_state.json().encode('utf-8')
+            else:
+                state_uncompressed_bytes = b''
+        if state_uncompressed_bytes:
+            # compress and upload to IPFS
+            self._logger.debug('Protocol state project snapshot at epoch {}, compressing with bz2...', epoch_id)
+            protocol_snapshot_data_compressed = bz2_archive_transformation(state_uncompressed_bytes, msg_obj)
+            self._logger.debug('Protocol state project snapshot at epoch {}, uploading to IPFS...', epoch_id)
+            # TODO: local file system caching of protocol state snapshots while uploading
+            protocol_snapshot_cid = await async_ipfs_client.add_bytes(protocol_snapshot_data_compressed)
+            self._logger.debug('Protocol state project snapshot at epoch {}, uploaded to IPFS with CID {}', epoch_id, protocol_snapshot_cid)
+            return WrappedProtocolState(epochId=epoch_id, protocol_state_cid=protocol_snapshot_cid)
 
     async def prelim_load(self, redis: aioredis.Redis, anchor_rpc_helper: RpcHelper, protocol_state_contract):
         state_query_call_tasks = []
@@ -109,15 +198,18 @@ class ProtocolStateProcessor(GenericProcessorMultiProjectAggregate):
         prev_project_state: Optional[ProjectSpecificState] = None,
     ) -> ProjectSpecificState:
 
-        self._logger.debug('Exporting project state for {}', project_id)
+        self._logger.debug('Exporting project specific state for {}, at epoch ID {}', project_id, end_epoch_id)
         if not prev_project_state:
             project_state = ProjectSpecificState.construct()
             project_state.first_epoch_id = first_epoch_id
             project_state.finalized_cids = dict()
         else:
             project_state = prev_project_state
-        self._logger.debug('Project {} first epoch ID: {}', project_id, first_epoch_id)
-        # TODO: add necessary logs below to track calculations
+            self._logger.debug(
+                'Found previous project specific state for {} synced till epoch ID {}',
+                project_id, max(prev_project_state.finalized_cids.keys())
+            )
+        self._logger.debug('In project specific state export, project {} first epoch ID: {}', project_id, first_epoch_id)
         # TODO: review tail epoch ID helper parameters in case project's first epoch ID is pre-fetched
         state_export_tail_marker, extrapolated_flag = await get_tail_epoch_id(
             redis_conn=redis,
@@ -134,9 +226,29 @@ class ProtocolStateProcessor(GenericProcessorMultiProjectAggregate):
                 max=end_epoch_id,
                 withscores=True,
             )
-            # TODO: check for null CIDs in case of bad caching?
+            
             if cids_r:
                 [project_state.finalized_cids.update({int(eid): cid}) for cid, eid in cids_r]
+                null_cid_epochs = list(
+                    filter(
+                        lambda x: 'null' in project_state.finalized_cids[x],
+                        project_state.finalized_cids.keys()))
+                # recheck on the contract if they are indeed null
+                self._logger.debug(
+                    'Verifying CIDs against epoch IDs of project {} by re-fetching state from contract '
+                    'since they were found to be null in local cache: {}',
+                    project_id,
+                    null_cid_epochs
+                )
+                rechecked_eid_cid_map = await self._load_finalized_cids_from_contract(
+                    project_id=project_id,
+                    epoch_id_list=null_cid_epochs,
+                    anchor_rpc_helper=anchor_rpc_helper,
+                    redis_conn=redis,
+                    protocol_state_contract=protocol_state_contract,
+                    semaphore=self._protocol_state_query_semaphore
+                )
+                project_state.finalized_cids.update(rechecked_eid_cid_map)
         else:
             cids_to_append = await redis.zrangebyscore(
                 name=project_finalized_data_zset(project_id),
@@ -158,12 +270,11 @@ class ProtocolStateProcessor(GenericProcessorMultiProjectAggregate):
         redis: aioredis.Redis,
         anchor_rpc_helper: RpcHelper,
         protocol_state_contract,
-    ):
+    ) -> bytes:
         project_id_first_epoch_id_map, all_project_ids = await self.prelim_load(
             redis, anchor_rpc_helper, protocol_state_contract,
         )
         state = ProtocolState.construct()
-        state.epochId = state_export_head_marker
         state.synced_till_epoch_id = state_export_head_marker
         state.project_specific_states = dict()
 
@@ -199,4 +310,4 @@ class ProtocolStateProcessor(GenericProcessorMultiProjectAggregate):
 
         self._logger.info('Exported state for {} projects', len(state.project_specific_states))
 
-        return state
+        return state.json().encode('utf-8')

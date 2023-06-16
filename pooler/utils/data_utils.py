@@ -140,7 +140,7 @@ async def fetch_file_from_ipfs(ipfs_reader, cid, bytes_mode: bool):
     return await ipfs_reader.cat(cid, bytes_mode=bytes_mode)
 
 
-async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, project_id: str, bytes_mode=False) -> Union[bytes, dict]:
+async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, project_id: str) -> dict:
     if not cid:
         return dict()
 
@@ -148,30 +148,23 @@ async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, proj
         return dict()
 
     cached_data_path = os.path.join(settings.ipfs.local_cache_path, project_id, 'snapshots')
-    filename = f'{cid}.json' if not bytes_mode else f'{cid}.json.bz2'
-    read_method = read_json_file if not bytes_mode else read_general_bytes
+    filename = f'{cid}.json'
     try:
-        submission_data = read_method(os.path.join(cached_data_path, filename))
+        submission_data = read_json_file(os.path.join(cached_data_path, filename))
     except Exception as e:
         # Fetch from IPFS
         logger.trace('Error while reading from cache', error=e)
         logger.info('Project {} CID {}, fetching data from IPFS', project_id, cid)
         try:
-            submission_data = await fetch_file_from_ipfs(ipfs_reader, cid, bytes_mode)
-        except Exception as e:
-            logger.error('Error while fetching data from IPFS | Project {} | CID {}: {}', project_id, cid, e)
-            if settings.logs.trace_enabled:
-                logger.opt(exception=True).error(e)
+            submission_data = await fetch_file_from_ipfs(ipfs_reader, cid, False)
+        except:
+            logger.error('Error while fetching data from IPFS | Project {} | CID {}', project_id, cid)
             submission_data = dict()
         else:
             # Cache it
-            write_method = write_json_file if filename.endswith('.json') else write_general_bytes
-            write_method(cached_data_path, filename, submission_data)
-            submission_data = json.loads(submission_data) if not bytes_mode else submission_data
-            return submission_data
-    else:
-        return submission_data
-    return dict()
+            write_json_file(cached_data_path, filename, submission_data)
+            submission_data = json.loads(submission_data)
+    return submission_data
 
 
 async def get_sumbmission_data_bulk(
@@ -201,7 +194,7 @@ async def get_project_epoch_snapshot(
 ) -> Union[bytes, dict]:
     cid = await get_project_finalized_cid(redis_conn, state_contract_obj, rpc_helper, epoch_id, project_id)
     if cid:
-        data = await get_submission_data(redis_conn, cid, ipfs_reader, project_id, bytes_mode=bytes_mode)
+        data = await get_submission_data(redis_conn, cid, ipfs_reader, project_id)
         return data
     else:
         return dict()
