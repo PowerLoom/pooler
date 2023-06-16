@@ -109,8 +109,8 @@ class ProtocolStateProcessor(GenericProcessorMultiProjectAggregate):
                 previous_protocol_state_wrapped = WrappedProtocolState.parse_obj(previous_protocol_snapshot_data)
                 self._logger.info('Previous protocol state at CID {}, attempting to fetch', previous_protocol_state_wrapped.protocol_state_cid)
                 # TODO: fetch protocl state snapshot from local file system cache
-                prev_state_uncompressed_bytes = await async_ipfs_client.cat(previous_protocol_state_wrapped.protocol_state_cid, bytes_mode=True)
-                prev_protocol_state_bytes = bz2_unzip(prev_state_uncompressed_bytes)
+                prev_state_compressed_bytes = await async_ipfs_client.cat(previous_protocol_state_wrapped.protocol_state_cid, bytes_mode=True)
+                prev_protocol_state_bytes = bz2_unzip(prev_state_compressed_bytes)
                 prev_protocol_state = ProtocolState.parse_raw(prev_protocol_state_bytes)
                 prev_protocol_state.synced_till_epoch_id = epoch_id - 1
                 all_project_ids = list(prev_protocol_state.project_specific_states.keys())
