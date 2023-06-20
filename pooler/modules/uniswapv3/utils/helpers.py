@@ -31,22 +31,24 @@ async def get_pair(
     factory_contract_obj,
     token0,
     token1,
+    fee,
     redis_conn: aioredis.Redis,
     rpc_helper: RpcHelper,
 ):
     # check if pair cache exists
     pair_address_cache = await redis_conn.hget(
         uniswap_tokens_pair_map,
-        f'{Web3.toChecksumAddress(token0)}-{Web3.toChecksumAddress(token1)}',
+        f'{Web3.toChecksumAddress(token0)}-{Web3.toChecksumAddress(token1)}|{fee}',
     )
     if pair_address_cache:
         pair_address_cache = pair_address_cache.decode('utf-8')
         return Web3.toChecksumAddress(pair_address_cache)
 
     tasks = [
-        factory_contract_obj.functions.getPair(
+        factory_contract_obj.functions.getPool(
             Web3.toChecksumAddress(token0),
             Web3.toChecksumAddress(token1),
+            fee,
         ),
     ]
 
@@ -56,7 +58,7 @@ async def get_pair(
     await redis_conn.hset(
         name=uniswap_tokens_pair_map,
         mapping={
-            f'{Web3.toChecksumAddress(token0)}-{Web3.toChecksumAddress(token1)}': Web3.toChecksumAddress(
+            f'{Web3.toChecksumAddress(token0)}-{Web3.toChecksumAddress(token1)}|{fee}': Web3.toChecksumAddress(
                 pair,
             ),
         },
@@ -100,15 +102,17 @@ async def get_pair_metadata(
             token1Addr = Web3.toChecksumAddress(
                 pair_token_addresses_cache[b'token1Addr'].decode('utf-8'),
             )
+            fee = pair_token_addresses_cache[b'fee'].decode('utf-8')
         else:
             pair_contract_obj = current_node['web3_client'].eth.contract(
                 address=Web3.toChecksumAddress(pair_address),
                 abi=pair_contract_abi,
             )
-            token0Addr, token1Addr = await rpc_helper.web3_call(
+            token0Addr, token1Addr, fee = await rpc_helper.web3_call(
                 [
                     pair_contract_obj.functions.token0(),
                     pair_contract_obj.functions.token1(),
+                    pair_contract_obj.functions.fee(),
                 ],
                 redis_conn=redis_conn,
             )
@@ -120,6 +124,7 @@ async def get_pair_metadata(
                 mapping={
                     'token0Addr': token0Addr,
                     'token1Addr': token1Addr,
+                    'fee': fee,
                 },
             )
 
@@ -211,7 +216,7 @@ async def get_pair_metadata(
                     'token1_name': token1_name,
                     'token1_symbol': token1_symbol,
                     'token1_decimals': token1_decimals,
-                    'pair_symbol': f'{token0_symbol}-{token1_symbol}',
+                    'pair_symbol': f'{token0_symbol}-{token1_symbol}|{fee}',
                 },
             )
 
@@ -229,7 +234,9 @@ async def get_pair_metadata(
                 'decimals': token1_decimals,
             },
             'pair': {
-                'symbol': f'{token0_symbol}-{token1_symbol}',
+                'symbol': f'{token0_symbol}-{token1_symbol}|{fee}',
+                'address': pair_address,
+                'fee': fee,
             },
         }
     except Exception as err:

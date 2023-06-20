@@ -45,7 +45,7 @@ cp config/aggregator.example.json config/aggregator.json
 cp config/auth_settings.example.json config/auth_settings.json
 cp config/settings.example.json config/settings.json
 
-export namespace=UNISWAPV2
+export namespace=UNISWAPV3
 export prost_rpc_url="${PROST_RPC_URL:-https://rpc-prost1b.powerloom.io}"
 
 export ipfs_url="${IPFS_URL:-/dns/ipfs/tcp/5001}"

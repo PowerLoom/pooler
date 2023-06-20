@@ -74,7 +74,7 @@
   },
   "projects_config_path": "config/projects.json",
   "aggregator_config_path": "config/aggregator.json",
-  "pair_contract_abi": "pooler/static/abis/UniswapV2Pair.json",
+  "pair_contract_abi": "pooler/static/abis/UniswapV3Pool.json",
   "protocol_state": {
     "abi": "pooler/static/abis/ProtocolContract.json",
     "address": "protocol-state-contract"

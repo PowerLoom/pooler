@@ -62,9 +62,9 @@ SIMPLE_CACHE_RPC_WHITELIST = cast(
 )
 
 ETH_ADDRESS = '0x0000000000000000000000000000000000000000'
-WETH9_ADDRESS = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2'
+WETH_ADDRESS = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2'
 
-w3 = Web3(Web3.HTTPProvider('https://rpc-eth-lb.blockvigil.com/v1/ca71e8fda51e1985672de5f5349f5363e369a7be'))
+w3 = Web3(Web3.HTTPProvider('https://rpc-eth-lb.blockvigil.com/v1/******************'))
 
 # see: https://chainid.network/chains/
 _netid_to_name = {
@@ -529,4 +529,15 @@ pool_instance = _load_contract(
 
 print(pool_instance)
 
-print(get_tvl_in_pool(pool_instance))
+quoter = _load_contract(
+    w3, abi_name='pooler/static/abis/Quoter.json', address='0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6',
+)
+
+
+sqrtPriceLimitX96 = 0
+price = quoter.functions.quoteExactInputSingle(
+    '0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640', '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', 3000, 1, sqrtPriceLimitX96,
+).call()
+
+print(price)
+# print(get_tvl_in_pool(pool_instance))

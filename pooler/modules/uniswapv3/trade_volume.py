@@ -79,6 +79,6 @@ class TradeVolumeProcessor(GenericProcessorSnapshot):
             token1TradeVolume=float(f'{total_token1_vol: .6f}'),
             token0TradeVolumeUSD=float(f'{total_token0_vol_usd: .6f}'),
             token1TradeVolumeUSD=float(f'{total_token1_vol_usd: .6f}'),
-            events=snapshot
+            events=snapshot,
         )
         return trade_volume_snapshot

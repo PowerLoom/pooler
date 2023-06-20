@@ -133,15 +133,15 @@ Pooler needs the following config files to be present
             "project_type": "snapshot_project_name_prefix_",
             "projects": ["array of smart contract addresses"], // Uniswap v2 pair contract addresses in this implementation
             "processor":{
-                "module": "pooler.modules.uniswapv2.pair_total_reserves",
-                "class_name": "PairTotalReservesProcessor" // class to be found in module pooler/modules/uniswapv2/pair_total_reserves.py
+                "module": "pooler.modules.uniswapv3.pair_total_reserves",
+                "class_name": "PairTotalReservesProcessor" // class to be found in module pooler/modules/uniswapv3/pair_total_reserves.py
             }
         }
         ```
         Copy over [`config/projects.example.json`](config/projects.example.json) to `config/projects.json`. For more details, read on in the [section below on extending a use case](#extending-pooler-with-a-uniswap-v2-data-point).
     * **`config/aggregator.json`** : This lists out different type of aggregation work to be performed over a span of snapshots. Copy over [`config/aggregator.example.json`](config/aggregator.example.json) to `config/aggregator.json`. The span is usually calculated as a function of the epoch size and average block time on the data source network. For eg,
         * the following configuration calculates a snapshot of total trade volume over a 24 hour time period, based on the [snapshot finalization](#snapshot-finalization) of a project ID corresponding to a pair contract. This can be seen by the `aggregate_on` key being set to `SingleProject`.
-            * This is specified by the `filters` key below. When a snapshot build is achieved for an epoch over a project ID [(ref:generation of project ID for snapshot building workers)](#epoch-generation). For eg, a snapshot build on `pairContract_trade_volume:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2` triggers the worker [`AggreagateTradeVolumeProcessor`](pooler/modules/uniswapv2/aggregate/single_uniswap_trade_volume_24h.py) as defined in the `processor` section of the config against the pair contract `0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc`.
+            * This is specified by the `filters` key below. When a snapshot build is achieved for an epoch over a project ID [(ref:generation of project ID for snapshot building workers)](#epoch-generation). For eg, a snapshot build on `pairContract_trade_volume:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV3` triggers the worker [`AggreagateTradeVolumeProcessor`](pooler/modules/uniswapv3/aggregate/single_uniswap_trade_volume_24h.py) as defined in the `processor` section of the config against the pair contract `0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc`.
         ```javascript
         {
             "config": [
@@ -155,7 +155,7 @@ Pooler needs the following config files to be present
                         "projectId": "pairContract_trade_volume"
                     },
                     "processor": {
-                        "module": "pooler.modules.uniswapv2.aggregate.single_uniswap_trade_volume_24h",
+                        "module": "pooler.modules.uniswapv3.aggregate.single_uniswap_trade_volume_24h",
                         "class_name": "AggreagateTradeVolumeProcessor"
                     }
                 }
@@ -170,23 +170,23 @@ Pooler needs the following config files to be present
                 "project_type": "aggregate_24h_top_pairs_lite",
                 "aggregate_on": "MultiProject",
                 "projects_to_wait_for": [
-                    "aggregate_pairContract_24h_trade_volume:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2",
-                    "pairContract_pair_total_reserves:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2",
-                    "aggregate_pairContract_24h_trade_volume:0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5:UNISWAPV2",
-                    "pairContract_pair_total_reserves:0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5:UNISWAPV2",
-                    "aggregate_pairContract_24h_trade_volume:0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852:UNISWAPV2",
-                    "pairContract_pair_total_reserves:0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852:UNISWAPV2",
-                    "aggregate_pairContract_24h_trade_volume:0x3041cbd36888becc7bbcbc0045e3b1f144466f5f:UNISWAPV2",
-                    "pairContract_pair_total_reserves:0x3041cbd36888becc7bbcbc0045e3b1f144466f5f:UNISWAPV2",
-                    "aggregate_pairContract_24h_trade_volume:0xd3d2e2692501a5c9ca623199d38826e513033a17:UNISWAPV2",
-                    "pairContract_pair_total_reserves:0xd3d2e2692501a5c9ca623199d38826e513033a17:UNISWAPV2",
-                    "aggregate_pairContract_24h_trade_volume:0xbb2b8038a1640196fbe3e38816f3e67cba72d940:UNISWAPV2",
-                    "pairContract_pair_total_reserves:0xbb2b8038a1640196fbe3e38816f3e67cba72d940:UNISWAPV2",
-                    "aggregate_pairContract_24h_trade_volume:0xa478c2975ab1ea89e8196811f51a7b7ade33eb11:UNISWAPV2",
-                    "pairContract_pair_total_reserves:0xa478c2975ab1ea89e8196811f51a7b7ade33eb11:UNISWAPV2"
+                    "aggregate_pairContract_24h_trade_volume:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV3",
+                    "pairContract_pair_total_reserves:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV3",
+                    "aggregate_pairContract_24h_trade_volume:0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5:UNISWAPV3",
+                    "pairContract_pair_total_reserves:0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5:UNISWAPV3",
+                    "aggregate_pairContract_24h_trade_volume:0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852:UNISWAPV3",
+                    "pairContract_pair_total_reserves:0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852:UNISWAPV3",
+                    "aggregate_pairContract_24h_trade_volume:0x3041cbd36888becc7bbcbc0045e3b1f144466f5f:UNISWAPV3",
+                    "pairContract_pair_total_reserves:0x3041cbd36888becc7bbcbc0045e3b1f144466f5f:UNISWAPV3",
+                    "aggregate_pairContract_24h_trade_volume:0xd3d2e2692501a5c9ca623199d38826e513033a17:UNISWAPV3",
+                    "pairContract_pair_total_reserves:0xd3d2e2692501a5c9ca623199d38826e513033a17:UNISWAPV3",
+                    "aggregate_pairContract_24h_trade_volume:0xbb2b8038a1640196fbe3e38816f3e67cba72d940:UNISWAPV3",
+                    "pairContract_pair_total_reserves:0xbb2b8038a1640196fbe3e38816f3e67cba72d940:UNISWAPV3",
+                    "aggregate_pairContract_24h_trade_volume:0xa478c2975ab1ea89e8196811f51a7b7ade33eb11:UNISWAPV3",
+                    "pairContract_pair_total_reserves:0xa478c2975ab1ea89e8196811f51a7b7ade33eb11:UNISWAPV3"
                 ],
                 "processor": {
-                    "module": "pooler.modules.uniswapv2.aggregate.multi_uniswap_top_pairs_24h",
+                    "module": "pooler.modules.uniswapv3.aggregate.multi_uniswap_top_pairs_24h",
                     "class_name": "AggreagateTopPairsProcessor"
                 }
             ]
@@ -241,10 +241,10 @@ There's currently no limitation on the number or type of usecases you can build 
 https://github.com/PowerLoom/pooler/blob/1452c166bef7534568a61b3a2ab0ff94535d7229/config/projects.example.json#L1-L35
 
 
-If we take a look at the `TradeVolumeProcessor` class present at [`pooler/modules/uniswapv2/trade_volume.py`](pooler/modules/uniswapv2/trade_volume.py) it implements the interface of `GenericProcessorSnapshot` defined in [`pooler/utils/callback_helpers.py`](pooler/utils/callback_helpers.py).
+If we take a look at the `TradeVolumeProcessor` class present at [`pooler/modules/uniswapv3/trade_volume.py`](pooler/modules/uniswapv3/trade_volume.py) it implements the interface of `GenericProcessorSnapshot` defined in [`pooler/utils/callback_helpers.py`](pooler/utils/callback_helpers.py).
 
 
-https://github.com/PowerLoom/pooler/blob/1452c166bef7534568a61b3a2ab0ff94535d7229/pooler/modules/uniswapv2/trade_volume.py#L13-L86
+https://github.com/PowerLoom/pooler/blob/1452c166bef7534568a61b3a2ab0ff94535d7229/pooler/modules/uniswapv3/trade_volume.py#L13-L86
 
 
 There are a couple of important concepts here necessary to write your extraction logic:
@@ -263,9 +263,9 @@ There are a couple of important concepts here necessary to write your extraction
 
 Output format can be anything depending on the usecase requirements. Although it is recommended to use proper [`pydantic`](https://pypi.org/project/pydantic/) models to define the snapshot interface.
 
-The resultant output model in this specific example is `UniswapTradesSnapshot` as defined in the Uniswap v2 specific modules directory: [`utils/models/message_models.py`](pooler/modules/uniswapv2/utils/models/message_models.py). This encapsulates state information captured by `TradeVolumeProcessor` between the block heights of the epoch: `min_chain_height` and `max_chain_height`.
+The resultant output model in this specific example is `UniswapTradesSnapshot` as defined in the Uniswap v2 specific modules directory: [`utils/models/message_models.py`](pooler/modules/uniswapv3/utils/models/message_models.py). This encapsulates state information captured by `TradeVolumeProcessor` between the block heights of the epoch: `min_chain_height` and `max_chain_height`.
 
-https://github.com/PowerLoom/pooler/blob/1452c166bef7534568a61b3a2ab0ff94535d7229/pooler/modules/uniswapv2/utils/models/message_models.py#L37-L44
+https://github.com/PowerLoom/pooler/blob/1452c166bef7534568a61b3a2ab0ff94535d7229/pooler/modules/uniswapv3/utils/models/message_models.py#L37-L44
 
 
 ### Step 2. Review: 24 hour aggregate of trade volume snapshots over a single pair contract
@@ -296,7 +296,7 @@ https://github.com/PowerLoom/pooler/blob/1452c166bef7534568a61b3a2ab0ff94535d722
 
 * Each finalized `epochId` is registered with a snapshot commit against the aggregated data set generated by running summations on trade volumes on all the base snapshots contained within the span calculated above.
 
-https://github.com/PowerLoom/pooler/blob/1452c166bef7534568a61b3a2ab0ff94535d7229/pooler/modules/uniswapv2/aggregate/single_uniswap_trade_volume_24h.py#L84-L157
+https://github.com/PowerLoom/pooler/blob/1452c166bef7534568a61b3a2ab0ff94535d7229/pooler/modules/uniswapv3/aggregate/single_uniswap_trade_volume_24h.py#L84-L157
 
 
 ### Step 3. New Datapoint: 2 hours aggregate of only swap events
@@ -307,11 +307,11 @@ From the information provided above, the following is left as an exercise for th
 
 * Add a new configuration entry in `config/aggregator.json` for this new aggregation worker class
 
-* Define a new data model in [`utils/message_models.py`](pooler/modules/uniswapv2/utils/models/message_models.py) referring to
+* Define a new data model in [`utils/message_models.py`](pooler/modules/uniswapv3/utils/models/message_models.py) referring to
     * `UniswapTradesAggregateSnapshot` as used in above example
     * `UniswapTradesSnapshot` used to capture each epoch's trade snapshots which includes the raw event logs as well
 
-* Follow the example of the aggregator worker [as implemented for 24 hours aggregation calculation](pooler/modules/uniswapv2/aggregate/single_uniswap_trade_volume_24h.py) , and work on calculating an `epochId` span of 2 hours and filtering out only the `Swap` events and the trade volume contained within.
+* Follow the example of the aggregator worker [as implemented for 24 hours aggregation calculation](pooler/modules/uniswapv3/aggregate/single_uniswap_trade_volume_24h.py) , and work on calculating an `epochId` span of 2 hours and filtering out only the `Swap` events and the trade volume contained within.
 
 ## Major Components
 
@@ -357,7 +357,7 @@ Extracting data from blockchain state and generating the snapshot can be a compl
 
 This component is one of the most important and allows you to access the finalized protocol state on the smart contract running on the anchor chain. Find it in [`core_api.py`](pooler/core_api.py).
 
-The [pooler-frontend](https://github.com/powerloom/pooler-frontend) that serves the Uniswap v2 dashboards hosted by the PowerLoom foundation on locations like https://uniswapv2.powerloom.io/ .
+The [pooler-frontend](https://github.com/powerloom/pooler-frontend) that serves the Uniswap v2 dashboards hosted by the PowerLoom foundation on locations like https://uniswapv3.powerloom.io/ .
 
 Among many thing, it allows you to **access the finalized CID as well as its contents at a given epoch ID for a project**.
 
