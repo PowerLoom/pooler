@@ -80,7 +80,7 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
 
         aggregate_snapshot = UniswapTradesAggregateSnapshot.parse_obj({'epochId': msg_obj.epochId})
         if extrapolated_flag:
-            aggregategate_snapshot.complete = False
+            aggregate_snapshot.complete = False
         if current_epoch_underlying_data:
             current_snapshot = UniswapTradesSnapshot.parse_obj(current_epoch_underlying_data)
             aggregate_snapshot = self._add_aggregate_snapshot(aggregate_snapshot, current_snapshot)
