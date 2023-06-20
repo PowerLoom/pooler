@@ -123,12 +123,17 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
             '24h aggregated trade volume snapshots for project ID {}: {}',
             len(all_snapshots), msg_obj.projectId, all_snapshots,
         )
+        complete_flags = []
         for single_24h_snapshot in all_snapshots:
             if not isinstance(single_24h_snapshot, BaseException):
                 try:
                     snapshot = UniswapTradesAggregateSnapshot.parse_obj(single_24h_snapshot)
+                    complete_flags.append(snapshot.complete)
                 except pydantic.ValidationError:
                     pass
                 else:
                     aggregate_snapshot = self._add_aggregate_snapshot(aggregate_snapshot, snapshot)
+
+        if not all(complete_flags) or count < 7:
+            aggregate_snapshot.complete = False
         return aggregate_snapshot

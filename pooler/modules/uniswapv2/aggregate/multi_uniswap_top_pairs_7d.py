@@ -43,10 +43,12 @@ class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
             ],
         )
 
+        complete_flags = []
         for msg, data in zip(msg_obj.messages, snapshot_data):
             if not data:
                 continue
             snapshot = UniswapTradesAggregateSnapshot.parse_obj(data)
+            complete_flags.append(snapshot.complete)
             snapshot_mapping[msg.projectId] = snapshot
 
             contract_address = msg.projectId.split(':')[-2]
@@ -87,5 +89,8 @@ class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
             epochId=epoch_id,
             pairs=top_pairs,
         )
+
+        if not all(complete_flags):
+            top_pairs_snapshot.complete = False
 
         return top_pairs_snapshot
