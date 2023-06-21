@@ -210,14 +210,32 @@ async def get_project_last_finalized_epoch_info(
         )
 
         if project_last_finalized_epoch is None:
-            response.status_code = 404
-            return {
-                'status': 'error',
-                'message': f'Unable to find last finalized epoch for project {project_id}',
-            }
-
-        project_last_finalized_epoch = int(project_last_finalized_epoch.decode('utf-8'))
-
+            # find from contract
+            epoch_finalized = False
+            [cur_epoch] = await request.app.state.anchor_rpc_helper.web3_call(
+                [request.app.state.protocol_state_contract.functions.currentEpoch()],
+                redis_conn=request.app.state.redis_pool,
+            )
+            epoch_id = int(cur_epoch[2])
+            while not epoch_finalized and epoch_id >= 0:
+                # get finalization status
+                [epoch_finalized_contract] = await request.app.state.anchor_rpc_helper.web3_call(
+                    [request.app.state.protocol_state_contract.functions.snapshotStatus(project_id, epoch_id)],
+                    redis_conn=request.app.state.redis_pool,
+                )
+                if epoch_finalized_contract[0]:
+                    epoch_finalized = True
+                    project_last_finalized_epoch = epoch_id
+                else:
+                    epoch_id -= 1
+                    if epoch_id < 0:
+                        response.status_code = 404
+                        return {
+                            'status': 'error',
+                            'message': f'Unable to find last finalized epoch for project {project_id}',
+                        }
+        else:
+            project_last_finalized_epoch = int(project_last_finalized_epoch.decode('utf-8'))
         [epoch_info_data] = await request.app.state.anchor_rpc_helper.web3_call(
             [request.app.state.protocol_state_contract.functions.epochInfo(project_last_finalized_epoch)],
             redis_conn=request.app.state.redis_pool,
