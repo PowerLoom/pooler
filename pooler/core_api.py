@@ -226,6 +226,10 @@ async def get_project_last_finalized_epoch_info(
                 if epoch_finalized_contract[0]:
                     epoch_finalized = True
                     project_last_finalized_epoch = epoch_id
+                    await request.app.state.redis_pool.set(
+                        project_last_finalized_epoch_key(project_id),
+                        project_last_finalized_epoch,
+                    )
                 else:
                     epoch_id -= 1
                     if epoch_id < 0:
