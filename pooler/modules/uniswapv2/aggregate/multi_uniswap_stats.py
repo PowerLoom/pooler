@@ -43,6 +43,7 @@ class AggreagateStatsProcessor(GenericProcessorMultiProjectAggregate):
             ],
         )
 
+        complete_flags = []
         for msg, data in zip(msg_obj.messages, snapshot_data):
             if not data:
                 continue
@@ -50,6 +51,7 @@ class AggreagateStatsProcessor(GenericProcessorMultiProjectAggregate):
                 snapshot = UniswapPairTotalReservesSnapshot.parse_obj(data)
             elif 'volume' in msg.projectId:
                 snapshot = UniswapTradesAggregateSnapshot.parse_obj(data)
+                complete_flags.append(snapshot.complete)
             snapshot_mapping[msg.projectId] = snapshot
 
         stats_data = {
@@ -105,5 +107,8 @@ class AggreagateStatsProcessor(GenericProcessorMultiProjectAggregate):
             tvlChange24h=stats_data['tvlChange24h'],
             feeChange24h=stats_data['feeChange24h'],
         )
+
+        if not all(complete_flags):
+            stats_snapshot.complete = False
 
         return stats_snapshot

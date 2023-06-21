@@ -46,6 +46,7 @@ class AggreagateTopTokensProcessor(GenericProcessorMultiProjectAggregate):
             ],
         )
 
+        complete_flags = []
         for msg, data in zip(msg_obj.messages, snapshot_data):
             if not data:
                 continue
@@ -53,6 +54,7 @@ class AggreagateTopTokensProcessor(GenericProcessorMultiProjectAggregate):
                 snapshot = UniswapPairTotalReservesSnapshot.parse_obj(data)
             elif 'volume' in msg.projectId:
                 snapshot = UniswapTradesAggregateSnapshot.parse_obj(data)
+                complete_flags.append(snapshot.complete)
             snapshot_mapping[msg.projectId] = snapshot
 
             contract_address = msg.projectId.split(':')[-2]
@@ -141,5 +143,7 @@ class AggreagateTopTokensProcessor(GenericProcessorMultiProjectAggregate):
             epochId=epoch_id,
             tokens=top_tokens,
         )
+        if not all(complete_flags):
+            top_tokens_snapshot.complete = False
 
         return top_tokens_snapshot
