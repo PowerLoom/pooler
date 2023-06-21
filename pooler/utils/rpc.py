@@ -39,7 +39,6 @@ from pooler.utils.redis.redis_keys import rpc_blocknumber_calls
 from pooler.utils.redis.redis_keys import rpc_get_event_logs_calls
 from pooler.utils.redis.redis_keys import rpc_json_rpc_calls
 from pooler.utils.redis.redis_keys import rpc_web3_calls
-from pooler.utils.rpc_cache import LruCacheRpc
 
 
 def get_contract_abi_dict(abi):
@@ -370,7 +369,6 @@ class RpcHelper(object):
         except Exception as e:
             raise e
 
-    @LruCacheRpc(maxsize=100, args={'rpc_query'})
     async def _make_rpc_jsonrpc_call(self, rpc_query, redis_conn):
         """Make a jsonrpc call to the given rpc_url"""
 
@@ -545,7 +543,6 @@ class RpcHelper(object):
         response_data = await self._make_rpc_jsonrpc_call(rpc_query, redis_conn=redis_conn)
         return response_data
 
-    @LruCacheRpc(maxsize=100, args={'contract_address', 'to_block', 'from_block', 'topics', 'event_abi'})
     async def get_events_logs(
         self, contract_address, to_block, from_block, topics, event_abi, redis_conn,
     ):

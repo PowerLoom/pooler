@@ -234,6 +234,10 @@ class ProcessorDistributor(multiprocessing.Process):
 
         self._logger.debug(f'Payload Commit Message Distribution time - {int(time.time())}')
 
+        # If not initialized yet, return
+        if not self._source_chain_id:
+            return
+
         process_unit = PayloadCommitFinalizedMessage(
             message=msg_obj,
             web3Storage=True,
