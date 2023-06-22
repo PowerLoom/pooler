@@ -287,7 +287,7 @@ class ProcessorDistributor(multiprocessing.Process):
 
             if config.aggregate_on == AggregateOn.single_project:
                 if config.filters.projectId not in process_unit.projectId:
-                    self._logger.info(f'projectId mismatch {process_unit.projectId} {config.filters.projectId}')
+                    self._logger.trace(f'projectId mismatch {process_unit.projectId} {config.filters.projectId}')
                     continue
 
                 await self._publish_message_to_queue(
@@ -298,7 +298,7 @@ class ProcessorDistributor(multiprocessing.Process):
                 )
             elif config.aggregate_on == AggregateOn.multi_project:
                 if process_unit.projectId not in config.projects_to_wait_for:
-                    self._logger.info(f'projectId not required for {config.project_type}: {process_unit.projectId}')
+                    self._logger.trace(f'projectId not required for {config.project_type}: {process_unit.projectId}')
                     continue
 
                 # cleanup redis for all previous epochs (5 buffer)
@@ -356,7 +356,7 @@ class ProcessorDistributor(multiprocessing.Process):
                     )
 
                 else:
-                    self._logger.info(
+                    self._logger.trace(
                         f'Not all projects present for {process_unit.epochId},'
                         f' {len(set(config.projects_to_wait_for)) - len(event_project_ids)} missing',
                     )
