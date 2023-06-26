@@ -3,7 +3,6 @@ import importlib
 from typing import Callable
 from typing import List
 from typing import Union
-from uuid import uuid4
 
 from aio_pika import IncomingMessage
 from aio_pika import Message
@@ -50,15 +49,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             )
             return
 
-        self_unique_id = str(uuid4())
-        cur_task: asyncio.Task = asyncio.current_task(
-            asyncio.get_running_loop(),
-        )
-        cur_task.set_name(
-            f'aio_pika.consumer|Processor|{task_type}|{msg_obj.contract}',
-        )
-        self._running_callback_tasks[self_unique_id] = cur_task
-
         try:
             if not self._rate_limiting_lua_scripts:
                 self._rate_limiting_lua_scripts = await load_rate_limiter_scripts(
@@ -84,7 +74,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 snapshot=snapshot,
             )
         except Exception as e:
-            del self._running_callback_tasks[self_unique_id]
             raise e
 
     async def _send_payload_commit_service_queue(

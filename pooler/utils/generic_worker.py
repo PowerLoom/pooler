@@ -1,7 +1,6 @@
 import asyncio
 import multiprocessing
 import resource
-import signal
 from functools import partial
 from typing import Dict
 from typing import Union
@@ -53,88 +52,12 @@ class GenericAsyncWorker(multiprocessing.Process):
         self.protocol_state_contract = None
 
         self._rate_limiting_lua_scripts = None
-        self._shutdown_signal_received_count = 0
 
         self.protocol_state_contract_abi = read_json_file(
             settings.protocol_state.abi,
             self._logger,
         )
         self.protocol_state_contract_address = settings.protocol_state.address
-
-    async def _shutdown_handler(self, sig, loop: asyncio.AbstractEventLoop):
-        self._shutdown_signal_received_count += 1
-        if self._shutdown_signal_received_count > 1:
-            self._logger.info(
-                (
-                    f'Received exit signal {sig.name}. Not processing as'
-                    ' shutdown sequence was already initiated...'
-                ),
-            )
-        else:
-            self._logger.info(
-                (
-                    f'Received exit signal {sig.name}. Processing shutdown'
-                    ' sequence...'
-                ),
-            )
-            # check the done or cancelled status of self._running_callback_tasks.values()
-            for u_uid, t in self._running_callback_tasks.items():
-                self._logger.debug(
-                    (
-                        'Shutdown handler: Checking result and status of'
-                        ' aio_pika consumer callback task {}'
-                    ),
-                    t.get_name(),
-                )
-                try:
-                    task_result = t.result()
-                except asyncio.CancelledError:
-                    self._logger.info(
-                        (
-                            'Shutdown handler: aio_pika consumer callback task'
-                            ' {} was cancelled'
-                        ),
-                        t.get_name(),
-                    )
-                except asyncio.InvalidStateError:
-                    self._logger.info(
-                        (
-                            'Shutdown handler: aio_pika consumer callback task'
-                            ' {} result not available yet. Still running.'
-                        ),
-                        t.get_name(),
-                    )
-                except Exception as e:
-                    self._logger.info(
-                        (
-                            'Shutdown handler: aio_pika consumer callback task'
-                            ' {} raised Exception. {}'
-                        ),
-                        t.get_name(),
-                        e,
-                    )
-                else:
-                    self._logger.info(
-                        (
-                            'Shutdown handler: aio_pika consumer callback task'
-                            ' returned with result {}'
-                        ),
-                        t.get_name(),
-                        task_result,
-                    )
-
-            tasks = [
-                t
-                for t in asyncio.all_tasks(loop)
-                if t is not asyncio.current_task(loop)
-            ]
-
-            [task.cancel() for task in tasks]
-
-            self._logger.info(f'Cancelling {len(tasks)} outstanding tasks')
-            await asyncio.gather(*tasks, return_exceptions=True)
-            loop.stop()
-            self._logger.info('Shutdown complete.')
 
     async def _rabbitmq_consumer(self, loop):
         self._rmq_connection_pool = Pool(get_rabbitmq_connection, max_size=5, loop=loop)
@@ -180,6 +103,8 @@ class GenericAsyncWorker(multiprocessing.Process):
                 ),
                 abi=self.protocol_state_contract_abi,
             )
+            # cleaning up ABI
+            self.protocol_state_contract_abi = None
 
     async def _init_httpx_client(self):
         if self._async_transport is not None:
@@ -197,7 +122,6 @@ class GenericAsyncWorker(multiprocessing.Process):
             transport=self._async_transport,
         )
 
-    
     def run(self) -> None:
         setproctitle(self._unique_id)
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
@@ -206,14 +130,6 @@ class GenericAsyncWorker(multiprocessing.Process):
             (settings.rlimit.file_descriptors, hard),
         )
         ev_loop = asyncio.get_event_loop()
-        signals = (signal.SIGTERM, signal.SIGINT, signal.SIGQUIT)
-        for s in signals:
-            ev_loop.add_signal_handler(
-                s,
-                lambda x=s: ev_loop.create_task(
-                    self._shutdown_handler(x, ev_loop),
-                ),
-            )
         self._logger.debug(
             f'Starting asynchronous callback worker {self._unique_id}...',
         )

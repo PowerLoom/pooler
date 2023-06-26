@@ -23,6 +23,7 @@ module.exports = {
       min_uptime: MIN_UPTIME,
       env: {
         NODE_ENV: NODE_ENV,
+        GUNICORN_WORKERS: 1,
       }
     },
     {
@@ -32,6 +33,7 @@ module.exports = {
       min_uptime: MIN_UPTIME,
       env: {
         NODE_ENV: NODE_ENV,
+        GUNICORN_WORKERS: 1,
       }
     }
   ]

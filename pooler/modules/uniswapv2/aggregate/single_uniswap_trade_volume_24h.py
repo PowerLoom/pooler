@@ -156,6 +156,8 @@ class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
 
                     if extrapolated_flag:
                         aggregate_snapshot.complete = False
+                    else:
+                        aggregate_snapshot.complete = True
 
                 else:
                     return await self._calculate_from_scratch(

@@ -5,6 +5,7 @@ import redis
 import redis.exceptions as redis_exc
 import tenacity
 from redis import asyncio as aioredis
+from redis.asyncio.connection import ConnectionPool
 
 from pooler.settings.config import settings as settings_conf
 from pooler.utils.default_logger import logger
@@ -30,13 +31,17 @@ def construct_redis_url():
     else:
         return f'redis://{REDIS_CONN_CONF["host"]}:{REDIS_CONN_CONF["port"]}/{REDIS_CONN_CONF["db"]}'
 
+# ref https://github.com/redis/redis-py/issues/936
+
 
 async def get_aioredis_pool(pool_size=200):
-    return await aioredis.from_url(
+    pool = ConnectionPool.from_url(
         url=construct_redis_url(),
         retry_on_error=[redis.exceptions.ReadOnlyError],
         max_connections=pool_size,
     )
+
+    return aioredis.Redis(connection_pool=pool)
 
 
 @contextlib.contextmanager
