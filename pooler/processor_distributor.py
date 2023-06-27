@@ -400,6 +400,9 @@ class ProcessorDistributor(multiprocessing.Process):
                 message.routing_key,
             )
 
+        if self._redis_conn:
+            await self._redis_conn.close()
+
     async def _rabbitmq_consumer(self, loop):
         self._rmq_connection_pool = Pool(get_rabbitmq_connection, max_size=5, loop=loop)
         self._rmq_channel_pool = Pool(
