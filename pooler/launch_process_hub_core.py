@@ -1,7 +1,5 @@
 import signal
 
-from setproctitle import setproctitle
-
 from pooler.init_rabbitmq import init_exchanges_queues
 from pooler.process_hub_core import ProcessHubCore
 from pooler.settings.config import settings
@@ -16,9 +14,6 @@ def generic_exit_handler(signum, frame):
 def main():
     for signame in [signal.SIGINT, signal.SIGTERM, signal.SIGQUIT]:
         signal.signal(signame, generic_exit_handler)
-    setproctitle(
-        f'PowerLoom|UniswapPoolerProcessHub|Core|Launcher:{settings.namespace}-{settings.instance_id[:5]}',
-    )
 
     # setup logging
     # Using bind to pass extra parameters to the logger, will show up in the {extra} field

@@ -15,7 +15,6 @@ from typing import Union
 import psutil
 import pydantic
 import redis
-from setproctitle import setproctitle
 
 from pooler.processor_distributor import ProcessorDistributor
 from pooler.settings.config import settings
@@ -221,7 +220,6 @@ class ProcessHubCore(Process):
 
     @cleanup_children_procs
     def run(self) -> None:
-        setproctitle('PowerLoom|ProcessHub|Core')
         self._logger = logger.bind(module='PowerLoom|ProcessHub|Core')
 
         for signame in [SIGINT, SIGTERM, SIGQUIT, SIGCHLD]:

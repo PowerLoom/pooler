@@ -14,7 +14,6 @@ from httpx import AsyncHTTPTransport
 from httpx import Limits
 from httpx import Timeout
 from redis import asyncio as aioredis
-from setproctitle import setproctitle
 from web3 import Web3
 
 from pooler.settings.config import settings
@@ -123,7 +122,6 @@ class GenericAsyncWorker(multiprocessing.Process):
         )
 
     def run(self) -> None:
-        setproctitle(self._unique_id)
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         resource.setrlimit(
             resource.RLIMIT_NOFILE,

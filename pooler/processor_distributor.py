@@ -12,7 +12,6 @@ from aio_pika import Message
 from aio_pika.pool import Pool
 from eth_utils import keccak
 from pydantic import ValidationError
-from setproctitle import setproctitle
 from web3 import Web3
 
 from pooler.settings.config import aggregator_config
@@ -425,7 +424,6 @@ class ProcessorDistributor(multiprocessing.Process):
             await q_obj.consume(self._on_rabbitmq_message)
 
     def run(self) -> None:
-        setproctitle(self.name)
 
         self._logger = logger.bind(
             module=f'PowerLoom|Callbacks|ProcessDistributor:{settings.namespace}-{settings.instance_id}',

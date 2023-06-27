@@ -11,7 +11,6 @@ from signal import SIGINT
 from signal import SIGQUIT
 from signal import SIGTERM
 
-from setproctitle import setproctitle
 from web3 import Web3
 
 from pooler.settings.config import settings
@@ -96,7 +95,6 @@ class EventDetectorProcess(multiprocessing.Process):
         self._redis_conn = None
 
         self._last_processed_block = None
-        setproctitle(name)
 
         self.rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
         self.contract_abi = read_json_file(
