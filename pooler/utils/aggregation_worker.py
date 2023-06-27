@@ -96,6 +96,8 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             )
         except Exception as e:
             raise e
+        finally:
+            await self._redis_conn.close()
 
     def _gen_single_type_project_id(self, type_, epoch):
         contract = epoch.projectId.split(':')[-2]
@@ -138,12 +140,21 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             )
 
         else:
-
-            source_chain_details = await get_source_chain_id(
-                redis_conn=self._redis_conn,
-                rpc_helper=self._anchor_rpc_helper,
-                state_contract_obj=self.protocol_state_contract,
-            )
+            try:
+                source_chain_details = await get_source_chain_id(
+                    redis_conn=self._redis_conn,
+                    rpc_helper=self._anchor_rpc_helper,
+                    state_contract_obj=self.protocol_state_contract,
+                )
+            except Exception as e:
+                self._logger.error(
+                    'Failed to get source chain details for {} against epoch {}',
+                    audit_stream,
+                    epoch,
+                )
+                raise e
+            finally:
+                await self._redis_conn.close()
 
             payload = snapshot.dict()
 

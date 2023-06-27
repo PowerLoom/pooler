@@ -75,6 +75,8 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             )
         except Exception as e:
             raise e
+        finally:
+            await self._redis_conn.close()
 
     async def _send_payload_commit_service_queue(
         self,
@@ -93,11 +95,19 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 epoch,
             )
         else:
-            source_chain_details = await get_source_chain_id(
-                redis_conn=self._redis_conn,
-                rpc_helper=self._anchor_rpc_helper,
-                state_contract_obj=self.protocol_state_contract,
-            )
+            try:
+                source_chain_details = await get_source_chain_id(
+                    redis_conn=self._redis_conn,
+                    rpc_helper=self._anchor_rpc_helper,
+                    state_contract_obj=self.protocol_state_contract,
+                )
+            except Exception as e:
+                self._logger.opt(exception=True).error(
+                    'Exception getting source chain id: {}', e,
+                )
+                raise e
+            finally:
+                await self._redis_conn.close()
 
             payload = snapshot.dict()
             project_id = f'{audit_stream}:{epoch.contract}:{settings.namespace}'
