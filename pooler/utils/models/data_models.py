@@ -7,6 +7,11 @@ from typing import Optional
 from pydantic import BaseModel
 
 
+class SnapshotWorkerDetails(BaseModel):
+    unique_name: str
+    pid: int
+
+
 class PayloadCommitAPIRequest(BaseModel):
     projectId: str
     payload: Dict

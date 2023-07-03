@@ -9,7 +9,7 @@ from signal import signal
 from signal import SIGQUIT
 from signal import SIGTERM
 from threading import Thread
-from typing import Dict
+from typing import Dict, Optional
 from typing import Union
 
 import psutil
@@ -23,6 +23,7 @@ from pooler.utils.aggregation_worker import AggregationAsyncWorker
 from pooler.utils.default_logger import logger
 from pooler.utils.exceptions import SelfExitException
 from pooler.utils.helper_functions import cleanup_children_procs
+from pooler.utils.models.data_models import SnapshotWorkerDetails
 from pooler.utils.models.message_models import ProcessHubCommand
 from pooler.utils.rabbitmq_helpers import RabbitmqSelectLoopInteractor
 from pooler.utils.redis.redis_conn import provide_redis_conn
@@ -45,10 +46,10 @@ PROC_STR_ID_TO_CLASS_MAP = {
 class ProcessHubCore(Process):
     def __init__(self, name, **kwargs):
         Process.__init__(self, name=name, **kwargs)
-        self._spawned_processes_map: Dict[str, Union[Process, None]] = dict()
-        self._spawned_cb_processes_map = (
+        self._spawned_processes_map: Dict[str, Optional[int]] = dict()  # process name to pid map
+        self._spawned_cb_processes_map: Dict[str, Dict[str, Optional[SnapshotWorkerDetails]]] = (
             dict()
-        )  # separate map for callback worker spawns
+        )  # separate map for callback worker spawns. unique ID -> dict(unique_name, pid)
         self._thread_shutdown_event = threading.Event()
         self._shutdown_initiated = False
 
@@ -72,30 +73,31 @@ class ProcessHubCore(Process):
                 callback_worker_name = None
                 callback_worker_unique_id = None
                 for (
-                    k,
+                    cb_worker_type,
                     worker_unique_id_entries,
                 ) in self._spawned_cb_processes_map.items():
                     for (
                         unique_id,
                         worker_process_details,
                     ) in worker_unique_id_entries.items():
-                        if worker_process_details['process'].pid == pid:
+                        if worker_process_details is not None and worker_process_details.pid == pid:
                             self._logger.debug(
                                 (
                                     'Found crashed child process PID in spawned'
                                     ' callback workers | Callback worker class:'
                                     ' {} | Unique worker identifier: {}'
                                 ),
-                                k,
-                                worker_process_details['id'],
+                                cb_worker_type,
+                                worker_process_details.unique_name,
                             )
-                            callback_worker_name = worker_process_details['id']
+                            callback_worker_name = worker_process_details.unique_name
                             callback_worker_unique_id = unique_id
-                            callback_worker_class = k
+                            callback_worker_class = cb_worker_type
+                            break
 
                 if (
                     callback_worker_name and
-                    callback_worker_unique_id
+                    callback_worker_unique_id and callback_worker_class
                 ):
 
                     if callback_worker_class == 'snapshot_workers':
@@ -108,12 +110,8 @@ class ProcessHubCore(Process):
                         )
 
                     worker_obj.start()
-                    self._spawned_cb_processes_map[callback_worker_class][
-                        callback_worker_unique_id
-                    ] = {
-                        'id': callback_worker_name,
-                        'process': worker_obj,
-                    }
+                    self._spawned_cb_processes_map[callback_worker_class][callback_worker_unique_id] = \
+                        SnapshotWorkerDetails(unique_name=callback_worker_unique_id, pid=worker_obj.pid)
                     self._logger.debug(
                         (
                             'Respawned callback worker class {} unique ID {}'
@@ -127,10 +125,10 @@ class ProcessHubCore(Process):
                     )
                     return
 
-                for k, worker_unique_id in self._spawned_processes_map.items():
-                    if worker_unique_id != -1 and worker_unique_id.pid == pid:
-                        self._logger.debug('RESPAWNING: process for {}', k)
-                        proc_details: dict = PROC_STR_ID_TO_CLASS_MAP.get(k)
+                for cb_worker_type, worker_pid in self._spawned_processes_map.items():
+                    if worker_pid is not None and worker_pid == pid:
+                        self._logger.debug('RESPAWNING: process for {}', cb_worker_type)
+                        proc_details: dict = PROC_STR_ID_TO_CLASS_MAP.get(cb_worker_type)
                         init_kwargs = dict(name=proc_details['name'])
                         if proc_details.get('class'):
                             proc_obj = proc_details['class'](**init_kwargs)
@@ -140,10 +138,10 @@ class ProcessHubCore(Process):
                             proc_obj.start()
                         self._logger.debug(
                             'RESPAWNED: process for {} with PID: {}',
-                            k,
+                            cb_worker_type,
                             proc_obj.pid,
                         )
-                        self._spawned_processes_map[k] = proc_obj
+                        self._spawned_processes_map[cb_worker_type] = proc_obj.pid
         elif signum in [SIGINT, SIGTERM, SIGQUIT]:
             self._shutdown_initiated = True
             self.rabbitmq_interactor.stop()
@@ -170,37 +168,45 @@ class ProcessHubCore(Process):
 
         for k, v in self._spawned_cb_processes_map.items():
             for unique_worker_entries in v.values():
-                if unique_worker_entries['process'].pid == pid:
-                    unique_worker_entries['process'].join()
+                if unique_worker_entries.pid == pid:
+                    psutil.Process(pid).wait()
 
         for k, v in self._spawned_processes_map.items():
             # internal state reporter might set proc_id_map[k] = -1
-            if v != -1 and v.pid == pid:
-                v.join()
+            if v is not None and v == pid:
+                _logger.debug('Waiting for process ID {} to join...', pid)
+                psutil.Process(pid).wait()
+                _logger.debug('Process ID {} joined...', pid)            
 
     @provide_redis_conn
-    def internal_state_reporter(self, redis_conn: redis.Redis = None):
+    def internal_state_reporter(self, redis_conn: Optional[redis.Redis] = None):
         while not self._thread_shutdown_event.wait(timeout=2):
             proc_id_map = dict()
-            for k, v in self._spawned_processes_map.items():
+            for cb_worker_type, v in self._spawned_processes_map.items():
                 if v:
-                    proc_id_map[k] = v.pid
+                    proc_id_map[cb_worker_type] = v
                 else:
-                    proc_id_map[k] = -1
+                    proc_id_map[cb_worker_type] = -1
             proc_id_map['callback_workers'] = dict()
             for (
-                k,
+                cb_worker_type,  # snapshot_workers or aggregation_workers
                 unique_worker_entries,
             ) in self._spawned_cb_processes_map.items():
-                proc_id_map['callback_workers'][k] = dict()
+                proc_id_map['callback_workers'][cb_worker_type] = dict()
                 for (
                     worker_unique_id,
                     worker_process_details,
                 ) in unique_worker_entries.items():
-                    proc_id_map['callback_workers'][k][worker_unique_id] = {
-                        'pid': worker_process_details['process'].pid,
-                        'id': worker_process_details['id'],
-                    }
+                    if worker_process_details:
+                        proc_id_map['callback_workers'][cb_worker_type][worker_unique_id] = {
+                            'pid': worker_process_details.pid,
+                            'id': worker_process_details.unique_name,
+                        }
+                    else:
+                        proc_id_map['callback_workers'][cb_worker_type][worker_unique_id] = {
+                            'pid': -1,
+                            'id': None,
+                        }
             proc_id_map['callback_workers'] = json.dumps(
                 proc_id_map['callback_workers'],
             )
@@ -241,7 +247,7 @@ class ProcessHubCore(Process):
             snapshot_worker_obj: Process = SnapshotAsyncWorker(name=unique_name)
             snapshot_worker_obj.start()
             self._spawned_cb_processes_map['snapshot_workers'].update(
-                {unique_id: {'id': unique_name, 'process': snapshot_worker_obj}},
+                {unique_id: SnapshotWorkerDetails(unique_name=unique_name, pid=snapshot_worker_obj.pid)},
             )
             self._logger.debug(
                 (
@@ -266,7 +272,7 @@ class ProcessHubCore(Process):
             aggregation_worker_obj: Process = AggregationAsyncWorker(name=unique_name)
             aggregation_worker_obj.start()
             self._spawned_cb_processes_map['aggregation_workers'].update(
-                {unique_id: {'id': unique_name, 'process': aggregation_worker_obj}},
+                {unique_id: SnapshotWorkerDetails(unique_name=unique_name, pid=aggregation_worker_obj.pid)},
             )
             self._logger.debug(
                 (
@@ -324,8 +330,8 @@ class ProcessHubCore(Process):
                     return
                     # self._logger.error('Received stop command on self. Initiating shutdown...')
                     # raise SelfExitException
-                mapped_p = self._spawned_processes_map.get(proc_str_id)
-                if not mapped_p:
+                mapped_pid = self._spawned_processes_map.get(proc_str_id)
+                if not mapped_pid:
                     self._logger.error(
                         (
                             'Did not find process ID in core processes string'
@@ -333,8 +339,8 @@ class ProcessHubCore(Process):
                         ),
                         proc_str_id,
                     )
-                    mapped_p = self._spawned_cb_processes_map.get(proc_str_id)
-                    if not mapped_p:
+                    mapped_snapshot_worker: Optional[SnapshotWorkerDetails] = self._spawned_cb_processes_map.get(proc_str_id)
+                    if not mapped_snapshot_worker:
                         self._logger.error(
                             (
                                 'Did not find process ID in callback processes'
@@ -344,10 +350,10 @@ class ProcessHubCore(Process):
                         )
                         return
                     else:
-                        self.kill_process(mapped_p.pid)
+                        self.kill_process(mapped_snapshot_worker.pid)
                         self._spawned_cb_processes_map[proc_str_id] = None
                 else:
-                    self.kill_process(mapped_p.pid)
+                    self.kill_process(mapped_pid)
                     self._spawned_processes_map[proc_str_id] = None
 
         elif cmd_json.command == 'start':
@@ -356,27 +362,29 @@ class ProcessHubCore(Process):
                     'Process Hub Core received start command: {}', cmd_json,
                 )
                 proc_name = cmd_json.proc_str_id
-                self._logger.debug(
-                    'Process Hub Core launching process for {}', proc_name,
-                )
-                proc_details: dict = PROC_STR_ID_TO_CLASS_MAP.get(proc_name)
-                init_kwargs = dict(name=proc_details['name'])
-                init_kwargs.update(cmd_json.init_kwargs)
-                if proc_details.get('class'):
-                    proc_obj = proc_details['class'](**init_kwargs)
-                    proc_obj.start()
-                else:
-                    proc_obj = Process(
-                        target=proc_details['target'],
-                        kwargs=cmd_json.init_kwargs,
+                if proc_name:
+                    self._logger.debug(
+                        'Process Hub Core launching process for {}', proc_name,
                     )
-                    proc_obj.start()
-                self._logger.debug(
-                    'Process Hub Core launched process for {} with PID: {}',
-                    proc_name,
-                    proc_obj.pid,
-                )
-                self._spawned_processes_map[proc_name] = proc_obj
+                    proc_details: dict = PROC_STR_ID_TO_CLASS_MAP.get(proc_name)
+                    init_kwargs = dict(name=proc_details['name'])
+                    if cmd_json.init_kwargs:
+                        init_kwargs.update(cmd_json.init_kwargs)
+                    if proc_details.get('class'):
+                        proc_obj = proc_details['class'](**init_kwargs)
+                        proc_obj.start()
+                    else:
+                        proc_obj = Process(
+                            target=proc_details['target'],
+                            **init_kwargs,
+                        )
+                        proc_obj.start()
+                    self._logger.debug(
+                        'Process Hub Core launched process for {} with PID: {}',
+                        proc_name,
+                        proc_obj.pid,
+                    )
+                    self._spawned_processes_map[proc_name] = proc_obj.pid
             except Exception as err:
                 self._logger.opt(exception=True).error(
                     (
