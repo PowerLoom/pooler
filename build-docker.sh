@@ -1,1 +1,1 @@
-docker build -t powerloom-boost .
+docker build -t powerloom-pooler .
