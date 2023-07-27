@@ -70,8 +70,7 @@ class ProcessorDistributor(multiprocessing.Process):
         self._payload_commit_exchange_name = (
             f'{settings.rabbitmq.setup.commit_payload.exchange}:{settings.namespace}'
         )
-        self._payload_commit_routing_key = f'powerloom-backend-commit-payload:{settings.namespace}'
-        f':{settings.instance_id}.Finalized'
+        self._payload_commit_routing_key = f'powerloom-backend-commit-payload:{settings.namespace}:{settings.instance_id}.Finalized'
 
         self.projects_config = copy.copy(projects_config)
         self._upcoming_project_changes = defaultdict(list)
