@@ -133,7 +133,7 @@ Pooler needs the following config files to be present
             "project_type": "snapshot_project_name_prefix_",
             "projects": ["array of smart contract addresses"], // Uniswap v2 pair contract addresses in this implementation
             "processor":{
-                "module": "pooler.modules.uniswapv2.pair_total_reserves",
+                "module": "snapshotter.modules.uniswapv2.pair_total_reserves",
                 "class_name": "PairTotalReservesProcessor" // class to be found in module pooler/modules/uniswapv2/pair_total_reserves.py
             }
         }
@@ -155,7 +155,7 @@ Pooler needs the following config files to be present
                         "projectId": "pairContract_trade_volume"
                     },
                     "processor": {
-                        "module": "pooler.modules.uniswapv2.aggregate.single_uniswap_trade_volume_24h",
+                        "module": "snapshotter.modules.uniswapv2.aggregate.single_uniswap_trade_volume_24h",
                         "class_name": "AggreagateTradeVolumeProcessor"
                     }
                 }
@@ -186,7 +186,7 @@ Pooler needs the following config files to be present
                     "pairContract_pair_total_reserves:0xa478c2975ab1ea89e8196811f51a7b7ade33eb11:UNISWAPV2"
                 ],
                 "processor": {
-                    "module": "pooler.modules.uniswapv2.aggregate.multi_uniswap_top_pairs_24h",
+                    "module": "snapshotter.modules.uniswapv2.aggregate.multi_uniswap_top_pairs_24h",
                     "class_name": "AggreagateTopPairsProcessor"
                 }
             ]
@@ -236,7 +236,7 @@ As you can notice in [`config/projects.example.json`](config/projects.example.js
 - `projects` (smart contracts to extract data from, pooler can generate different snapshots from multiple sources as long as the Contract ABI is same)
 - `processor` (the actual compuation logic reference, while you can write the logic anywhere, it is recommended to write your implementation in pooler/modules folder)
 
-There's currently no limitation on the number or type of usecases you can build using pooler. Just write the Processor class and pooler libraries will take care of the rest.
+There's currently no limitation on the number or type of usecases you can build using snapshotter. Just write the Processor class and pooler libraries will take care of the rest.
 
 https://github.com/PowerLoom/pooler/blob/1452c166bef7534568a61b3a2ab0ff94535d7229/config/projects.example.json#L1-L35
 
@@ -251,13 +251,13 @@ There are a couple of important concepts here necessary to write your extraction
 * `compute` is the main function where most of the snapshot extraction and generation logic needs to be written. It receives the following inputs:
 - `max_chain_height` (epoch end block)
 - `min_chain_height` (epoch start block)
-- `data_source_contract_address` (contract address to extract data from)
+- `address` (contract address to extract data from)
 - `redis` (async redis connection)
 - `rpc_helper` ([`RpcHelper`](pooler/utils/rpc.py) instance to help with any calls to the data source contract's chain)
 
 * `transformation_lambdas` provide an additional layer for computation on top of the generated snapshot (if needed). If `compute` function handles everything you can just set `transformation_lambdas` to `[]` otherwise pass the list of transformation function sequence. Each function referenced in `transformation_lambdas` must have same input interface. It should receive the following inputs -
  - `snapshot` (the generated snapshot to apply transformation on)
- - `data_source_contract_address` (contract address to extract data from)
+ - `address` (contract address to extract data from)
  - `epoch_begin` (epoch begin block)
  - `epoch_end` (epoch end block)
 
@@ -326,7 +326,7 @@ Related information and other services depending on these can be found in previo
 
 ### Process Hub Core
 
-The Process Hub Core, defined in [`process_hub_core.py`](pooler/process_hub_core.py), serves as the primary process manager in Pooler.
+The Process Hub Core, defined in [`process_hub_core.py`](pooler/process_hub_core.py), serves as the primary process manager in snapshotter.
 * Operated by the CLI tol [`processhub_cmd.py`](pooler/processhub_cmd.py), it is responsible for starting and managing the `SystemEventDetector` and `ProcessorDistributor` processes.
 * Additionally, it spawns the base snapshot and aggregator workers required for processing tasks from the `powerloom-backend-callback` queue. The number of workers and their configuration path can be adjusted in `config/settings.json`.
 

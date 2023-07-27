@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "pooler"
+name = "Powerloom Snapshotter"
 version = "0.1.0"
 description = ""
 authors = ["Powerloom, Inc."]
@@ -14,7 +14,6 @@ typer = "^0.7.0"
 psutil = "^5.9.4"
 importlib = "^1.0.4"
 pika = "^1.3.1"
-aio-pika = "^8.3.0"
 gunicorn = "^20.1.0"
 aiohttp = "^3.8.3"
 web3 = "^5.31.3"
@@ -30,6 +29,8 @@ loguru = "^0.7.0"
 httpx = "^0.24.0"
 fastapi = "^0.95.1"
 ifps-client = {git = "https://git@github.com/PowerLoom/py-ipfs-client.git"}
+aiorwlock = "^1.3.0"
+aio-pika = "^9.1.4"
 
 
 [build-system]
