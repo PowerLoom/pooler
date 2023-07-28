@@ -7,7 +7,7 @@
   - [Preloading](#preloading)
   - [Base Snapshot Generation](#base-snapshot-generation)
   - [Snapshot Finalization](#snapshot-finalization)
-  - [Aggregation and data composition](#aggregation-and-data-composition---snapshot-generation-of-higher-order-data-points-on-base-snapshots)
+  - [Aggregation and data composition - snapshot generation of higher-order data points on base snapshots](#aggregation-and-data-composition---snapshot-generation-of-higher-order-data-points-on-base-snapshots)
 - [Major Components](#major-components)
   - [System Event Detector](#system-event-detector)
   - [Process Hub Core](#process-hub-core)
@@ -337,7 +337,7 @@ Pooler needs the following config files to be present
 
 ## Monitoring and Debugging
 
-Login to the pooler docker container using `docker exec -it deploy-boost-1 bash` (use `docker ps` to verify its presence in the list of running containers) and use the following commands for monitoring and debugging
+Login to the pooler docker container using `docker exec -it deploy-pooler-1 bash` (use `docker ps` to verify its presence in the list of running containers) and use the following commands for monitoring and debugging
 - To monitor the status of running processes, you simply need to run `pm2 status`.
 - To see all logs you can run `pm2 logs`
 - To see logs for a specific process you can run `pm2 logs <Process Identifier>`
@@ -373,7 +373,7 @@ In this section, let us take a look at the data composition abilities of Pooler 
 Required reading:
 * [Base Snapshot Generation](#base-snapshot-generation) and
 * [configuring `config/projects.json`](#configuration)
-* [Aggregation and data composition](#aggregation-and-data-composition---snapshot-generation-of-higher-order-datapoints-on-base-snapshots)
+* [Aggregation and data composition](#aggregation-and-data-composition---snapshot-generation-of-higher-order-data-points-on-base-snapshots)
 
 As you can notice in [`config/projects.example.json`](config/projects.example.json), each project config needs to have the following components
 
@@ -408,7 +408,7 @@ Output format can be anything depending on the usecase requirements. Although it
 
 The resultant output model in this specific example is `UniswapTradesSnapshot` as defined in the Uniswap v2 specific modules directory: [`utils/models/message_models.py`](snapshotter/modules/pooler/uniswapv2/utils/models/message_models.py). This encapsulates state information captured by `TradeVolumeProcessor` between the block heights of the epoch: `min_chain_height` and `max_chain_height`.
 
-https://github.com/PowerLoom/pooler/blob/1452c166bef7534568a61b3a2ab0ff94535d7229/snapshotter/modules/pooler/uniswapv2/utils/models/message_models.py#L37-L44
+https://github.com/PowerLoom/pooler/blob/4cecbbb196c4c6bb34f64c43001a41f38834479f/snapshotter/modules/pooler/uniswapv2/utils/models/message_models.py#L47-L54
 
 
 ### Step 2. Review: 24 hour aggregate of trade volume snapshots over a single pair contract
