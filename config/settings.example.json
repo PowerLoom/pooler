@@ -47,6 +47,9 @@
       },
       "event_detector": {
         "exchange": "powerloom-backend-event-detector"
+      },
+      "delegated_worker": {
+        "exchange": "powerloom-backend-delegated-worker"
       }
     }
   },
@@ -74,14 +77,16 @@
   },
   "projects_config_path": "config/projects.json",
   "aggregator_config_path": "config/aggregator.json",
-  "pair_contract_abi": "pooler/static/abis/UniswapV2Pair.json",
+  "preloader_config_path": "config/preloader.json",
+  "pair_contract_abi": "snapshotter/static/abis/UniswapV2Pair.json",
   "protocol_state": {
-    "abi": "pooler/static/abis/ProtocolContract.json",
+    "abi": "snapshotter/static/abis/ProtocolContract.json",
     "address": "protocol-state-contract"
   },
   "callback_worker_config": {
-    "num_snapshot_workers": 8,
-    "num_aggregation_workers": 16
+    "num_delegate_workers": 8,
+    "num_snapshot_workers": 2,
+    "num_aggregation_workers": 4
   },
   "ipfs": {
     "url": "ipfs-writer-url",

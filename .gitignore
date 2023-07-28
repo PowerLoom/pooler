@@ -8,5 +8,5 @@ temp/*
 uniswapTokenData
 **/*projects.json
 **/*aggregator.json
-**/*settings.json
+config/*settings.json
 **/*.backup

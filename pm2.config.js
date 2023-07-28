@@ -8,8 +8,8 @@ const MIN_UPTIME = 60000;
 module.exports = {
   apps : [
     {
-      name   : "pooler-process-hub-core",
-      script : `poetry run python -m pooler.launch_process_hub_core`,
+      name   : "process-hub-core",
+      script : `poetry run python -m snapshotter.launch_process_hub_core`,
       max_restarts: MAX_RESTART,
       min_uptime: MIN_UPTIME,
       env: {
@@ -17,21 +17,23 @@ module.exports = {
       }
     },
     {
-      name   : "pooler-core-api",
-      script : `poetry run python -m pooler.gunicorn_core_launcher`,
+      name   : "core-api",
+      script : `poetry run python -m snapshotter.gunicorn_core_launcher`,
       max_restarts: MAX_RESTART,
       min_uptime: MIN_UPTIME,
       env: {
         NODE_ENV: NODE_ENV,
+        GUNICORN_WORKERS: 1,
       }
     },
     {
-      name   : "pooler-auth-api",
-      script : `poetry run python -m pooler.auth.gunicorn_auth_entry_launcher`,
+      name   : "auth-api",
+      script : `poetry run python -m snapshotter.auth.gunicorn_auth_entry_launcher`,
       max_restarts: MAX_RESTART,
       min_uptime: MIN_UPTIME,
       env: {
         NODE_ENV: NODE_ENV,
+        GUNICORN_WORKERS: 1,
       }
     }
   ]
