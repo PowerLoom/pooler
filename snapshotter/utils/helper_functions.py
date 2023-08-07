@@ -113,6 +113,7 @@ def preloading_entry_exit_logger(fn):
             logger.info('Finished running preloader {}...', self.__class__.__name__)
         except asyncio.CancelledError:
             self._logger.error('Cancelled preloader worker {} for epoch {}', self.__class__.__name__, epoch.epochId)
+            raise asyncio.CancelledError
         except Exception as e:
             self._logger.opt(exception=settings.logs.trace_enabled).error(
                 'Exception while running preloader worker {} for epoch {}, Error: {}',
@@ -120,6 +121,7 @@ def preloading_entry_exit_logger(fn):
                 epoch.epochId,
                 e,
             )
+            raise e
     return wrapper
 
 
