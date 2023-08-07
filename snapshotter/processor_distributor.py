@@ -7,6 +7,7 @@ import queue
 import time
 from collections import defaultdict
 from functools import partial
+from typing import Awaitable
 from typing import Dict
 from typing import List
 from typing import Set
@@ -22,7 +23,6 @@ from pydantic import ValidationError
 from web3 import Web3
 
 from snapshotter.settings.config import aggregator_config
-from snapshotter.settings.config import preloader_config
 from snapshotter.settings.config import preloaders
 from snapshotter.settings.config import projects_config
 from snapshotter.settings.config import settings
@@ -32,7 +32,6 @@ from snapshotter.utils.data_utils import get_projects_list
 from snapshotter.utils.data_utils import get_source_chain_epoch_size
 from snapshotter.utils.data_utils import get_source_chain_id
 from snapshotter.utils.default_logger import logger
-from snapshotter.utils.models.data_models import PreloaderAsyncFutureDetails
 from snapshotter.utils.models.message_models import EpochBase
 from snapshotter.utils.models.message_models import PayloadCommitFinalizedMessage
 from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
@@ -75,7 +74,7 @@ class ProcessorDistributor(multiprocessing.Process):
         self.projects_config = copy.copy(projects_config)
         self._upcoming_project_changes = defaultdict(list)
         self._preload_completion_conditions: Dict[
-            int, Dict[str, PreloaderAsyncFutureDetails],
+            int, Awaitable,
         ] = defaultdict(dict)  # epoch ID to preloading complete event
         self._newly_added_projects = set()
         self._shutdown_initiated = False
@@ -174,15 +173,12 @@ class ProcessorDistributor(multiprocessing.Process):
         epoch: EpochBase,
     ):
         preloader_types_l = list(self._preload_completion_conditions[epoch.epochId].keys())
-        conditions: List[asyncio.Task] = [
-            self._preload_completion_conditions[epoch.epochId][k].future
+        conditions: List[Awaitable] = [
+            self._preload_completion_conditions[epoch.epochId][k]
             for k in preloader_types_l
         ]
         preload_results = await asyncio.gather(
-            *[
-                asyncio.wait_for(t, timeout=preloader_config.timeout)
-                for t in conditions
-            ],
+            *conditions,
             return_exceptions=True,
         )
         succesful_preloads = list()
@@ -191,7 +187,7 @@ class ProcessorDistributor(multiprocessing.Process):
             preload_results,
         )
         for i, preload_result in enumerate(preload_results):
-            if isinstance(preload_result, Exception) or conditions[i].cancelled():
+            if isinstance(preload_result, Exception):
                 self._logger.error(
                     f'Preloading failed for epoch {epoch.epochId} project type {preloader_types_l[i]}',
                 )
@@ -201,9 +197,7 @@ class ProcessorDistributor(multiprocessing.Process):
                     'Preloading successful for preloader {}',
                     preloader_types_l[i],
                 )
-        # run cleanup on preloaders
-        for p in self._preload_completion_conditions[epoch.epochId].values():
-            await p.obj.cleanup()
+
         self._logger.debug('Final list of successful preloads: {}', succesful_preloads)
         for project_type in self._project_type_config_mapping:
             project_config = self._project_type_config_mapping[project_type]
@@ -216,13 +210,15 @@ class ProcessorDistributor(multiprocessing.Process):
             )
             if all([t in succesful_preloads for t in project_config.preload_tasks]):
                 self._logger.info(
-                    'Preloading dependency satisfied for project type {} epoch {}. Distributing snapshot build tasks...',
+                    'Preloading dependency satisfied for project type {} epoch {}. '
+                    'Distributing snapshot build tasks...',
                     project_type, epoch.epochId,
                 )
                 await self._distribute_callbacks_snapshotting(project_type, epoch)
             else:
                 self._logger.error(
-                    'Preloading dependency not satisfied for project type {} epoch {}. Not distributing snapshot build tasks...',
+                    'Preloading dependency not satisfied for project type {} epoch {}. '
+                    'Not distributing snapshot build tasks...',
                     project_type, epoch.epochId,
                 )
         if epoch.epochId in self._preload_completion_conditions:
@@ -251,11 +247,8 @@ class ProcessorDistributor(multiprocessing.Process):
                     preloader.task_type,
                     msg_obj.epochId,
                 )
-                f = asyncio.ensure_future(preloader_obj.compute(**preloader_compute_kwargs))
-                self._preload_completion_conditions[msg_obj.epochId][preloader.task_type] = PreloaderAsyncFutureDetails(
-                    obj=preloader_obj,
-                    future=f,
-                )
+                f = preloader_obj.compute(**preloader_compute_kwargs)
+                self._preload_completion_conditions[msg_obj.epochId][preloader.task_type] = f
         for project_config in self.projects_config:
             if not project_config.preload_tasks:
                 # release for snapshotting
@@ -292,7 +285,7 @@ class ProcessorDistributor(multiprocessing.Process):
             await self._enable_pending_projects_for_epoch(msg_obj.epochId),
         )
 
-        await self._exec_preloaders(msg_obj=msg_obj)
+        asyncio.ensure_future(self._exec_preloaders(msg_obj=msg_obj))
 
     async def _distribute_callbacks_snapshotting(self, project_type: str, epoch: EpochBase):
         # send to snapshotters to get the balances of the addresses
@@ -583,7 +576,8 @@ class ProcessorDistributor(multiprocessing.Process):
         )
 
         if message_type == 'EpochReleased':
-            await self._epoch_release_processor(message)
+            asyncio.ensure_future(self._epoch_release_processor(message))
+            # await self._epoch_release_processor(message)
         elif message_type == 'SnapshotSubmitted':
             await self._distribute_callbacks_aggregate(
                 message,
@@ -609,7 +603,7 @@ class ProcessorDistributor(multiprocessing.Process):
 
     async def _rabbitmq_consumer(self, loop):
         async with self._rmq_channel_pool.acquire() as channel:
-            await channel.set_qos(100)
+            await channel.set_qos(1)
             exchange = await channel.get_exchange(
                 name=self._consume_exchange_name,
             )

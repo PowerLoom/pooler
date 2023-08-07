@@ -1,4 +1,3 @@
-import asyncio
 from enum import Enum
 from typing import Any
 from typing import Dict
@@ -7,8 +6,6 @@ from typing import Optional
 from typing import Union
 
 from pydantic import BaseModel
-
-from snapshotter.utils.callback_helpers import GenericPreloader
 
 
 class SnapshotWorkerDetails(BaseModel):
@@ -19,14 +16,6 @@ class SnapshotWorkerDetails(BaseModel):
 class ProcessorWorkerDetails(BaseModel):
     unique_name: str
     pid: Union[None, int] = None
-
-
-class PreloaderAsyncFutureDetails(BaseModel):
-    obj: GenericPreloader
-    future: asyncio.Task
-
-    class Config:
-        arbitrary_types_allowed = True
 
 
 class SnapshotterIssue(BaseModel):
