@@ -55,10 +55,31 @@ def logger_filter_critical(record):
 logger.remove()
 
 if settings.logs.write_to_files:
-    logger.add('logs/debug.log', level='DEBUG', format=FORMAT, filter=logger_filter_debug, rotation='1 day')
-    logger.add('logs/info.log', level='INFO', format=FORMAT, filter=logger_filter_info, rotation='1 day')
-    logger.add('logs/success.log', level='SUCCESS', format=FORMAT, filter=logger_filter_success, rotation='1 day')
-    logger.add('logs/warning.log', level='WARNING', format=FORMAT, filter=logger_filter_warning, rotation='1 day')
-    logger.add('logs/error.log', level='ERROR', format=FORMAT, filter=logger_filter_error, rotation='1 day')
-    logger.add('logs/critical.log', level='CRITICAL', format=FORMAT, filter=logger_filter_critical, rotation='1 day')
-    logger.add('logs/trace.log', level='TRACE', format=FORMAT, filter=logger_filter_trace, rotation='1 day')
+    logger.add(
+        'logs/debug.log', level='DEBUG', format=FORMAT, filter=logger_filter_debug,
+        rotation='6 hours', compression='tar.xz', retention='2 days',
+    )
+    logger.add(
+        'logs/info.log', level='INFO', format=FORMAT, filter=logger_filter_info,
+        rotation='6 hours', compression='tar.xz', retention='2 days',
+    )
+    logger.add(
+        'logs/success.log', level='SUCCESS', format=FORMAT, filter=logger_filter_success,
+        rotation='6 hours', compression='tar.xz', retention='2 days',
+    )
+    logger.add(
+        'logs/warning.log', level='WARNING', format=FORMAT, filter=logger_filter_warning,
+        rotation='6 hours', compression='tar.xz', retention='2 days',
+    )
+    logger.add(
+        'logs/error.log', level='ERROR', format=FORMAT, filter=logger_filter_error,
+        rotation='6 hours', compression='tar.xz', retention='2 days',
+    )
+    logger.add(
+        'logs/critical.log', level='CRITICAL', format=FORMAT, filter=logger_filter_critical,
+        rotation='6 hours', compression='tar.xz', retention='2 days',
+    )
+    logger.add(
+        'logs/trace.log', level='TRACE', format=FORMAT, filter=logger_filter_trace,
+        rotation='6 hours', compression='tar.xz', retention='2 days',
+    )

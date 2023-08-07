@@ -3,7 +3,8 @@ import os
 
 from gunicorn.app.base import BaseApplication
 from gunicorn.glogging import Logger
-from loguru import logger
+
+from snapshotter.utils.default_logger import logger
 
 LOG_LEVEL = logging.getLevelName(os.environ.get('LOG_LEVEL', 'DEBUG'))
 

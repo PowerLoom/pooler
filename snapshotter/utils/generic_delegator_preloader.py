@@ -135,8 +135,7 @@ class DelegatorPreloaderAsyncWorker(GenericDelegatorPreloader):
                 )
                 await self.cleanup()
                 raise Exception(
-                    f'Preloading task {self._task_type} for epoch {epoch.epochId} timed out'
-                    f' after {preloader_config.timeout} seconds',
+                    f'Preloading task {self._task_type} for epoch {epoch.epochId} timed out after {preloader_config.timeout} seconds',
                 )
             except Exception as e:
                 self._logger.error('Exception while waiting for preloading to complete: {}', e)

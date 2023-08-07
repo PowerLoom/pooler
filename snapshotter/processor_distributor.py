@@ -210,15 +210,13 @@ class ProcessorDistributor(multiprocessing.Process):
             )
             if all([t in succesful_preloads for t in project_config.preload_tasks]):
                 self._logger.info(
-                    'Preloading dependency satisfied for project type {} epoch {}. '
-                    'Distributing snapshot build tasks...',
+                    'Preloading dependency satisfied for project type {} epoch {}. Distributing snapshot build tasks...',
                     project_type, epoch.epochId,
                 )
                 await self._distribute_callbacks_snapshotting(project_type, epoch)
             else:
                 self._logger.error(
-                    'Preloading dependency not satisfied for project type {} epoch {}. '
-                    'Not distributing snapshot build tasks...',
+                    'Preloading dependency not satisfied for project type {} epoch {}. Not distributing snapshot build tasks...',
                     project_type, epoch.epochId,
                 )
         if epoch.epochId in self._preload_completion_conditions:
