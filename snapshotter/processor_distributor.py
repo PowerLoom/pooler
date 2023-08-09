@@ -601,7 +601,7 @@ class ProcessorDistributor(multiprocessing.Process):
 
     async def _rabbitmq_consumer(self, loop):
         async with self._rmq_channel_pool.acquire() as channel:
-            await channel.set_qos(1)
+            await channel.set_qos(10)
             exchange = await channel.get_exchange(
                 name=self._consume_exchange_name,
             )
