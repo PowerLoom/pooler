@@ -15,7 +15,7 @@ from snapshotter.settings.config import projects_config
 from snapshotter.settings.config import settings
 from snapshotter.utils.callback_helpers import send_failure_notifications
 from snapshotter.utils.generic_worker import GenericAsyncWorker
-from snapshotter.utils.models.data_models import SnapshotterIssue
+from snapshotter.utils.models.data_models import SnapshotterIssue, SnapshotterReportState
 from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
 from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessage
 from snapshotter.utils.models.settings_model import AggregateOn
@@ -130,7 +130,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             )
             notification_message = SnapshotterIssue(
                 instanceID=settings.instance_id,
-                issueType='MISSED_SNAPSHOT',
+                issueType=SnapshotterReportState.MISSED_SNAPSHOT,
                 projectID=project_id,
                 epochId=str(msg_obj.epochId),
                 timeOfReporting=str(time.time()),

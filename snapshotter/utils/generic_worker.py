@@ -1,7 +1,9 @@
 import asyncio
+import json
 import multiprocessing
 import resource
 from functools import partial
+import time
 from typing import Dict
 from typing import Union
 from uuid import uuid4
@@ -24,12 +26,14 @@ from snapshotter.utils.callback_helpers import get_rabbitmq_robust_connection_as
 from snapshotter.utils.data_utils import get_source_chain_id
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.file_utils import read_json_file
+from snapshotter.utils.models.data_models import SnapshotterStateUpdate, SnapshotterStates
 from snapshotter.utils.models.message_models import AggregateBase
 from snapshotter.utils.models.message_models import PayloadCommitMessage
 from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
 from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
 from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessage
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
+from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.rpc import RpcHelper
 
 
@@ -171,6 +175,15 @@ class GenericAsyncWorker(multiprocessing.Process):
                     ),
                     snapshot,
                     e,
+                )
+                await self._redis_conn.set(
+                    epoch_id_project_to_state_mapping(project_id, epoch.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_PAYLOAD_COMMIT.value),
+                    SnapshotterStateUpdate(status='failed', error=str(e), timestamp=int(time.time())).json(),
+                )
+            else:
+                await self._redis_conn.set(
+                    epoch_id_project_to_state_mapping(project_id, epoch.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_PAYLOAD_COMMIT.value),
+                    SnapshotterStateUpdate(status='success', timestamp=int(time.time())).json(),
                 )
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):

@@ -1,6 +1,8 @@
+from datetime import datetime
 import json
 import os
 import threading
+from urllib.parse import urljoin
 import uuid
 from multiprocessing import Process
 from signal import SIGCHLD
@@ -11,6 +13,7 @@ from signal import SIGTERM
 from threading import Thread
 from typing import Dict
 from typing import Optional
+import httpx
 
 import psutil
 import pydantic
@@ -24,8 +27,9 @@ from snapshotter.utils.default_logger import logger
 from snapshotter.utils.delegate_worker import DelegateAsyncWorker
 from snapshotter.utils.exceptions import SelfExitException
 from snapshotter.utils.helper_functions import cleanup_proc_hub_children
-from snapshotter.utils.models.data_models import ProcessorWorkerDetails
+from snapshotter.utils.models.data_models import ProcessorWorkerDetails, SnapshotterIssue, SnapshotterReportState
 from snapshotter.utils.models.data_models import SnapshotWorkerDetails
+from snapshotter.utils.models.data_models import SnapshotterPing
 from snapshotter.utils.models.message_models import ProcessHubCommand
 from snapshotter.utils.rabbitmq_helpers import RabbitmqSelectLoopInteractor
 from snapshotter.utils.redis.redis_conn import provide_redis_conn
@@ -52,6 +56,14 @@ class ProcessHubCore(Process):
         self._spawned_cb_processes_map: Dict[str, Dict[str, Optional[SnapshotWorkerDetails]]] = (
             dict()
         )  # separate map for callback worker spawns. unique ID -> dict(unique_name, pid)
+        self._httpx_client = httpx.Client(
+            base_url=settings.reporting.service_url,
+            limits=httpx.Limits(
+                max_keepalive_connections=2,
+                max_connections=2,
+                keepalive_expiry=300,
+            ),
+        )
         self._thread_shutdown_event = threading.Event()
         self._shutdown_initiated = False
 
@@ -95,6 +107,7 @@ class ProcessHubCore(Process):
                             callback_worker_name = worker_process_details.unique_name
                             callback_worker_unique_id = unique_id
                             callback_worker_class = cb_worker_type
+                            
                             break
 
                 if (
@@ -130,6 +143,26 @@ class ProcessHubCore(Process):
                         worker_obj.pid,
                         pid,
                     )
+                    if settings.reporting.service_url:
+                        self._httpx_client.post(
+                            url=urljoin(settings.reporting.service_url, '/reportIssue'),
+                            json=SnapshotterIssue(
+                                instanceID=settings.instance_id,
+                                issueType=SnapshotterReportState.CRASHED_CHILD_WORKER,
+                                projectID='',
+                                epochId='',
+                                timeOfReporting=datetime.now().isoformat(),
+                                extra=json.dumps(
+                                    {
+                                        'worker_name': callback_worker_name,
+                                        'pid': pid,
+                                        'worker_class': callback_worker_class,
+                                        'worker_unique_id': callback_worker_unique_id,
+                                        'respawned_pid': worker_obj.pid,
+                                    }
+                                ),
+                            ).dict(),
+                        )
                     return
 
                 for cb_worker_type, worker_pid in self._spawned_processes_map.items():
@@ -151,6 +184,18 @@ class ProcessHubCore(Process):
                         self._spawned_processes_map[cb_worker_type] = proc_obj.pid
         elif signum in [SIGINT, SIGTERM, SIGQUIT]:
             self._shutdown_initiated = True
+            if settings.reporting.service_url:
+                self._logger.debug('Sending shutdown signal to reporting service')
+                self._httpx_client.post(
+                    url=urljoin(settings.reporting.service_url, '/reportIssue'),
+                    json=SnapshotterIssue(
+                        instanceID=settings.instance_id,
+                        issueType=SnapshotterReportState.SHUTDOWN_INITIATED,
+                        projectID='',
+                        epochId='',
+                        timeOfReporting=datetime.now().isoformat(),
+                    ).dict(),
+                )
             self.rabbitmq_interactor.stop()
             # raise GenericExitOnSignal
 
@@ -217,6 +262,11 @@ class ProcessHubCore(Process):
                 name=f'powerloom:snapshotter:{settings.namespace}:{settings.instance_id}:Processes',
                 mapping=proc_id_map,
             )
+            if settings.reporting.service_url:
+                self._httpx_client.post(
+                    url=urljoin(settings.reporting.service_url, '/ping'),
+                    json=SnapshotterPing(instanceID=settings.instance_id).dict(),
+                )
         self._logger.error(
             (
                 'Caught thread shutdown notification event. Deleting process'
