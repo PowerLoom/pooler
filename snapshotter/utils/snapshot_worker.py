@@ -94,14 +94,22 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             await send_failure_notifications(
                 client=self._client, message=notification_message,
             )
-            await self._redis_conn.set(
-                epoch_id_project_to_state_mapping(project_id=project_id, epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value),
-                SnapshotterStateUpdate(status='failed', error=str(e), timestamp=int(time.time())).json(),
+            await self._redis_conn.hset(
+                name=epoch_id_project_to_state_mapping(epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value),
+                mapping={
+                    project_id: SnapshotterStateUpdate(
+                        status='failed', error=str(e), timestamp=int(time.time())
+                    ).json()
+                },
             )
         else:
-            await self._redis_conn.set(
-                epoch_id_project_to_state_mapping(project_id=project_id, epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value),
-                SnapshotterStateUpdate(status='success', timestamp=int(time.time())).json(),
+            await self._redis_conn.hset(
+                name=epoch_id_project_to_state_mapping(epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value),
+                mapping={
+                    project_id: SnapshotterStateUpdate(
+                        status='success', timestamp=int(time.time())
+                    ).json()
+                },
             )
             await self._send_payload_commit_service_queue(
                 type_=task_type,

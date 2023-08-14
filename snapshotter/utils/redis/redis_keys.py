@@ -89,5 +89,5 @@ def epoch_id_epoch_released_key(epoch_id):
     return f'epochID:{epoch_id}:epochReleased'
 
 
-def epoch_id_project_to_state_mapping(project_id, epoch_id, state_id):
-    return f'epochID:{epoch_id}:projectID:{project_id}:stateID:{state_id}'
+def epoch_id_project_to_state_mapping(epoch_id, state_id):
+    return f'epochID:{epoch_id}:stateID:{state_id}:processingStatus'

@@ -7,6 +7,7 @@ import json
 import multiprocessing
 import queue
 import time
+import uvloop
 from collections import defaultdict
 from functools import partial
 from typing import Dict
@@ -15,8 +16,7 @@ from typing import Set
 from urllib.parse import urljoin
 from uuid import uuid4
 from httpx import AsyncClient, AsyncHTTPTransport, Limits, Timeout
-
-import uvloop
+from redis import asyncio as aioredis
 from aio_pika import IncomingMessage
 from aio_pika import Message
 from aio_pika.pool import Pool
@@ -51,14 +51,15 @@ from snapshotter.utils.rpc import RpcHelper
 
 
 class ProcessorDistributor(multiprocessing.Process):
+    _aioredis_pool: RedisPoolCache
+    _redis_conn: aioredis.Redis
+
     def __init__(self, name, **kwargs):
         super(ProcessorDistributor, self).__init__(name=name, **kwargs)
         self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
         self._q = queue.Queue()
         self._rabbitmq_interactor = None
         self._shutdown_initiated = False
-        self._redis_conn = None
-        self._aioredis_pool = None
         self._rpc_helper = None
         self._source_chain_id = None
         self._projects_list = None
@@ -106,10 +107,9 @@ class ProcessorDistributor(multiprocessing.Process):
         )
 
     async def _init_redis_pool(self):
-        if not self._aioredis_pool:
-            self._aioredis_pool = RedisPoolCache()
-            await self._aioredis_pool.populate()
-            self._redis_conn = self._aioredis_pool._aioredis_pool
+        self._aioredis_pool = RedisPoolCache()
+        await self._aioredis_pool.populate()
+        self._redis_conn = self._aioredis_pool._aioredis_pool
 
     async def _init_rpc_helper(self):
         if not self._rpc_helper:
@@ -239,9 +239,13 @@ class ProcessorDistributor(multiprocessing.Process):
                     project_type, epoch.epochId,
                 )
                 asyncio.ensure_future(
-                    self._redis_conn.set(
-                        epoch_id_project_to_state_mapping(epoch.epochId, project_type, SnapshotterStates.PRELOAD.value),
-                        SnapshotterStateUpdate(status='success', timestamp=int(time.time())).json()
+                    self._redis_conn.hset(
+                        name=epoch_id_project_to_state_mapping(epoch.epochId, SnapshotterStates.PRELOAD.value),
+                        mapping={
+                            project_type: SnapshotterStateUpdate(
+                                status='success', timestamp=int(time.time())
+                            ).json()
+                        }
                     )
                 )
                 await self._distribute_callbacks_snapshotting(project_type, epoch)
@@ -251,9 +255,13 @@ class ProcessorDistributor(multiprocessing.Process):
                     project_type, epoch.epochId,
                 )
                 asyncio.ensure_future(
-                    self._redis_conn.set(
-                        epoch_id_project_to_state_mapping(epoch.epochId, project_type, SnapshotterStates.PRELOAD.value),
-                        SnapshotterStateUpdate(status='failed', timestamp=int(time.time())).json()
+                    self._redis_conn.hset(
+                        name=epoch_id_project_to_state_mapping(epoch.epochId, SnapshotterStates.PRELOAD.value),
+                        mapping={
+                            project_type: SnapshotterStateUpdate(
+                                status='failed', timestamp=int(time.time())
+                            ).json()
+                        }
                     )
                 )
         # TODO: set separate overall status for failed and successful preloads
@@ -464,9 +472,13 @@ class ProcessorDistributor(multiprocessing.Process):
             {msg_obj.snapshotCid: msg_obj.epochId},
         )
 
-        await self._redis_conn.set(
-            epoch_id_project_to_state_mapping(msg_obj.projectId, msg_obj.epochId, SnapshotterStates.SNAPSHOT_FINALIZE.value),
-            int(time.time()),
+        await self._redis_conn.hset(
+            name=epoch_id_project_to_state_mapping(msg_obj.epochId, SnapshotterStates.SNAPSHOT_FINALIZE.value),
+            mapping={
+                msg_obj.projectId: SnapshotterStateUpdate(
+                    status='success', timestamp=int(time.time()), extra={'snapshot_cid': msg_obj.snapshotCid}
+                ).json()
+            }
         )
 
         self._logger.trace(f'Payload Commit Message Distribution time - {int(time.time())}')
@@ -608,17 +620,14 @@ class ProcessorDistributor(multiprocessing.Process):
         await asyncio.gather(*rabbitmq_publish_tasks, return_exceptions=True)
 
     async def _cleanup_older_epoch_status(self, epoch_id: int):
-        await self._redis_conn.delete(epoch_id_epoch_released_key(epoch_id - 30))
-        tasks = list()
-        key_patterns = list()
-        for state in SnapshotterStates:
-            key_pattern = f'epochID:{epoch_id-30}:projectID:*:stateID:{state.value}'
-            key_patterns.append(key_pattern)
+        tasks = [self._redis_conn.delete(epoch_id_epoch_released_key(epoch_id - 30))]
         delete_keys = list()
-        for pattern in key_patterns:
-            async for k in self._redis_conn.scan_iter(match=pattern, count=1000):
-                delete_keys.append(k)
-        await self._redis_conn.delete(*delete_keys)
+        for state in SnapshotterStates:
+            k = epoch_id_project_to_state_mapping(epoch_id - 30, state.value)
+            delete_keys.append(k)
+        if delete_keys:
+            tasks.append(self._redis_conn.delete(*delete_keys))
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
         await message.ack()
@@ -641,7 +650,7 @@ class ProcessorDistributor(multiprocessing.Process):
                     epoch_id_epoch_released_key(_.epochId),
                     int(time.time()),
                 )
-                asyncio.ensure_future(self._cleanup_older_epoch_status(msg_obj.epochId))
+                asyncio.ensure_future(self._cleanup_older_epoch_status(_.epochId))
             await self._epoch_release_processor(message)
         elif message_type == 'SnapshotSubmitted':
             try:
@@ -649,9 +658,13 @@ class ProcessorDistributor(multiprocessing.Process):
             except:
                 pass
             else:
-                await self._redis_conn.set(
-                    epoch_id_project_to_state_mapping(msg_obj.projectId, msg_obj.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_PROTOCOL_CONTRACT.value),
-                    SnapshotterStateUpdate(status='success', timestamp=int(time.time()), extra={'snapshotCid': msg_obj.snapshotCid}).json(),
+                await self._redis_conn.hset(
+                    name=epoch_id_project_to_state_mapping(msg_obj.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_PROTOCOL_CONTRACT.value),
+                    mapping={
+                        msg_obj.projectId: SnapshotterStateUpdate(
+                            status='success', timestamp=int(time.time()), extra={'snapshotCid': msg_obj.snapshotCid}
+                        ).json()
+                    },
                 )
             await self._distribute_callbacks_aggregate(
                 message,
