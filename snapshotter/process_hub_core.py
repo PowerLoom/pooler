@@ -23,6 +23,7 @@ from snapshotter.processor_distributor import ProcessorDistributor
 from snapshotter.settings.config import settings
 from snapshotter.system_event_detector import EventDetectorProcess
 from snapshotter.utils.aggregation_worker import AggregationAsyncWorker
+from snapshotter.utils.callback_helpers import send_failure_notifications_sync
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.delegate_worker import DelegateAsyncWorker
 from snapshotter.utils.exceptions import SelfExitException
@@ -144,9 +145,9 @@ class ProcessHubCore(Process):
                         pid,
                     )
                     if settings.reporting.service_url:
-                        self._httpx_client.post(
-                            url=urljoin(settings.reporting.service_url, '/reportIssue'),
-                            json=SnapshotterIssue(
+                        send_failure_notifications_sync(
+                            client=self._httpx_client,
+                            message=SnapshotterIssue(
                                 instanceID=settings.instance_id,
                                 issueType=SnapshotterReportState.CRASHED_CHILD_WORKER.value,
                                 projectID='',
@@ -161,7 +162,7 @@ class ProcessHubCore(Process):
                                         'respawned_pid': worker_obj.pid,
                                     }
                                 ),
-                            ).dict(),
+                            )
                         )
                     return
 
@@ -186,15 +187,15 @@ class ProcessHubCore(Process):
             self._shutdown_initiated = True
             if settings.reporting.service_url:
                 self._logger.debug('Sending shutdown signal to reporting service')
-                self._httpx_client.post(
-                    url=urljoin(settings.reporting.service_url, '/reportIssue'),
-                    json=SnapshotterIssue(
+                send_failure_notifications_sync(
+                    client=self._httpx_client,
+                    message=SnapshotterIssue(
                         instanceID=settings.instance_id,
                         issueType=SnapshotterReportState.SHUTDOWN_INITIATED.value,
                         projectID='',
                         epochId='',
                         timeOfReporting=datetime.now().isoformat(),
-                    ).dict(),
+                    )
                 )
             self.rabbitmq_interactor.stop()
             # raise GenericExitOnSignal

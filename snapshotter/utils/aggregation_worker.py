@@ -13,7 +13,7 @@ from pydantic import ValidationError
 from snapshotter.settings.config import aggregator_config
 from snapshotter.settings.config import projects_config
 from snapshotter.settings.config import settings
-from snapshotter.utils.callback_helpers import send_failure_notifications
+from snapshotter.utils.callback_helpers import send_failure_notifications_async
 from snapshotter.utils.generic_worker import GenericAsyncWorker
 from snapshotter.utils.models.data_models import SnapshotterIssue, SnapshotterReportState
 from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
@@ -136,7 +136,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 timeOfReporting=str(time.time()),
                 extra=json.dumps({'issueDetails': f'Error : {e}'}),
             )
-            await send_failure_notifications(
+            await send_failure_notifications_async(
                 client=self._client, message=notification_message,
             )
         finally:

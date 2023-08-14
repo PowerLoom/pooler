@@ -12,7 +12,7 @@ from snapshotter.init_rabbitmq import get_delegate_worker_request_queue_routing_
 from snapshotter.init_rabbitmq import get_delegate_worker_response_queue_routing_key_pattern
 from snapshotter.settings.config import delegate_tasks
 from snapshotter.settings.config import settings
-from snapshotter.utils.callback_helpers import send_failure_notifications
+from snapshotter.utils.callback_helpers import send_failure_notifications_async
 from snapshotter.utils.generic_worker import GenericAsyncWorker
 from snapshotter.utils.models.data_models import DelegateTaskProcessorIssue
 from snapshotter.utils.models.message_models import PowerloomDelegateWorkerRequestMessage
@@ -80,7 +80,7 @@ class DelegateAsyncWorker(GenericAsyncWorker):
                 exception=json.dumps({'issueDetails': f'Error : {e}'}),
             )
             # send failure notifications
-            await send_failure_notifications(
+            await send_failure_notifications_async(
                 client=self._client,
                 message=notification_message,
             )

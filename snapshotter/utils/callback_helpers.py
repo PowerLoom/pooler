@@ -10,6 +10,7 @@ from typing import Union
 import aio_pika
 import loguru._logger
 from httpx import AsyncClient
+from httpx import Client as SyncClient
 from ipfs_client.main import AsyncIPFSClient
 from pydantic import BaseModel
 from redis import asyncio as aioredis
@@ -66,7 +67,7 @@ def misc_notification_callback_result_handler(fut: asyncio.Future):
         logger.debug('Callback or notification result:{}', r)
 
 
-async def send_failure_notifications(client: AsyncClient, message: BaseModel):
+async def send_failure_notifications_async(client: AsyncClient, message: BaseModel):
     if settings.reporting.service_url:
         f = asyncio.ensure_future(
             client.post(
@@ -84,6 +85,26 @@ async def send_failure_notifications(client: AsyncClient, message: BaseModel):
             ),
         )
         f.add_done_callback(misc_notification_callback_result_handler)
+
+
+def send_failure_notifications_sync(client: SyncClient, message: BaseModel):
+    try:
+        if settings.reporting.service_url:
+            client.post(
+                url=settings.reporting.service_url,
+                json=message.dict(),
+            )
+    except:
+        pass
+
+    try:
+        if settings.reporting.slack_url:
+            client.post(
+                url=settings.reporting.slack_url,
+                json=message.dict(),
+            )
+    except:
+        pass
 
 
 class GenericProcessorSnapshot(ABC):
