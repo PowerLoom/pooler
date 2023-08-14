@@ -32,6 +32,8 @@ rpc_get_transaction_receipt_calls = (
     'rpc:transactionReceipt:' + settings.namespace + ':calls'
 )
 
+epoch_process_report_cached_key = 'epochProcessReport'
+
 
 # project finalzed data zset
 def project_finalized_data_zset(project_id):
