@@ -53,7 +53,7 @@ class SnapshotterStateUpdate(BaseModel):
 
 class SnapshotterIssue(BaseModel):
     instanceID: str
-    issueType: SnapshotterReportState
+    issueType: str
     projectID: str
     epochId: str
     timeOfReporting: str

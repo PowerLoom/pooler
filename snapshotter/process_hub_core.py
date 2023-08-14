@@ -148,7 +148,7 @@ class ProcessHubCore(Process):
                             url=urljoin(settings.reporting.service_url, '/reportIssue'),
                             json=SnapshotterIssue(
                                 instanceID=settings.instance_id,
-                                issueType=SnapshotterReportState.CRASHED_CHILD_WORKER,
+                                issueType=SnapshotterReportState.CRASHED_CHILD_WORKER.value,
                                 projectID='',
                                 epochId='',
                                 timeOfReporting=datetime.now().isoformat(),
@@ -190,7 +190,7 @@ class ProcessHubCore(Process):
                     url=urljoin(settings.reporting.service_url, '/reportIssue'),
                     json=SnapshotterIssue(
                         instanceID=settings.instance_id,
-                        issueType=SnapshotterReportState.SHUTDOWN_INITIATED,
+                        issueType=SnapshotterReportState.SHUTDOWN_INITIATED.value,
                         projectID='',
                         epochId='',
                         timeOfReporting=datetime.now().isoformat(),

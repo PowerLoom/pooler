@@ -130,7 +130,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             )
             notification_message = SnapshotterIssue(
                 instanceID=settings.instance_id,
-                issueType=SnapshotterReportState.MISSED_SNAPSHOT,
+                issueType=SnapshotterReportState.MISSED_SNAPSHOT.value,
                 projectID=project_id,
                 epochId=str(msg_obj.epochId),
                 timeOfReporting=str(time.time()),
