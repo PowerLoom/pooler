@@ -10,7 +10,10 @@ from snapshotter.settings.config import projects_config
 from snapshotter.settings.config import settings
 from snapshotter.utils.callback_helpers import send_failure_notifications_async
 from snapshotter.utils.generic_worker import GenericAsyncWorker
-from snapshotter.utils.models.data_models import SnapshotterIssue, SnapshotterReportState, SnapshotterStateUpdate, SnapshotterStates
+from snapshotter.utils.models.data_models import SnapshotterIssue
+from snapshotter.utils.models.data_models import SnapshotterReportState
+from snapshotter.utils.models.data_models import SnapshotterStates
+from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
 from snapshotter.utils.redis.rate_limiter import load_rate_limiter_scripts
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
@@ -95,20 +98,24 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 client=self._client, message=notification_message,
             )
             await self._redis_conn.hset(
-                name=epoch_id_project_to_state_mapping(epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value),
+                name=epoch_id_project_to_state_mapping(
+                    epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
+                ),
                 mapping={
                     project_id: SnapshotterStateUpdate(
-                        status='failed', error=str(e), timestamp=int(time.time())
-                    ).json()
+                        status='failed', error=str(e), timestamp=int(time.time()),
+                    ).json(),
                 },
             )
         else:
             await self._redis_conn.hset(
-                name=epoch_id_project_to_state_mapping(epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value),
+                name=epoch_id_project_to_state_mapping(
+                    epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
+                ),
                 mapping={
                     project_id: SnapshotterStateUpdate(
-                        status='success', timestamp=int(time.time())
-                    ).json()
+                        status='success', timestamp=int(time.time()),
+                    ).json(),
                 },
             )
             await self._send_payload_commit_service_queue(
