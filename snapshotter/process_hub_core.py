@@ -264,10 +264,18 @@ class ProcessHubCore(Process):
                 mapping=proc_id_map,
             )
             if settings.reporting.service_url:
-                self._httpx_client.post(
-                    url=urljoin(settings.reporting.service_url, '/ping'),
-                    json=SnapshotterPing(instanceID=settings.instance_id).dict(),
-                )
+                try:
+                    self._httpx_client.post(
+                        url=urljoin(settings.reporting.service_url, '/ping'),
+                        json=SnapshotterPing(instanceID=settings.instance_id).dict(),
+                    )
+                except Exception as e:
+                    if settings.logs.trace_enabled:
+                        self._logger.opt(exception=True).error('Error while pinging reporting service: {}', e,)
+                    else:
+                        self._logger.error(
+                            'Error while pinging reporting service: {}', e,
+                        )
         self._logger.error(
             (
                 'Caught thread shutdown notification event. Deleting process'

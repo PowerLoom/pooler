@@ -6,6 +6,7 @@ from abc import abstractproperty
 from typing import Any
 from typing import Dict
 from typing import Union
+from urllib.parse import urljoin
 
 import aio_pika
 import loguru._logger
@@ -67,11 +68,25 @@ def misc_notification_callback_result_handler(fut: asyncio.Future):
         logger.debug('Callback or notification result:{}', r)
 
 
+def sync_notification_callback_result_handler(f):
+    try:
+        result = f()
+    except Exception as exc:
+        if settings.logs.trace_enabled:
+            logger.opt(exception=True).error(
+                'Exception while sending callback or notification: {}', exc,
+            )
+        else:
+            logger.error('Exception while sending callback or notification: {}', exc)
+    else:
+        logger.debug('Callback or notification result:{}', result)
+
+
 async def send_failure_notifications_async(client: AsyncClient, message: BaseModel):
     if settings.reporting.service_url:
         f = asyncio.ensure_future(
             client.post(
-                url=settings.reporting.service_url,
+                url=urljoin(settings.reporting.service_url, '/reportIssue'),
                 json=message.dict(),
             ),
         )
@@ -88,23 +103,19 @@ async def send_failure_notifications_async(client: AsyncClient, message: BaseMod
 
 
 def send_failure_notifications_sync(client: SyncClient, message: BaseModel):
-    try:
-        if settings.reporting.service_url:
-            client.post(
-                url=settings.reporting.service_url,
-                json=message.dict(),
-            )
-    except:
-        pass
+    if settings.reporting.service_url:
+        f = client.post(
+            url=urljoin(settings.reporting.service_url, '/reportIssue'),
+            json=message.dict(),
+        )
+        sync_notification_callback_result_handler(f)
 
-    try:
-        if settings.reporting.slack_url:
-            client.post(
-                url=settings.reporting.slack_url,
-                json=message.dict(),
-            )
-    except:
-        pass
+    if settings.reporting.slack_url:
+        f = client.post(
+            url=settings.reporting.slack_url,
+            json=message.dict(),
+        )
+        sync_notification_callback_result_handler(f)
 
 
 class GenericProcessorSnapshot(ABC):
