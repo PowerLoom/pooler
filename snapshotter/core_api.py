@@ -1,15 +1,19 @@
 import json
 from typing import List
+
 from fastapi import Depends
 from fastapi import FastAPI
 from fastapi import Request
 from fastapi import Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi_pagination import add_pagination
+from fastapi_pagination import Page
+from fastapi_pagination import paginate
 from ipfs_client.main import AsyncIPFSClientSingleton
 from pydantic import Field
 from redis import asyncio as aioredis
 from web3 import Web3
-from fastapi_pagination import Page, add_pagination, paginate
+
 from snapshotter.auth.helpers.data_models import RateLimitAuthCheck
 from snapshotter.auth.helpers.data_models import UserStatusEnum
 from snapshotter.auth.helpers.helpers import incr_success_calls_count
@@ -23,14 +27,15 @@ from snapshotter.utils.data_utils import get_snapshotter_project_status
 from snapshotter.utils.data_utils import get_snapshotter_status
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.file_utils import read_json_file
-from snapshotter.utils.models.data_models import (
-    SnapshotterStateUpdate, SnapshotterStates, SnapshotterEpochProcessingReportItem
-)
+from snapshotter.utils.models.data_models import SnapshotterEpochProcessingReportItem
+from snapshotter.utils.models.data_models import SnapshotterStates
+from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.redis.rate_limiter import load_rate_limiter_scripts
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
-from snapshotter.utils.redis.redis_keys import (
-    epoch_id_epoch_released_key, epoch_id_project_to_state_mapping, project_last_finalized_epoch_key, epoch_process_report_cached_key
-)
+from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
+from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
+from snapshotter.utils.redis.redis_keys import epoch_process_report_cached_key
+from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_key
 from snapshotter.utils.rpc import RpcHelper
 
 
@@ -56,7 +61,7 @@ origins = ['*']
 app = FastAPI()
 # for pagination of epoch processing status reports
 Page = Page.with_custom_options(
-    size=Field(10, ge=1, le=30)
+    size=Field(10, ge=1, le=30),
 )
 add_pagination(app)
 app.add_middleware(
@@ -496,7 +501,7 @@ async def get_snapshotter_epoch_processing_status(
             map(
                 lambda x: SnapshotterEpochProcessingReportItem.parse_obj(x),
                 json.loads(_),
-            )
+            ),
         )
         return paginate(epoch_processing_final_report)
     epoch_processing_final_report: List[SnapshotterEpochProcessingReportItem] = list()
@@ -528,6 +533,8 @@ async def get_snapshotter_epoch_processing_status(
         epoch_release_status = await redis_conn.get(
             epoch_id_epoch_released_key(epoch_id=epoch_id),
         )
+        if not epoch_release_status:
+            continue
         epoch_specific_report.transitionStatus = dict()
         if epoch_release_status:
             epoch_specific_report.transitionStatus['EPOCH_RELEASED'] = SnapshotterStateUpdate(
