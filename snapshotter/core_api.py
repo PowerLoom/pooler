@@ -475,12 +475,10 @@ async def get_snapshotter_project_level_status(
     return snapshotter_project_status.dict(exclude_none=True, exclude_unset=True)
 
 
-@app.get('/internal/snapshotter/status/epochProcessing')
+@app.get('/internal/snapshotter/epochProcessingStatus')
 async def get_snapshotter_epoch_processing_status(
     request: Request,
     response: Response,
-    project_id: str,
-    data: bool = False,
     rate_limit_auth_dep: RateLimitAuthCheck = Depends(
         rate_limit_auth_check,
     ),
@@ -526,7 +524,7 @@ async def get_snapshotter_epoch_processing_status(
     current_epoch_id = current_epoch['epochId']
     for epoch_id in range(current_epoch_id, current_epoch_id - 30 - 1, -1):
         epoch_specific_report = SnapshotterEpochProcessingReportItem.construct()
-        epoch_specific_report.epoch_id = epoch_id
+        epoch_specific_report.epochId = epoch_id
         epoch_release_status = await redis_conn.get(
             epoch_id_epoch_released_key(epoch_id=epoch_id),
         )

@@ -193,31 +193,24 @@ class GenericAsyncWorker(multiprocessing.Process):
         pass
 
     async def _init_redis_pool(self):
-        if self._aioredis_pool is not None:
-            return
         self._aioredis_pool = RedisPoolCache()
         await self._aioredis_pool.populate()
         self._redis_conn = self._aioredis_pool._aioredis_pool
 
     async def _init_rpc_helper(self):
-        if self._rpc_helper is None:
-            self._rpc_helper = RpcHelper(rpc_settings=settings.rpc)
+        self._rpc_helper = RpcHelper(rpc_settings=settings.rpc)
+        self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
 
-        if self._anchor_rpc_helper is None:
-            self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
-
-            self.protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
-                address=Web3.toChecksumAddress(
-                    self.protocol_state_contract_address,
-                ),
-                abi=self.protocol_state_contract_abi,
-            )
-            # cleaning up ABI
-            self.protocol_state_contract_abi = None
+        self.protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
+            address=Web3.toChecksumAddress(
+                self.protocol_state_contract_address,
+            ),
+            abi=self.protocol_state_contract_abi,
+        )
+        # cleaning up ABI
+        self.protocol_state_contract_abi = None
 
     async def _init_httpx_client(self):
-        if self._async_transport is not None:
-            return
         self._async_transport = AsyncHTTPTransport(
             limits=Limits(
                 max_connections=100,
