@@ -3,6 +3,7 @@ from abc import ABC
 from abc import ABCMeta
 from abc import abstractmethod
 from abc import abstractproperty
+import functools
 from typing import Any
 from typing import Dict
 from typing import Union
@@ -68,7 +69,7 @@ def misc_notification_callback_result_handler(fut: asyncio.Future):
         logger.debug('Callback or notification result:{}', r)
 
 
-def sync_notification_callback_result_handler(f):
+def sync_notification_callback_result_handler(f: functools.partial):
     try:
         result = f()
     except Exception as exc:
@@ -104,14 +105,16 @@ async def send_failure_notifications_async(client: AsyncClient, message: BaseMod
 
 def send_failure_notifications_sync(client: SyncClient, message: BaseModel):
     if settings.reporting.service_url:
-        f = client.post(
+        f = functools.partial(
+            client.post,
             url=urljoin(settings.reporting.service_url, '/reportIssue'),
             json=message.dict(),
         )
         sync_notification_callback_result_handler(f)
 
     if settings.reporting.slack_url:
-        f = client.post(
+        f = functools.partial(
+            client.post,
             url=settings.reporting.slack_url,
             json=message.dict(),
         )
