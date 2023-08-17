@@ -61,7 +61,11 @@ class AggreagateTradeVolumeProcessor(GenericProcessorAggregate):
         protocol_state_contract,
         project_id: str,
     ):
-        self._logger.info('project_first_epoch is 0, building aggregate from scratch')
+
+        # try and fetch last finalized snapshot for this project
+        # if found then use that and fetch missing base snapshots
+        # if not found then build from scratch
+        self._logger.info('building aggregate from scratch')
 
         # source project tail epoch
         tail_epoch_id, extrapolated_flag = await get_tail_epoch_id(

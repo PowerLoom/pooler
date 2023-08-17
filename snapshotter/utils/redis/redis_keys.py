@@ -34,8 +34,11 @@ rpc_get_transaction_receipt_calls = (
 
 epoch_process_report_cached_key = 'epochProcessReport'
 
+snapshot_submission_window_key = 'snapshotSubmissionWindow'
 
 # project finalzed data zset
+
+
 def project_finalized_data_zset(project_id):
     return f'projectID:{project_id}:finalizedData'
 
@@ -93,3 +96,7 @@ def epoch_id_epoch_released_key(epoch_id):
 
 def epoch_id_project_to_state_mapping(epoch_id, state_id):
     return f'epochID:{epoch_id}:stateID:{state_id}:processingStatus'
+
+
+def submitted_base_snapshots_key(epoch_id, project_id):
+    return f'submittedBaseSnapshots:{epoch_id}:{project_id}'

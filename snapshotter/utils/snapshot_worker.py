@@ -17,6 +17,8 @@ from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
 from snapshotter.utils.redis.rate_limiter import load_rate_limiter_scripts
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
+from snapshotter.utils.redis.redis_keys import snapshot_submission_window_key
+from snapshotter.utils.redis.redis_keys import submitted_base_snapshots_key
 
 
 class SnapshotAsyncWorker(GenericAsyncWorker):
@@ -108,6 +110,16 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 },
             )
         else:
+
+            await self._redis_conn.set(
+                name=submitted_base_snapshots_key(
+                    epoch_id=msg_obj.epochId, project_id=project_id,
+                ),
+                value=snapshot.json(),
+                # block time is about 2 seconds on anchor chain, keeping it around five times the submission window
+                expire=self._submission_window * 10,
+            )
+
             await self._redis_conn.hset(
                 name=epoch_id_project_to_state_mapping(
                     epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
@@ -178,3 +190,8 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         if not self._initialized:
             await self._init_project_calculation_mapping()
             await self.init()
+            submission_window = await self._redis_conn.get(
+                name=snapshot_submission_window_key,
+            )
+            if submission_window:
+                self._submission_window = int(submission_window)
