@@ -116,8 +116,8 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                     epoch_id=msg_obj.epochId, project_id=project_id,
                 ),
                 value=snapshot.json(),
-                # block time is about 2 seconds on anchor chain, keeping it around five times the submission window
-                expire=self._submission_window * 10,
+                # block time is about 2 seconds on anchor chain, keeping it around ten times the submission window
+                ex=self._submission_window * 10 * 2,
             )
 
             await self._redis_conn.hset(
