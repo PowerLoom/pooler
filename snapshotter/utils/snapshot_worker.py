@@ -8,11 +8,15 @@ from pydantic import ValidationError
 
 from snapshotter.settings.config import projects_config
 from snapshotter.settings.config import settings
-from snapshotter.utils.callback_helpers import send_failure_notifications
+from snapshotter.utils.callback_helpers import send_failure_notifications_async
 from snapshotter.utils.generic_worker import GenericAsyncWorker
 from snapshotter.utils.models.data_models import SnapshotterIssue
+from snapshotter.utils.models.data_models import SnapshotterReportState
+from snapshotter.utils.models.data_models import SnapshotterStates
+from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
 from snapshotter.utils.redis.rate_limiter import load_rate_limiter_scripts
+from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 
 
 class SnapshotAsyncWorker(GenericAsyncWorker):
@@ -75,13 +79,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 for each_lambda in task_processor.transformation_lambdas:
                     snapshot = each_lambda(snapshot, msg_obj.data_source, msg_obj.begin, msg_obj.end)
 
-            await self._send_payload_commit_service_queue(
-                type_=task_type,
-                project_id=project_id,
-                epoch=msg_obj,
-                snapshot=snapshot,
-                storage_flag=settings.web3storage.upload_snapshots,
-            )
         except Exception as e:
             self._logger.opt(exception=True).error(
                 'Exception processing callback for epoch: {}, Error: {},'
@@ -90,18 +87,45 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
 
             notification_message = SnapshotterIssue(
                 instanceID=settings.instance_id,
-                issueType='MISSED_SNAPSHOT',
+                issueType=SnapshotterReportState.MISSED_SNAPSHOT.value,
                 projectID=project_id,
                 epochId=str(msg_obj.epochId),
                 timeOfReporting=str(time.time()),
                 extra=json.dumps({'issueDetails': f'Error : {e}'}),
             )
 
-            await send_failure_notifications(
+            await send_failure_notifications_async(
                 client=self._client, message=notification_message,
             )
-        finally:
-            await self._redis_conn.close()
+            await self._redis_conn.hset(
+                name=epoch_id_project_to_state_mapping(
+                    epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
+                ),
+                mapping={
+                    project_id: SnapshotterStateUpdate(
+                        status='failed', error=str(e), timestamp=int(time.time()),
+                    ).json(),
+                },
+            )
+        else:
+            await self._redis_conn.hset(
+                name=epoch_id_project_to_state_mapping(
+                    epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
+                ),
+                mapping={
+                    project_id: SnapshotterStateUpdate(
+                        status='success', timestamp=int(time.time()),
+                    ).json(),
+                },
+            )
+            await self._send_payload_commit_service_queue(
+                type_=task_type,
+                project_id=project_id,
+                epoch=msg_obj,
+                snapshot=snapshot,
+                storage_flag=settings.web3storage.upload_snapshots,
+            )
+        await self._redis_conn.close()
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
         task_type = message.routing_key.split('.')[-1]

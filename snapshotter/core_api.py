@@ -1,9 +1,16 @@
+import json
+from typing import List
+
 from fastapi import Depends
 from fastapi import FastAPI
 from fastapi import Request
 from fastapi import Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi_pagination import add_pagination
+from fastapi_pagination import Page
+from fastapi_pagination import paginate
 from ipfs_client.main import AsyncIPFSClientSingleton
+from pydantic import Field
 from redis import asyncio as aioredis
 from web3 import Web3
 
@@ -20,8 +27,14 @@ from snapshotter.utils.data_utils import get_snapshotter_project_status
 from snapshotter.utils.data_utils import get_snapshotter_status
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.file_utils import read_json_file
+from snapshotter.utils.models.data_models import SnapshotterEpochProcessingReportItem
+from snapshotter.utils.models.data_models import SnapshotterStates
+from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.redis.rate_limiter import load_rate_limiter_scripts
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
+from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
+from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
+from snapshotter.utils.redis.redis_keys import epoch_process_report_cached_key
 from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_key
 from snapshotter.utils.rpc import RpcHelper
 
@@ -46,6 +59,11 @@ protocol_state_contract_address = settings.protocol_state.address
 # setup CORS origins stuff
 origins = ['*']
 app = FastAPI()
+# for pagination of epoch processing status reports
+Page = Page.with_custom_options(
+    size=Field(10, ge=1, le=30),
+)
+add_pagination(app)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -460,3 +478,88 @@ async def get_snapshotter_project_level_status(
     await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
 
     return snapshotter_project_status.dict(exclude_none=True, exclude_unset=True)
+
+
+@app.get('/internal/snapshotter/epochProcessingStatus')
+async def get_snapshotter_epoch_processing_status(
+    request: Request,
+    response: Response,
+    rate_limit_auth_dep: RateLimitAuthCheck = Depends(
+        rate_limit_auth_check,
+    ),
+) -> Page[SnapshotterEpochProcessingReportItem]:
+    if not (
+        rate_limit_auth_dep.rate_limit_passed and
+        rate_limit_auth_dep.authorized and
+        rate_limit_auth_dep.owner.active == UserStatusEnum.active
+    ):
+        return inject_rate_limit_fail_response(rate_limit_auth_dep)
+    redis_conn: aioredis.Redis = request.app.state.redis_pool
+    _ = await redis_conn.get(epoch_process_report_cached_key)
+    if _:
+        epoch_processing_final_report = list(
+            map(
+                lambda x: SnapshotterEpochProcessingReportItem.parse_obj(x),
+                json.loads(_),
+            ),
+        )
+        return paginate(epoch_processing_final_report)
+    epoch_processing_final_report: List[SnapshotterEpochProcessingReportItem] = list()
+    try:
+        [current_epoch_data] = await request.app.state.anchor_rpc_helper.web3_call(
+            [request.app.state.protocol_state_contract.functions.currentEpoch()],
+            redis_conn=request.app.state.redis_pool,
+        )
+        current_epoch = {
+            'begin': current_epoch_data[0],
+            'end': current_epoch_data[1],
+            'epochId': current_epoch_data[2],
+        }
+
+    except Exception as e:
+        rest_logger.exception(
+            'Exception in get_current_epoch',
+            e=e,
+        )
+        response.status_code = 500
+        return {
+            'status': 'error',
+            'message': f'Unable to get current epoch, error: {e}',
+        }
+    current_epoch_id = current_epoch['epochId']
+    for epoch_id in range(current_epoch_id, current_epoch_id - 30 - 1, -1):
+        epoch_specific_report = SnapshotterEpochProcessingReportItem.construct()
+        epoch_specific_report.epochId = epoch_id
+        epoch_release_status = await redis_conn.get(
+            epoch_id_epoch_released_key(epoch_id=epoch_id),
+        )
+        if not epoch_release_status:
+            continue
+        epoch_specific_report.transitionStatus = dict()
+        if epoch_release_status:
+            epoch_specific_report.transitionStatus['EPOCH_RELEASED'] = SnapshotterStateUpdate(
+                status='success', timestamp=int(epoch_release_status),
+            )
+        else:
+            epoch_specific_report.transitionStatus['EPOCH_RELEASED'] = None
+        for state in SnapshotterStates:
+            state_report_entries = await redis_conn.hgetall(
+                name=epoch_id_project_to_state_mapping(epoch_id=epoch_id, state_id=state.value),
+            )
+            if state_report_entries:
+                project_state_report_entries = dict()
+                epoch_specific_report.transitionStatus[state.value] = dict()
+                project_state_report_entries = {
+                    project_id.decode('utf-8'): SnapshotterStateUpdate.parse_raw(project_state_entry)
+                    for project_id, project_state_entry in state_report_entries.items()
+                }
+                epoch_specific_report.transitionStatus[state.value] = project_state_report_entries
+            else:
+                epoch_specific_report.transitionStatus[state.value] = None
+        epoch_processing_final_report.append(epoch_specific_report)
+    await redis_conn.set(
+        epoch_process_report_cached_key,
+        json.dumps(list(map(lambda x: x.json(), epoch_processing_final_report))),
+        ex=60,
+    )
+    return paginate(epoch_processing_final_report)
