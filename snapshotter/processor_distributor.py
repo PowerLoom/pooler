@@ -653,19 +653,6 @@ class ProcessorDistributor(multiprocessing.Process):
                 asyncio.ensure_future(self._cleanup_older_epoch_status(_.epochId))
             await self._epoch_release_processor(message)
         elif message_type == 'SnapshotSubmitted':
-            try:
-                msg_obj: PowerloomSnapshotSubmittedMessage = PowerloomSnapshotSubmittedMessage.parse_raw(message.body)
-            except:
-                pass
-            else:
-                await self._redis_conn.hset(
-                    name=epoch_id_project_to_state_mapping(msg_obj.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_PROTOCOL_CONTRACT.value),
-                    mapping={
-                        msg_obj.projectId: SnapshotterStateUpdate(
-                            status='success', timestamp=int(time.time()), extra={'snapshotCid': msg_obj.snapshotCid}
-                        ).json()
-                    },
-                )
             await self._distribute_callbacks_aggregate(
                 message,
             )
