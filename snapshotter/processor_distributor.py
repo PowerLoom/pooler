@@ -5,14 +5,11 @@ import json
 import multiprocessing
 import queue
 import time
-from calendar import EPOCH
 from collections import defaultdict
-from datetime import datetime
 from functools import partial
 from typing import Dict
 from typing import List
 from typing import Set
-from urllib.parse import urljoin
 from uuid import uuid4
 
 import uvloop
@@ -189,7 +186,7 @@ class ProcessorDistributor(multiprocessing.Process):
             )
 
             if submission_window:
-                self._redis_conn.set(
+                await self._redis_conn.set(
                     snapshot_submission_window_key,
                     submission_window,
                 )

@@ -31,6 +31,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         for project_config in projects_config:
             type_ = project_config.project_type
             self._task_types.append(type_)
+        self._submission_window = None
 
     def _gen_project_id(self, type_: str, epoch):
         if not epoch.data_source:
@@ -56,6 +57,13 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 ),
             )
             return
+
+        if not self._submission_window:
+            submission_window = await self._redis_conn.get(
+                name=snapshot_submission_window_key,
+            )
+            if submission_window:
+                self._submission_window = int(submission_window)
 
         project_id = self._gen_project_id(type_=task_type, epoch=msg_obj)
 
@@ -190,8 +198,3 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         if not self._initialized:
             await self._init_project_calculation_mapping()
             await self.init()
-            submission_window = await self._redis_conn.get(
-                name=snapshot_submission_window_key,
-            )
-            if submission_window:
-                self._submission_window = int(submission_window)
