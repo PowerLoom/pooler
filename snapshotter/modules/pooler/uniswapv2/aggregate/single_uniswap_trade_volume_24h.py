@@ -142,6 +142,16 @@ class AggreagateTradeVolumeProcessor(GenericProcessorAggregate):
                     msg_obj, redis, rpc_helper, anchor_rpc_helper, ipfs_reader, protocol_state_contract, project_id,
                 )
 
+            tail_epoch_id, _ = await get_tail_epoch_id(
+                redis, protocol_state_contract, anchor_rpc_helper, msg_obj.epochId, 86400, msg_obj.projectId,
+            )
+
+            if project_last_finalized_epoch <= tail_epoch_id:
+                self._logger.error('last finalized epoch is too old, building aggregate from scratch')
+                return await self._calculate_from_scratch(
+                    msg_obj, redis, rpc_helper, anchor_rpc_helper, ipfs_reader, protocol_state_contract, project_id,
+                )
+
             project_last_finalized_data = await get_submission_data(
                 redis, project_last_finalized_cid, ipfs_reader, project_id,
             )
