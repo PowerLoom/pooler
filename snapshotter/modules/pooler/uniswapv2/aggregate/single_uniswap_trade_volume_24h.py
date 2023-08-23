@@ -66,8 +66,17 @@ class AggreagateTradeVolumeProcessor(GenericProcessorAggregate):
         project_id: str,
     ):
 
-        self._logger.info('building aggregate from scratch')
+        calculate_from_scratch_in_progress = await redis.get(f'calculate_from_scratch:{project_id}')
+        if calculate_from_scratch_in_progress:
+            self._logger.info('calculate_from_scratch already in progress, skipping')
+            return
 
+        self._logger.info('building aggregate from scratch')
+        await redis.set(
+            name=f'calculate_from_scratch:{project_id}',
+            value='true',
+            ex=300,
+        )
         # source project tail epoch
         tail_epoch_id, extrapolated_flag = await get_tail_epoch_id(
             redis, protocol_state_contract, anchor_rpc_helper, msg_obj.epochId, 86400, msg_obj.projectId,
@@ -94,6 +103,8 @@ class AggreagateTradeVolumeProcessor(GenericProcessorAggregate):
             if snapshot_data:
                 snapshot = UniswapTradesSnapshot.parse_obj(snapshot_data)
                 aggregate_snapshot = self._add_aggregate_snapshot(aggregate_snapshot, snapshot)
+
+        await redis.delete(f'calculate_from_scratch:{project_id}')
 
         return aggregate_snapshot
 
