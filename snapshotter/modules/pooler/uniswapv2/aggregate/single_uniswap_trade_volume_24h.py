@@ -136,11 +136,13 @@ class AggreagateTradeVolumeProcessor(GenericProcessorAggregate):
             self._logger.info('project_first_epoch is not 0, building aggregate from previous aggregate')
 
             # get key with highest score
-            project_last_finalized = await redis.zrange(
+            project_last_finalized = await redis.zrevrangebyscore(
                 project_finalized_data_zset(project_id),
-                start=-1,
-                end=-1,
+                max='+inf',
+                min='-inf',
                 withscores=True,
+                start=0,
+                num=1,
             )
 
             if project_last_finalized:
@@ -174,12 +176,16 @@ class AggreagateTradeVolumeProcessor(GenericProcessorAggregate):
                 )
 
             aggregate_snapshot = UniswapTradesAggregateSnapshot.parse_obj(project_last_finalized_data)
+            # updating epochId to current epoch
+            aggregate_snapshot.epochId = msg_obj.epochId
 
-            base_project_last_finalized = await redis.zrange(
+            base_project_last_finalized = await redis.zrevrangebyscore(
                 project_finalized_data_zset(msg_obj.projectId),
-                start=-1,
-                end=-1,
+                max='+inf',
+                min='-inf',
                 withscores=True,
+                start=0,
+                num=1,
             )
 
             if base_project_last_finalized:
@@ -188,7 +194,7 @@ class AggreagateTradeVolumeProcessor(GenericProcessorAggregate):
             else:
                 base_project_last_finalized_epoch = 0
 
-            if base_project_last_finalized_epoch:
+            if base_project_last_finalized_epoch and project_last_finalized_epoch < base_project_last_finalized_epoch:
                 # fetch base finalized snapshots if they exist and are within 5 epochs of current epoch
                 base_finalized_snapshot_range = (
                     project_last_finalized_epoch + 1,
@@ -201,7 +207,7 @@ class AggreagateTradeVolumeProcessor(GenericProcessorAggregate):
                 )
             else:
                 base_finalized_snapshots = []
-                base_finalized_snapshot_range = (project_last_finalized_epoch, msg_obj.epochId)
+                base_finalized_snapshot_range = (0, project_last_finalized_epoch)
 
             base_unfinalized_tasks = []
             for epoch_id in range(base_finalized_snapshot_range[1] + 1, msg_obj.epochId + 1):
