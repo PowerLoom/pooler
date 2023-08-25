@@ -65,6 +65,8 @@ class AggreagateTradeVolumeProcessor(GenericProcessorAggregate):
         protocol_state_contract,
         project_id: str,
     ):
+        self._logger.info('Calculation from scratch disabled for snapshotting pretask, skipping')
+        return None
 
         calculate_from_scratch_in_progress = await redis.get(f'calculate_from_scratch:{project_id}')
         if calculate_from_scratch_in_progress:
