@@ -1,6 +1,7 @@
 import asyncio
 import multiprocessing
 import resource
+import time
 from functools import partial
 from typing import Dict
 from typing import Union
@@ -24,12 +25,15 @@ from snapshotter.utils.callback_helpers import get_rabbitmq_robust_connection_as
 from snapshotter.utils.data_utils import get_source_chain_id
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.file_utils import read_json_file
+from snapshotter.utils.models.data_models import SnapshotterStates
+from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.message_models import AggregateBase
 from snapshotter.utils.models.message_models import PayloadCommitMessage
 from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
 from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
 from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessage
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
+from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.rpc import RpcHelper
 
 
@@ -37,24 +41,19 @@ class GenericAsyncWorker(multiprocessing.Process):
     _async_transport: AsyncHTTPTransport
     _rmq_connection_pool: Pool
     _rmq_channel_pool: Pool
-    _aioredis_pool: aioredis.Redis
-    _writer_redis_pool: aioredis.Redis
-    _reader_redis_pool: aioredis.Redis
+    _aioredis_pool: RedisPoolCache
+    _redis_conn: aioredis.Redis
     _rpc_helper: RpcHelper
+    _anchor_rpc_helper: RpcHelper
     _httpx_client: AsyncClient
 
     def __init__(self, name, **kwargs):
         self._core_rmq_consumer: asyncio.Task
         self._exchange_name = f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}'
         self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
-        self._redis_conn: Union[None, aioredis.Redis] = None
         self._running_callback_tasks: Dict[str, asyncio.Task] = dict()
         super(GenericAsyncWorker, self).__init__(name=name, **kwargs)
         self._logger = logger.bind(module=self.name)
-        self._aioredis_pool = None
-        self._async_transport = None
-        self._rpc_helper = None
-        self._anchor_rpc_helper = None
         self.protocol_state_contract = None
         self._qos = 20
 
@@ -172,39 +171,53 @@ class GenericAsyncWorker(multiprocessing.Process):
                     snapshot,
                     e,
                 )
+                await self._redis_conn.hset(
+                    name=epoch_id_project_to_state_mapping(
+                        epoch.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_PAYLOAD_COMMIT.value,
+                    ),
+                    mapping={
+                        project_id: SnapshotterStateUpdate(
+                            status='failed', error=str(e), timestamp=int(time.time()),
+                        ).json(),
+                    },
+                )
+            else:
+                await self._redis_conn.hset(
+                    name=epoch_id_project_to_state_mapping(
+                        epoch.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_PAYLOAD_COMMIT.value,
+                    ),
+                    mapping={
+                        project_id: SnapshotterStateUpdate(
+                            status='success', timestamp=int(time.time()),
+                        ).json(),
+                    },
+                )
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
         pass
 
     async def _init_redis_pool(self):
-        if self._aioredis_pool is not None:
-            return
         self._aioredis_pool = RedisPoolCache()
         await self._aioredis_pool.populate()
         self._redis_conn = self._aioredis_pool._aioredis_pool
 
     async def _init_rpc_helper(self):
-        if self._rpc_helper is None:
-            self._rpc_helper = RpcHelper(rpc_settings=settings.rpc)
+        self._rpc_helper = RpcHelper(rpc_settings=settings.rpc)
+        self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
 
-        if self._anchor_rpc_helper is None:
-            self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
-
-            self.protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
-                address=Web3.toChecksumAddress(
-                    self.protocol_state_contract_address,
-                ),
-                abi=self.protocol_state_contract_abi,
-            )
-            # cleaning up ABI
-            self.protocol_state_contract_abi = None
+        self.protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
+            address=Web3.toChecksumAddress(
+                self.protocol_state_contract_address,
+            ),
+            abi=self.protocol_state_contract_abi,
+        )
+        # cleaning up ABI
+        self.protocol_state_contract_abi = None
 
     async def _init_httpx_client(self):
-        if self._async_transport is not None:
-            return
         self._async_transport = AsyncHTTPTransport(
             limits=Limits(
-                max_connections=100,
+                max_connections=200,
                 max_keepalive_connections=50,
                 keepalive_expiry=None,
             ),

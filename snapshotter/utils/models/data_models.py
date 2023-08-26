@@ -18,6 +18,42 @@ class ProcessorWorkerDetails(BaseModel):
     pid: Union[None, int] = None
 
 
+class PreloaderAsyncFutureDetails(BaseModel):
+    obj: GenericPreloader
+    future: asyncio.Task
+
+    class Config:
+        arbitrary_types_allowed = True
+
+
+class SnapshotterReportState(Enum):
+    MISSED_SNAPSHOT = 'MISSED_SNAPSHOT'
+    SUBMITTED_INCORRECT_SNAPSHOT = 'SUBMITTED_INCORRECT_SNAPSHOT'
+    SHUTDOWN_INITIATED = 'SHUTDOWN_INITIATED'
+    CRASHED_CHILD_WORKER = 'CRASHED_CHILD_WORKER'
+
+
+class SnapshotterStates(Enum):
+    PRELOAD = 'PRELOAD'
+    SNAPSHOT_BUILD = 'SNAPSHOT_BUILD'
+    SNAPSHOT_SUBMIT_PAYLOAD_COMMIT = 'SNAPSHOT_SUBMIT_PAYLOAD_COMMIT'
+    RELAYER_SEND = 'RELAYER_SEND'
+    SNAPSHOT_FINALIZE = 'SNAPSHOT_FINALIZE'
+
+
+class SnapshotterStateUpdate(BaseModel):
+    status: str
+    error: Optional[str] = None
+    extra: Optional[Dict[str, Any]] = None
+    timestamp: int
+
+
+class SnapshotterEpochProcessingReportItem(BaseModel):
+    epochId: int
+    # map transition like EPOCH_RELEASED to its status
+    transitionStatus: Dict[str, Union[SnapshotterStateUpdate, None, Dict[str, SnapshotterStateUpdate]]]
+
+
 class SnapshotterIssue(BaseModel):
     instanceID: str
     issueType: str
@@ -85,16 +121,15 @@ class ProtocolState(BaseModel):
     synced_till_epoch_id: int
 
 
-class SnapshotterReportState(Enum):
-    MISSED_SNAPSHOT = 'MISSED_SNAPSHOT'
-    SUBMITTED_INCORRECT_SNAPSHOT = 'SUBMITTED_INCORRECT_SNAPSHOT'
-
-
 class ProjectStatus(BaseModel):
     projectId: str
     successfulSubmissions: int = 0
     incorrectSubmissions: int = 0
     missedSubmissions: int = 0
+
+
+class SnapshotterPing(BaseModel):
+    instanceID: str
 
 
 class SnapshotterStatus(BaseModel):

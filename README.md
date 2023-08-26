@@ -7,7 +7,7 @@
   - [Preloading](#preloading)
   - [Base Snapshot Generation](#base-snapshot-generation)
   - [Snapshot Finalization](#snapshot-finalization)
-  - [Aggregation and data composition](#aggregation-and-data-composition---snapshot-generation-of-higher-order-data-points-on-base-snapshots)
+  - [Aggregation and data composition - snapshot generation of higher-order data points on base snapshots](#aggregation-and-data-composition---snapshot-generation-of-higher-order-data-points-on-base-snapshots)
 - [Major Components](#major-components)
   - [System Event Detector](#system-event-detector)
   - [Process Hub Core](#process-hub-core)
@@ -373,7 +373,7 @@ In this section, let us take a look at the data composition abilities of Pooler 
 Required reading:
 * [Base Snapshot Generation](#base-snapshot-generation) and
 * [configuring `config/projects.json`](#configuration)
-* [Aggregation and data composition](#aggregation-and-data-composition---snapshot-generation-of-higher-order-datapoints-on-base-snapshots)
+* [Aggregation and data composition](#aggregation-and-data-composition---snapshot-generation-of-higher-order-data-points-on-base-snapshots)
 
 As you can notice in [`config/projects.example.json`](config/projects.example.json), each project config needs to have the following components
 
