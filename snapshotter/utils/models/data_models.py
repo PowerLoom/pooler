@@ -1,3 +1,4 @@
+import asyncio
 from enum import Enum
 from typing import Any
 from typing import Dict
@@ -6,6 +7,8 @@ from typing import Optional
 from typing import Union
 
 from pydantic import BaseModel
+
+from snapshotter.utils.callback_helpers import GenericPreloader
 
 
 class SnapshotWorkerDetails(BaseModel):
