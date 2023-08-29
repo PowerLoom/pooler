@@ -238,7 +238,7 @@ class AggreagateTradeVolumeProcessor(GenericProcessorAggregate):
 
             # Remove from tail if needed
             tail_epochs_to_remove = []
-            for epoch_id in range(project_last_finalized_epoch + 1, msg_obj.epochId + 1):
+            for epoch_id in range(project_last_finalized_epoch, msg_obj.epochId):
                 tail_epoch_id, extrapolated_flag = await get_tail_epoch_id(
                     redis, protocol_state_contract, anchor_rpc_helper, epoch_id, 86400, msg_obj.projectId,
                 )
