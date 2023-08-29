@@ -154,9 +154,14 @@ class AggreagateTradeVolumeProcessor(GenericProcessorAggregate):
                     msg_obj, redis, rpc_helper, anchor_rpc_helper, ipfs_reader, protocol_state_contract, project_id,
                 )
 
-            tail_epoch_id, _ = await get_tail_epoch_id(
+            tail_epoch_id, extrapolated_flag = await get_tail_epoch_id(
                 redis, protocol_state_contract, anchor_rpc_helper, msg_obj.epochId, 86400, msg_obj.projectId,
             )
+
+            if extrapolated_flag:
+                aggregate_complete_flag = False
+            else:
+                aggregate_complete_flag = True
 
             if project_last_finalized_epoch <= tail_epoch_id:
                 self._logger.error('last finalized epoch is too old, building aggregate from scratch')
@@ -255,6 +260,7 @@ class AggreagateTradeVolumeProcessor(GenericProcessorAggregate):
                         snapshot = UniswapTradesSnapshot.parse_obj(snapshot_data)
                         aggregate_snapshot = self._remove_aggregate_snapshot(aggregate_snapshot, snapshot)
 
+            if aggregate_complete_flag:
                 aggregate_snapshot.complete = True
             else:
                 aggregate_snapshot.complete = False
