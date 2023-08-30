@@ -1,5 +1,4 @@
 import asyncio
-import json
 import multiprocessing
 import resource
 import time
@@ -218,7 +217,7 @@ class GenericAsyncWorker(multiprocessing.Process):
     async def _init_httpx_client(self):
         self._async_transport = AsyncHTTPTransport(
             limits=Limits(
-                max_connections=100,
+                max_connections=200,
                 max_keepalive_connections=50,
                 keepalive_expiry=None,
             ),

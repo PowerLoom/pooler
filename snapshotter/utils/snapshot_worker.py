@@ -17,6 +17,8 @@ from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
 from snapshotter.utils.redis.rate_limiter import load_rate_limiter_scripts
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
+from snapshotter.utils.redis.redis_keys import snapshot_submission_window_key
+from snapshotter.utils.redis.redis_keys import submitted_base_snapshots_key
 
 
 class SnapshotAsyncWorker(GenericAsyncWorker):
@@ -29,6 +31,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         for project_config in projects_config:
             type_ = project_config.project_type
             self._task_types.append(type_)
+        self._submission_window = None
 
     def _gen_project_id(self, type_: str, epoch):
         if not epoch.data_source:
@@ -54,6 +57,13 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 ),
             )
             return
+
+        if not self._submission_window:
+            submission_window = await self._redis_conn.get(
+                name=snapshot_submission_window_key,
+            )
+            if submission_window:
+                self._submission_window = int(submission_window)
 
         project_id = self._gen_project_id(type_=task_type, epoch=msg_obj)
 
@@ -108,6 +118,16 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 },
             )
         else:
+
+            await self._redis_conn.set(
+                name=submitted_base_snapshots_key(
+                    epoch_id=msg_obj.epochId, project_id=project_id,
+                ),
+                value=snapshot.json(),
+                # block time is about 2 seconds on anchor chain, keeping it around ten times the submission window
+                ex=self._submission_window * 10 * 2,
+            )
+
             await self._redis_conn.hset(
                 name=epoch_id_project_to_state_mapping(
                     epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,

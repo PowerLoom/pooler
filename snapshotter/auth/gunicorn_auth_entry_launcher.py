@@ -2,23 +2,21 @@ import logging
 import os
 import sys
 
-from loguru import logger
-
 from snapshotter.auth.conf import auth_settings
 from snapshotter.auth.server_entry import app
+from snapshotter.utils.default_logger import FORMAT
+from snapshotter.utils.default_logger import logger
 from snapshotter.utils.gunicorn import InterceptHandler
 from snapshotter.utils.gunicorn import StandaloneApplication
 from snapshotter.utils.gunicorn import StubbedGunicornLogger
 
-LOG_LEVEL = logging.getLevelName(os.environ.get('LOG_LEVEL', 'DEBUG'))
 JSON_LOGS = True if os.environ.get('JSON_LOGS', '0') == '1' else False
+LOG_LEVEL = logging.getLevelName(os.environ.get('LOG_LEVEL', 'DEBUG'))
 WORKERS = int(os.environ.get('GUNICORN_WORKERS', '5'))
 
 
 if __name__ == '__main__':
     intercept_handler = InterceptHandler()
-    # logging.basicConfig(handlers=[intercept_handler], level=LOG_LEVEL)
-    # logging.root.handlers = [intercept_handler]
     logging.root.setLevel(LOG_LEVEL)
 
     seen = set()
@@ -35,20 +33,8 @@ if __name__ == '__main__':
             seen.add(name.split('.')[0])
             logging.getLogger(name).handlers = [intercept_handler]
 
-    logger.configure(
-        handlers=[
-            {
-                'sink': sys.stdout,
-                'serialize': JSON_LOGS,
-                'level': logging.DEBUG,
-            },
-            {
-                'sink': sys.stderr,
-                'serialize': JSON_LOGS,
-                'level': logging.ERROR,
-            },
-        ],
-    )
+    logger.add(sys.stdout, format=FORMAT, level=LOG_LEVEL, serialize=JSON_LOGS)
+    logger.add(sys.stderr, format=FORMAT, level=logging.ERROR, serialize=JSON_LOGS)
 
     options = {
         'bind': f'{auth_settings.bind.host}:{auth_settings.bind.port}',

@@ -10,6 +10,7 @@ from redis import asyncio as aioredis
 
 from snapshotter.init_rabbitmq import get_delegate_worker_request_queue_routing_key
 from snapshotter.init_rabbitmq import get_delegate_worker_response_queue_routing_key_pattern
+from snapshotter.settings.config import preloader_config
 from snapshotter.settings.config import settings
 from snapshotter.utils.callback_helpers import GenericDelegatorPreloader
 from snapshotter.utils.callback_helpers import get_rabbitmq_basic_connection_async
@@ -30,16 +31,21 @@ class DelegatorPreloaderAsyncWorker(GenericDelegatorPreloader):
         self._filter_worker_response_queue = None
         self._filter_worker_response_routing_key = None
         self._rw_lock = aiorwlock.RWLock()
-        self._preload_successful_event = asyncio.Event()
-        self._cleanup_done = False
+        self._preload_finished_event = asyncio.Event()
+        self._redis_conn = None
+        self._channel = None
+        self._q_obj = None
 
     async def cleanup(self):
-        if self._cleanup_done:
-            return
-        try:
-            await self._redis_conn.close()
-        except Exception as e:
-            self._logger.exception('Exception while closing redis connection: {}', e)
+        if self._redis_conn:
+            try:
+                await self._redis_conn.close()
+            except Exception as e:
+                self._logger.exception('Exception while closing redis connection: {}', e)
+
+        if self._channel and self._q_obj and not self._channel.is_closed:
+            await self._q_obj.cancel(self._consumer_tag)
+            await self._channel.close()
 
     async def _periodic_awaited_responses_checker(self):
         _running = True
@@ -50,7 +56,7 @@ class DelegatorPreloaderAsyncWorker(GenericDelegatorPreloader):
                     await self._on_delegated_responses_complete()
                     self._logger.info('Preloading task {} for epoch {} complete', self._task_type, self._epoch.epochId)
                     _running = False
-        self._preload_successful_event.set()
+        self._preload_finished_event.set()
 
     async def _on_filter_worker_response_message(
         self,
@@ -69,6 +75,7 @@ class DelegatorPreloaderAsyncWorker(GenericDelegatorPreloader):
             redis_conn: aioredis.Redis,
             rpc_helper: RpcHelper,
     ):
+        self._redis_conn = redis_conn
         self._awaited_delegated_response_ids = set(self._request_id_query_obj_map.keys())
         async with await get_rabbitmq_basic_connection_async() as rmq_conn:
             self._channel = await rmq_conn.channel()
@@ -118,4 +125,19 @@ class DelegatorPreloaderAsyncWorker(GenericDelegatorPreloader):
             )
             asyncio.ensure_future(self._periodic_awaited_responses_checker())
 
-            await self._preload_successful_event.wait()  # will block until preload is completed
+            try:
+                await asyncio.wait_for(self._preload_finished_event.wait(), timeout=preloader_config.timeout)
+                await self.cleanup()
+            except asyncio.TimeoutError:
+                self._logger.error(
+                    'Preloading task {} for epoch {} timed out after {} seconds',
+                    self._task_type, epoch.epochId, preloader_config.timeout,
+                )
+                await self.cleanup()
+                raise Exception(
+                    f'Preloading task {self._task_type} for epoch {epoch.epochId} timed out after {preloader_config.timeout} seconds',
+                )
+            except Exception as e:
+                self._logger.error('Exception while waiting for preloading to complete: {}', e)
+                await self.cleanup()
+                raise e

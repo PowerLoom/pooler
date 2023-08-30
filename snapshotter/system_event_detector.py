@@ -164,7 +164,7 @@ class EventDetectorProcess(multiprocessing.Process):
             if log.event == 'EpochReleased':
                 event = EpochReleasedEvent(
                     begin=log.args.begin,
-                    end=log.args.begin,
+                    end=log.args.end,
                     epochId=log.args.epochId,
                     timestamp=log.args.timestamp,
                 )

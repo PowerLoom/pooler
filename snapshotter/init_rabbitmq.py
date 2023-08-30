@@ -1,3 +1,4 @@
+import aio_pika
 import pika
 
 from snapshotter.settings.config import settings

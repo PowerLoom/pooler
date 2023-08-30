@@ -231,6 +231,16 @@ async def get_projects_list(redis_conn: aioredis.Redis, state_contract_obj, rpc_
     return projects_list
 
 
+async def get_snapshot_submision_window(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper):
+    tasks = [
+        state_contract_obj.functions.snapshotSubmissionWindow(),
+    ]
+
+    [submission_window] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
+
+    return submission_window
+
+
 async def get_source_chain_epoch_size(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper):
 
     source_chain_epoch_size_data = await redis_conn.get(

@@ -12,6 +12,8 @@ module.exports = {
       script : `poetry run python -m snapshotter.launch_process_hub_core`,
       max_restarts: MAX_RESTART,
       min_uptime: MIN_UPTIME,
+      error_file: "/dev/null",
+      out_file: "/dev/null",
       env: {
         NODE_ENV: NODE_ENV,
       }
@@ -21,6 +23,8 @@ module.exports = {
       script : `poetry run python -m snapshotter.gunicorn_core_launcher`,
       max_restarts: MAX_RESTART,
       min_uptime: MIN_UPTIME,
+      error_file: "/dev/null",
+      out_file: "/dev/null",
       env: {
         NODE_ENV: NODE_ENV,
         GUNICORN_WORKERS: 1,
@@ -31,6 +35,8 @@ module.exports = {
       script : `poetry run python -m snapshotter.auth.gunicorn_auth_entry_launcher`,
       max_restarts: MAX_RESTART,
       min_uptime: MIN_UPTIME,
+      error_file: "/dev/null",
+      out_file: "/dev/null",
       env: {
         NODE_ENV: NODE_ENV,
         GUNICORN_WORKERS: 1,
