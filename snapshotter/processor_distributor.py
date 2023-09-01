@@ -41,6 +41,7 @@ from snapshotter.utils.default_logger import logger
 from snapshotter.utils.models.data_models import PreloaderAsyncFutureDetails
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
+from snapshotter.utils.models.data_models import SnapshottersUpdatedEvent
 from snapshotter.utils.models.message_models import EpochBase
 from snapshotter.utils.models.message_models import PayloadCommitFinalizedMessage
 from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
@@ -54,6 +55,7 @@ from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import project_finalized_data_zset
 from snapshotter.utils.redis.redis_keys import snapshot_submission_window_key
+from snapshotter.utils.redis.redis_keys import active_status_key
 from snapshotter.utils.rpc import RpcHelper
 
 
@@ -674,7 +676,14 @@ class ProcessorDistributor(multiprocessing.Process):
             )
         elif message_type == 'ProjectsUpdated':
             await self._update_all_projects(message)
-
+        elif message_type == 'SnapshottersUpdated':
+            msg_cast = SnapshottersUpdatedEvent.parse_raw(message.body)
+            if msg_cast.snapshotterAddress == settings.instance_id:
+                if self._redis_conn:
+                    await self._redis_conn.set(
+                        active_status_key,
+                        int(msg_cast.allowed)
+                    )
         else:
             self._logger.error(
                 (
