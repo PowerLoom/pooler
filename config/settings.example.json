@@ -13,7 +13,7 @@
   "rpc": {
     "full_nodes": [{
       "url": "https://rpc-url",
-      "rate_limit": "10000000/day;2000/minute;100/second"
+      "rate_limit": "100000000/day;20000/minute;1000/second"
     }],
     "archive_nodes": [],
     "force_archive_blocks": 100,
@@ -118,7 +118,7 @@
   "anchor_chain_rpc": {
     "full_nodes": [{
       "url": "https://prost-rpc-url",
-      "rate_limit": "100000000/day;18000/minute;300/second"
+      "rate_limit": "100000000/day;20000/minute;1000/second"
     }],
     "retry": 5,
     "request_time_out": 5,
