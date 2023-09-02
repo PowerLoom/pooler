@@ -84,9 +84,9 @@
     "address": "protocol-state-contract"
   },
   "callback_worker_config": {
-    "num_delegate_workers": 8,
-    "num_snapshot_workers": 2,
-    "num_aggregation_workers": 4
+    "num_delegate_workers": 0,
+    "num_snapshot_workers": 8,
+    "num_aggregation_workers": 12
   },
   "ipfs": {
     "url": "ipfs-writer-url",
