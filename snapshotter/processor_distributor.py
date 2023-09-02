@@ -676,7 +676,7 @@ class ProcessorDistributor(multiprocessing.Process):
             )
         elif message_type == 'ProjectsUpdated':
             await self._update_all_projects(message)
-        elif message_type == 'SnapshottersUpdated':
+        elif message_type == 'allSnapshottersUpdated':
             msg_cast = SnapshottersUpdatedEvent.parse_raw(message.body)
             if msg_cast.snapshotterAddress == settings.instance_id:
                 if self._redis_conn:

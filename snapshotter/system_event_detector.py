@@ -120,14 +120,14 @@ class EventDetectorProcess(multiprocessing.Process):
             'EpochReleased': self.contract.events.EpochReleased._get_event_abi(),
             'SnapshotFinalized': self.contract.events.SnapshotFinalized._get_event_abi(),
             'ProjectsUpdated': self.contract.events.ProjectsUpdated._get_event_abi(),
-            'SnapshottersUpdated': self.contract.events.SnapshottersUpdated._get_event_abi(),
+            'allSnapshottersUpdated': self.contract.events.allSnapshottersUpdated._get_event_abi(),
         }
 
         EVENT_SIGS = {
             'EpochReleased': 'EpochReleased(uint256,uint256,uint256,uint256)',
             'SnapshotFinalized': 'SnapshotFinalized(uint256,uint256,string,string,uint256)',
             'ProjectsUpdated': 'ProjectsUpdated(string,bool,uint256)',
-            'SnapshottersUpdated': 'SnapshottersUpdated(address,bool)',
+            'allSnapshottersUpdated': 'allSnapshottersUpdated(address,bool)',
 
         }
 
@@ -191,7 +191,7 @@ class EventDetectorProcess(multiprocessing.Process):
                     timestamp=int(time.time()),
                 )
                 events.append((log.event, event))
-            elif log.event == 'SnapshottersUpdated':
+            elif log.event == 'allSnapshottersUpdated':
                 event = SnapshottersUpdatedEvent(
                     snapshotterAddress=log.args.snapshotterAddress,
                     allowed=log.args.allowed,
