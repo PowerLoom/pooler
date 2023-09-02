@@ -25,7 +25,8 @@ env:
 jobs:
   build:
 
-    runs-on: ubuntu-latest
+    runs-on:
+      group: larger-runners
     permissions:
       contents: read
       packages: write
