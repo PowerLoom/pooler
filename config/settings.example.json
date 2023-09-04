@@ -20,7 +20,7 @@
     "retry": 5,
     "request_time_out": 5,
     "skip_epoch_threshold_blocks": 30,
-    "polling_interval": 15,
+    "polling_interval": 10,
     "connection_limits":{
       "max_connections": 100,
       "max_keepalive_connections": 50,
