@@ -28,7 +28,6 @@ from web3._utils.normalizers import BASE_RETURN_NORMALIZERS
 from web3.eth import AsyncEth
 from web3.types import TxParams
 from web3.types import Wei
-from web3.middleware import async_simple_cache_middleware
 
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import logger
@@ -153,8 +152,6 @@ class RpcHelper(object):
                 modules={'eth': (AsyncEth,)},
                 middlewares=[],
             )
-            await node['web3_client_async'].provider.cache_async_session(self._web3_aiohttp_client)
-            node['web3_client_async'].middleware_onion.add(async_simple_cache_middleware)
 
     async def init(self, redis_conn):
         if not self._sync_nodes_initialized:
