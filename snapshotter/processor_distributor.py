@@ -51,11 +51,11 @@ from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMess
 from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessage
 from snapshotter.utils.models.settings_model import AggregateOn
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
+from snapshotter.utils.redis.redis_keys import active_status_key
 from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import project_finalized_data_zset
 from snapshotter.utils.redis.redis_keys import snapshot_submission_window_key
-from snapshotter.utils.redis.redis_keys import active_status_key
 from snapshotter.utils.rpc import RpcHelper
 
 
@@ -664,7 +664,15 @@ class ProcessorDistributor(multiprocessing.Process):
                     int(time.time()),
                 )
                 asyncio.ensure_future(self._cleanup_older_epoch_status(_.epochId))
-            await self._epoch_release_processor(message)
+
+            _ = await self._redis_conn.get(active_status_key)
+            if _:
+                active_status = bool(int(_))
+                if not active_status:
+                    self._logger.error('System is not active, ignoring released Epoch')
+                else:
+                    await self._epoch_release_processor(message)
+
         elif message_type == 'SnapshotSubmitted':
             await self._distribute_callbacks_aggregate(
                 message,
@@ -682,7 +690,7 @@ class ProcessorDistributor(multiprocessing.Process):
                 if self._redis_conn:
                     await self._redis_conn.set(
                         active_status_key,
-                        int(msg_cast.allowed)
+                        int(msg_cast.allowed),
                     )
         else:
             self._logger.error(
