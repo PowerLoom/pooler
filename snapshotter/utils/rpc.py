@@ -152,6 +152,7 @@ class RpcHelper(object):
                 modules={'eth': (AsyncEth,)},
                 middlewares=[],
             )
+            await node['web3_client_async'].provider.cache_async_session(self._web3_aiohttp_client)
 
     async def init(self, redis_conn):
         if not self._sync_nodes_initialized:

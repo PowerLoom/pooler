@@ -22,7 +22,7 @@ async def main():
     )
     snapshotters_arr_query = await anchor_rpc.web3_call(
         [
-            protocol_state_contract.functions.getSnapshotters(),
+            protocol_state_contract.functions.getAllSnapshotters(),
         ],
         redis_conn
     )
