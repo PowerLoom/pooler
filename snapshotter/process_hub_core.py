@@ -2,6 +2,7 @@ from datetime import datetime
 import json
 import os
 import threading
+import time
 from urllib.parse import urljoin
 import uuid
 from multiprocessing import Process
@@ -65,6 +66,7 @@ class ProcessHubCore(Process):
                 keepalive_expiry=300,
             ),
         )
+        self._last_reporting_service_ping = 0
         self._thread_shutdown_event = threading.Event()
         self._shutdown_initiated = False
 
@@ -263,7 +265,7 @@ class ProcessHubCore(Process):
                 name=f'powerloom:snapshotter:{settings.namespace}:{settings.instance_id}:Processes',
                 mapping=proc_id_map,
             )
-            if settings.reporting.service_url:
+            if settings.reporting.service_url and int(time.time()) - self._last_reporting_service_ping >= 30:
                 try:
                     self._httpx_client.post(
                         url=urljoin(settings.reporting.service_url, '/ping'),
@@ -276,6 +278,7 @@ class ProcessHubCore(Process):
                         self._logger.error(
                             'Error while pinging reporting service: {}', e,
                         )
+                self._last_reporting_service_ping = int(time.time())
         self._logger.error(
             (
                 'Caught thread shutdown notification event. Deleting process'

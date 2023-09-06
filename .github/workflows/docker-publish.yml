@@ -9,7 +9,7 @@ on:
   release:
     types: ['published']
   push:
-    branches: [ "dockerify" ]
+    branches: [ "dockerify", "testnet_pretask" ]
     # Publish semver tags as releases.
     tags: [ 'v*.*.*' ]
   pull_request:
@@ -25,7 +25,8 @@ env:
 jobs:
   build:
 
-    runs-on: ubuntu-latest
+    runs-on:
+      group: larger-runners
     permissions:
       contents: read
       packages: write

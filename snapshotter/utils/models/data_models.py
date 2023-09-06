@@ -108,6 +108,11 @@ class ProjectsUpdatedEvent(EventBase):
     enableEpochId: int
 
 
+class SnapshottersUpdatedEvent(EventBase):
+    snapshotterAddress: str
+    allowed: bool
+
+
 class SnapshotSubmittedEvent(EventBase):
     snapshotCid: str
     epochId: int

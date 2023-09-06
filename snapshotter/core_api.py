@@ -36,6 +36,7 @@ from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import epoch_process_report_cached_key
 from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_key
+from snapshotter.utils.redis.redis_keys import active_status_key
 from snapshotter.utils.rpc import RpcHelper
 
 
@@ -97,11 +98,23 @@ async def startup_boilerplate():
     await app.state.ipfs_singleton.init_sessions()
     app.state.ipfs_reader_client = app.state.ipfs_singleton._ipfs_read_client
 
-# Health check endpoint that returns 200 OK
 
-
+# Health check endpoint
 @app.get('/health')
-async def health_check():
+async def health_check(
+    request: Request,
+    response: Response,
+):
+    redis_conn: aioredis.Redis = request.app.state.redis_pool
+    _ = await redis_conn.get(active_status_key)
+    if _:
+        active_status = bool(int(_))
+        if not active_status:
+            response.status_code = 503
+            return {
+                'status': 'error',
+                'message': 'Snapshotter is not active',
+            }
     return {'status': 'OK'}
 
 # get current epoch
