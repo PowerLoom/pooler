@@ -543,6 +543,7 @@ async def get_snapshotter_epoch_processing_status(
     for epoch_id in range(current_epoch_id, current_epoch_id - 30 - 1, -1):
         epoch_specific_report = SnapshotterEpochProcessingReportItem.construct()
         epoch_specific_report.epochId = epoch_id
+        
         epoch_release_status = await redis_conn.get(
             epoch_id_epoch_released_key(epoch_id=epoch_id),
         )
@@ -572,7 +573,7 @@ async def get_snapshotter_epoch_processing_status(
         epoch_processing_final_report.append(epoch_specific_report)
     await redis_conn.set(
         epoch_process_report_cached_key,
-        json.dumps(list(map(lambda x: x.json(), epoch_processing_final_report))),
+        json.dumps(list(map(lambda x: x.dict(), epoch_processing_final_report))),
         ex=60,
     )
     return paginate(epoch_processing_final_report)
