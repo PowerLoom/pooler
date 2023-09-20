@@ -46,7 +46,7 @@ def pidStatus(connections: bool = False):
     for k, v in r.hgetall(
         name=f'powerloom:uniswap:{settings.namespace}:{settings.instance_id}:Processes',
     ).items():
-        key = k.decode('utf-8')
+        key = k.decode('utf-8') 
         value = v.decode('utf-8')
 
         if key == 'callback_workers':

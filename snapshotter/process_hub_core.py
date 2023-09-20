@@ -1,10 +1,15 @@
 from datetime import datetime
 import json
 import os
+from re import S
 import threading
 import time
 from urllib.parse import urljoin
 import uuid
+import psutil
+import pydantic
+import redis
+import httpx
 from multiprocessing import Process
 from signal import SIGCHLD
 from signal import SIGINT
@@ -14,12 +19,7 @@ from signal import SIGTERM
 from threading import Thread
 from typing import Dict
 from typing import Optional
-import httpx
-
-import psutil
-import pydantic
-import redis
-
+from eth_utils.address import to_checksum_address
 from snapshotter.processor_distributor import ProcessorDistributor
 from snapshotter.settings.config import settings
 from snapshotter.system_event_detector import EventDetectorProcess
@@ -28,13 +28,15 @@ from snapshotter.utils.callback_helpers import send_failure_notifications_sync
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.delegate_worker import DelegateAsyncWorker
 from snapshotter.utils.exceptions import SelfExitException
+from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.helper_functions import cleanup_proc_hub_children
-from snapshotter.utils.models.data_models import ProcessorWorkerDetails, SnapshotterIssue, SnapshotterReportState
-from snapshotter.utils.models.data_models import SnapshotWorkerDetails
+from snapshotter.utils.models.data_models import ProcessorWorkerDetails, SnapshotterEpochProcessingReportItem, SnapshotterIssue, SnapshotterReportState, SnapshotterStateUpdate, SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterPing
 from snapshotter.utils.models.message_models import ProcessHubCommand
 from snapshotter.utils.rabbitmq_helpers import RabbitmqSelectLoopInteractor
-from snapshotter.utils.redis.redis_conn import provide_redis_conn
+from snapshotter.utils.redis.redis_conn import REDIS_CONN_CONF, provide_redis_conn
+from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key, epoch_id_project_to_state_mapping
+from snapshotter.utils.rpc import RpcHelper
 from snapshotter.utils.snapshot_worker import SnapshotAsyncWorker
 
 PROC_STR_ID_TO_CLASS_MAP = {
@@ -52,10 +54,14 @@ PROC_STR_ID_TO_CLASS_MAP = {
 
 
 class ProcessHubCore(Process):
+    _anchor_rpc_helper: RpcHelper
+    _redis_connection_pool_sync: redis.BlockingConnectionPool
+    _redis_conn_sync: redis.Redis
+
     def __init__(self, name, **kwargs):
         Process.__init__(self, name=name, **kwargs)
         self._spawned_processes_map: Dict[str, Optional[int]] = dict()  # process name to pid map
-        self._spawned_cb_processes_map: Dict[str, Dict[str, Optional[SnapshotWorkerDetails]]] = (
+        self._spawned_cb_processes_map: Dict[str, Dict[str, Optional[ProcessorWorkerDetails]]] = (
             dict()
         )  # separate map for callback worker spawns. unique ID -> dict(unique_name, pid)
         self._httpx_client = httpx.Client(
@@ -134,7 +140,7 @@ class ProcessHubCore(Process):
 
                     worker_obj.start()
                     self._spawned_cb_processes_map[callback_worker_class][callback_worker_unique_id] = \
-                        SnapshotWorkerDetails(unique_name=callback_worker_unique_id, pid=worker_obj.pid)
+                        ProcessorWorkerDetails(unique_name=callback_worker_unique_id, pid=worker_obj.pid)
                     self._logger.debug(
                         (
                             'Respawned callback worker class {} unique ID {}'
@@ -222,12 +228,14 @@ class ProcessHubCore(Process):
             for unique_worker_entry in v.values():
                 if unique_worker_entry is not None and unique_worker_entry.pid == pid:
                     psutil.Process(pid).wait()
+                    break
 
         for k, v in self._spawned_processes_map.items():
             if v is not None and v == pid:
                 self._logger.debug('Waiting for process ID {} to join...', pid)
                 psutil.Process(pid).wait()
                 self._logger.debug('Process ID {} joined...', pid)
+                break
 
     @provide_redis_conn
     def internal_state_reporter(self, redis_conn: redis.Redis = None):
@@ -279,6 +287,99 @@ class ProcessHubCore(Process):
                             'Error while pinging reporting service: {}', e,
                         )
                 self._last_reporting_service_ping = int(time.time())
+                # check for epoch processing status
+                try:
+                    [current_epoch_data] = self._protocol_state_contract.functions.getCurrentEpoch().call()
+                    current_epoch = {
+                        'begin': current_epoch_data[0],
+                        'end': current_epoch_data[1],
+                        'epochId': current_epoch_data[2],
+                    }
+
+                except Exception as e:
+                    self._logger.exception(
+                        'Exception in get_current_epoch',
+                        e=e,
+                    )
+                    continue
+                current_epoch_id = current_epoch['epochId']
+                epoch_health = dict()
+                # check until the last 3 epochs
+                for epoch_id in range(current_epoch_id, current_epoch_id - 3 - 1, -1):
+                    epoch_specific_report = SnapshotterEpochProcessingReportItem.construct()
+                    success_percentage = 0
+                    epoch_specific_report.epochId = epoch_id
+                    for state in SnapshotterStates:
+                        if state not in [SnapshotterStates.PRELOAD, SnapshotterStates.SNAPSHOT_BUILD]:
+                            continue
+                        state_report_entries = self._redis_conn_sync.hgetall(
+                            name=epoch_id_project_to_state_mapping(epoch_id=epoch_id, state_id=state.value),
+                        )
+                        if state_report_entries:
+                            project_state_report_entries = dict()
+                            epoch_specific_report.transitionStatus[state.value] = dict()
+                            project_state_report_entries = {
+                                project_id.decode('utf-8'): SnapshotterStateUpdate.parse_raw(project_state_entry)
+                                for project_id, project_state_entry in state_report_entries.items()
+                            }
+                            epoch_specific_report.transitionStatus[state.value] = project_state_report_entries
+                            success_percentage += len(
+                                [
+                                    project_state_report_entry
+                                    for project_state_report_entry in project_state_report_entries.values()
+                                    if project_state_report_entry.status == 'success'
+                                ],
+                            ) / len(project_state_report_entries)
+                        else:
+                            epoch_specific_report.transitionStatus[state.value] = None
+                    if success_percentage != 0:
+                        self._logger.debug(
+                            'Epoch {} processing success percentage within states of PRELOAD and SNAPSHOT_BUILD: {}',
+                            epoch_id,
+                            success_percentage,
+                        )
+
+                    if any(
+                        [
+                            epoch_specific_report.transitionStatus[state.value] is None
+                            for state in [SnapshotterStates.PRELOAD, SnapshotterStates.SNAPSHOT_BUILD]
+                        ]
+                    ):
+                        epoch_health[epoch_id] = False
+                        self._logger.debug(
+                            'Marking epoch {} as unhealthy due to missing state reports: {}',
+                            epoch_id,
+                            [state.value for state in [SnapshotterStates.PRELOAD, SnapshotterStates.SNAPSHOT_BUILD] if epoch_specific_report.transitionStatus[state.value] is None],
+                        )
+                    if success_percentage < 0.5:
+                        epoch_health[epoch_id] = False
+                        self._logger.debug(
+                            'Marking epoch {} as unhealthy due to low success percentage: {}',
+                            epoch_id,
+                            success_percentage,
+                        )
+                if len([epoch_id for epoch_id, healthy in epoch_health.items() if not healthy]) >= 2:
+                    self._logger.debug(
+                        'Sending unhealthy epoch report to reporting service: {}',
+                        epoch_health,
+                    )
+                    # TODO: send detailed issue report
+                    # TODO: kill existing children worker processes and restart them
+                    # send_failure_notifications_sync(
+                    #     client=self._httpx_client,
+                    #     message=SnapshotterIssue(
+                    #         instanceID=settings.instance_id,
+                    #         issueType=SnapshotterReportState.MISSED_SNAPSHOT.value,
+                    #         projectID='',
+                    #         epochId='',
+                    #         timeOfReporting=datetime.now().isoformat(),
+                    #         extra=json.dumps(
+                    #             {
+                    #                 'epoch_health': epoch_health,
+                    #             }
+                    #         ),
+                    #     )
+                    # )
         self._logger.error(
             (
                 'Caught thread shutdown notification event. Deleting process'
@@ -289,12 +390,73 @@ class ProcessHubCore(Process):
             f'powerloom:snapshotter:{settings.namespace}:{settings.instance_id}:Processes',
         )
 
+    def _kill_all_children(self):
+        self._logger.error('Waiting on spawned callback workers to join...')
+        for (
+            worker_class_name,
+            unique_worker_entries,
+        ) in self._spawned_cb_processes_map.items():
+            for (
+                worker_unique_id,
+                worker_unique_process_details,
+            ) in unique_worker_entries.items():
+                if worker_unique_process_details is not None and worker_unique_process_details.pid:
+                    self._logger.error(
+                        (
+                            'Waiting on spawned callback worker {} | Unique'
+                            ' ID {} | PID {}  to join...'
+                        ),
+                        worker_class_name,
+                        worker_unique_id,
+                        worker_unique_process_details.pid,
+                    )
+                    psutil.Process(pid=worker_unique_process_details.pid).wait()
+        self._spawned_cb_processes_map = dict()
+
+        logger.error(
+            'Waiting on spawned core workers to join... {}',
+            self._spawned_processes_map,
+        )
+        for (
+            worker_class_name,
+            worker_pid,
+        ) in self._spawned_processes_map.items():
+            self._logger.error(
+                'spawned Process Pid to wait on {}',
+                worker_pid,
+            )
+            if worker_pid is not None:
+                self._logger.error(
+                    (
+                        'Waiting on spawned core worker {} | PID {}  to'
+                        ' join...'
+                    ),
+                    worker_class_name,
+                    worker_pid,
+                )
+                psutil.Process(worker_pid).wait()
+        self._spawned_processes_map = dict()
+
     @cleanup_proc_hub_children
     def run(self) -> None:
         self._logger = logger.bind(module='Powerloom|ProcessHub|Core')
 
         for signame in [SIGINT, SIGTERM, SIGQUIT, SIGCHLD]:
             signal(signame, self.signal_handler)
+
+        self._redis_connection_pool_sync = redis.BlockingConnectionPool(**REDIS_CONN_CONF)
+        self._redis_conn_sync = redis.Redis(connection_pool=self._redis_connection_pool_sync)
+        self._anchor_rpc_helper = RpcHelper(
+            rpc_settings=settings.anchor_chain_rpc
+        )
+        self._anchor_rpc_helper._load_web3_providers_and_rate_limits()
+        protocol_abi = read_json_file(settings.protocol_state.abi, self._logger)
+        self._protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
+            address=to_checksum_address(
+                settings.protocol_state.address,
+            ),
+            abi=protocol_abi,
+        )
 
         self._logger.debug('=' * 80)
         self._logger.debug('Launching Workers')
@@ -443,7 +605,7 @@ class ProcessHubCore(Process):
                                     self.kill_process(worker_process_details.pid)
                                     self._spawned_cb_processes_map[
                                         cb_worker_type
-                                    ][worker_unique_id] = SnapshotWorkerDetails(
+                                    ][worker_unique_id] = ProcessorWorkerDetails(
                                         unique_name=worker_unique_id, pid=None,
                                     )
                                     self._logger.info(

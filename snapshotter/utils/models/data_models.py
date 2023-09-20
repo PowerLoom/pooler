@@ -11,11 +11,6 @@ from pydantic import BaseModel
 from snapshotter.utils.callback_helpers import GenericPreloader
 
 
-class SnapshotWorkerDetails(BaseModel):
-    unique_name: str
-    pid: Union[int, None] = None
-
-
 class ProcessorWorkerDetails(BaseModel):
     unique_name: str
     pid: Union[None, int] = None
@@ -53,6 +48,7 @@ class SnapshotterStateUpdate(BaseModel):
 
 class SnapshotterEpochProcessingReportItem(BaseModel):
     epochId: int
+    epochEnd: int
     # map transition like EPOCH_RELEASED to its status
     transitionStatus: Dict[str, Union[SnapshotterStateUpdate, None, Dict[str, SnapshotterStateUpdate]]]
 
