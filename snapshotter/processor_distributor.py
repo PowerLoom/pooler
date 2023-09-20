@@ -201,7 +201,6 @@ class ProcessorDistributor(multiprocessing.Process):
                     project_data = []
                     for project in relevant_projects:
                         data_source = project.split(':')[-2]
-                        data_source = '_'.join(to_checksum_address(d) for d in data_source.split('_'))
                         project_data.append(
                             data_source,
                         )
@@ -445,7 +444,6 @@ class ProcessorDistributor(multiprocessing.Process):
                         if project_config.projects is None:
                             continue
                         data_source = msg_obj.projectId.split(':')[-2]
-                        data_source = '_'.join(to_checksum_address(d) for d in data_source.split('_'))
                         if msg_obj.allowed:
                             project_config.projects.append(data_source)
                             project_config.projects = list(set(project_config.projects))
