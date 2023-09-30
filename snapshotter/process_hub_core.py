@@ -254,7 +254,8 @@ class ProcessHubCore(Process):
                             epoch_specific_report.transitionStatus[state.value] = None
                     if success_percentage != 0:
                         self._logger.debug(
-                            'Epoch {} processing success percentage within states of PRELOAD and SNAPSHOT_BUILD: {}',
+                            'Epoch {} processing success percentage within states {}: {}',
+                            list(epoch_specific_report.transitionStatus.keys()),
                             epoch_id,
                             success_percentage * 100,
                         )
