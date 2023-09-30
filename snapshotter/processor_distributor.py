@@ -4,6 +4,8 @@ import importlib
 import json
 import multiprocessing
 import queue
+import resource
+from signal import SIGINT, SIGQUIT, SIGTERM, signal
 import time
 from collections import defaultdict
 from functools import partial
@@ -114,6 +116,11 @@ class ProcessorDistributor(multiprocessing.Process):
             follow_redirects=False,
             transport=self._async_transport,
         )
+
+    def _signal_handler(self, signum, frame):
+        if signum in [SIGINT, SIGTERM, SIGQUIT]:
+            self._core_rmq_consumer.cancel()
+
 
     async def _init_redis_pool(self):
         self._aioredis_pool = RedisPoolCache()
@@ -721,6 +728,13 @@ class ProcessorDistributor(multiprocessing.Process):
         self._logger = logger.bind(
             module=f'Powerloom|Callbacks|ProcessDistributor:{settings.namespace}-{settings.instance_id}',
         )
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        resource.setrlimit(
+            resource.RLIMIT_NOFILE,
+            (settings.rlimit.file_descriptors, hard),
+        )
+        for signame in [SIGINT, SIGTERM, SIGQUIT]:
+            signal(signame, self._signal_handler)
         asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
         ev_loop = asyncio.get_event_loop()
         ev_loop.run_until_complete(self.init_worker())

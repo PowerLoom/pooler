@@ -66,8 +66,8 @@ class AggreagateTradeVolumeProcessor(GenericProcessorAggregate):
         project_id: str,
     ):
         # skipping calculate from scratch for pretest
-        self._logger.info('skipping calculate from scratch for pretest')
-        return
+        # self._logger.info('skipping calculate from scratch for pretest')
+        # return
 
         calculate_from_scratch_in_progress = await redis.get(f'calculate_from_scratch:{project_id}')
         if calculate_from_scratch_in_progress:

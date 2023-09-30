@@ -143,5 +143,20 @@ def stop(
         )
 
 
+@app.command()
+def respawn():
+    c = create_rabbitmq_conn()
+    typer.secho('Opening RabbitMQ channel...', fg=typer.colors.GREEN)
+    ch = c.channel()
+    proc_hub_cmd = ProcessHubCommand(
+        command='respawn'
+    )
+    processhub_command_publish(ch, proc_hub_cmd.json())
+    typer.secho(
+        f'Sent command to ProcessHubCore | Command: {proc_hub_cmd.json()}',
+        fg=typer.colors.YELLOW,
+    )
+
+
 if __name__ == '__main__':
     app()

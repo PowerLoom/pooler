@@ -1,12 +1,13 @@
 import asyncio
 import multiprocessing
 import resource
+from signal import SIGINT, SIGQUIT, SIGTERM
 import time
 from functools import partial
 from typing import Dict
 from typing import Union
 from uuid import uuid4
-
+from signal import signal
 from aio_pika import IncomingMessage
 from aio_pika import Message
 from aio_pika.pool import Pool
@@ -71,6 +72,10 @@ class GenericAsyncWorker(multiprocessing.Process):
             f'powerloom-backend-commit-payload:{settings.namespace}:{settings.instance_id}.Data'
         )
         self._initialized = False
+
+    def _signal_handler(self, signum, frame):
+        if signum in [SIGINT, SIGTERM, SIGQUIT]:
+            self._core_rmq_consumer.cancel()
 
     async def _rabbitmq_consumer(self, loop):
         self._rmq_connection_pool = Pool(get_rabbitmq_robust_connection_async, max_size=5, loop=loop)
@@ -241,6 +246,8 @@ class GenericAsyncWorker(multiprocessing.Process):
             resource.RLIMIT_NOFILE,
             (settings.rlimit.file_descriptors, hard),
         )
+        for signame in [SIGINT, SIGTERM, SIGQUIT]:
+            signal(signame, self._signal_handler)
         ev_loop = asyncio.get_event_loop()
         self._logger.debug(
             f'Starting asynchronous callback worker {self._unique_id}...',
