@@ -48,10 +48,10 @@ class SnapshotterStateUpdate(BaseModel):
 
 
 class SnapshotterEpochProcessingReportItem(BaseModel):
-    epochId: int
-    epochEnd: int
+    epochId: int = 0
+    epochEnd: int = 0
     # map transition like EPOCH_RELEASED to its status
-    transitionStatus: Dict[str, Union[SnapshotterStateUpdate, None, Dict[str, SnapshotterStateUpdate]]]
+    transitionStatus: Dict[str, Union[SnapshotterStateUpdate, None, Dict[str, SnapshotterStateUpdate]]] = dict()
 
 
 class SnapshotterIssue(BaseModel):
