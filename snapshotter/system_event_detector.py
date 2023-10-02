@@ -2,6 +2,7 @@ import asyncio
 import json
 import multiprocessing
 import queue
+import resource
 import signal
 import sys
 import threading
@@ -326,6 +327,11 @@ class EventDetectorProcess(multiprocessing.Process):
 
     @rabbitmq_and_redis_cleanup
     def run(self):
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        resource.setrlimit(
+            resource.RLIMIT_NOFILE,
+            (settings.rlimit.file_descriptors, hard),
+        )
         for signame in [signal.SIGINT, signal.SIGTERM, signal.SIGQUIT]:
             signal.signal(signame, self._generic_exit_handler)
         self._rabbitmq_thread = threading.Thread(
