@@ -65,9 +65,10 @@ class AggreagateTradeVolumeProcessor(GenericProcessorAggregate):
         protocol_state_contract,
         project_id: str,
     ):
-        # skipping calculate from scratch for pretest
-        # self._logger.info('skipping calculate from scratch for pretest')
-        # return
+        # skipping calculate from scratch for pretest and testnet participants if they are not 'full' nodes
+        # TODO: check against snapshotter identity on protocol state contract
+        self._logger.info('skipping calculate from scratch for pretest')
+        return
 
         calculate_from_scratch_in_progress = await redis.get(f'calculate_from_scratch:{project_id}')
         if calculate_from_scratch_in_progress:
