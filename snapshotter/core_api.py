@@ -549,7 +549,7 @@ async def get_snapshotter_epoch_processing_status(
         rest_logger.info(f'Setting Epoch size: {epoch_size}')
         request.app.state.epoch_size = epoch_size
     for epoch_id in range(current_epoch_id, current_epoch_id - 30 - 1, -1):
-        epoch_specific_report = SnapshotterEpochProcessingReportItem.construct()        
+        epoch_specific_report = SnapshotterEpochProcessingReportItem.construct()
         epoch_release_status = await redis_conn.get(
             epoch_id_epoch_released_key(epoch_id=epoch_id),
         )

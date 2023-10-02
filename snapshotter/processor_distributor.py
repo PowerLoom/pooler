@@ -691,7 +691,7 @@ class ProcessorDistributor(multiprocessing.Process):
             await self._update_all_projects(message)
         elif message_type == 'allSnapshottersUpdated':
             msg_cast = SnapshottersUpdatedEvent.parse_raw(message.body)
-            if msg_cast.snapshotterAddress == settings.instance_id:
+            if msg_cast.snapshotterAddress == to_checksum_address(settings.instance_id):
                 if self._redis_conn:
                     await self._redis_conn.set(
                         active_status_key,
