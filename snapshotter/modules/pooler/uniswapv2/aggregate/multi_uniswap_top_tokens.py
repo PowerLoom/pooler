@@ -8,7 +8,7 @@ from ..utils.models.message_models import UniswapTopTokensSnapshot
 from ..utils.models.message_models import UniswapTradesAggregateSnapshot
 from snapshotter.utils.callback_helpers import GenericProcessorAggregate
 from snapshotter.utils.data_utils import get_project_epoch_snapshot
-from snapshotter.utils.data_utils import get_sumbmission_data_bulk
+from snapshotter.utils.data_utils import get_submission_data_bulk
 from snapshotter.utils.data_utils import get_tail_epoch_id
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
@@ -40,7 +40,7 @@ class AggreagateTopTokensProcessor(GenericProcessorAggregate):
         snapshot_mapping = {}
         projects_metadata = {}
 
-        snapshot_data = await get_sumbmission_data_bulk(
+        snapshot_data = await get_submission_data_bulk(
             redis, [msg.snapshotCid for msg in msg_obj.messages], ipfs_reader, [
                 msg.projectId for msg in msg_obj.messages
             ],
