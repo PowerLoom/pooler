@@ -2,7 +2,7 @@ import asyncio
 import json
 import os
 import time
-
+from eth_abi import abi
 from eth_utils import to_checksum_address
 from web3 import AsyncHTTPProvider
 from web3 import HTTPProvider
@@ -43,7 +43,17 @@ def get_uniswapv3_ticks_test():
     print('time')
     print(end - start)
     print('txn')
-    print(txn[0:90000])
+    # print(txn[0:90000])
+
+    # decode 
+    decoded_bytes = abi.decode(('bytes[]', '(int128,int24)'), bytes.fromhex(txn[2:]), strict=False)
+    decoded_hex_arr = [w3.to_hex(i) for i in decoded_bytes[0]]
+    print(decoded_hex_arr)
+    print(len(decoded_hex_arr))
+    decoded_ticks = [{"idx": w3.to_int(hexstr='0x' + i[-6:]), "liquidity_net": w3.to_int(hexstr=i[:-6])} for i in decoded_hex_arr]
+    print('ticks')
+    print(decoded_ticks)
+
 
 
 if __name__ == '__main__':
