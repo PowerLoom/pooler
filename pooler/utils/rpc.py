@@ -465,6 +465,7 @@ class RpcHelper(object):
         to_block,
         params: Union[List, None] = None,
         from_address=Web3.toChecksumAddress('0x0000000000000000000000000000000000000000'),
+        overrides: Union[List, None] = None,
     ):
         """
         Batch call "single-function" on a contract for given block-range
@@ -494,6 +495,7 @@ class RpcHelper(object):
                             'data': function_signature,
                         },
                         hex(block),
+                        overrides,
                     ],
                     'id': request_id,
                 },

@@ -157,7 +157,7 @@ def _str_to_addr(s: Union[AddressLike, str]) -> Address:
 
 def _addr_to_str(a: AddressLike) -> str:
     if isinstance(a, bytes):
-        # Address or ChecksumAddress
+        # Address or  ChecksumAddress
         addr: str = Web3.to_checksum_address('0x' + bytes(a).hex())
         return addr
     elif isinstance(a, str) and a.startswith('0x'):

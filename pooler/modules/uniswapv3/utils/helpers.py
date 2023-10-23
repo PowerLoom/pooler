@@ -248,3 +248,24 @@ async def get_pair_metadata(
             ),
         )
         raise err
+
+
+def transform_tick_bytes_to_tvl(ticks):
+    # implementation of tick contract means populated values are 13 bytes long. resulting array will have populated members
+    # prepended with 13
+    counter = 4
+    ticks = []
+    while(counter < len(ticks)):
+        bytes = ticks[counter: counter + 64]
+        if bytes[-2] != '13':
+            counter+=64
+        else:
+
+            tick = {
+                    'liquidity_net': Web3.to_int('0x' + ticks[counter+64: counter+96]),
+                    'index': '0x' + ticks[counter+96: counter+102],
+            }
+
+            ticks.append(tick)
+            counter += 128
+    return ticks
