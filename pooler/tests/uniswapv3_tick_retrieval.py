@@ -49,29 +49,29 @@ def get_uniswapv3_ticks_test():
     # decode
     decoded_bytes_arr = abi.decode(('bytes[]', '(int128,int24)'), b, strict=False)
     # print(decoded_bytes_arr)
-    
+
     start = time.time()
-    hex_arr = [ {
-        "idx": w3.to_hex(primitive=i[-3:]),
-        "liq": w3.to_hex(primitive=i[:-3])
+    hex_arr = [{
+        'idx': w3.to_hex(primitive=i[-3:]),
+        'liq': w3.to_hex(primitive=i[:-3]),
     } for i in decoded_bytes_arr[0]]
     end = time.time()
     print(f'time to decode arr: {end - start}')
-    
+
     # padded_bytes_arr = [{
     #     "liquidity_net": i[:-6].zfill(64) if i[3] == "0" else bytes.join('f' *),
     #     "idx": i[-6:].zfill(12)
     # }] 0xffffffffffffffffffff1b47f3384f46
     start = time.time()
     decoded_ticks_arr = [{
-        "liquidity_net": int.from_bytes(i[:-6], 'big', signed=True),
-        "idx": int.from_bytes(i[-6:], 'big', signed=True)
+        'liquidity_net': int.from_bytes(i[:-6], 'big', signed=True),
+        'idx': int.from_bytes(i[-6:], 'big', signed=True),
     } for i in decoded_bytes_arr[0]]
     end = time.time()
-    # print(decoded_ticks_arr)    
+    # print(decoded_ticks_arr)
     print(f'time to decode props: {end - start}')
     print(f'time to for all operations: {end - all_start}')
-    
+
     # print(decoded_hex_arr)
     # print(len(decoded_hex_arr))
     # decoded_ticks = [
