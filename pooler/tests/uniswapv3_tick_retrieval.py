@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import time
+
 from eth_abi import abi
 from eth_utils import to_checksum_address
 from web3 import AsyncHTTPProvider
@@ -35,25 +36,52 @@ def get_uniswapv3_ticks_test():
     override_params = {
         override_address: {'code': bytecode},
     }
+    all_start = time.time()
     start = time.time()
-    bytes = w3.eth.call(txn_params, 'latest', override_params)
-    txn = w3.to_hex(bytes)
+    b = w3.eth.call(txn_params, 'latest', override_params)
+    # print(b[0:1000])
 
     end = time.time()
-    print('time')
-    print(end - start)
-    print('txn')
+
+    print(f'time to retreive tick data: {end - start}')
     # print(txn[0:90000])
 
-    # decode 
-    decoded_bytes = abi.decode(('bytes[]', '(int128,int24)'), bytes.fromhex(txn[2:]), strict=False)
-    decoded_hex_arr = [w3.to_hex(i) for i in decoded_bytes[0]]
-    print(decoded_hex_arr)
-    print(len(decoded_hex_arr))
-    decoded_ticks = [{"idx": w3.to_int(hexstr='0x' + i[-6:]), "liquidity_net": w3.to_int(hexstr=i[:-6])} for i in decoded_hex_arr]
-    print('ticks')
-    print(decoded_ticks)
-
+    # decode
+    decoded_bytes_arr = abi.decode(('bytes[]', '(int128,int24)'), b, strict=False)
+    # print(decoded_bytes_arr)
+    
+    start = time.time()
+    hex_arr = [ {
+        "idx": w3.to_hex(primitive=i[-3:]),
+        "liq": w3.to_hex(primitive=i[:-3])
+    } for i in decoded_bytes_arr[0]]
+    end = time.time()
+    print(f'time to decode arr: {end - start}')
+    
+    # padded_bytes_arr = [{
+    #     "liquidity_net": i[:-6].zfill(64) if i[3] == "0" else bytes.join('f' *),
+    #     "idx": i[-6:].zfill(12)
+    # }] 0xffffffffffffffffffff1b47f3384f46
+    start = time.time()
+    decoded_ticks_arr = [{
+        "liquidity_net": int.from_bytes(i[:-6], 'big', signed=True),
+        "idx": int.from_bytes(i[-6:], 'big', signed=True)
+    } for i in decoded_bytes_arr[0]]
+    end = time.time()
+    # print(decoded_ticks_arr)    
+    print(f'time to decode props: {end - start}')
+    print(f'time to for all operations: {end - all_start}')
+    
+    # print(decoded_hex_arr)
+    # print(len(decoded_hex_arr))
+    # decoded_ticks = [
+    #     {
+    #         'idx': w3.to_int(hexstr='0x' + i[-6:]),
+    #         'liquidity_net': w3.to_int(hexstr=i[:-6]),
+    #     } for i in decoded_hex_arr
+    # ]
+    # print('ticks')
+    # print(decoded_ticks)
 
 
 if __name__ == '__main__':
