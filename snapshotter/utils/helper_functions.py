@@ -33,49 +33,7 @@ def cleanup_proc_hub_children(fn):
             # for p in alive:
             #     logger.error(f'killing process: {p.name()}')
             #     p.kill()
-            logger.error('Waiting on spawned callback workers to join...')
-            for (
-                worker_class_name,
-                unique_worker_entries,
-            ) in self._spawned_cb_processes_map.items():
-                for (
-                    worker_unique_id,
-                    worker_unique_process_details,
-                ) in unique_worker_entries.items():
-                    if worker_unique_process_details is not None and worker_unique_process_details.pid:
-                        logger.error(
-                            (
-                                'Waiting on spawned callback worker {} | Unique'
-                                ' ID {} | PID {}  to join...'
-                            ),
-                            worker_class_name,
-                            worker_unique_id,
-                            worker_unique_process_details.pid,
-                        )
-                        psutil.Process(pid=worker_unique_process_details.pid).wait()
-
-            logger.error(
-                'Waiting on spawned core workers to join... {}',
-                self._spawned_processes_map,
-            )
-            for (
-                worker_class_name,
-                worker_pid,
-            ) in self._spawned_processes_map.items():
-                logger.error(
-                    'spawned Process Pid to wait on {}',
-                    worker_pid,
-                )
-                if worker_pid is not None:
-                    logger.error(
-                        (
-                            'Waiting on spawned core worker {} | PID {}  to'
-                            ' join...'
-                        ),
-                        worker_class_name,
-                        worker_pid,
-                    )
-                    psutil.Process(worker_pid).wait()
+            self._kill_all_children()
             logger.error('Finished waiting for all children...now can exit.')
         finally:
             logger.error('Finished waiting for all children...now can exit.')

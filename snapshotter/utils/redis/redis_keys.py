@@ -36,6 +36,8 @@ epoch_process_report_cached_key = 'epochProcessReport'
 
 snapshot_submission_window_key = 'snapshotSubmissionWindow'
 
+active_status_key = f'snapshotterActiveStatus:{settings.namespace}'
+
 # project finalzed data zset
 
 
