@@ -183,3 +183,8 @@ class SnapshotterIncorrectSnapshotSubmission(BaseModel):
 class SnapshotterProjectStatus(BaseModel):
     missedSubmissions: List[SnapshotterMissedSnapshotSubmission]
     incorrectSubmissions: List[SnapshotterIncorrectSnapshotSubmission]
+
+
+class UnfinalizedSnapshot(BaseModel):
+    snapshotCid: str
+    snapshot: Dict[str, Any]

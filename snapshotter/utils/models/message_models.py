@@ -104,11 +104,10 @@ class AggregateBase(BaseModel):
 
 
 class PayloadCommitMessage(BaseModel):
-    message: Dict[Any, Any]
-    web3Storage: bool
     sourceChainId: int
     projectId: str
     epochId: int
+    snapshotCID: str
 
 
 class PayloadCommitFinalizedMessage(BaseModel):
