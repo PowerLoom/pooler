@@ -12,9 +12,6 @@ from ..settings.config import settings as worker_settings
 from .constants import current_node
 from .constants import erc20_abi
 from .constants import pair_contract_abi
-from pooler.modules.uniswapv3.tvl import AddressLike
-from pooler.modules.uniswapv3.tvl import get_token0_in_pool
-from pooler.modules.uniswapv3.tvl import get_token1_in_pool
 from pooler.utils.default_logger import logger
 from pooler.utils.rpc import RpcHelper
 

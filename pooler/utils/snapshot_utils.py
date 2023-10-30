@@ -1,4 +1,5 @@
 import asyncio
+from decimal import Decimal
 import json
 
 from redis import asyncio as aioredis
