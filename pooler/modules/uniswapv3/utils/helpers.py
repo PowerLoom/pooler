@@ -1,10 +1,9 @@
 import asyncio
 import functools
+from functools import reduce
 
 from redis import asyncio as aioredis
 from web3 import Web3
-
-from pooler.modules.uniswapv3.tvl import AddressLike, get_token0_in_pool, get_token1_in_pool
 
 from ..redis_keys import uniswap_pair_contract_tokens_addresses
 from ..redis_keys import uniswap_pair_contract_tokens_data
@@ -13,9 +12,11 @@ from ..settings.config import settings as worker_settings
 from .constants import current_node
 from .constants import erc20_abi
 from .constants import pair_contract_abi
+from pooler.modules.uniswapv3.tvl import AddressLike
+from pooler.modules.uniswapv3.tvl import get_token0_in_pool
+from pooler.modules.uniswapv3.tvl import get_token1_in_pool
 from pooler.utils.default_logger import logger
 from pooler.utils.rpc import RpcHelper
-from functools import reduce
 
 
 helper_logger = logger.bind(module='PowerLoom|Uniswap|Helpers')
@@ -252,5 +253,3 @@ async def get_pair_metadata(
             ),
         )
         raise err
-
-

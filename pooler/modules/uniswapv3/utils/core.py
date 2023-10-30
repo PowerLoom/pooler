@@ -1,29 +1,26 @@
 import asyncio
-
 import json
 
-from pooler.modules.uniswapv3.total_value_locked import calculate_reserves, calculate_tvl_from_ticks, get_events, transform_tick_bytes_to_list
-
-from .constants import pair_contract_abi
 from redis import asyncio as aioredis
 from web3 import Web3
-
-from pooler.modules.uniswapv3.utils.models.message_models import UniswapPairTotalReservesSnapshot
-from pooler.utils.models.message_models import EpochBaseSnapshot
 
 from .constants import pair_contract_abi
 from .constants import UNISWAP_EVENTS_ABI
 from .constants import UNISWAP_TRADE_EVENT_SIGS
-
 from .helpers import get_pair_metadata
-
 from .models.data_models import epoch_event_trade_data
 from .models.data_models import event_trade_data
 from .models.data_models import trade_data
 from .pricing import (
     get_token_price_in_block_range,
 )
+from pooler.modules.uniswapv3.total_value_locked import calculate_reserves
+from pooler.modules.uniswapv3.total_value_locked import calculate_tvl_from_ticks
+from pooler.modules.uniswapv3.total_value_locked import get_events
+from pooler.modules.uniswapv3.total_value_locked import transform_tick_bytes_to_list
+from pooler.modules.uniswapv3.utils.models.message_models import UniswapPairTotalReservesSnapshot
 from pooler.utils.default_logger import logger
+from pooler.utils.models.message_models import EpochBaseSnapshot
 from pooler.utils.rpc import get_contract_abi_dict
 from pooler.utils.rpc import get_event_sig_and_abi
 from pooler.utils.rpc import RpcHelper
@@ -106,30 +103,30 @@ async def get_pair_reserves(
     )
 
     initial_reserves = calculate_reserves(
-        pair_address, 
-        from_block, 
-        pair_per_token_metadata, 
-        rpc_helper, 
-        redis_conn
-        )
+        pair_address,
+        from_block,
+        pair_per_token_metadata,
+        rpc_helper,
+        redis_conn,
+    )
 
     core_logger.debug(
         f'Total reserves fetched tick data for : {pair_address}',
     )
     # grab mint/burn events in range
     events = get_events(
-        pair_address=pair_address, 
-        rpc=rpc_helper, 
-        from_block=from_block, 
-        to_block=to_block, 
-        redis_con=redis_conn
-        )
-    
+        pair_address=pair_address,
+        rpc=rpc_helper,
+        from_block=from_block,
+        to_block=to_block,
+        redis_con=redis_conn,
+    )
+
     core_logger.debug(
         f'Total reserves fetched event data for : {pair_address}',
     )
     # sum burn and mint each block
-    
+
     reserves_array = [
         [initial_reserves[0] + x.amount0, initial_reserves[1] + x.amount1]
         if x.name == 'Mint'
@@ -504,5 +501,3 @@ async def get_pair_trade_volume(
     max_block_timestamp = max_block_details.get('timestamp', None)
     epoch_trade_logs.update({'timestamp': max_block_timestamp})
     return epoch_trade_logs
-
-
