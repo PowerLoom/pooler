@@ -357,24 +357,7 @@ multicall2 = _load_contract(
 # Below two functions derived from: https://stackoverflow.com/questions/71814845/how-to-calculate-uniswap-v3-pools-total-value-locked-tvl-on-chain
 
 
-def get_token0_in_pool(
-    liquidity: float,
-    sqrtPrice: float,
-    sqrtPriceLow: float,
-    sqrtPriceHigh: float,
-) -> float:
-    sqrtPrice = max(min(sqrtPrice, sqrtPriceHigh), sqrtPriceLow)
-    return liquidity * (sqrtPriceHigh - sqrtPrice) / (sqrtPrice * sqrtPriceHigh)
 
-
-def get_token1_in_pool(
-    liquidity: float,
-    sqrtPrice: float,
-    sqrtPriceLow: float,
-    sqrtPriceHigh: float,
-) -> float:
-    sqrtPrice = max(min(sqrtPrice, sqrtPriceHigh), sqrtPriceLow)
-    return liquidity * (sqrtPrice - sqrtPriceLow)
 
 
 # Find min or max tick in initialized tick range using the tickBitmap

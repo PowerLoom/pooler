@@ -1,7 +1,10 @@
 import asyncio
+import functools
 
 from redis import asyncio as aioredis
 from web3 import Web3
+
+from pooler.modules.uniswapv3.tvl import AddressLike, get_token0_in_pool, get_token1_in_pool
 
 from ..redis_keys import uniswap_pair_contract_tokens_addresses
 from ..redis_keys import uniswap_pair_contract_tokens_data
@@ -12,6 +15,7 @@ from .constants import erc20_abi
 from .constants import pair_contract_abi
 from pooler.utils.default_logger import logger
 from pooler.utils.rpc import RpcHelper
+from functools import reduce
 
 
 helper_logger = logger.bind(module='PowerLoom|Uniswap|Helpers')
@@ -250,22 +254,3 @@ async def get_pair_metadata(
         raise err
 
 
-def transform_tick_bytes_to_tvl(ticks):
-    # implementation of tick contract means populated values are 13 bytes long. resulting array will have populated members
-    # prepended with 13
-    counter = 4
-    ticks = []
-    while(counter < len(ticks)):
-        bytes = ticks[counter: counter + 64]
-        if bytes[-2] != '13':
-            counter+=64
-        else:
-
-            tick = {
-                    'liquidity_net': Web3.to_int('0x' + ticks[counter+64: counter+96]),
-                    'index': '0x' + ticks[counter+96: counter+102],
-            }
-
-            ticks.append(tick)
-            counter += 128
-    return ticks

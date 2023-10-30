@@ -39,7 +39,7 @@ def get_uniswapv3_ticks_test():
     all_start = time.time()
     start = time.time()
     b = w3.eth.call(txn_params, 'latest', override_params)
-    # print(b[0:1000])
+    print(b[0:1000])
 
     end = time.time()
 
