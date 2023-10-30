@@ -126,12 +126,12 @@ async def get_pair_reserves(
         f'Total reserves fetched event data for : {pair_address}',
     )
     # sum burn and mint each block
-
+    reserves_array = [initial_reserves]
     reserves_array = [
-        [initial_reserves[0] + x.amount0, initial_reserves[1] + x.amount1]
-        if x.name == 'Mint'
-        else [initial_reserves[0] - x.amount0, initial_reserves[1] - x.amount1]
-        for x in events
+        [reserves_array[-1][0] + event.args.amount0, reserves_array[-1][1] + event.args.amount1]
+        if event.event == 'Mint'
+        else [reserves_array[-1][0] - event.args.amount0, reserves_array[-1][1] - event.args.amount1]
+        for event in events
     ]
 
     token0_decimals = pair_per_token_metadata['token0']['decimals']

@@ -1,6 +1,6 @@
 import asyncio
-from decimal import Decimal
 import json
+from decimal import Decimal
 
 from redis import asyncio as aioredis
 
