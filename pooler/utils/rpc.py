@@ -519,7 +519,7 @@ class RpcHelper(object):
             rpc_query, redis_conn=redis_conn
         )
         rpc_response = []
-    
+
         response = response_data if isinstance(response_data, list) else [response_data]
         for result in response:
             rpc_response.append(

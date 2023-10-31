@@ -13,7 +13,9 @@ from pooler.utils.rpc import RpcHelper
 
 async def test_calculate_reserves():
     # Mock your parameters
-    pair_address = Web3.to_checksum_address("0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640")
+    pair_address = Web3.to_checksum_address(
+        "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
+    )
     from_block = 18472036
     rpc_helper = RpcHelper()
     aioredis_pool = RedisPoolCache()
@@ -36,17 +38,14 @@ async def test_calculate_reserves():
     # Initialize Web3
     w3 = Web3(Web3.HTTPProvider(os.environ["RPC_URL"]))
     contract = w3.eth.contract(
-        address=pair_address, abi=_load_abi("pooler/tests/static/abi/UniswapV3Pool.json")
+        address=pair_address,
+        abi=_load_abi("pooler/tests/static/abi/UniswapV3Pool.json"),
     )
     token0 = contract.functions.token0().call()
     token1 = contract.functions.token1().call()
 
-    token0_contract = w3.eth.contract(
-        address=token0, abi=erc20_abi
-    )
-    token1_contract = w3.eth.contract(
-        address=token1, abi=erc20_abi
-    )
+    token0_contract = w3.eth.contract(address=token0, abi=erc20_abi)
+    token1_contract = w3.eth.contract(address=token1, abi=erc20_abi)
     # Fetch actual reserves from blockchain
     # The function name 'getReserves' and the field names may differ based on the actual ABI
     token0_actual_reserve = token0_contract.functions.balanceOf(pair_address).call()
@@ -55,12 +54,19 @@ async def test_calculate_reserves():
     # Compare them with returned reserves
     # our calculations should be less than or equal to token balance.
     #  assuming a maximum of 30%? of token balance is unpaid fees
-    assert reserves[0] >= token0_actual_reserve * 0.8, 'calculated reserve is lower than 90% token balance'
-    assert reserves[0] <= token0_actual_reserve, "calculated reserve is higher than token balance"
-    assert reserves[1] >= token1_actual_reserve * 0.8, "calculated reserve is lower than 90% token balance"
-    assert reserves[1] <= token1_actual_reserve, "calculated reserve is higher than token balance"
-    print('PASSED')
-        
+    assert (
+        reserves[0] >= token0_actual_reserve * 0.8
+    ), "calculated reserve is lower than 90% token balance"
+    assert (
+        reserves[0] <= token0_actual_reserve
+    ), "calculated reserve is higher than token balance"
+    assert (
+        reserves[1] >= token1_actual_reserve * 0.8
+    ), "calculated reserve is lower than 90% token balance"
+    assert (
+        reserves[1] <= token1_actual_reserve
+    ), "calculated reserve is higher than token balance"
+    print("PASSED")
 
 
 if __name__ == "__main__":
