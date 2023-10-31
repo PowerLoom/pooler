@@ -50,6 +50,18 @@ class ContractAddresses(BaseModel):
         ...,
         example="0x5BA1e12693Dc8F9c48aAD8770482f4739bEeD696",
     )
+    DAI_WETH_PAIR: str = Field(
+        ...,
+        example="0xC2eFb029Ed7EeCd775C21b53Fa594D5dA2D3febb",
+    )
+    USDC_WETH_PAIR: str = Field(
+        ...,
+        example="0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8",
+    )
+    USDT_WETH_PAIR: str = Field(
+        ...,
+        example="0x0d4a11d5EEaaC28EC3F61d100daF4d40471f1852",
+    )
 
 
 class Settings(BaseModel):
