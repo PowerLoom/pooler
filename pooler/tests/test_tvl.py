@@ -36,7 +36,7 @@ async def test_calculate_reserves():
     assert len(reserves) == 2, "Should have two elements"
 
     # Initialize Web3
-    w3 = Web3(Web3.HTTPProvider(os.environ["RPC_URL"]))
+    w3 = Web3(Web3.HTTPProvider(settings.rpc.full_nodes[0].url))
     contract = w3.eth.contract(
         address=pair_address,
         abi=_load_abi("pooler/tests/static/abi/UniswapV3Pool.json"),
