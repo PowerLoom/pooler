@@ -26,25 +26,24 @@ async def fetch_liquidityUSD_rpc(
     )
     block_pair_total_reserves = data.get(block_num)
     return (
-        block_pair_total_reserves['token0USD'] +
-        block_pair_total_reserves['token1USD']
+        block_pair_total_reserves["token0USD"] + block_pair_total_reserves["token1USD"]
     )
 
 
 def fetch_liquidityUSD_graph(pair_address, block_num):
-    uniswap_url = 'https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v2'
+    uniswap_url = "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v2"
     uniswap_payload = (
-        '{"query":"{\\n pair(id: \\"' +
-        str(pair_address) +
-        '\\",block:{number:' +
-        str(
+        '{"query":"{\\n pair(id: \\"'
+        + str(pair_address)
+        + '\\",block:{number:'
+        + str(
             block_num,
-        ) +
-        '}) {\\n reserveUSD \\n token0 { \\n     symbol \\n } \\n token1 {'
+        )
+        + "}) {\\n reserveUSD \\n token0 { \\n     symbol \\n } \\n token1 {"
         ' \\n      symbol \\n    }\\n  } \\n }" }'
     )
     print(uniswap_payload)
-    headers = {'Content-Type': 'application/plain'}
+    headers = {"Content-Type": "application/plain"}
     response = httpx.post(
         url=uniswap_url,
         headers=headers,
@@ -53,11 +52,11 @@ def fetch_liquidityUSD_graph(pair_address, block_num):
     )
     if response.status_code == 200:
         data = json.loads(response.text)
-        print('Response', data)
-        data = data['data']
-        return float(data['pair']['reserveUSD'])
+        print("Response", data)
+        data = data["data"]
+        return float(data["pair"]["reserveUSD"])
     else:
-        print('Error fetching data from uniswap THE GRAPH %s', response)
+        print("Error fetching data from uniswap THE GRAPH %s", response)
         return 0
 
 
@@ -67,26 +66,26 @@ async def compare_liquidity():
     block_num = 16046250
 
     contracts = list()
-    contracts.append('0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5')
+    contracts.append("0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5")
     for contract in contracts:
         liquidity_usd_graph = fetch_liquidityUSD_graph(contract, block_num)
         liquidity_usd_rpc = await fetch_liquidityUSD_rpc(contract, block_num)
         print(
-            f'Contract {contract}, liquidityUSD_graph is'
-            f' {liquidity_usd_graph} , liquidityUSD_rpc {liquidity_usd_rpc},'
-            ' liquidityUSD difference'
-            f' {(liquidity_usd_rpc - liquidity_usd_graph)}',
+            f"Contract {contract}, liquidityUSD_graph is"
+            f" {liquidity_usd_graph} , liquidityUSD_rpc {liquidity_usd_rpc},"
+            " liquidityUSD difference"
+            f" {(liquidity_usd_rpc - liquidity_usd_graph)}",
         )
         total_liquidity_usd_graph += liquidity_usd_graph
         total_liquidity_usd_rpc += liquidity_usd_rpc
 
     print(
-        f'{len(contracts)} contracts compared, liquidityUSD_rpc_total is'
-        f' {total_liquidity_usd_rpc}, liquidityUSD_graph_total is'
-        f' {total_liquidity_usd_graph}',
+        f"{len(contracts)} contracts compared, liquidityUSD_rpc_total is"
+        f" {total_liquidity_usd_rpc}, liquidityUSD_graph_total is"
+        f" {total_liquidity_usd_graph}",
     )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.run_until_complete(compare_liquidity())

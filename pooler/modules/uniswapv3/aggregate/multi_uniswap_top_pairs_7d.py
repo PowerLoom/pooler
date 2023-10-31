@@ -17,7 +17,7 @@ class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
 
     def __init__(self) -> None:
         self.transformation_lambdas = []
-        self._logger = logger.bind(module='AggregateTopPairsProcessor')
+        self._logger = logger.bind(module="AggregateTopPairsProcessor")
 
     async def compute(
         self,
@@ -28,9 +28,8 @@ class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
         ipfs_reader: AsyncIPFSClient,
         protocol_state_contract,
         project_id: str,
-
     ):
-        self._logger.info(f'Calculating 7d top pairs trade volume data for {msg_obj}')
+        self._logger.info(f"Calculating 7d top pairs trade volume data for {msg_obj}")
 
         epoch_id = msg_obj.epochId
 
@@ -38,9 +37,10 @@ class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
         all_pair_metadata = {}
 
         snapshot_data = await get_sumbmission_data_bulk(
-            redis, [msg.snapshotCid for msg in msg_obj.messages], ipfs_reader, [
-                msg.projectId for msg in msg_obj.messages
-            ],
+            redis,
+            [msg.snapshotCid for msg in msg_obj.messages],
+            ipfs_reader,
+            [msg.projectId for msg in msg_obj.messages],
         )
 
         for msg, data in zip(msg_obj.messages, snapshot_data):
@@ -49,7 +49,7 @@ class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
             snapshot = UniswapTradesAggregateSnapshot.parse_obj(data)
             snapshot_mapping[msg.projectId] = snapshot
 
-            contract_address = msg.projectId.split(':')[-2]
+            contract_address = msg.projectId.split(":")[-2]
             if contract_address not in all_pair_metadata:
                 pair_metadata = await get_pair_metadata(
                     contract_address,
@@ -63,19 +63,19 @@ class AggreagateTopPairsProcessor(GenericProcessorMultiProjectAggregate):
         pair_data = {}
         for snapshot_project_id in snapshot_mapping.keys():
             snapshot = snapshot_mapping[snapshot_project_id]
-            contract = snapshot_project_id.split(':')[-2]
+            contract = snapshot_project_id.split(":")[-2]
             pair_metadata = all_pair_metadata[contract]
 
             if contract not in pair_data:
                 pair_data[contract] = {
-                    'address': contract,
-                    'name': pair_metadata['pair']['symbol'],
-                    'volume7d': 0,
-                    'fee7d': 0,
+                    "address": contract,
+                    "name": pair_metadata["pair"]["symbol"],
+                    "volume7d": 0,
+                    "fee7d": 0,
                 }
 
-            pair_data[contract]['volume7d'] += snapshot.totalTrade
-            pair_data[contract]['fee7d'] += snapshot.totalFee
+            pair_data[contract]["volume7d"] += snapshot.totalTrade
+            pair_data[contract]["fee7d"] += snapshot.totalFee
 
         top_pairs = []
         for pair in pair_data.values():

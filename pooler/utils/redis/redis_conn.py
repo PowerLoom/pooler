@@ -10,19 +10,19 @@ from pooler.settings.config import settings as settings_conf
 from pooler.utils.default_logger import logger
 
 # setup logging
-logger = logger.bind(module='PowerLoom|RedisConn')
+logger = logger.bind(module="PowerLoom|RedisConn")
 
 REDIS_CONN_CONF = {
-    'host': settings_conf.redis.host,
-    'port': settings_conf.redis.port,
-    'password': settings_conf.redis.password,
-    'db': settings_conf.redis.db,
-    'retry_on_error': [redis.exceptions.ReadOnlyError],
+    "host": settings_conf.redis.host,
+    "port": settings_conf.redis.port,
+    "password": settings_conf.redis.password,
+    "db": settings_conf.redis.db,
+    "retry_on_error": [redis.exceptions.ReadOnlyError],
 }
 
 
 def construct_redis_url():
-    if REDIS_CONN_CONF['password']:
+    if REDIS_CONN_CONF["password"]:
         return (
             f'redis://{REDIS_CONN_CONF["password"]}@{REDIS_CONN_CONF["host"]}:{REDIS_CONN_CONF["port"]}'
             f'/{REDIS_CONN_CONF["db"]}'
@@ -64,7 +64,7 @@ def create_redis_conn(
 def provide_redis_conn(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        arg_conn = 'redis_conn'
+        arg_conn = "redis_conn"
         func_params = fn.__code__.co_varnames
         conn_in_args = arg_conn in func_params and func_params.index(
             arg_conn,
@@ -78,7 +78,7 @@ def provide_redis_conn(fn):
             with create_redis_conn(connection_pool) as redis_obj:
                 kwargs[arg_conn] = redis_obj
                 logger.debug(
-                    'Returning after populating redis connection object',
+                    "Returning after populating redis connection object",
                 )
                 return fn(*args, **kwargs)
 
@@ -88,16 +88,16 @@ def provide_redis_conn(fn):
 def provide_async_redis_conn(fn):
     @wraps(fn)
     async def async_redis_conn_wrapper(*args, **kwargs):
-        redis_conn_raw = await kwargs['request'].app.redis_pool.acquire()
+        redis_conn_raw = await kwargs["request"].app.redis_pool.acquire()
         redis_conn = aioredis.Redis(redis_conn_raw)
-        kwargs['redis_conn'] = redis_conn
+        kwargs["redis_conn"] = redis_conn
         try:
             return await fn(*args, **kwargs)
         except Exception as e:
             logger.opt(exception=True).error(e)
-            return {'error': 'Internal Server Error'}
+            return {"error": "Internal Server Error"}
         finally:
-            kwargs['request'].app.redis_pool.release(redis_conn_raw)
+            kwargs["request"].app.redis_pool.release(redis_conn_raw)
 
     return async_redis_conn_wrapper
 
@@ -107,7 +107,7 @@ def provide_async_redis_conn(fn):
 def provide_async_redis_conn_insta(fn):
     @wraps(fn)
     async def wrapped(*args, **kwargs):
-        arg_conn = 'redis_conn'
+        arg_conn = "redis_conn"
         if kwargs.get(arg_conn):
             return await fn(*args, **kwargs)
         else:
@@ -128,10 +128,10 @@ def provide_async_redis_conn_insta(fn):
             else:
                 # logging.debug('Creating single connection via high level aioredis interface')
                 connection = await aioredis.Redis(
-                    host=REDIS_CONN_CONF['host'],
-                    port=REDIS_CONN_CONF['port'],
-                    db=REDIS_CONN_CONF['db'],
-                    password=REDIS_CONN_CONF['password'],
+                    host=REDIS_CONN_CONF["host"],
+                    port=REDIS_CONN_CONF["port"],
+                    db=REDIS_CONN_CONF["db"],
+                    password=REDIS_CONN_CONF["password"],
                     retry_on_error=[redis.exceptions.ReadOnlyError],
                 )
             kwargs[arg_conn] = connection

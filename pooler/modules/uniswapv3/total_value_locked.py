@@ -1,98 +1,133 @@
 import functools
 import json
+import pathlib
 import time
 from typing import Union
+from eth_abi import abi
 
+import web3
+
+from pooler.modules.uniswapv3.utils.constants \
+import pair_contract_abi, current_node, max_gas_static_call
 from eth_typing import Address
 from eth_typing.evm import Address
 from eth_typing.evm import ChecksumAddress
 from redis import asyncio as aioredis
-from utils.constants import pair_contract_abi
+
 from web3 import Web3
 from web3.contract import Contract
+from pooler import settings
 
 from pooler.modules.uniswapv3.utils.helpers import get_pair_metadata
+from pooler.utils.file_utils import read_json_file
 from pooler.utils.rpc import get_contract_abi_dict
 from pooler.utils.rpc import RpcHelper
 
 AddressLike = Union[Address, ChecksumAddress]
+
+# load helper abi
+helper_contract_abi = read_json_file(
+    'pooler/tests/static/abi/UniV3Helper.json'
+)
+
+
 def transform_tick_bytes_to_list(tickData):
-    # implementation of tick contract means populated values are 13 bytes long. resulting array will have populated members
-    # prepended with 13
+    # eth_abi decode tickdata as a bytes[] 
+    bytes_decoded_arr = abi.decode(("bytes[]", "(int128,int24)"), tickData, strict=False)
+    ticks = [
+        {
+            "liquidity_net": int.from_bytes(i[:-3], "big", signed=True),
+            "idx": int.from_bytes(i[-3:], "big", signed=True),
+        }
+        for i in bytes_decoded_arr[0]
+    ]
+    
+    # while counter < len(tickData):
+    #     bytes = tickData[counter : counter + 64]
+    #     if bytes[-2] != "13":
+    #         counter += 64
+    #     else:
+    #         tick = {
+    #             "liquidity_net": Web3.to_int(
+    #                 "0x" + tickData[counter + 64 : counter + 96]
+    #             ),
+    #             "index": "0x" + tickData[counter + 96 : counter + 102],
+    #         }
 
-    ticks = []
-    while(counter < len(tickData)):
-        bytes = tickData[counter: counter + 64]
-        if bytes[-2] != '13':
-            counter+=64
-        else:
-            tick = {
-                    'liquidity_net': Web3.to_int('0x' + tickData[counter+64: counter+96]),
-                    'index': '0x' + tickData[counter+96: counter+102],
-            }
-
-            ticks.append(tick)
-            counter += 128
+    #         ticks.append(tick)
+    #         counter += 128
 
     return ticks
 
+
 def calculate_tvl_from_ticks(ticks, pair_metadata, sqrt_price):
+    sqrt_price = sqrt_price / (1 << 96)
     liquidity_total = 0
     token0_liquidity = 0
     token1_liquidity = 0
     tick_spacing = 10
 
-    if pair_metadata.pair.fee == 3000:
+    if len(ticks) == 0:
+        return (0, 0)
+    
+    if pair_metadata['pair']['fee'] == 3000:
         tick_spacing = 60
-    elif pair_metadata.pair.fee == 10000:
+    elif pair_metadata['pair']['fee'] == 10000:
         tick_spacing = 200
 
     for tick in ticks:
-        liquidity_net = tick.liquidity_net
-        idx = tick.idx
+        liquidity_net = tick['liquidity_net']
+        idx = tick['idx']
         liquidity_total += liquidity_net
         sqrtPriceLow = 1.0001 ** (idx // 2)
         sqrtPriceHigh = 1.0001 ** ((idx + tick_spacing) // 2)
         token0_liquidity += get_token0_in_pool(
-            liquidity_total, sqrt_price, sqrtPriceLow, sqrtPriceHigh,
+            liquidity_total,
+            sqrt_price,
+            sqrtPriceLow,
+            sqrtPriceHigh,
         )
         token1_liquidity += get_token1_in_pool(
-            liquidity_total, sqrt_price, sqrtPriceLow, sqrtPriceHigh,
+            liquidity_total,
+            sqrt_price,
+            sqrtPriceLow,
+            sqrtPriceHigh,
         )
-
-    # Correcting for each token's respective decimals
-    token0_decimals = pair_metadata.token0.decimals
-    token1_decimals = pair_metadata.token1.decimals
-    token0_liquidity = token0_liquidity // (10**token0_decimals)
-    token1_liquidity = token1_liquidity // (10**token1_decimals)
 
 
     return (token0_liquidity, token1_liquidity)
 
 
 def get_token0_in_pool(
-    liquidity: float,
-    sqrtPrice: float,
-    sqrtPriceLow: float,
-    sqrtPriceHigh: float,
-) -> float:
+    liquidity: int,
+    sqrtPrice: int,
+    sqrtPriceLow: int,
+    sqrtPriceHigh: int,
+) -> int:
     sqrtPrice = max(min(sqrtPrice, sqrtPriceHigh), sqrtPriceLow)
-    return liquidity * (sqrtPriceHigh - sqrtPrice) / (sqrtPrice * sqrtPriceHigh)
+    return liquidity * (sqrtPriceHigh - sqrtPrice) // (sqrtPrice * sqrtPriceHigh)
 
 
 def get_token1_in_pool(
-    liquidity: float,
-    sqrtPrice: float,
-    sqrtPriceLow: float,
-    sqrtPriceHigh: float,
-) -> float:
+    liquidity: int,
+    sqrtPrice: int,
+    sqrtPriceLow: int,
+    sqrtPriceHigh: int,
+) -> int:
     sqrtPrice = max(min(sqrtPrice, sqrtPriceHigh), sqrtPriceLow)
     return liquidity * (sqrtPrice - sqrtPriceLow)
 
-async def get_events(pair_address: str, rpc: RpcHelper, from_block, to_block, redis_con):
-    contract = _load_contract(pair_address, '/static/abis/UniswapV3Pool', pair_address)
-    mint_topic = Web3.keccak(text='Mint(address,address,uint256,uint256,uint128,int24)').hex()
-    burn_topic = Web3.keccak(text='Burn(address,address,uint256,uint256,uint128,int24)').hex()
+
+async def get_events(
+    pair_address: str, rpc: RpcHelper, from_block, to_block, redis_con
+):
+    contract = _load_contract(pair_address, "/static/abis/UniswapV3Pool", pair_address)
+    mint_topic = Web3.keccak(
+        text="Mint(address,address,uint256,uint256,uint128,int24)"
+    ).hex()
+    burn_topic = Web3.keccak(
+        text="Burn(address,address,uint256,uint256,uint128,int24)"
+    ).hex()
     topics = [[mint_topic], [burn_topic]]
 
     event_abi = dict()
@@ -109,52 +144,67 @@ async def get_events(pair_address: str, rpc: RpcHelper, from_block, to_block, re
     )
 
 
-
 @functools.lru_cache()
 def _load_contract(w3: Web3, abi_name: str, address: AddressLike) -> Contract:
     address = Web3.to_checksum_address(address)
     return w3.eth.contract(address=address, abi=_load_abi(abi_name))
+
 
 def _load_abi(path: str) -> str:
     with open(path) as f:
         abi: str = json.load(f)
     return abi
 
+
 async def calculate_reserves(
-        pair_address,
-        from_block,
-        pair_per_token_metadata,
-        rpc_helper,
-        redis_conn,
+    pair_address,
+    from_block,
+    pair_per_token_metadata,
+    rpc_helper: RpcHelper,
+    redis_conn,
 ):
-    # create dictionary of ABI {function_name -> {signature, abi, input, output}}
-    pair_abi_dict = get_contract_abi_dict(pair_contract_abi)
+    w3_client = rpc_helper.get_current_node()
+    w3 = w3_client['web3_client_async'] if w3_client['web3_client_async'] else w3_client['web3_client']
+
+
     # get token price function takes care of its own rate limit
-    override_address = Web3.toChecksumAddress('0x' + '1' * 40)
+    override_address = Web3.to_checksum_address("0x" + "1" * 40)
     overrides = {
-        override_address: '0x608060405234801561001057600080fd5b506004361061002b5760003560e01c8063802036f514610030575b600080fd5b61004a600480360381019061004591906106da565b610060565b6040516100579190610859565b60405180910390f35b606060008273ffffffffffffffffffffffffffffffffffffffff1663d0c93a7c6040518163ffffffff1660e01b8152600401602060405180830381865afa1580156100af573d6000803e3d6000fd5b505050506040513d601f19601f820116820180604052508101906100d391906108b4565b905060008373ffffffffffffffffffffffffffffffffffffffff16633850c7bd6040518163ffffffff1660e01b81526004016040805180830381865afa158015610121573d6000803e3d6000fd5b505050506040513d601f19601f82011682018060405250810190610145919061090d565b91505060007ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff27618905060007ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff276186101999061097c565b9050600084600184846101ac91906109c4565b6101b69190610a1f565b6101c09190610aa9565b60020b67ffffffffffffffff8111156101dc576101db610b13565b5b60405190808252806020026020018201604052801561020a5781602001602082028036833780820191505090505b5090506000806008878661021e9190610aa9565b60020b901d90506000600888866102359190610aa9565b60020b901d90505b8060010b8260010b1361037a5760008a73ffffffffffffffffffffffffffffffffffffffff16635339c296846040518263ffffffff1660e01b81526004016102859190610b5e565b602060405180830381865afa1580156102a2573d6000803e3d6000fd5b505050506040513d601f19601f820116820180604052508101906102c69190610baf565b90505b600081146103665760006102dc826104f6565b90508060ff166001901b8218915060008a8260ff1660088760010b60020b901b176103079190610bdc565b90508860020b8160020b1215801561032557508760020b8160020b13155b1561035f578087878061033790610c19565b98508151811061034a57610349610c61565b5b602002602001019060020b908160020b815250505b50506102c9565b50818061037290610c90565b92505061023d565b8267ffffffffffffffff81111561039457610393610b13565b5b6040519080825280602002602001820160405280156103c757816020015b60608152602001906001900390816103b25790505b50985060005b838110156104e8576000808c73ffffffffffffffffffffffffffffffffffffffff1663f30dba9388858151811061040757610406610c61565b5b60200260200101516040518263ffffffff1660e01b815260040161042b9190610cc9565b61010060405180830381865afa158015610449573d6000803e3d6000fd5b505050506040513d601f19601f8201168201806040525081019061046d9190610e12565b50505050505091509150818188858151811061048c5761048b610c61565b5b60200260200101516040516020016104a693929190610f5d565b6040516020818303038152906040528c84815181106104c8576104c7610c61565b5b6020026020010181905250505080806104e090610c19565b9150506103cd565b505050505050505050919050565b600080821161050457600080fd5b60ff905060006fffffffffffffffffffffffffffffffff801683161115610539576080816105329190610fa7565b9050610541565b608082901c91505b600067ffffffffffffffff80168316111561056a576040816105639190610fa7565b9050610572565b604082901c91505b600063ffffffff801683161115610597576020816105909190610fa7565b905061059f565b602082901c91505b600061ffff8016831611156105c2576010816105bb9190610fa7565b90506105ca565b601082901c91505b600060ff8016831611156105ec576008816105e59190610fa7565b90506105f4565b600882901c91505b6000600f831611156106145760048161060d9190610fa7565b905061061c565b600482901c91505b600060038316111561063c576002816106359190610fa7565b9050610644565b600282901c91505b60006001831611156106605760018161065d9190610fa7565b90505b919050565b600080fd5b600073ffffffffffffffffffffffffffffffffffffffff82169050919050565b60006106958261066a565b9050919050565b60006106a78261068a565b9050919050565b6106b78161069c565b81146106c257600080fd5b50565b6000813590506106d4816106ae565b92915050565b6000602082840312156106f0576106ef610665565b5b60006106fe848285016106c5565b91505092915050565b600081519050919050565b600082825260208201905092915050565b6000819050602082019050919050565b600081519050919050565b600082825260208201905092915050565b60005b8381101561076d578082015181840152602081019050610752565b60008484015250505050565b6000601f19601f8301169050919050565b600061079582610733565b61079f818561073e565b93506107af81856020860161074f565b6107b881610779565b840191505092915050565b60006107cf838361078a565b905092915050565b6000602082019050919050565b60006107ef82610707565b6107f98185610712565b93508360208202850161080b85610723565b8060005b85811015610847578484038952815161082885826107c3565b9450610833836107d7565b925060208a0199505060018101905061080f565b50829750879550505050505092915050565b6000602082019050818103600083015261087381846107e4565b905092915050565b60008160020b9050919050565b6108918161087b565b811461089c57600080fd5b50565b6000815190506108ae81610888565b92915050565b6000602082840312156108ca576108c9610665565b5b60006108d88482850161089f565b91505092915050565b6108ea8161066a565b81146108f557600080fd5b50565b600081519050610907816108e1565b92915050565b6000806040838503121561092457610923610665565b5b6000610932858286016108f8565b92505060206109438582860161089f565b9150509250929050565b7f4e487b7100000000000000000000000000000000000000000000000000000000600052601160045260246000fd5b60006109878261087b565b91507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff80000082036109b9576109b861094d565b5b816000039050919050565b60006109cf8261087b565b91506109da8361087b565b92508282039050627fffff81137fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff80000082121715610a1957610a1861094d565b5b92915050565b6000610a2a8261087b565b9150610a358361087b565b925082820190507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff8000008112627fffff82131715610a7457610a7361094d565b5b92915050565b7f4e487b7100000000000000000000000000000000000000000000000000000000600052601260045260246000fd5b6000610ab48261087b565b9150610abf8361087b565b925082610acf57610ace610a7a565b5b600160000383147fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff80000083141615610b0857610b0761094d565b5b828205905092915050565b7f4e487b7100000000000000000000000000000000000000000000000000000000600052604160045260246000fd5b60008160010b9050919050565b610b5881610b42565b82525050565b6000602082019050610b736000830184610b4f565b92915050565b6000819050919050565b610b8c81610b79565b8114610b9757600080fd5b50565b600081519050610ba981610b83565b92915050565b600060208284031215610bc557610bc4610665565b5b6000610bd384828501610b9a565b91505092915050565b6000610be78261087b565b9150610bf28361087b565b9250828202610c008161087b565b9150808214610c1257610c1161094d565b5b5092915050565b6000610c2482610b79565b91507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff8203610c5657610c5561094d565b5b600182019050919050565b7f4e487b7100000000000000000000000000000000000000000000000000000000600052603260045260246000fd5b6000610c9b82610b42565b9150617fff8203610caf57610cae61094d565b5b600182019050919050565b610cc38161087b565b82525050565b6000602082019050610cde6000830184610cba565b92915050565b60006fffffffffffffffffffffffffffffffff82169050919050565b610d0981610ce4565b8114610d1457600080fd5b50565b600081519050610d2681610d00565b92915050565b600081600f0b9050919050565b610d4281610d2c565b8114610d4d57600080fd5b50565b600081519050610d5f81610d39565b92915050565b60008160060b9050919050565b610d7b81610d65565b8114610d8657600080fd5b50565b600081519050610d9881610d72565b92915050565b600063ffffffff82169050919050565b610db781610d9e565b8114610dc257600080fd5b50565b600081519050610dd481610dae565b92915050565b60008115159050919050565b610def81610dda565b8114610dfa57600080fd5b50565b600081519050610e0c81610de6565b92915050565b600080600080600080600080610100898b031215610e3357610e32610665565b5b6000610e418b828c01610d17565b9850506020610e528b828c01610d50565b9750506040610e638b828c01610b9a565b9650506060610e748b828c01610b9a565b9550506080610e858b828c01610d89565b94505060a0610e968b828c016108f8565b93505060c0610ea78b828c01610dc5565b92505060e0610eb88b828c01610dfd565b9150509295985092959890939650565b60008160801b9050919050565b6000610ee082610ec8565b9050919050565b610ef8610ef382610ce4565b610ed5565b82525050565b6000610f0982610ec8565b9050919050565b610f21610f1c82610d2c565b610efe565b82525050565b60008160e81b9050919050565b6000610f3f82610f27565b9050919050565b610f57610f528261087b565b610f34565b82525050565b6000610f698286610ee7565b601082019150610f798285610f10565b601082019150610f898284610f46565b600382019150819050949350505050565b600060ff82169050919050565b6000610fb282610f9a565b9150610fbd83610f9a565b9250828203905060ff811115610fd657610fd561094d565b5b9291505056fea2646970667358221220221231006ad914be8e1c336c2daae4906e7356f2050aed1a9d0b63a212ece14164736f6c63430008130033',
+        override_address: {"code": "0x608080604052600436101561001357600080fd5b60003560e01c63802036f51461002857600080fd5b346106155760207ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc360112610615576004359073ffffffffffffffffffffffffffffffffffffffff82168203610615577fd0c93a7c00000000000000000000000000000000000000000000000000000000815260208160048173ffffffffffffffffffffffffffffffffffffffff86165afa90811561062257600091610975575b506040517f3850c7bd00000000000000000000000000000000000000000000000000000000815260408160048173ffffffffffffffffffffffffffffffffffffffff87165afa80156106225761092f575b508060020b15610900578060020b621b13d10560020b7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe061017361015d83610a1f565b9261016b60405194856109af565b808452610a1f565b013660208301376000918060020b7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff276180560020b60081d60010b5b8060010b8260020b620d89e80560020b60081d60010b811361062e57604051907f5339c296000000000000000000000000000000000000000000000000000000008252600482015260208160248173ffffffffffffffffffffffffffffffffffffffff8a165afa908115610622576000916105eb575b50805b61026e575060010b617fff811461023f576001016101ad565b7f4e487b7100000000000000000000000000000000000000000000000000000000600052601160045260246000fd5b8060ff6fffffffffffffffffffffffffffffffff8216156105df5750607f5b67ffffffffffffffff8216156105d55760ff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc0818316011161023f5760ff167fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc0015b63ffffffff8216156105cb5760ff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0818316011161023f5760ff167fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0015b61ffff8216156105c15760ff7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0818316011161023f5760ff167ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0015b60ff8216156105b75760ff7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff8818316011161023f5760ff167ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff8015b600f8216156105ad5760ff7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc818316011161023f5760ff167ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc015b60038216156105a15760ff7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe818316011161023f577ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe60ff6001921601915b1661054b575b60ff16906001821b18908360020b9060020b8360081b60020b1760020b028060020b90810361023f57807ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff27618839212158061053e575b610524575b50610226565b61053761053088610a37565b9787610a64565b523861051e565b50620d89e8811315610519565b60ff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff818316011161023f5760ff167fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff016104c4565b9060019060021c6104be565b9060041c9061045f565b9060081c90610404565b9060101c906103a9565b9060201c9061034d565b9060401c906102ef565b90508160801c9061028d565b90506020813d60201161061a575b81610606602093836109af565b81010312610615575138610223565b600080fd5b3d91506105f9565b6040513d6000823e3d90fd5b50505061063a82610a1f565b9261064860405194856109af565b8284527fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe061067584610a1f565b0160005b8181106108ef57505060005b83811061075b578460405160208101916020825280518093526040820192602060408260051b8501019201906000945b8186106106c25784840385f35b9091927fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc0858203018252835180519081835260005b828110610746575050602080837fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0601f85600085809860019a01015201160101950192019501949190916106b5565b806020809284010151828287010152016106f7565b6107658184610a64565b5160020b90604051917ff30dba9300000000000000000000000000000000000000000000000000000000835260048301526101008260248173ffffffffffffffffffffffffffffffffffffffff87165afa91821561062257600092610857575b506107d08185610a64565b516040519260801b602084015260e81b603083015260138252604082019180831067ffffffffffffffff84111761082857610823926040526108128288610a64565b5261081d8187610a64565b50610a37565b610685565b7f4e487b7100000000000000000000000000000000000000000000000000000000600052604160045260246000fd5b909150610100813d610100116108e7575b8161087661010093836109af565b810103126106155780516fffffffffffffffffffffffffffffffff8116036106155760208101519081600f0b82036106155760808101518060060b03610615576108c260a082016109fe565b5060c081015163ffffffff8116036106155760e00151801515036106155790386107c5565b3d9150610868565b806060602080938901015201610679565b7f4e487b7100000000000000000000000000000000000000000000000000000000600052601260045260246000fd5b6040813d60401161096d575b81610948604093836109af565b810103126106155760208161095f610966936109fe565b50016109f0565b503861011a565b3d915061093b565b90506020813d6020116109a7575b81610990602093836109af565b81010312610615576109a1906109f0565b386100c9565b3d9150610983565b90601f7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0910116810190811067ffffffffffffffff82111761082857604052565b51908160020b820361061557565b519073ffffffffffffffffffffffffffffffffffffffff8216820361061557565b67ffffffffffffffff81116108285760051b60200190565b7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff811461023f5760010190565b8051821015610a785760209160051b010190565b7f4e487b7100000000000000000000000000000000000000000000000000000000600052603260045260246000fdfea2646970667358221220b066db1595cf7acb7b895611dc9837f3bd0731b073eef99e736694005439e20864736f6c63430008130033"}
     }
-    params = [pair_address]
-    # get tick data for
-    response = await rpc_helper.batch_eth_call_on_block_range(
-        abi_dict=pair_abi_dict,
-        function_name='getTicks',
-        contract_address=override_address,
-        # minimize rpc calls and only grab first block
-        from_block=from_block,
-        to_block=from_block,
-        redis_conn=redis_conn,
-        params=params,
-        overrides=overrides,
+    override_contract = w3.eth.contract(abi=helper_contract_abi, address=override_address)
+    
+    # retrieve the max gas limit for the current block
+    max_gas =  w3.eth.get_block('latest')['gasLimit'] - 1
+    # create a web3 transaction object for a static state override call to the getTicks function of the helper
+    txn_params = override_contract.functions.getTicks(Web3.to_checksum_address(pair_address)).build_transaction(
+        {   
+            "gas": 12345678987654323
+        },
     )
 
-    ticks_list = transform_tick_bytes_to_list(response[0])
+    # get tick data 
+    # build a web3 eth_call with txn_params and use overrides for state override calls
+    response = w3.eth.call(txn_params, block_identifier=from_block, state_override=overrides)
+    
+    # to_checksum_address the helper address, and make an eth_call to get the tick data
+    # the call functions in rpc_helper.py do not correctly decode the tick byte data
 
-    slot0 = rpc_helper.web3_call(['slot0'], redis_conn)
-    sqrt_price = slot0[0]
+    ticks_list = transform_tick_bytes_to_list(response)
+    pair_contract_obj: Contract = w3.eth.contract(
+                address=Web3.to_checksum_address(pair_address),
+                abi=pair_contract_abi,
+            )
+    
+    tasks = [
+        pair_contract_obj.functions.slot0()
+    ]
+
+    slot0 = await rpc_helper.web3_call(tasks, redis_conn)
+    sqrt_price = slot0[0][0]
     t0_reserves, t1_reserves = calculate_tvl_from_ticks(
         ticks_list,
-        pair_per_token_metadata.get(from_block),
+        pair_per_token_metadata,
         sqrt_price,
     )
 

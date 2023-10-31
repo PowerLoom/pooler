@@ -20,7 +20,7 @@ class AggreagateTopTokensProcessor(GenericProcessorMultiProjectAggregate):
 
     def __init__(self) -> None:
         self.transformation_lambdas = []
-        self._logger = logger.bind(module='AggregateTopTokensProcessor')
+        self._logger = logger.bind(module="AggregateTopTokensProcessor")
 
     async def compute(
         self,
@@ -31,31 +31,30 @@ class AggreagateTopTokensProcessor(GenericProcessorMultiProjectAggregate):
         ipfs_reader: AsyncIPFSClient,
         protocol_state_contract,
         project_id: str,
-
     ):
-
-        self._logger.info(f'Calculating top tokens data for {msg_obj}')
+        self._logger.info(f"Calculating top tokens data for {msg_obj}")
         epoch_id = msg_obj.epochId
 
         snapshot_mapping = {}
         projects_metadata = {}
 
         snapshot_data = await get_sumbmission_data_bulk(
-            redis, [msg.snapshotCid for msg in msg_obj.messages], ipfs_reader, [
-                msg.projectId for msg in msg_obj.messages
-            ],
+            redis,
+            [msg.snapshotCid for msg in msg_obj.messages],
+            ipfs_reader,
+            [msg.projectId for msg in msg_obj.messages],
         )
 
         for msg, data in zip(msg_obj.messages, snapshot_data):
             if not data:
                 continue
-            if 'reserves' in msg.projectId:
+            if "reserves" in msg.projectId:
                 snapshot = UniswapPairTotalReservesSnapshot.parse_obj(data)
-            elif 'volume' in msg.projectId:
+            elif "volume" in msg.projectId:
                 snapshot = UniswapTradesAggregateSnapshot.parse_obj(data)
             snapshot_mapping[msg.projectId] = snapshot
 
-            contract_address = msg.projectId.split(':')[-2]
+            contract_address = msg.projectId.split(":")[-2]
             pair_metadata = await get_pair_metadata(
                 contract_address,
                 redis_conn=redis,
@@ -70,66 +69,91 @@ class AggreagateTopTokensProcessor(GenericProcessorMultiProjectAggregate):
             snapshot = snapshot_mapping[snapshot_project_id]
             project_metadata = projects_metadata[snapshot_project_id]
 
-            token0 = project_metadata['token0']
-            token1 = project_metadata['token1']
+            token0 = project_metadata["token0"]
+            token1 = project_metadata["token1"]
 
-            if token0['address'] not in token_data:
-                token_data[token0['address']] = {
-                    'address': token0['address'],
-                    'name': token0['name'],
-                    'symbol': token0['symbol'],
-                    'decimals': token0['decimals'],
-                    'price': 0,
-                    'volume24h': 0,
-                    'liquidity': 0,
-                    'priceChange24h': 0,
+            if token0["address"] not in token_data:
+                token_data[token0["address"]] = {
+                    "address": token0["address"],
+                    "name": token0["name"],
+                    "symbol": token0["symbol"],
+                    "decimals": token0["decimals"],
+                    "price": 0,
+                    "volume24h": 0,
+                    "liquidity": 0,
+                    "priceChange24h": 0,
                 }
 
-            if token1['address'] not in token_data:
-                token_data[token1['address']] = {
-                    'address': token1['address'],
-                    'name': token1['name'],
-                    'symbol': token1['symbol'],
-                    'decimals': token1['decimals'],
-                    'price': 0,
-                    'volume24h': 0,
-                    'liquidity': 0,
-                    'priceChange24h': 0,
+            if token1["address"] not in token_data:
+                token_data[token1["address"]] = {
+                    "address": token1["address"],
+                    "name": token1["name"],
+                    "symbol": token1["symbol"],
+                    "decimals": token1["decimals"],
+                    "price": 0,
+                    "volume24h": 0,
+                    "liquidity": 0,
+                    "priceChange24h": 0,
                 }
 
-            if 'reserves' in snapshot_project_id:
+            if "reserves" in snapshot_project_id:
                 max_epoch_block = snapshot.chainHeightRange.end
 
-                token_data[token0['address']]['price'] = snapshot.token0Prices[f'block{max_epoch_block}']
-                token_data[token1['address']]['price'] = snapshot.token1Prices[f'block{max_epoch_block}']
+                token_data[token0["address"]]["price"] = snapshot.token0Prices[
+                    f"block{max_epoch_block}"
+                ]
+                token_data[token1["address"]]["price"] = snapshot.token1Prices[
+                    f"block{max_epoch_block}"
+                ]
 
-                token_data[token0['address']]['liquidity'] += snapshot.token0ReservesUSD[f'block{max_epoch_block}']
-                token_data[token1['address']]['liquidity'] += snapshot.token1ReservesUSD[f'block{max_epoch_block}']
+                token_data[token0["address"]][
+                    "liquidity"
+                ] += snapshot.token0ReservesUSD[f"block{max_epoch_block}"]
+                token_data[token1["address"]][
+                    "liquidity"
+                ] += snapshot.token1ReservesUSD[f"block{max_epoch_block}"]
 
-            elif 'volume' in snapshot_project_id:
-
-                token_data[token0['address']]['volume24h'] += snapshot.token0TradeVolumeUSD
-                token_data[token1['address']]['volume24h'] += snapshot.token1TradeVolumeUSD
+            elif "volume" in snapshot_project_id:
+                token_data[token0["address"]][
+                    "volume24h"
+                ] += snapshot.token0TradeVolumeUSD
+                token_data[token1["address"]][
+                    "volume24h"
+                ] += snapshot.token1TradeVolumeUSD
 
         tail_epoch_id, extrapolated_flag = await get_tail_epoch_id(
-            redis, protocol_state_contract, anchor_rpc_helper, msg_obj.epochId, 86400, project_id,
+            redis,
+            protocol_state_contract,
+            anchor_rpc_helper,
+            msg_obj.epochId,
+            86400,
+            project_id,
         )
 
         if not extrapolated_flag:
             previous_top_tokens_snapshot_data = await get_project_epoch_snapshot(
-                redis, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id, project_id,
+                redis,
+                protocol_state_contract,
+                anchor_rpc_helper,
+                ipfs_reader,
+                tail_epoch_id,
+                project_id,
             )
 
             if previous_top_tokens_snapshot_data:
-                previous_top_tokens_snapshot = UniswapTopTokensSnapshot.parse_obj(previous_top_tokens_snapshot_data)
+                previous_top_tokens_snapshot = UniswapTopTokensSnapshot.parse_obj(
+                    previous_top_tokens_snapshot_data
+                )
                 for token in previous_top_tokens_snapshot.tokens:
                     if token.address in token_data:
                         price_before_24h = token.price
 
                         if price_before_24h > 0:
-                            token_data[token.address]['priceChange24h'] = (
-                                token_data[token.address]['price'] - price_before_24h
-                            ) / price_before_24h * 100
+                            token_data[token.address]["priceChange24h"] = (
+                                (token_data[token.address]["price"] - price_before_24h)
+                                / price_before_24h
+                                * 100
+                            )
 
         top_tokens = []
         for token in token_data.values():

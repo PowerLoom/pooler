@@ -18,7 +18,9 @@ from pooler.modules.uniswapv3.total_value_locked import calculate_reserves
 from pooler.modules.uniswapv3.total_value_locked import calculate_tvl_from_ticks
 from pooler.modules.uniswapv3.total_value_locked import get_events
 from pooler.modules.uniswapv3.total_value_locked import transform_tick_bytes_to_list
-from pooler.modules.uniswapv3.utils.models.message_models import UniswapPairTotalReservesSnapshot
+from pooler.modules.uniswapv3.utils.models.message_models import (
+    UniswapPairTotalReservesSnapshot,
+)
 from pooler.utils.default_logger import logger
 from pooler.utils.models.message_models import EpochBaseSnapshot
 from pooler.utils.rpc import get_contract_abi_dict
@@ -28,7 +30,7 @@ from pooler.utils.snapshot_utils import (
     get_block_details_in_block_range,
 )
 
-core_logger = logger.bind(module='PowerLoom|UniswapCore')
+core_logger = logger.bind(module="PowerLoom|UniswapCore")
 
 
 async def get_pair_reserves(
@@ -40,7 +42,7 @@ async def get_pair_reserves(
     fetch_timestamp=False,
 ):
     core_logger.debug(
-        f'Starting pair total reserves query for: {pair_address}',
+        f"Starting pair total reserves query for: {pair_address}",
     )
     pair_address = Web3.toChecksumAddress(pair_address)
 
@@ -55,8 +57,8 @@ async def get_pair_reserves(
         except Exception as err:
             core_logger.opt(exception=True).error(
                 (
-                    'Error attempting to get block details of block-range'
-                    ' {}-{}: {}, retrying again'
+                    "Error attempting to get block details of block-range"
+                    " {}-{}: {}, retrying again"
                 ),
                 from_block,
                 to_block,
@@ -73,15 +75,12 @@ async def get_pair_reserves(
     )
 
     core_logger.debug(
-        (
-            'total pair reserves fetched block details for epoch for:'
-            f' {pair_address}'
-        ),
+        ("total pair reserves fetched block details for epoch for:" f" {pair_address}"),
     )
 
     token0_price_map, token1_price_map = await asyncio.gather(
         get_token_price_in_block_range(
-            token_metadata=pair_per_token_metadata['token0'],
+            token_metadata=pair_per_token_metadata["token0"],
             from_block=from_block,
             to_block=to_block,
             redis_conn=redis_conn,
@@ -89,7 +88,7 @@ async def get_pair_reserves(
             debug_log=False,
         ),
         get_token_price_in_block_range(
-            token_metadata=pair_per_token_metadata['token1'],
+            token_metadata=pair_per_token_metadata["token1"],
             from_block=from_block,
             to_block=to_block,
             redis_conn=redis_conn,
@@ -99,7 +98,7 @@ async def get_pair_reserves(
     )
 
     core_logger.debug(
-        f'Total reserves fetched token prices for: {pair_address}',
+        f"Total reserves fetched token prices for: {pair_address}",
     )
 
     initial_reserves = calculate_reserves(
@@ -111,7 +110,7 @@ async def get_pair_reserves(
     )
 
     core_logger.debug(
-        f'Total reserves fetched tick data for : {pair_address}',
+        f"Total reserves fetched tick data for : {pair_address}",
     )
     # grab mint/burn events in range
     events = get_events(
@@ -123,19 +122,25 @@ async def get_pair_reserves(
     )
 
     core_logger.debug(
-        f'Total reserves fetched event data for : {pair_address}',
+        f"Total reserves fetched event data for : {pair_address}",
     )
     # sum burn and mint each block
     reserves_array = [initial_reserves]
     reserves_array = [
-        [reserves_array[-1][0] + event.args.amount0, reserves_array[-1][1] + event.args.amount1]
-        if event.event == 'Mint'
-        else [reserves_array[-1][0] - event.args.amount0, reserves_array[-1][1] - event.args.amount1]
+        [
+            reserves_array[-1][0] + event.args.amount0,
+            reserves_array[-1][1] + event.args.amount1,
+        ]
+        if event.event == "Mint"
+        else [
+            reserves_array[-1][0] - event.args.amount0,
+            reserves_array[-1][1] - event.args.amount1,
+        ]
         for event in events
     ]
 
-    token0_decimals = pair_per_token_metadata['token0']['decimals']
-    token1_decimals = pair_per_token_metadata['token1']['decimals']
+    token0_decimals = pair_per_token_metadata["token0"]["decimals"]
+    token1_decimals = pair_per_token_metadata["token1"]["decimals"]
 
     pair_reserves_arr = dict()
     block_count = 0
@@ -160,7 +165,7 @@ async def get_pair_reserves(
         current_block_details = block_details_dict.get(block_num, None)
         timestamp = (
             current_block_details.get(
-                'timestamp',
+                "timestamp",
                 None,
             )
             if current_block_details
@@ -168,20 +173,20 @@ async def get_pair_reserves(
         )
 
         pair_reserves_arr[block_num] = {
-            'token0': token0Amount,
-            'token1': token1Amount,
-            'token0USD': token0USD,
-            'token1USD': token1USD,
-            'token0Price': token0Price,
-            'token1Price': token1Price,
-            'timestamp': timestamp,
+            "token0": token0Amount,
+            "token1": token1Amount,
+            "token0USD": token0USD,
+            "token1USD": token1USD,
+            "token0Price": token0Price,
+            "token1Price": token1Price,
+            "timestamp": timestamp,
         }
         block_count += 1
 
     core_logger.debug(
         (
-            'Calculated pair total reserves for epoch-range:'
-            f' {from_block} - {to_block} | pair_contract: {pair_address}'
+            "Calculated pair total reserves for epoch-range:"
+            f" {from_block} - {to_block} | pair_contract: {pair_address}"
         ),
     )
     return pair_reserves_arr
@@ -205,32 +210,33 @@ def extract_trade_volume_log(
             return 0, 0
 
         token_amount = log.args.get(token_type) / 10 ** int(
-            pair_per_token_metadata[token]['decimals'],
+            pair_per_token_metadata[token]["decimals"],
         )
         token_usd_amount = token_amount * token_price_map.get(
-            log.get('blockNumber'), 0,
+            log.get("blockNumber"),
+            0,
         )
         return token_amount, token_usd_amount
 
-    if event_name == 'Swap':
+    if event_name == "Swap":
         amount0In, amount0In_usd = token_native_and_usd_amount(
-            token='token0',
-            token_type='amount0In',
+            token="token0",
+            token_type="amount0In",
             token_price_map=token0_price_map,
         )
         amount0Out, amount0Out_usd = token_native_and_usd_amount(
-            token='token0',
-            token_type='amount0Out',
+            token="token0",
+            token_type="amount0Out",
             token_price_map=token0_price_map,
         )
         amount1In, amount1In_usd = token_native_and_usd_amount(
-            token='token1',
-            token_type='amount1In',
+            token="token1",
+            token_type="amount1In",
             token_price_map=token1_price_map,
         )
         amount1Out, amount1Out_usd = token_native_and_usd_amount(
-            token='token1',
-            token_type='amount1Out',
+            token="token1",
+            token_type="amount1Out",
             token_price_map=token1_price_map,
         )
 
@@ -240,32 +246,32 @@ def extract_trade_volume_log(
         token0_amount_usd = abs(amount0Out_usd - amount0In_usd)
         token1_amount_usd = abs(amount1Out_usd - amount1In_usd)
 
-    elif event_name == 'Mint' or event_name == 'Burn':
+    elif event_name == "Mint" or event_name == "Burn":
         token0_amount, token0_amount_usd = token_native_and_usd_amount(
-            token='token0',
-            token_type='amount0',
+            token="token0",
+            token_type="amount0",
             token_price_map=token0_price_map,
         )
         token1_amount, token1_amount_usd = token_native_and_usd_amount(
-            token='token1',
-            token_type='amount1',
+            token="token1",
+            token_type="amount1",
             token_price_map=token1_price_map,
         )
 
     trade_volume_usd = 0
     trade_fee_usd = 0
 
-    block_details = block_details_dict.get(int(log.get('blockNumber', 0)), {})
+    block_details = block_details_dict.get(int(log.get("blockNumber", 0)), {})
     log = json.loads(Web3.toJSON(log))
-    log['token0_amount'] = token0_amount
-    log['token1_amount'] = token1_amount
-    log['timestamp'] = block_details.get('timestamp', '')
+    log["token0_amount"] = token0_amount
+    log["token1_amount"] = token1_amount
+    log["timestamp"] = block_details.get("timestamp", "")
     # pop unused log props
-    log.pop('blockHash', None)
-    log.pop('transactionIndex', None)
+    log.pop("blockHash", None)
+    log.pop("transactionIndex", None)
 
     # if event is 'Swap' then only add single token in total volume calculation
-    if event_name == 'Swap':
+    if event_name == "Swap":
         # set one side token value in swap case
         if token1_amount_usd and token0_amount_usd:
             trade_volume_usd = (
@@ -286,7 +292,7 @@ def extract_trade_volume_log(
         )  # uniswap LP fee rate
 
         # set final usd amount for swap
-        log['trade_amount_usd'] = trade_volume_usd
+        log["trade_amount_usd"] = trade_volume_usd
 
         return (
             trade_data(
@@ -303,7 +309,7 @@ def extract_trade_volume_log(
     trade_volume_usd = token0_amount_usd + token1_amount_usd
 
     # set final usd amount for other events
-    log['trade_amount_usd'] = trade_volume_usd
+    log["trade_amount_usd"] = trade_volume_usd
 
     return (
         trade_data(
@@ -327,7 +333,6 @@ async def get_pair_trade_volume(
     rpc_helper: RpcHelper,
     fetch_timestamp=True,
 ):
-
     data_source_contract_address = Web3.toChecksumAddress(
         data_source_contract_address,
     )
@@ -344,8 +349,8 @@ async def get_pair_trade_volume(
         except Exception as err:
             core_logger.opt(exception=True).error(
                 (
-                    'Error attempting to get block details of to_block {}:'
-                    ' {}, retrying again'
+                    "Error attempting to get block details of to_block {}:"
+                    " {}, retrying again"
                 ),
                 max_chain_height,
                 err,
@@ -359,7 +364,7 @@ async def get_pair_trade_volume(
     )
     token0_price_map, token1_price_map = await asyncio.gather(
         get_token_price_in_block_range(
-            token_metadata=pair_per_token_metadata['token0'],
+            token_metadata=pair_per_token_metadata["token0"],
             from_block=min_chain_height,
             to_block=max_chain_height,
             redis_conn=redis_conn,
@@ -367,7 +372,7 @@ async def get_pair_trade_volume(
             debug_log=False,
         ),
         get_token_price_in_block_range(
-            token_metadata=pair_per_token_metadata['token1'],
+            token_metadata=pair_per_token_metadata["token1"],
             from_block=min_chain_height,
             to_block=max_chain_height,
             redis_conn=redis_conn,
@@ -384,12 +389,12 @@ async def get_pair_trade_volume(
 
     events_log = await rpc_helper.get_events_logs(
         **{
-            'contract_address': data_source_contract_address,
-            'to_block': max_chain_height,
-            'from_block': min_chain_height,
-            'topics': [event_sig],
-            'event_abi': event_abi,
-            'redis_conn': redis_conn,
+            "contract_address": data_source_contract_address,
+            "to_block": max_chain_height,
+            "from_block": min_chain_height,
+            "topics": [event_sig],
+            "event_abi": event_abi,
+            "redis_conn": redis_conn,
         },
     )
 
@@ -479,18 +484,16 @@ async def get_pair_trade_volume(
                 block_details_dict=block_details_dict,
             )
 
-            if log.event == 'Swap':
+            if log.event == "Swap":
                 epoch_results.Swap.logs.append(processed_log)
                 epoch_results.Swap.trades += trades_result
-                tx_hash_trades += (
-                    trades_result  # swap in single txHash should be added
-                )
+                tx_hash_trades += trades_result  # swap in single txHash should be added
 
-            elif log.event == 'Mint':
+            elif log.event == "Mint":
                 epoch_results.Mint.logs.append(processed_log)
                 epoch_results.Mint.trades += trades_result
 
-            elif log.event == 'Burn':
+            elif log.event == "Burn":
                 epoch_results.Burn.logs.append(processed_log)
                 epoch_results.Burn.trades += trades_result
 
@@ -498,6 +501,6 @@ async def get_pair_trade_volume(
         epoch_results.Trades += abs(tx_hash_trades)
     epoch_trade_logs = epoch_results.dict()
     max_block_details = block_details_dict.get(max_chain_height, {})
-    max_block_timestamp = max_block_details.get('timestamp', None)
-    epoch_trade_logs.update({'timestamp': max_block_timestamp})
+    max_block_timestamp = max_block_details.get("timestamp", None)
+    epoch_trade_logs.update({"timestamp": max_block_timestamp})
     return epoch_trade_logs

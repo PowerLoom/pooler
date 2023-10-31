@@ -12,7 +12,7 @@ class trade_data(BaseModel):
     token0TradeVolumeUSD: float
     token1TradeVolumeUSD: float
 
-    def __add__(self, other: 'trade_data') -> 'trade_data':
+    def __add__(self, other: "trade_data") -> "trade_data":
         self.totalTradesUSD += other.totalTradesUSD
         self.totalFeeUSD += other.totalFeeUSD
         self.token0TradeVolume += other.token0TradeVolume
@@ -21,7 +21,7 @@ class trade_data(BaseModel):
         self.token1TradeVolumeUSD += other.token1TradeVolumeUSD
         return self
 
-    def __sub__(self, other: 'trade_data') -> 'trade_data':
+    def __sub__(self, other: "trade_data") -> "trade_data":
         self.totalTradesUSD -= other.totalTradesUSD
         self.totalFeeUSD -= other.totalFeeUSD
         self.token0TradeVolume -= other.token0TradeVolume
@@ -30,7 +30,7 @@ class trade_data(BaseModel):
         self.token1TradeVolumeUSD -= other.token1TradeVolumeUSD
         return self
 
-    def __abs__(self) -> 'trade_data':
+    def __abs__(self) -> "trade_data":
         self.totalTradesUSD = abs(self.totalTradesUSD)
         self.totalFeeUSD = abs(self.totalFeeUSD)
         self.token0TradeVolume = abs(self.token0TradeVolume)

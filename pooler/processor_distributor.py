@@ -39,7 +39,7 @@ from pooler.utils.snapshot_utils import warm_up_cache_for_snapshot_constructors
 class ProcessorDistributor(multiprocessing.Process):
     def __init__(self, name, **kwargs):
         super(ProcessorDistributor, self).__init__(name=name, **kwargs)
-        self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
+        self._unique_id = f"{name}-" + keccak(text=str(uuid4())).hex()[:8]
         self._q = queue.Queue()
         self._rabbitmq_interactor = None
         self._shutdown_initiated = False
@@ -47,19 +47,23 @@ class ProcessorDistributor(multiprocessing.Process):
         self._aioredis_pool = None
         self._rpc_helper = None
         self._source_chain_id = None
-        self._consume_exchange_name = f'{settings.rabbitmq.setup.event_detector.exchange}:{settings.namespace}'
+        self._consume_exchange_name = (
+            f"{settings.rabbitmq.setup.event_detector.exchange}:{settings.namespace}"
+        )
         self._consume_queue_name = (
-            f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}'
+            f"powerloom-event-detector:{settings.namespace}:{settings.instance_id}"
         )
         self._initialized = False
-        self._consume_queue_routing_key = f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.*'
+        self._consume_queue_routing_key = (
+            f"powerloom-event-detector:{settings.namespace}:{settings.instance_id}.*"
+        )
         self._callback_exchange_name = (
-            f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}'
+            f"{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}"
         )
         self._payload_commit_exchange_name = (
-            f'{settings.rabbitmq.setup.commit_payload.exchange}:{settings.namespace}'
+            f"{settings.rabbitmq.setup.commit_payload.exchange}:{settings.namespace}"
         )
-        self._payload_commit_routing_key = f'powerloom-backend-commit-payload:{settings.namespace}:{settings.instance_id}.Finalized'
+        self._payload_commit_routing_key = f"powerloom-backend-commit-payload:{settings.namespace}:{settings.instance_id}.Finalized"
 
     async def _init_redis_pool(self):
         if not self._aioredis_pool:
@@ -71,9 +75,11 @@ class ProcessorDistributor(multiprocessing.Process):
         if not self._rpc_helper:
             self._rpc_helper = RpcHelper()
             self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
-            with open(settings.protocol_state.abi, 'r') as f:
+            with open(settings.protocol_state.abi, "r") as f:
                 abi_dict = json.load(f)
-            protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
+            protocol_state_contract = self._anchor_rpc_helper.get_current_node()[
+                "web3_client"
+            ].eth.contract(
                 address=Web3.toChecksumAddress(
                     settings.protocol_state.address,
                 ),
@@ -91,7 +97,8 @@ class ProcessorDistributor(multiprocessing.Process):
             )
 
     async def _warm_up_cache_for_epoch_data(
-        self, msg_obj: PowerloomSnapshotProcessMessage,
+        self,
+        msg_obj: PowerloomSnapshotProcessMessage,
     ):
         """
         Function to warm up the cache which is used across all snapshot constructors
@@ -111,8 +118,8 @@ class ProcessorDistributor(multiprocessing.Process):
         except Exception as exc:
             self._logger.warning(
                 (
-                    'There was an error while warming-up cache for epoch data.'
-                    f' error_msg: {exc}'
+                    "There was an error while warming-up cache for epoch data."
+                    f" error_msg: {exc}"
                 ),
             )
 
@@ -148,35 +155,31 @@ class ProcessorDistributor(multiprocessing.Process):
                     )
 
                     self._logger.info(
-                        'Sent message to queue: {}', message,
+                        "Sent message to queue: {}",
+                        message,
                     )
 
         except Exception as e:
             self._logger.opt(exception=True).error(
-                (
-                    'Exception sending message to queue. '
-                    ' {} | dump: {}'
-                ),
+                ("Exception sending message to queue. " " {} | dump: {}"),
                 message,
                 e,
             )
 
     async def _distribute_callbacks_snapshotting(self, message: IncomingMessage):
         try:
-            msg_obj: EpochBroadcast = (
-                EpochBroadcast.parse_raw(message.body)
-            )
+            msg_obj: EpochBroadcast = EpochBroadcast.parse_raw(message.body)
         except ValidationError:
             self._logger.opt(exception=True).error(
-                'Bad message structure of epoch callback',
+                "Bad message structure of epoch callback",
             )
             return
         except Exception:
             self._logger.opt(exception=True).error(
-                'Unexpected message format of epoch callback',
+                "Unexpected message format of epoch callback",
             )
             return
-        self._logger.debug(f'Epoch Distribution time - {int(time.time())}')
+        self._logger.debug(f"Epoch Distribution time - {int(time.time())}")
         # warm-up cache before constructing snapshots
         await self._warm_up_cache_for_epoch_data(msg_obj=msg_obj)
 
@@ -197,14 +200,14 @@ class ProcessorDistributor(multiprocessing.Process):
                 queuing_tasks.append(
                     self._publish_message_to_queue(
                         exchange=self._callback_exchange_name,
-                        routing_key=f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}:EpochReleased.{type_}',
+                        routing_key=f"powerloom-backend-callback:{settings.namespace}:{settings.instance_id}:EpochReleased.{type_}",
                         message=process_unit,
                     ),
                 )
 
                 self._logger.debug(
-                    'Sent out message to be processed by worker'
-                    f' {type_} : {process_unit}',
+                    "Sent out message to be processed by worker"
+                    f" {type_} : {process_unit}",
                 )
 
         results = await asyncio.gather(*queuing_tasks, return_exceptions=True)
@@ -212,14 +215,16 @@ class ProcessorDistributor(multiprocessing.Process):
         for result in results:
             if isinstance(result, Exception):
                 self._logger.error(
-                    'Error while sending message to queue. Error - {}',
+                    "Error while sending message to queue. Error - {}",
                     result,
                 )
 
-    async def _cache_and_forward_to_payload_commit_queue(self, message: IncomingMessage):
-        event_type = message.routing_key.split('.')[-1]
+    async def _cache_and_forward_to_payload_commit_queue(
+        self, message: IncomingMessage
+    ):
+        event_type = message.routing_key.split(".")[-1]
 
-        if event_type == 'SnapshotFinalized':
+        if event_type == "SnapshotFinalized":
             msg_obj: PowerloomSnapshotFinalizedMessage = (
                 PowerloomSnapshotFinalizedMessage.parse_raw(message.body)
             )
@@ -232,7 +237,9 @@ class ProcessorDistributor(multiprocessing.Process):
             {msg_obj.snapshotCid: msg_obj.epochId},
         )
 
-        self._logger.debug(f'Payload Commit Message Distribution time - {int(time.time())}')
+        self._logger.debug(
+            f"Payload Commit Message Distribution time - {int(time.time())}"
+        )
 
         process_unit = PayloadCommitFinalizedMessage(
             message=msg_obj,
@@ -248,16 +255,16 @@ class ProcessorDistributor(multiprocessing.Process):
 
         self._logger.debug(
             (
-                'Sent out Event to Payload Commit Queue'
-                f' {event_type} : {process_unit}'
+                "Sent out Event to Payload Commit Queue"
+                f" {event_type} : {process_unit}"
             ),
         )
 
     async def _distribute_callbacks_aggregate(self, message: IncomingMessage):
-        event_type = message.routing_key.split('.')[-1]
+        event_type = message.routing_key.split(".")[-1]
         try:
-            if event_type != 'SnapshotSubmitted':
-                self._logger.error(f'Unknown event type {event_type}')
+            if event_type != "SnapshotSubmitted":
+                self._logger.error(f"Unknown event type {event_type}")
                 return
 
             process_unit: PowerloomSnapshotSubmittedMessage = (
@@ -266,15 +273,15 @@ class ProcessorDistributor(multiprocessing.Process):
 
         except ValidationError:
             self._logger.opt(exception=True).error(
-                'Bad message structure of event callback',
+                "Bad message structure of event callback",
             )
             return
         except Exception:
             self._logger.opt(exception=True).error(
-                'Unexpected message format of event callback',
+                "Unexpected message format of event callback",
             )
             return
-        self._logger.debug(f'Aggregation Task Distribution time - {int(time.time())}')
+        self._logger.debug(f"Aggregation Task Distribution time - {int(time.time())}")
 
         # go through aggregator config, if it matches then send appropriate message
 
@@ -283,40 +290,44 @@ class ProcessorDistributor(multiprocessing.Process):
 
             if config.aggregate_on == AggregateOn.single_project:
                 if config.filters.projectId not in process_unit.projectId:
-                    self._logger.info(f'projectId mismatch {process_unit.projectId} {config.filters.projectId}')
+                    self._logger.info(
+                        f"projectId mismatch {process_unit.projectId} {config.filters.projectId}"
+                    )
                     continue
 
                 await self._publish_message_to_queue(
                     exchange=self._callback_exchange_name,
-                    routing_key=f'powerloom-backend-callback:{settings.namespace}:'
-                    f'{settings.instance_id}:CalculateAggregate.{type_}',
+                    routing_key=f"powerloom-backend-callback:{settings.namespace}:"
+                    f"{settings.instance_id}:CalculateAggregate.{type_}",
                     message=process_unit,
                 )
             elif config.aggregate_on == AggregateOn.multi_project:
                 if process_unit.projectId not in config.projects_to_wait_for:
-                    self._logger.info(f'projectId not required for {config.project_type}: {process_unit.projectId}')
+                    self._logger.info(
+                        f"projectId not required for {config.project_type}: {process_unit.projectId}"
+                    )
                     continue
 
                 # cleanup redis for all previous epochs (5 buffer)
                 await self._redis_conn.zremrangebyscore(
-                    f'powerloom:aggregator:{config.project_type}:events',
+                    f"powerloom:aggregator:{config.project_type}:events",
                     0,
                     process_unit.epochId - 5,
                 )
 
                 await self._redis_conn.zadd(
-                    f'powerloom:aggregator:{config.project_type}:events',
+                    f"powerloom:aggregator:{config.project_type}:events",
                     {process_unit.json(): process_unit.epochId},
                 )
 
                 events = await self._redis_conn.zrangebyscore(
-                    f'powerloom:aggregator:{config.project_type}:events',
+                    f"powerloom:aggregator:{config.project_type}:events",
                     process_unit.epochId,
                     process_unit.epochId,
                 )
 
                 if not events:
-                    self._logger.info(f'No events found for {process_unit.epochId}')
+                    self._logger.info(f"No events found for {process_unit.epochId}")
                     continue
 
                 event_project_ids = set()
@@ -328,7 +339,9 @@ class ProcessorDistributor(multiprocessing.Process):
                     finalized_messages.append(event)
 
                 if event_project_ids == set(config.projects_to_wait_for):
-                    self._logger.info(f'All projects present for {process_unit.epochId}, aggregating')
+                    self._logger.info(
+                        f"All projects present for {process_unit.epochId}, aggregating"
+                    )
                     final_msg = PowerloomCalculateAggregateMessage(
                         messages=finalized_messages,
                         epochId=process_unit.epochId,
@@ -338,33 +351,31 @@ class ProcessorDistributor(multiprocessing.Process):
 
                     await self._publish_message_to_queue(
                         exchange=self._callback_exchange_name,
-                        routing_key=f'powerloom-backend-callback:{settings.namespace}'
-                        f':{settings.instance_id}:CalculateAggregate.{type_}',
+                        routing_key=f"powerloom-backend-callback:{settings.namespace}"
+                        f":{settings.instance_id}:CalculateAggregate.{type_}",
                         message=final_msg,
                     )
 
                     # Cleanup redis for current epoch
 
                     await self._redis_conn.zremrangebyscore(
-                        f'powerloom:aggregator:{config.project_type}:events',
+                        f"powerloom:aggregator:{config.project_type}:events",
                         process_unit.epochId,
                         process_unit.epochId,
                     )
 
                 else:
                     self._logger.info(
-                        f'Not all projects present for {process_unit.epochId},'
-                        f' {len(set(config.projects_to_wait_for)) - len(event_project_ids)} missing',
+                        f"Not all projects present for {process_unit.epochId},"
+                        f" {len(set(config.projects_to_wait_for)) - len(event_project_ids)} missing",
                     )
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
         await message.ack()
 
-        message_type = message.routing_key.split('.')[-1]
+        message_type = message.routing_key.split(".")[-1]
         self._logger.debug(
-            (
-                'Got message to process and distribute: {}'
-            ),
+            ("Got message to process and distribute: {}"),
             message.body,
         )
 
@@ -373,33 +384,32 @@ class ProcessorDistributor(multiprocessing.Process):
             await self._init_rpc_helper()
             self._initialized = True
 
-        if message_type == 'EpochReleased':
+        if message_type == "EpochReleased":
             await self._distribute_callbacks_snapshotting(
                 message,
             )
 
-        elif message_type == 'SnapshotSubmitted':
+        elif message_type == "SnapshotSubmitted":
             await self._distribute_callbacks_aggregate(
                 message,
             )
 
-        elif message_type == 'SnapshotFinalized':
+        elif message_type == "SnapshotFinalized":
             await self._cache_and_forward_to_payload_commit_queue(
                 message,
             )
 
         else:
             self._logger.error(
-                (
-                    'Unknown routing key for callback distribution: {}'
-                ),
+                ("Unknown routing key for callback distribution: {}"),
                 message.routing_key,
             )
 
     async def _rabbitmq_consumer(self, loop):
         self._rmq_connection_pool = Pool(get_rabbitmq_connection, max_size=5, loop=loop)
         self._rmq_channel_pool = Pool(
-            partial(get_rabbitmq_channel, self._rmq_connection_pool), max_size=20,
+            partial(get_rabbitmq_channel, self._rmq_connection_pool),
+            max_size=20,
             loop=loop,
         )
         async with self._rmq_channel_pool.acquire() as channel:
@@ -412,7 +422,7 @@ class ProcessorDistributor(multiprocessing.Process):
                 ensure=False,
             )
             self._logger.debug(
-                f'Consuming queue {self._consume_queue_name} with routing key {self._consume_queue_routing_key}...',
+                f"Consuming queue {self._consume_queue_name} with routing key {self._consume_queue_routing_key}...",
             )
             await q_obj.bind(exchange, routing_key=self._consume_queue_routing_key)
             await q_obj.consume(self._on_rabbitmq_message)
@@ -421,11 +431,14 @@ class ProcessorDistributor(multiprocessing.Process):
         setproctitle(self.name)
 
         self._logger = logger.bind(
-            module=f'PowerLoom|Callbacks|ProcessDistributor:{settings.namespace}-{settings.instance_id}',
+            module=f"PowerLoom|Callbacks|ProcessDistributor:{settings.namespace}-{settings.instance_id}",
         )
 
         ev_loop = asyncio.get_event_loop()
-        self._logger.debug('Starting RabbitMQ consumer on queue {} for Processor Distributor', self._consume_queue_name)
+        self._logger.debug(
+            "Starting RabbitMQ consumer on queue {} for Processor Distributor",
+            self._consume_queue_name,
+        )
         self._core_rmq_consumer = asyncio.ensure_future(
             self._rabbitmq_consumer(ev_loop),
         )

@@ -4,7 +4,7 @@ from functools import wraps
 from pooler.utils.default_logger import logger
 
 # setup logging
-logger = logger.bind(module='PowerLoom|HelperFunctions')
+logger = logger.bind(module="PowerLoom|HelperFunctions")
 
 
 def cleanup_children_procs(fn):
@@ -12,10 +12,10 @@ def cleanup_children_procs(fn):
     def wrapper(self, *args, **kwargs):
         try:
             fn(self, *args, **kwargs)
-            logger.info('Finished running process hub core...')
+            logger.info("Finished running process hub core...")
         except Exception as e:
             logger.opt(exception=True).error(
-                'Received an exception on process hub core run(): {}',
+                "Received an exception on process hub core run(): {}",
                 e,
             )
             # logger.error('Initiating kill children....')
@@ -27,7 +27,7 @@ def cleanup_children_procs(fn):
             # for p in alive:
             #     logger.error(f'killing process: {p.name()}')
             #     p.kill()
-            logger.error('Waiting on spawned callback workers to join...')
+            logger.error("Waiting on spawned callback workers to join...")
             for (
                 worker_class_name,
                 unique_worker_entries,
@@ -36,20 +36,20 @@ def cleanup_children_procs(fn):
                     worker_unique_id,
                     worker_unique_process_details,
                 ) in unique_worker_entries.items():
-                    if worker_unique_process_details['process'].pid:
+                    if worker_unique_process_details["process"].pid:
                         logger.error(
                             (
-                                'Waiting on spawned callback worker {} | Unique'
-                                ' ID {} | PID {}  to join...'
+                                "Waiting on spawned callback worker {} | Unique"
+                                " ID {} | PID {}  to join..."
                             ),
                             worker_class_name,
                             worker_unique_id,
-                            worker_unique_process_details['process'].pid,
+                            worker_unique_process_details["process"].pid,
                         )
-                        worker_unique_process_details['process'].join()
+                        worker_unique_process_details["process"].join()
 
             logger.error(
-                'Waiting on spawned core workers to join... {}',
+                "Waiting on spawned core workers to join... {}",
                 self._spawned_processes_map,
             )
             for (
@@ -57,23 +57,20 @@ def cleanup_children_procs(fn):
                 unique_worker_entries,
             ) in self._spawned_processes_map.items():
                 logger.error(
-                    'spawned Process Pid to wait on {}',
+                    "spawned Process Pid to wait on {}",
                     unique_worker_entries.pid,
                 )
                 # internal state reporter might set proc_id_map[k] = -1
                 if unique_worker_entries != -1:
                     logger.error(
-                        (
-                            'Waiting on spawned core worker {} | PID {}  to'
-                            ' join...'
-                        ),
+                        ("Waiting on spawned core worker {} | PID {}  to" " join..."),
                         worker_class_name,
                         unique_worker_entries.pid,
                     )
                     unique_worker_entries.join()
-            logger.error('Finished waiting for all children...now can exit.')
+            logger.error("Finished waiting for all children...now can exit.")
         finally:
-            logger.error('Finished waiting for all children...now can exit.')
+            logger.error("Finished waiting for all children...now can exit.")
             self._reporter_thread.join()
             sys.exit(0)
             # sys.exit(0)
@@ -84,9 +81,9 @@ def cleanup_children_procs(fn):
 def acquire_threading_semaphore(fn):
     @wraps(fn)
     def semaphore_wrapper(*args, **kwargs):
-        semaphore = kwargs['semaphore']
+        semaphore = kwargs["semaphore"]
 
-        logger.debug('Acquiring threading semaphore')
+        logger.debug("Acquiring threading semaphore")
         semaphore.acquire()
         try:
             resp = fn(*args, **kwargs)

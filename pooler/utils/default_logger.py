@@ -5,7 +5,7 @@ from loguru import logger
 from pooler.settings.config import settings
 
 # {extra} field can be used to pass extra parameters to the logger using .bind()
-FORMAT = '{time:MMMM D, YYYY > HH:mm:ss!UTC} | {level} | {message}| {extra}'
+FORMAT = "{time:MMMM D, YYYY > HH:mm:ss!UTC} | {level} | {message}| {extra}"
 
 
 def trace_enabled(_):
@@ -14,18 +14,18 @@ def trace_enabled(_):
 
 logger.remove(0)
 
-logger.add(sys.stdout, level='DEBUG', format=FORMAT)
-logger.add(sys.stderr, level='WARNING', format=FORMAT)
+logger.add(sys.stdout, level="DEBUG", format=FORMAT)
+logger.add(sys.stderr, level="WARNING", format=FORMAT)
 logger.add(
     sys.stderr,
-    level='ERROR',
+    level="ERROR",
     format=FORMAT,
     backtrace=True,
     diagnose=True,
 )
 logger.add(
     sys.stdout,
-    level='TRACE',
+    level="TRACE",
     format=FORMAT,
     filter=trace_enabled,
     backtrace=True,
@@ -33,25 +33,25 @@ logger.add(
 )
 
 if settings.logs.write_to_files:
-    logger.add('logs/debug.log', level='DEBUG', format=FORMAT, rotation='1 day')
+    logger.add("logs/debug.log", level="DEBUG", format=FORMAT, rotation="1 day")
     logger.add(
-        'logs/warning.log',
-        level='WARNING',
+        "logs/warning.log",
+        level="WARNING",
         format=FORMAT,
-        rotation='1 day',
+        rotation="1 day",
     )
     logger.add(
-        'logs/error.log',
-        level='ERROR',
+        "logs/error.log",
+        level="ERROR",
         format=FORMAT,
         backtrace=True,
-        rotation='1 day',
+        rotation="1 day",
     )
     logger.add(
-        'logs/trace.log',
-        level='TRACE',
+        "logs/trace.log",
+        level="TRACE",
         format=FORMAT,
         filter=trace_enabled,
         backtrace=True,
-        rotation='1 day',
+        rotation="1 day",
     )

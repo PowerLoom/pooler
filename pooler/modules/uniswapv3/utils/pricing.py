@@ -11,7 +11,7 @@ from pooler.utils.default_logger import logger
 from pooler.utils.rpc import RpcHelper
 from pooler.utils.snapshot_utils import get_eth_price_usd
 
-pricing_logger = logger.bind(module='PowerLoom|Uniswap|Pricing')
+pricing_logger = logger.bind(module="PowerLoom|Uniswap|Pricing")
 
 
 async def get_token_price_in_block_range(
@@ -27,7 +27,7 @@ async def get_token_price_in_block_range(
     """
     try:
         token_price_dict = dict()
-        token_address = Web3.toChecksumAddress(token_metadata['address'])
+        token_address = Web3.toChecksumAddress(token_metadata["address"])
         # check if cahce exist for given epoch
         cached_price_dict = await redis_conn.zrangebyscore(
             name=uniswap_pair_cached_block_height_token_price.format(
@@ -40,16 +40,23 @@ async def get_token_price_in_block_range(
             price_dict = {
                 json.loads(
                     price.decode(
-                        'utf-8',
+                        "utf-8",
                     ),
-                )['blockHeight']: json.loads(price.decode('utf-8'))['price'] for price in cached_price_dict
+                )["blockHeight"]: json.loads(
+                    price.decode("utf-8")
+                )["price"]
+                for price in cached_price_dict
             }
             return price_dict
 
-        if token_address == Web3.toChecksumAddress(worker_settings.contract_addresses.WETH):
+        if token_address == Web3.toChecksumAddress(
+            worker_settings.contract_addresses.WETH
+        ):
             token_price_dict = await get_eth_price_usd(
-                from_block=from_block, to_block=to_block,
-                redis_conn=redis_conn, rpc_helper=rpc_helper,
+                from_block=from_block,
+                to_block=to_block,
+                redis_conn=redis_conn,
+                rpc_helper=rpc_helper,
             )
         else:
             token_eth_price_dict = dict()
@@ -63,12 +70,15 @@ async def get_token_price_in_block_range(
 
             if len(token_eth_price_dict) > 0:
                 eth_usd_price_dict = await get_eth_price_usd(
-                    from_block=from_block, to_block=to_block, redis_conn=redis_conn,
+                    from_block=from_block,
+                    to_block=to_block,
+                    redis_conn=redis_conn,
                     rpc_helper=rpc_helper,
                 )
                 for block_num in range(from_block, to_block + 1):
                     token_price_dict[block_num] = token_eth_price_dict.get(
-                        block_num, 0,
+                        block_num,
+                        0,
                     ) * eth_usd_price_dict.get(block_num, 0)
             else:
                 for block_num in range(from_block, to_block + 1):
@@ -77,20 +87,21 @@ async def get_token_price_in_block_range(
             if debug_log:
                 pricing_logger.debug(
                     f"{token_metadata['symbol']}: price is {token_price_dict}"
-                    f' | its eth price is {token_eth_price_dict}',
+                    f" | its eth price is {token_eth_price_dict}",
                 )
 
         # cache price at height
         if len(token_price_dict) > 0:
             redis_cache_mapping = {
-                json.dumps({'blockHeight': height, 'price': price}): int(
+                json.dumps({"blockHeight": height, "price": price}): int(
                     height,
-                ) for height, price in token_price_dict.items()
+                )
+                for height, price in token_price_dict.items()
             }
 
             await redis_conn.zadd(
                 name=uniswap_pair_cached_block_height_token_price.format(
-                    Web3.toChecksumAddress(token_metadata['address']),
+                    Web3.toChecksumAddress(token_metadata["address"]),
                 ),
                 mapping=redis_cache_mapping,  # timestamp so zset do not ignore same height on multiple heights
             )
@@ -100,9 +111,9 @@ async def get_token_price_in_block_range(
     except Exception as err:
         pricing_logger.opt(exception=True, lazy=True).trace(
             (
-                'Error while calculating price of token:'
+                "Error while calculating price of token:"
                 f" {token_metadata['symbol']} | {token_metadata['address']}|"
-                ' err: {err}'
+                " err: {err}"
             ),
             err=lambda: str(err),
         )

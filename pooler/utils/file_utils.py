@@ -7,7 +7,7 @@ from loguru import logger
 
 from pooler.settings.config import settings
 
-default_logger = logger.bind(module='PowerLoom|FileUtils')
+default_logger = logger.bind(module="PowerLoom|FileUtils")
 
 
 def read_json_file(
@@ -17,12 +17,12 @@ def read_json_file(
     """Read given json file and return its content as a dictionary."""
     # check if file is present
     if not os.path.exists(file_path):
-        raise FileNotFoundError(f'File {file_path} not found')
+        raise FileNotFoundError(f"File {file_path} not found")
 
     try:
-        f_ = open(file_path, 'r', encoding='utf-8')
+        f_ = open(file_path, "r", encoding="utf-8")
     except Exception as exc:
-        logger.warning(f'Unable to open the {file_path} file')
+        logger.warning(f"Unable to open the {file_path} file")
         if settings.logs.trace_enabled:
             logger.opt(exception=True).error(exc)
         raise exc
@@ -45,9 +45,9 @@ def write_json_file(
         file_path = os.path.join(directory, file_name)
         if not os.path.exists(directory):
             os.makedirs(directory)
-        f_ = open(file_path, 'w', encoding='utf-8')
+        f_ = open(file_path, "w", encoding="utf-8")
     except Exception as exc:
-        logger.error(f'Unable to write to file {file_path}')
+        logger.error(f"Unable to write to file {file_path}")
         raise exc
     else:
         json.dump(data, f_, ensure_ascii=False, indent=4)
@@ -58,24 +58,26 @@ def write_bytes_to_file(directory: str, file_name: str, data):
         file_path = directory + file_name
         if not os.path.exists(directory):
             os.makedirs(directory)
-        file_obj = open(file_path, 'wb')
+        file_obj = open(file_path, "wb")
     except Exception as exc:
-        logger.opt(exception=True).error('Unable to open the {} file', file_path)
+        logger.opt(exception=True).error("Unable to open the {} file", file_path)
         raise exc
     else:
         bytes_written = file_obj.write(data)
-        logger.debug('Wrote {} bytes to file {}', bytes_written, file_path)
+        logger.debug("Wrote {} bytes to file {}", bytes_written, file_path)
         file_obj.close()
 
 
 def read_text_file(file_path: str):
     """Read given file and return the read bytes in form of a string."""
     try:
-        file_obj = open(file_path, 'r', encoding='utf-8')
+        file_obj = open(file_path, "r", encoding="utf-8")
     except FileNotFoundError:
         return None
     except Exception as exc:
-        logger.opt(exception=True).warning('Unable to open the {} file because of exception: {}', file_path, exc)
+        logger.opt(exception=True).warning(
+            "Unable to open the {} file because of exception: {}", file_path, exc
+        )
         return None
     else:
         return file_obj.read()

@@ -27,14 +27,14 @@ from pooler.utils.rpc import RpcHelper
 
 
 REDIS_CONN_CONF = {
-    'host': settings.redis.host,
-    'port': settings.redis.port,
-    'password': settings.redis.password,
-    'db': settings.redis.db,
+    "host": settings.redis.host,
+    "port": settings.redis.port,
+    "password": settings.redis.password,
+    "db": settings.redis.db,
 }
 
 # setup logging
-rest_logger = logger.bind(module='PowerLoom|CoreAPI')
+rest_logger = logger.bind(module="PowerLoom|CoreAPI")
 
 
 protocol_state_contract_abi = read_json_file(
@@ -44,32 +44,32 @@ protocol_state_contract_abi = read_json_file(
 protocol_state_contract_address = settings.protocol_state.address
 
 # setup CORS origins stuff
-origins = ['*']
+origins = ["*"]
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=['*'],
-    allow_headers=['*'],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
-@app.on_event('startup')
+@app.on_event("startup")
 async def startup_boilerplate():
     app.state.aioredis_pool = RedisPoolCache(pool_size=100)
     await app.state.aioredis_pool.populate()
     app.state.redis_pool = app.state.aioredis_pool._aioredis_pool
     app.state.auth_aioredis_singleton = AuthRedisPoolCache(pool_size=100)
     await app.state.auth_aioredis_singleton.populate()
-    app.state.auth_aioredis_pool = (
-        app.state.auth_aioredis_singleton._aioredis_pool
-    )
+    app.state.auth_aioredis_pool = app.state.auth_aioredis_singleton._aioredis_pool
     app.state.core_settings = settings
     app.state.local_user_cache = dict()
     await load_rate_limiter_scripts(app.state.auth_aioredis_pool)
     app.state.anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
-    app.state.protocol_state_contract = app.state.anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
+    app.state.protocol_state_contract = app.state.anchor_rpc_helper.get_current_node()[
+        "web3_client"
+    ].eth.contract(
         address=Web3.toChecksumAddress(
             protocol_state_contract_address,
         ),
@@ -79,17 +79,19 @@ async def startup_boilerplate():
     await app.state.ipfs_singleton.init_sessions()
     app.state.ipfs_reader_client = app.state.ipfs_singleton._ipfs_read_client
 
+
 # Health check endpoint that returns 200 OK
 
 
-@app.get('/health')
+@app.get("/health")
 async def health_check():
-    return {'status': 'OK'}
+    return {"status": "OK"}
+
 
 # get current epoch
 
 
-@app.get('/current_epoch')
+@app.get("/current_epoch")
 async def get_current_epoch(
     request: Request,
     response: Response,
@@ -101,9 +103,9 @@ async def get_current_epoch(
     This endpoint is used to fetch current epoch.
     """
     if not (
-        rate_limit_auth_dep.rate_limit_passed and
-        rate_limit_auth_dep.authorized and
-        rate_limit_auth_dep.owner.active == UserStatusEnum.active
+        rate_limit_auth_dep.rate_limit_passed
+        and rate_limit_auth_dep.authorized
+        and rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
 
@@ -113,20 +115,20 @@ async def get_current_epoch(
             redis_conn=request.app.state.redis_pool,
         )
         current_epoch = {
-            'begin': current_epoch_data[0],
-            'end': current_epoch_data[1],
-            'epochId': current_epoch_data[2],
+            "begin": current_epoch_data[0],
+            "end": current_epoch_data[1],
+            "epochId": current_epoch_data[2],
         }
 
     except Exception as e:
         rest_logger.exception(
-            'Exception in get_current_epoch',
+            "Exception in get_current_epoch",
             e=e,
         )
         response.status_code = 500
         return {
-            'status': 'error',
-            'message': f'Unable to get current epoch, error: {e}',
+            "status": "error",
+            "message": f"Unable to get current epoch, error: {e}",
         }
 
     auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
@@ -136,7 +138,7 @@ async def get_current_epoch(
 
 
 # get epoch info
-@app.get('/epoch/{epoch_id}')
+@app.get("/epoch/{epoch_id}")
 async def get_epoch_info(
     request: Request,
     response: Response,
@@ -149,9 +151,9 @@ async def get_epoch_info(
     This endpoint is used to fetch epoch info for a given epoch_id.
     """
     if not (
-        rate_limit_auth_dep.rate_limit_passed and
-        rate_limit_auth_dep.authorized and
-        rate_limit_auth_dep.owner.active == UserStatusEnum.active
+        rate_limit_auth_dep.rate_limit_passed
+        and rate_limit_auth_dep.authorized
+        and rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
 
@@ -161,20 +163,20 @@ async def get_epoch_info(
             redis_conn=request.app.state.redis_pool,
         )
         epoch_info = {
-            'timestamp': epoch_info_data[0],
-            'blocknumber': epoch_info_data[1],
-            'epochEnd': epoch_info_data[2],
+            "timestamp": epoch_info_data[0],
+            "blocknumber": epoch_info_data[1],
+            "epochEnd": epoch_info_data[2],
         }
 
     except Exception as e:
         rest_logger.exception(
-            'Exception in get_current_epoch',
+            "Exception in get_current_epoch",
             e=e,
         )
         response.status_code = 500
         return {
-            'status': 'error',
-            'message': f'Unable to get current epoch, error: {e}',
+            "status": "error",
+            "message": f"Unable to get current epoch, error: {e}",
         }
 
     auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
@@ -183,7 +185,7 @@ async def get_epoch_info(
     return epoch_info
 
 
-@app.get('/last_finalized_epoch/{project_id}')
+@app.get("/last_finalized_epoch/{project_id}")
 async def get_project_last_finalized_epoch_info(
     request: Request,
     response: Response,
@@ -196,14 +198,13 @@ async def get_project_last_finalized_epoch_info(
     This endpoint is used to fetch epoch info for the last finalized epoch for a given project.
     """
     if not (
-        rate_limit_auth_dep.rate_limit_passed and
-        rate_limit_auth_dep.authorized and
-        rate_limit_auth_dep.owner.active == UserStatusEnum.active
+        rate_limit_auth_dep.rate_limit_passed
+        and rate_limit_auth_dep.authorized
+        and rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
 
     try:
-
         # get project last finalized epoch from redis
         project_last_finalized_epoch = await request.app.state.redis_pool.get(
             project_last_finalized_epoch_key(project_id),
@@ -212,32 +213,36 @@ async def get_project_last_finalized_epoch_info(
         if project_last_finalized_epoch is None:
             response.status_code = 404
             return {
-                'status': 'error',
-                'message': f'Unable to find last finalized epoch for project {project_id}',
+                "status": "error",
+                "message": f"Unable to find last finalized epoch for project {project_id}",
             }
 
-        project_last_finalized_epoch = int(project_last_finalized_epoch.decode('utf-8'))
+        project_last_finalized_epoch = int(project_last_finalized_epoch.decode("utf-8"))
 
         [epoch_info_data] = await request.app.state.anchor_rpc_helper.web3_call(
-            [request.app.state.protocol_state_contract.functions.epochInfo(project_last_finalized_epoch)],
+            [
+                request.app.state.protocol_state_contract.functions.epochInfo(
+                    project_last_finalized_epoch
+                )
+            ],
             redis_conn=request.app.state.redis_pool,
         )
         epoch_info = {
-            'epochId': project_last_finalized_epoch,
-            'timestamp': epoch_info_data[0],
-            'blocknumber': epoch_info_data[1],
-            'epochEnd': epoch_info_data[2],
+            "epochId": project_last_finalized_epoch,
+            "timestamp": epoch_info_data[0],
+            "blocknumber": epoch_info_data[1],
+            "epochEnd": epoch_info_data[2],
         }
 
     except Exception as e:
         rest_logger.exception(
-            'Exception in get_project_last_finalized_epoch_info',
+            "Exception in get_project_last_finalized_epoch_info",
             e=e,
         )
         response.status_code = 500
         return {
-            'status': 'error',
-            'message': f'Unable to get last finalized epoch for project {project_id}, error: {e}',
+            "status": "error",
+            "message": f"Unable to get last finalized epoch for project {project_id}, error: {e}",
         }
 
     auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
@@ -245,10 +250,11 @@ async def get_project_last_finalized_epoch_info(
 
     return epoch_info
 
+
 # get data for epoch_id, project_id
 
 
-@app.get('/data/{epoch_id}/{project_id}/')
+@app.get("/data/{epoch_id}/{project_id}/")
 async def get_data_for_project_id_epoch_id(
     request: Request,
     response: Response,
@@ -262,9 +268,9 @@ async def get_data_for_project_id_epoch_id(
     This endpoint is used to fetch data for a given project_id and epoch_id.
     """
     if not (
-        rate_limit_auth_dep.rate_limit_passed and
-        rate_limit_auth_dep.authorized and
-        rate_limit_auth_dep.owner.active == UserStatusEnum.active
+        rate_limit_auth_dep.rate_limit_passed
+        and rate_limit_auth_dep.authorized
+        and rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
 
@@ -279,32 +285,33 @@ async def get_data_for_project_id_epoch_id(
         )
     except Exception as e:
         rest_logger.exception(
-            'Exception in get_data_for_project_id_epoch_id',
+            "Exception in get_data_for_project_id_epoch_id",
             e=e,
         )
         response.status_code = 500
         return {
-            'status': 'error',
-            'message': f'Unable to get data for project_id: {project_id},'
-            f' epoch_id: {epoch_id}, error: {e}',
+            "status": "error",
+            "message": f"Unable to get data for project_id: {project_id},"
+            f" epoch_id: {epoch_id}, error: {e}",
         }
 
     if not data:
         response.status_code = 404
         return {
-            'status': 'error',
-            'message': f'No data found for project_id: {project_id},'
-            f' epoch_id: {epoch_id}',
+            "status": "error",
+            "message": f"No data found for project_id: {project_id},"
+            f" epoch_id: {epoch_id}",
         }
     auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
     await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
 
     return data
 
+
 # get finalized cid for epoch_id, project_id
 
 
-@app.get('/cid/{epoch_id}/{project_id}/')
+@app.get("/cid/{epoch_id}/{project_id}/")
 async def get_finalized_cid_for_project_id_epoch_id(
     request: Request,
     response: Response,
@@ -318,9 +325,9 @@ async def get_finalized_cid_for_project_id_epoch_id(
     This endpoint is used to fetch finalized cid for a given project_id and epoch_id.
     """
     if not (
-        rate_limit_auth_dep.rate_limit_passed and
-        rate_limit_auth_dep.authorized and
-        rate_limit_auth_dep.owner.active == UserStatusEnum.active
+        rate_limit_auth_dep.rate_limit_passed
+        and rate_limit_auth_dep.authorized
+        and rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
 
@@ -334,22 +341,22 @@ async def get_finalized_cid_for_project_id_epoch_id(
         )
     except Exception as e:
         rest_logger.exception(
-            'Exception in get_finalized_cid_for_project_id_epoch_id',
+            "Exception in get_finalized_cid_for_project_id_epoch_id",
             e=e,
         )
         response.status_code = 500
         return {
-            'status': 'error',
-            'message': f'Unable to get finalized cid for project_id: {project_id},'
-            f' epoch_id: {epoch_id}, error: {e}',
+            "status": "error",
+            "message": f"Unable to get finalized cid for project_id: {project_id},"
+            f" epoch_id: {epoch_id}, error: {e}",
         }
 
     if not data:
         response.status_code = 404
         return {
-            'status': 'error',
-            'message': f'No finalized cid found for project_id: {project_id},'
-            f' epoch_id: {epoch_id}',
+            "status": "error",
+            "message": f"No finalized cid found for project_id: {project_id},"
+            f" epoch_id: {epoch_id}",
         }
     auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
     await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
@@ -357,7 +364,7 @@ async def get_finalized_cid_for_project_id_epoch_id(
     return data
 
 
-@app.get('/internal/snapshotter/status')
+@app.get("/internal/snapshotter/status")
 async def get_snapshotter_overall_status(
     request: Request,
     response: Response,
@@ -366,9 +373,9 @@ async def get_snapshotter_overall_status(
     ),
 ):
     if not (
-        rate_limit_auth_dep.rate_limit_passed and
-        rate_limit_auth_dep.authorized and
-        rate_limit_auth_dep.owner.active == UserStatusEnum.active
+        rate_limit_auth_dep.rate_limit_passed
+        and rate_limit_auth_dep.authorized
+        and rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
 
@@ -378,13 +385,13 @@ async def get_snapshotter_overall_status(
         )
     except Exception as e:
         rest_logger.exception(
-            'Exception in get_snapshotter_overall_status',
+            "Exception in get_snapshotter_overall_status",
             e=e,
         )
         response.status_code = 500
         return {
-            'status': 'error',
-            'message': f'Unable to get snapshotter status, error: {e}',
+            "status": "error",
+            "message": f"Unable to get snapshotter status, error: {e}",
         }
 
     auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
@@ -393,7 +400,7 @@ async def get_snapshotter_overall_status(
     return snapshotter_status
 
 
-@app.get('/internal/snapshotter/status/{project_id}')
+@app.get("/internal/snapshotter/status/{project_id}")
 async def get_snapshotter_project_level_status(
     request: Request,
     response: Response,
@@ -404,9 +411,9 @@ async def get_snapshotter_project_level_status(
     ),
 ):
     if not (
-        rate_limit_auth_dep.rate_limit_passed and
-        rate_limit_auth_dep.authorized and
-        rate_limit_auth_dep.owner.active == UserStatusEnum.active
+        rate_limit_auth_dep.rate_limit_passed
+        and rate_limit_auth_dep.authorized
+        and rate_limit_auth_dep.owner.active == UserStatusEnum.active
     ):
         return inject_rate_limit_fail_response(rate_limit_auth_dep)
 
@@ -418,20 +425,20 @@ async def get_snapshotter_project_level_status(
         )
     except Exception as e:
         rest_logger.exception(
-            'Exception in get_snapshotter_project_level_status',
+            "Exception in get_snapshotter_project_level_status",
             e=e,
         )
         response.status_code = 500
         return {
-            'status': 'error',
-            'message': f'Unable to get snapshotter status for project_id: {project_id}, error: {e}',
+            "status": "error",
+            "message": f"Unable to get snapshotter status for project_id: {project_id}, error: {e}",
         }
 
     if not snapshotter_project_status:
         response.status_code = 404
         return {
-            'status': 'error',
-            'message': f'No snapshotter status found for project_id: {project_id}',
+            "status": "error",
+            "message": f"No snapshotter status found for project_id: {project_id}",
         }
 
     auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool

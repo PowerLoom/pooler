@@ -7,11 +7,11 @@ from pooler.auth.conf import auth_settings
 def construct_redis_url():
     if auth_settings.redis.password:
         return (
-            f'redis://{auth_settings.redis.password}@{auth_settings.redis.host}:{auth_settings.redis.port}'
-            f'/{auth_settings.redis.db}'
+            f"redis://{auth_settings.redis.password}@{auth_settings.redis.host}:{auth_settings.redis.port}"
+            f"/{auth_settings.redis.db}"
         )
     else:
-        return f'redis://{auth_settings.redis.host}:{auth_settings.redis.port}/{auth_settings.redis.db}'
+        return f"redis://{auth_settings.redis.host}:{auth_settings.redis.port}/{auth_settings.redis.db}"
 
 
 async def get_aioredis_pool(pool_size=200):

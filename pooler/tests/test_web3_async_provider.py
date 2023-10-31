@@ -11,7 +11,7 @@ from pooler.utils.rpc import RpcHelper
 
 
 async def test_web3_async_call():
-    with open('pooler/tests/static/abi/storage_contract.json') as f:
+    with open("pooler/tests/static/abi/storage_contract.json") as f:
         contract_abi = json.load(f)
     aioredis_pool = RedisPoolCache()
     await aioredis_pool.populate()
@@ -20,19 +20,19 @@ async def test_web3_async_call():
     await rpc_helper.init(writer_redis_pool)
     sync_w3_client = Web3(HTTPProvider(settings.anchor_chain_rpc.full_nodes[0].url))
     contract_obj = sync_w3_client.eth.contract(
-        address=to_checksum_address('0x31b554545279DBB438FC66c55A449263a6b56dB5'),
-        abi=contract_abi
+        address=to_checksum_address("0x31b554545279DBB438FC66c55A449263a6b56dB5"),
+        abi=contract_abi,
     )
     # print(await contract.functions.retrieve().call())
     tasks = [
         contract_obj.functions.retrieve(),
     ]
     result = await rpc_helper.web3_call(tasks, redis_conn=writer_redis_pool)
-    logger.debug('Retrieve: {}', result)
+    logger.debug("Retrieve: {}", result)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     try:
         asyncio.get_event_loop().run_until_complete(test_web3_async_call())
     except Exception as e:
-        logger.opt(exception=True).error('exception: {}', e)
+        logger.opt(exception=True).error("exception: {}", e)

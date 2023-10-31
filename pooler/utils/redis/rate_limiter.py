@@ -55,8 +55,8 @@ async def load_rate_limiter_scripts(redis_conn: aioredis.Redis):
     script_clear_keys_sha = await redis_conn.script_load(SCRIPT_CLEAR_KEYS)
     script_incr_expire = await redis_conn.script_load(SCRIPT_INCR_EXPIRE)
     return {
-        'script_incr_expire': script_incr_expire,
-        'script_clear_keys': script_clear_keys_sha,
+        "script_incr_expire": script_incr_expire,
+        "script_clear_keys": script_clear_keys_sha,
     }
 
 
@@ -96,7 +96,7 @@ async def generic_rate_limiter(
             redis.exceptions.ResponseError,
         ) as exc:
             raise Exception from exc
-    return True, 0, ''
+    return True, 0, ""
 
 
 async def check_rpc_rate_limit(
@@ -114,7 +114,7 @@ async def check_rpc_rate_limit(
     """
     key_bits = [
         app_id,
-        'eth_call',
+        "eth_call",
     ]  # TODO: add unique elements that can identify a request
     try:
         can_request, retry_after, violated_limit = await generic_rate_limiter(
@@ -127,8 +127,8 @@ async def check_rpc_rate_limit(
     except Exception as exc:
         logger.opt(exception=True).error(
             (
-                'Caught exception on rate limiter operations: {} | Bypassing'
-                ' rate limit check '
+                "Caught exception on rate limiter operations: {} | Bypassing"
+                " rate limit check "
             ),
             exc,
         )
@@ -141,6 +141,6 @@ async def check_rpc_rate_limit(
             underlying_exception=None,
             extra_info=error_msg,
         )
-        logger.trace('Rate limit hit, raising exception {}', str(exc))
+        logger.trace("Rate limit hit, raising exception {}", str(exc))
         raise exc
     return can_request

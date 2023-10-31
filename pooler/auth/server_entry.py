@@ -22,18 +22,18 @@ from pooler.utils.default_logger import logger
 api_logger = logger.bind(module=__name__)
 
 # setup CORS origins stuff
-origins = ['*']
+origins = ["*"]
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=['*'],
-    allow_headers=['*'],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
-@app.on_event('startup')
+@app.on_event("startup")
 async def startup_boilerplate():
     app.state.aioredis_pool = RedisPoolCache(pool_size=100)
     await app.state.aioredis_pool.populate()
@@ -41,7 +41,7 @@ async def startup_boilerplate():
     app.state.core_settings = settings
 
 
-@app.post('/user')
+@app.post("/user")
 async def create_update_user(
     request: Request,
     user_cu_request: AppOwnerModel,
@@ -67,13 +67,13 @@ async def create_update_user(
             mapping=user_details,
         )
     except Exception as e:
-        api_logger.opt(exception=True).error('{}', e)
-        return {'success': False}
+        api_logger.opt(exception=True).error("{}", e)
+        return {"success": False}
     else:
-        return {'success': True}
+        return {"success": True}
 
 
-@app.post('/user/{email}/api_key')
+@app.post("/user/{email}/api_key")
 async def add_api_key(
     api_key_request: AddApiKeyRequest,
     email: str,
@@ -82,17 +82,17 @@ async def add_api_key(
 ):
     redis_conn: aioredis.Redis = request.app.state.redis_pool
     if not await redis_conn.sismember(all_users_set(), email):
-        return {'success': False, 'error': 'User does not exists'}
+        return {"success": False, "error": "User does not exists"}
 
     async with redis_conn.pipeline(transaction=True) as p:
         await p.sadd(
             user_active_api_keys_set(email),
             api_key_request.api_key,
         ).set(api_key_to_owner_key(api_key_request.api_key), email).execute()
-    return {'success': True}
+    return {"success": True}
 
 
-@app.delete('/user/{email}/api_key')
+@app.delete("/user/{email}/api_key")
 async def revoke_api_key(
     api_key_request: AddApiKeyRequest,
     email: str,
@@ -101,27 +101,27 @@ async def revoke_api_key(
 ):
     redis_conn: aioredis.Redis = request.app.state.redis_pool
     if not await redis_conn.sismember(all_users_set(), email):
-        return {'success': False, 'error': 'User does not exists'}
+        return {"success": False, "error": "User does not exists"}
 
     if not await redis_conn.sismember(
         user_active_api_keys_set(email),
         api_key_request.api_key,
     ):
-        return {'success': False, 'error': 'API key not active'}
+        return {"success": False, "error": "API key not active"}
     elif await redis_conn.sismember(
         user_revoked_api_keys_set(email),
         api_key_request.api_key,
     ):
-        return {'success': False, 'error': 'API key already revoked'}
+        return {"success": False, "error": "API key already revoked"}
     await redis_conn.smove(
         user_active_api_keys_set(email),
         user_revoked_api_keys_set(email),
         api_key_request.api_key,
     )
-    return {'success': True}
+    return {"success": True}
 
 
-@app.get('/user/{email}')
+@app.get("/user/{email}")
 async def get_user_details(
     request: Request,
     response: Response,
@@ -131,7 +131,7 @@ async def get_user_details(
 
     all_details = await redis_conn.hgetall(name=user_details_htable(email))
     if not all_details:
-        return {'success': False, 'error': 'User does not exists'}
+        return {"success": False, "error": "User does not exists"}
 
     active_api_keys = await redis_conn.smembers(
         name=user_active_api_keys_set(email),
@@ -141,16 +141,16 @@ async def get_user_details(
     )
 
     return {
-        'success': True,
-        'data': UserAllDetailsResponse(
-            **{k.decode('utf-8'): v.decode('utf-8') for k, v in all_details.items()},
-            active_api_keys=[x.decode('utf-8') for x in active_api_keys],
-            revoked_api_keys=[x.decode('utf-8') for x in revoked_api_keys],
+        "success": True,
+        "data": UserAllDetailsResponse(
+            **{k.decode("utf-8"): v.decode("utf-8") for k, v in all_details.items()},
+            active_api_keys=[x.decode("utf-8") for x in active_api_keys],
+            revoked_api_keys=[x.decode("utf-8") for x in revoked_api_keys],
         ).dict(),
     }
 
 
-@app.get('/users')
+@app.get("/users")
 async def get_all_users(
     request: Request,
     response: Response,
@@ -158,6 +158,6 @@ async def get_all_users(
     redis_conn: aioredis.Redis = request.app.state.redis_pool
     all_users = await redis_conn.smembers(all_users_set())
     return {
-        'success': True,
-        'data': [x.decode('utf-8') for x in all_users],
+        "success": True,
+        "data": [x.decode("utf-8") for x in all_users],
     }

@@ -30,15 +30,15 @@ from pooler.utils.redis.redis_conn import provide_redis_conn
 from pooler.utils.snapshot_worker import SnapshotAsyncWorker
 
 PROC_STR_ID_TO_CLASS_MAP = {
-    'SystemEventDetector': {
-        'class': EventDetectorProcess,
-        'name': 'PowerLoom|SystemEventDetector',
-        'target': None,
+    "SystemEventDetector": {
+        "class": EventDetectorProcess,
+        "name": "PowerLoom|SystemEventDetector",
+        "target": None,
     },
-    'ProcessorDistributor': {
-        'class': ProcessorDistributor,
-        'name': 'PowerLoom|ProcessorDistributor',
-        'target': None,
+    "ProcessorDistributor": {
+        "class": ProcessorDistributor,
+        "name": "PowerLoom|ProcessorDistributor",
+        "target": None,
     },
 }
 
@@ -56,15 +56,16 @@ class ProcessHubCore(Process):
     def signal_handler(self, signum, frame):
         if signum == SIGCHLD and not self._shutdown_initiated:
             pid, status = os.waitpid(
-                -1, os.WNOHANG | os.WUNTRACED | os.WCONTINUED,
+                -1,
+                os.WNOHANG | os.WUNTRACED | os.WCONTINUED,
             )
             if os.WIFCONTINUED(status) or os.WIFSTOPPED(status):
                 return
             if os.WIFSIGNALED(status) or os.WIFEXITED(status):
                 self._logger.debug(
                     (
-                        'Received process crash notification for child process'
-                        ' PID: {}'
+                        "Received process crash notification for child process"
+                        " PID: {}"
                     ),
                     pid,
                 )
@@ -80,30 +81,26 @@ class ProcessHubCore(Process):
                         unique_id,
                         worker_process_details,
                     ) in worker_unique_id_entries.items():
-                        if worker_process_details['process'].pid == pid:
+                        if worker_process_details["process"].pid == pid:
                             self._logger.debug(
                                 (
-                                    'Found crashed child process PID in spawned'
-                                    ' callback workers | Callback worker class:'
-                                    ' {} | Unique worker identifier: {}'
+                                    "Found crashed child process PID in spawned"
+                                    " callback workers | Callback worker class:"
+                                    " {} | Unique worker identifier: {}"
                                 ),
                                 k,
-                                worker_process_details['id'],
+                                worker_process_details["id"],
                             )
-                            callback_worker_name = worker_process_details['id']
+                            callback_worker_name = worker_process_details["id"]
                             callback_worker_unique_id = unique_id
                             callback_worker_class = k
 
-                if (
-                    callback_worker_name and
-                    callback_worker_unique_id
-                ):
-
-                    if callback_worker_class == 'snapshot_workers':
+                if callback_worker_name and callback_worker_unique_id:
+                    if callback_worker_class == "snapshot_workers":
                         worker_obj: Process = SnapshotAsyncWorker(
                             name=callback_worker_name,
                         )
-                    elif callback_worker_class == 'aggregation_workers':
+                    elif callback_worker_class == "aggregation_workers":
                         worker_obj: Process = AggregationAsyncWorker(
                             name=callback_worker_name,
                         )
@@ -112,14 +109,14 @@ class ProcessHubCore(Process):
                     self._spawned_cb_processes_map[callback_worker_class][
                         callback_worker_unique_id
                     ] = {
-                        'id': callback_worker_name,
-                        'process': worker_obj,
+                        "id": callback_worker_name,
+                        "process": worker_obj,
                     }
                     self._logger.debug(
                         (
-                            'Respawned callback worker class {} unique ID {}'
-                            ' with PID {} after receiving crash signal against'
-                            ' PID {}'
+                            "Respawned callback worker class {} unique ID {}"
+                            " with PID {} after receiving crash signal against"
+                            " PID {}"
                         ),
                         callback_worker_class,
                         callback_worker_unique_id,
@@ -130,17 +127,17 @@ class ProcessHubCore(Process):
 
                 for k, worker_unique_id in self._spawned_processes_map.items():
                     if worker_unique_id != -1 and worker_unique_id.pid == pid:
-                        self._logger.debug('RESPAWNING: process for {}', k)
+                        self._logger.debug("RESPAWNING: process for {}", k)
                         proc_details: dict = PROC_STR_ID_TO_CLASS_MAP.get(k)
-                        init_kwargs = dict(name=proc_details['name'])
-                        if proc_details.get('class'):
-                            proc_obj = proc_details['class'](**init_kwargs)
+                        init_kwargs = dict(name=proc_details["name"])
+                        if proc_details.get("class"):
+                            proc_obj = proc_details["class"](**init_kwargs)
                             proc_obj.start()
                         else:
-                            proc_obj = Process(target=proc_details['target'])
+                            proc_obj = Process(target=proc_details["target"])
                             proc_obj.start()
                         self._logger.debug(
-                            'RESPAWNED: process for {} with PID: {}',
+                            "RESPAWNED: process for {} with PID: {}",
                             k,
                             proc_obj.pid,
                         )
@@ -152,27 +149,27 @@ class ProcessHubCore(Process):
 
     def kill_process(self, pid: int):
         _logger = logger.bind(
-            module=f'PowerLoom|ProcessHub|Core:{settings.namespace}-{settings.instance_id}',
+            module=f"PowerLoom|ProcessHub|Core:{settings.namespace}-{settings.instance_id}",
         )
         p = psutil.Process(pid)
         _logger.debug(
-            'Attempting to send SIGTERM to process ID {} for following command',
+            "Attempting to send SIGTERM to process ID {} for following command",
             pid,
         )
         p.terminate()
-        _logger.debug('Waiting for 3 seconds to confirm termination of process')
+        _logger.debug("Waiting for 3 seconds to confirm termination of process")
         gone, alive = psutil.wait_procs([p], timeout=3)
         for p_ in alive:
             _logger.debug(
-                'Process ID {} not terminated by SIGTERM. Sending SIGKILL...',
+                "Process ID {} not terminated by SIGTERM. Sending SIGKILL...",
                 p_.pid,
             )
             p_.kill()
 
         for k, v in self._spawned_cb_processes_map.items():
             for unique_worker_entries in v.values():
-                if unique_worker_entries['process'].pid == pid:
-                    unique_worker_entries['process'].join()
+                if unique_worker_entries["process"].pid == pid:
+                    unique_worker_entries["process"].join()
 
         for k, v in self._spawned_processes_map.items():
             # internal state reporter might set proc_id_map[k] = -1
@@ -188,116 +185,115 @@ class ProcessHubCore(Process):
                     proc_id_map[k] = v.pid
                 else:
                     proc_id_map[k] = -1
-            proc_id_map['callback_workers'] = dict()
+            proc_id_map["callback_workers"] = dict()
             for (
                 k,
                 unique_worker_entries,
             ) in self._spawned_cb_processes_map.items():
-                proc_id_map['callback_workers'][k] = dict()
+                proc_id_map["callback_workers"][k] = dict()
                 for (
                     worker_unique_id,
                     worker_process_details,
                 ) in unique_worker_entries.items():
-                    proc_id_map['callback_workers'][k][worker_unique_id] = {
-                        'pid': worker_process_details['process'].pid,
-                        'id': worker_process_details['id'],
+                    proc_id_map["callback_workers"][k][worker_unique_id] = {
+                        "pid": worker_process_details["process"].pid,
+                        "id": worker_process_details["id"],
                     }
-            proc_id_map['callback_workers'] = json.dumps(
-                proc_id_map['callback_workers'],
+            proc_id_map["callback_workers"] = json.dumps(
+                proc_id_map["callback_workers"],
             )
             redis_conn.hset(
-                name=f'powerloom:uniswap:{settings.namespace}:{settings.instance_id}:Processes',
+                name=f"powerloom:uniswap:{settings.namespace}:{settings.instance_id}:Processes",
                 mapping=proc_id_map,
             )
         self._logger.error(
             (
-                'Caught thread shutdown notification event. Deleting process'
-                ' worker map in redis...'
+                "Caught thread shutdown notification event. Deleting process"
+                " worker map in redis..."
             ),
         )
         redis_conn.delete(
-            f'powerloom:uniswap:{settings.namespace}:{settings.instance_id}:Processes',
+            f"powerloom:uniswap:{settings.namespace}:{settings.instance_id}:Processes",
         )
 
     @cleanup_children_procs
     def run(self) -> None:
-        setproctitle('PowerLoom|ProcessHub|Core')
-        self._logger = logger.bind(module='PowerLoom|ProcessHub|Core')
+        setproctitle("PowerLoom|ProcessHub|Core")
+        self._logger = logger.bind(module="PowerLoom|ProcessHub|Core")
 
         for signame in [SIGINT, SIGTERM, SIGQUIT, SIGCHLD]:
             signal(signame, self.signal_handler)
 
-        self._logger.debug('=' * 80)
-        self._logger.debug('Launching Workers')
+        self._logger.debug("=" * 80)
+        self._logger.debug("Launching Workers")
 
         # Starting Snapshot workers
-        self._spawned_cb_processes_map['snapshot_workers'] = dict()
+        self._spawned_cb_processes_map["snapshot_workers"] = dict()
 
         for _ in range(settings.callback_worker_config.num_snapshot_workers):
             unique_id = str(uuid.uuid4())[:5]
             unique_name = (
-                f'PowerLoom|SnapshotWorker:{settings.namespace}:{settings.instance_id}' +
-                '-' +
-                unique_id
+                f"PowerLoom|SnapshotWorker:{settings.namespace}:{settings.instance_id}"
+                + "-"
+                + unique_id
             )
             snapshot_worker_obj: Process = SnapshotAsyncWorker(name=unique_name)
             snapshot_worker_obj.start()
-            self._spawned_cb_processes_map['snapshot_workers'].update(
-                {unique_id: {'id': unique_name, 'process': snapshot_worker_obj}},
+            self._spawned_cb_processes_map["snapshot_workers"].update(
+                {unique_id: {"id": unique_name, "process": snapshot_worker_obj}},
             )
             self._logger.debug(
                 (
-                    'Process Hub Core launched process {} for snapshot'
-                    ' worker {} with PID: {}'
+                    "Process Hub Core launched process {} for snapshot"
+                    " worker {} with PID: {}"
                 ),
                 unique_name,
-                'snapshot_workers',
+                "snapshot_workers",
                 snapshot_worker_obj.pid,
             )
 
         # Starting Aggregate workers
-        self._spawned_cb_processes_map['aggregation_workers'] = dict()
+        self._spawned_cb_processes_map["aggregation_workers"] = dict()
 
         for _ in range(settings.callback_worker_config.num_aggregation_workers):
             unique_id = str(uuid.uuid4())[:5]
             unique_name = (
-                f'PowerLoom|AggregationWorker:{settings.namespace}:{settings.instance_id}' +
-                '-' +
-                unique_id
+                f"PowerLoom|AggregationWorker:{settings.namespace}:{settings.instance_id}"
+                + "-"
+                + unique_id
             )
             aggregation_worker_obj: Process = AggregationAsyncWorker(name=unique_name)
             aggregation_worker_obj.start()
-            self._spawned_cb_processes_map['aggregation_workers'].update(
-                {unique_id: {'id': unique_name, 'process': aggregation_worker_obj}},
+            self._spawned_cb_processes_map["aggregation_workers"].update(
+                {unique_id: {"id": unique_name, "process": aggregation_worker_obj}},
             )
             self._logger.debug(
-                (
-                    'Process Hub Core launched process {} for'
-                    ' worker {} with PID: {}'
-                ),
+                ("Process Hub Core launched process {} for" " worker {} with PID: {}"),
                 unique_name,
-                'aggregation_workers',
+                "aggregation_workers",
                 aggregation_worker_obj.pid,
             )
 
         self._logger.debug(
-            'Starting Internal Process State reporter for Process Hub Core...',
+            "Starting Internal Process State reporter for Process Hub Core...",
         )
         self._reporter_thread = Thread(target=self.internal_state_reporter)
         self._reporter_thread.start()
-        self._logger.debug('Starting Process Hub Core...')
+        self._logger.debug("Starting Process Hub Core...")
 
-        queue_name = f'powerloom-processhub-commands-q:{settings.namespace}:{settings.instance_id}'
-        self.rabbitmq_interactor: RabbitmqSelectLoopInteractor = RabbitmqSelectLoopInteractor(
-            consume_queue_name=queue_name,
-            consume_callback=self.callback,
-            consumer_worker_name=(
-                f'PowerLoom|ProcessHub|Core-{settings.instance_id[:5]}'
-            ),
+        queue_name = f"powerloom-processhub-commands-q:{settings.namespace}:{settings.instance_id}"
+        self.rabbitmq_interactor: RabbitmqSelectLoopInteractor = (
+            RabbitmqSelectLoopInteractor(
+                consume_queue_name=queue_name,
+                consume_callback=self.callback,
+                consumer_worker_name=(
+                    f"PowerLoom|ProcessHub|Core-{settings.instance_id[:5]}"
+                ),
+            )
         )
-        self._logger.debug('Starting RabbitMQ consumer on queue {}', queue_name)
+        self._logger.debug("Starting RabbitMQ consumer on queue {}", queue_name)
         self.rabbitmq_interactor.run()
-        self._logger.debug('RabbitMQ interactor ioloop ended...')
+        self._logger.debug("RabbitMQ interactor ioloop ended...")
         self._thread_shutdown_event.set()
         raise SelfExitException
 
@@ -309,38 +305,36 @@ class ProcessHubCore(Process):
         try:
             cmd_json = ProcessHubCommand(**command)
         except pydantic.ValidationError:
-            self._logger.error('ProcessHubCore received unrecognized command')
+            self._logger.error("ProcessHubCore received unrecognized command")
             self._logger.error(command)
             return
 
-        if cmd_json.command == 'stop':
+        if cmd_json.command == "stop":
             self._logger.debug(
-                'Process Hub Core received stop command: {}', cmd_json,
+                "Process Hub Core received stop command: {}",
+                cmd_json,
             )
             process_id = cmd_json.pid
             proc_str_id = cmd_json.proc_str_id
             if process_id:
                 return
             if proc_str_id:
-                if proc_str_id == 'self':
+                if proc_str_id == "self":
                     return
                     # self._logger.error('Received stop command on self. Initiating shutdown...')
                     # raise SelfExitException
                 mapped_p = self._spawned_processes_map.get(proc_str_id)
                 if not mapped_p:
                     self._logger.error(
-                        (
-                            'Did not find process ID in core processes string'
-                            ' map: {}'
-                        ),
+                        ("Did not find process ID in core processes string" " map: {}"),
                         proc_str_id,
                     )
                     mapped_p = self._spawned_cb_processes_map.get(proc_str_id)
                     if not mapped_p:
                         self._logger.error(
                             (
-                                'Did not find process ID in callback processes'
-                                ' string map: {}'
+                                "Did not find process ID in callback processes"
+                                " string map: {}"
                             ),
                             proc_str_id,
                         )
@@ -352,29 +346,31 @@ class ProcessHubCore(Process):
                     self.kill_process(mapped_p.pid)
                     self._spawned_processes_map[proc_str_id] = None
 
-        elif cmd_json.command == 'start':
+        elif cmd_json.command == "start":
             try:
                 self._logger.debug(
-                    'Process Hub Core received start command: {}', cmd_json,
+                    "Process Hub Core received start command: {}",
+                    cmd_json,
                 )
                 proc_name = cmd_json.proc_str_id
                 self._logger.debug(
-                    'Process Hub Core launching process for {}', proc_name,
+                    "Process Hub Core launching process for {}",
+                    proc_name,
                 )
                 proc_details: dict = PROC_STR_ID_TO_CLASS_MAP.get(proc_name)
-                init_kwargs = dict(name=proc_details['name'])
+                init_kwargs = dict(name=proc_details["name"])
                 init_kwargs.update(cmd_json.init_kwargs)
-                if proc_details.get('class'):
-                    proc_obj = proc_details['class'](**init_kwargs)
+                if proc_details.get("class"):
+                    proc_obj = proc_details["class"](**init_kwargs)
                     proc_obj.start()
                 else:
                     proc_obj = Process(
-                        target=proc_details['target'],
+                        target=proc_details["target"],
                         kwargs=cmd_json.init_kwargs,
                     )
                     proc_obj.start()
                 self._logger.debug(
-                    'Process Hub Core launched process for {} with PID: {}',
+                    "Process Hub Core launched process for {} with PID: {}",
                     proc_name,
                     proc_obj.pid,
                 )
@@ -382,39 +378,42 @@ class ProcessHubCore(Process):
             except Exception as err:
                 self._logger.opt(exception=True).error(
                     (
-                        f'Error while starting a process:{cmd_json} |'
-                        f' error_msg: {str(err)}'
+                        f"Error while starting a process:{cmd_json} |"
+                        f" error_msg: {str(err)}"
                     ),
                 )
-        elif cmd_json.command == 'restart':
+        elif cmd_json.command == "restart":
             try:
                 # TODO
                 self._logger.debug(
-                    'Process Hub Core received restart command: {}', cmd_json,
+                    "Process Hub Core received restart command: {}",
+                    cmd_json,
                 )
                 # first kill
                 self._logger.debug(
-                    'Attempting to kill process: {}', cmd_json.pid,
+                    "Attempting to kill process: {}",
+                    cmd_json.pid,
                 )
                 self.kill_process(cmd_json.pid)
                 self._logger.debug(
-                    'Attempting to start process: {}', cmd_json.proc_str_id,
+                    "Attempting to start process: {}",
+                    cmd_json.proc_str_id,
                 )
             except Exception as err:
                 self._logger.opt(exception=True).error(
                     (
-                        f'Error while restarting a process:{cmd_json} |'
-                        f' error_msg: {str(err)}'
+                        f"Error while restarting a process:{cmd_json} |"
+                        f" error_msg: {str(err)}"
                     ),
                 )
 
 
-if __name__ == '__main__':
-    p = ProcessHubCore(name='PowerLoom|UniswapPoolerProcessHub|Core')
+if __name__ == "__main__":
+    p = ProcessHubCore(name="PowerLoom|UniswapPoolerProcessHub|Core")
     p.start()
     while p.is_alive():
         logger.debug(
-            'Process hub core is still alive. waiting on it to join...',
+            "Process hub core is still alive. waiting on it to join...",
         )
         try:
             p.join()

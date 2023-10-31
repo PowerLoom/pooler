@@ -21,13 +21,13 @@ class RPCException(Exception):
 
     def __str__(self):
         ret = {
-            'request': self.request,
-            'response': self.response,
-            'extra_info': self.extra_info,
-            'exception': None,
+            "request": self.request,
+            "response": self.response,
+            "extra_info": self.extra_info,
+            "exception": None,
         }
         if isinstance(self.underlying_exception, Exception):
-            ret.update({'exception': self.underlying_exception.__str__()})
+            ret.update({"exception": self.underlying_exception.__str__()})
         return json.dumps(ret)
 
     def __repr__(self):

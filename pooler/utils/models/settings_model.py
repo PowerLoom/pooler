@@ -8,8 +8,8 @@ from pydantic import Field
 
 
 class Auth(BaseModel):
-    enabled: bool = Field(True, description='Whether auth is enabled or not')
-    header_key: str = Field('X-API-KEY', description='Key used for auth')
+    enabled: bool = Field(True, description="Whether auth is enabled or not")
+    header_key: str = Field("X-API-KEY", description="Key used for auth")
 
 
 class CoreAPI(BaseModel):
@@ -123,7 +123,7 @@ class IPFSWriterRateLimit(BaseModel):
 class ExternalAPIAuth(BaseModel):
     # this is most likely used as a basic auth tuple of (username, password)
     apiKey: str
-    apiSecret: str = ''
+    apiSecret: str = ""
 
 
 class IPFSconfig(BaseModel):
@@ -184,8 +184,8 @@ class AggregateFilterConfig(BaseModel):
 
 
 class AggregateOn(str, Enum):
-    single_project = 'SingleProject'
-    multi_project = 'MultiProject'
+    single_project = "SingleProject"
+    multi_project = "MultiProject"
 
 
 class AggregationConfig(BaseModel):

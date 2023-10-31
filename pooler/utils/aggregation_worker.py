@@ -32,9 +32,9 @@ class AggregationAsyncWorker(GenericAsyncWorker):
     _ipfs_reader_client: AsyncIPFSClient
 
     def __init__(self, name, **kwargs):
-        self._q = f'powerloom-backend-cb-aggregate:{settings.namespace}:{settings.instance_id}'
-        self._rmq_routing = f'powerloom-backend-callback:{settings.namespace}'
-        f':{settings.instance_id}:CalculateAggregate.*'
+        self._q = f"powerloom-backend-cb-aggregate:{settings.namespace}:{settings.instance_id}"
+        self._rmq_routing = f"powerloom-backend-callback:{settings.namespace}"
+        f":{settings.instance_id}:CalculateAggregate.*"
         super(AggregationAsyncWorker, self).__init__(name=name, **kwargs)
 
         self._project_calculation_mapping = None
@@ -54,19 +54,22 @@ class AggregationAsyncWorker(GenericAsyncWorker):
     @notify_on_task_failure_aggregate
     async def _processor_task(
         self,
-        msg_obj: Union[PowerloomSnapshotSubmittedMessage, PowerloomCalculateAggregateMessage],
+        msg_obj: Union[
+            PowerloomSnapshotSubmittedMessage, PowerloomCalculateAggregateMessage
+        ],
         task_type: str,
     ):
         """Function used to process the received message object."""
         self._logger.debug(
-            'Processing callback: {}', msg_obj,
+            "Processing callback: {}",
+            msg_obj,
         )
 
         if task_type not in self._project_calculation_mapping:
             self._logger.error(
                 (
-                    'No project calculation mapping found for task type'
-                    f' {task_type}. Skipping...'
+                    "No project calculation mapping found for task type"
+                    f" {task_type}. Skipping..."
                 ),
             )
             return
@@ -76,7 +79,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             asyncio.get_running_loop(),
         )
         cur_task.set_name(
-            f'aio_pika.consumer|Processor|{task_type}|{msg_obj.broadcastId}',
+            f"aio_pika.consumer|Processor|{task_type}|{msg_obj.broadcastId}",
         )
         self._running_callback_tasks[self_unique_id] = cur_task
 
@@ -86,8 +89,9 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                     self._redis_conn,
                 )
             self._logger.debug(
-                'Got epoch to process for {}: {}',
-                task_type, msg_obj,
+                "Got epoch to process for {}: {}",
+                task_type,
+                msg_obj,
             )
 
             stream_processor = self._project_calculation_mapping[task_type]
@@ -109,18 +113,17 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             raise e
 
     def _gen_single_type_project_id(self, type_, epoch):
-        contract = epoch.projectId.split(':')[-2]
-        project_id = f'{type_}:{contract}:{settings.namespace}'
+        contract = epoch.projectId.split(":")[-2]
+        project_id = f"{type_}:{contract}:{settings.namespace}"
         return project_id
 
     def _gen_multiple_type_project_id(self, type_, epoch):
-
         underlying_project_ids = [project.projectId for project in epoch.messages]
-        unique_project_id = ''.join(sorted(underlying_project_ids))
+        unique_project_id = "".join(sorted(underlying_project_ids))
 
         project_hash = hashlib.sha3_256(unique_project_id.encode()).hexdigest()
 
-        project_id = f'{type_}:{project_hash}:{settings.namespace}'
+        project_id = f"{type_}:{project_hash}:{settings.namespace}"
         return project_id
 
     def _gen_project_id(self, type_, epoch):
@@ -129,27 +132,27 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         elif type_ in self._multi_project_types:
             return self._gen_multiple_type_project_id(type_, epoch)
         else:
-            raise ValueError(f'Unknown project type {type_}')
+            raise ValueError(f"Unknown project type {type_}")
 
     async def _send_payload_commit_service_queue(
         self,
         audit_stream,
-        epoch: Union[PowerloomSnapshotSubmittedMessage, PowerloomCalculateAggregateMessage],
+        epoch: Union[
+            PowerloomSnapshotSubmittedMessage, PowerloomCalculateAggregateMessage
+        ],
         snapshot: Union[AggregateBase, None],
     ):
-
         if not snapshot:
             self._logger.error(
                 (
-                    'No aggreagate snapshot to commit. Construction of snapshot'
-                    ' failed for {} against epoch {}'
+                    "No aggreagate snapshot to commit. Construction of snapshot"
+                    " failed for {} against epoch {}"
                 ),
                 audit_stream,
                 epoch,
             )
 
         else:
-
             source_chain_details = await get_source_chain_id(
                 redis_conn=self._redis_conn,
                 rpc_helper=self._anchor_rpc_helper,
@@ -168,10 +171,8 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 epochId=epoch.epochId,
             )
 
-            exchange = (
-                f'{settings.rabbitmq.setup.commit_payload.exchange}:{settings.namespace}'
-            )
-            routing_key = f'powerloom-backend-commit-payload:{settings.namespace}:{settings.instance_id}.Data'
+            exchange = f"{settings.rabbitmq.setup.commit_payload.exchange}:{settings.namespace}"
+            routing_key = f"powerloom-backend-commit-payload:{settings.namespace}:{settings.instance_id}.Data"
 
             # send through rabbitmq
             try:
@@ -193,14 +194,15 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                         )
 
                         self._logger.info(
-                            'Sent message to commit payload queue: {}', commit_payload,
+                            "Sent message to commit payload queue: {}",
+                            commit_payload,
                         )
 
             except Exception as e:
                 self._logger.opt(exception=True).error(
                     (
-                        'Exception committing snapshot to audit protocol:'
-                        ' {} | dump: {}'
+                        "Exception committing snapshot to audit protocol:"
+                        " {} | dump: {}"
                     ),
                     snapshot,
                     e,
@@ -208,14 +210,14 @@ class AggregationAsyncWorker(GenericAsyncWorker):
 
     async def _map_processed_epochs_to_adapters(
         self,
-        msg_obj: Union[PowerloomSnapshotSubmittedMessage, PowerloomCalculateAggregateMessage],
+        msg_obj: Union[
+            PowerloomSnapshotSubmittedMessage, PowerloomCalculateAggregateMessage
+        ],
         cb_fn_async,
         task_type,
         transformation_lambdas: List[Callable],
     ):
-
         try:
-
             project_id = self._gen_project_id(task_type, msg_obj)
 
             result = await cb_fn_async(
@@ -237,8 +239,8 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         except Exception as e:
             self._logger.opt(exception=True).error(
                 (
-                    'Error while processing aggregate {} for callback processor'
-                    ' of type {}'
+                    "Error while processing aggregate {} for callback processor"
+                    " of type {}"
                 ),
                 msg_obj,
                 task_type,
@@ -246,7 +248,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             raise e
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
-        task_type = message.routing_key.split('.')[-1]
+        task_type = message.routing_key.split(".")[-1]
         if task_type not in self._task_types:
             return
 
@@ -254,7 +256,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
 
         await self.init()
 
-        self._logger.debug('task type: {}', task_type)
+        self._logger.debug("task type: {}", task_type)
         # TODO: Update based on new single project based design
         if task_type in self._single_project_types:
             try:
@@ -263,16 +265,14 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 )
             except ValidationError as e:
                 self._logger.opt(exception=True).error(
-                    (
-                        'Bad message structure of callback processor. Error: {}'
-                    ),
+                    ("Bad message structure of callback processor. Error: {}"),
                     e,
                 )
                 return
             except Exception as e:
                 self._logger.opt(exception=True).error(
                     (
-                        'Unexpected message structure of callback in processor. Error: {}'
+                        "Unexpected message structure of callback in processor. Error: {}"
                     ),
                     e,
                 )
@@ -284,26 +284,27 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 )
             except ValidationError as e:
                 self._logger.opt(exception=True).error(
-                    (
-                        'Bad message structure of callback processor. Error: {}'
-                    ),
+                    ("Bad message structure of callback processor. Error: {}"),
                     e,
                 )
                 return
             except Exception as e:
                 self._logger.opt(exception=True).error(
                     (
-                        'Unexpected message structure of callback in processor. Error: {}'
+                        "Unexpected message structure of callback in processor. Error: {}"
                     ),
                     e,
                 )
                 return
         else:
             self._logger.error(
-                'Unknown task type {}', task_type,
+                "Unknown task type {}",
+                task_type,
             )
             return
-        asyncio.ensure_future(self._processor_task(msg_obj=msg_obj, task_type=task_type))
+        asyncio.ensure_future(
+            self._processor_task(msg_obj=msg_obj, task_type=task_type)
+        )
 
     async def _init_project_calculation_mapping(self):
         if self._project_calculation_mapping is not None:
@@ -313,14 +314,14 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         for project_config in aggregator_config:
             key = project_config.project_type
             if key in self._project_calculation_mapping:
-                raise Exception('Duplicate project type found')
+                raise Exception("Duplicate project type found")
             module = importlib.import_module(project_config.processor.module)
             class_ = getattr(module, project_config.processor.class_name)
             self._project_calculation_mapping[key] = class_()
         for project_config in projects_config:
             key = project_config.project_type
             if key in self._project_calculation_mapping:
-                raise Exception('Duplicate project type found')
+                raise Exception("Duplicate project type found")
             module = importlib.import_module(project_config.processor.module)
             class_ = getattr(module, project_config.processor.class_name)
             self._project_calculation_mapping[key] = class_()

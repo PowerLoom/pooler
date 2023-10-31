@@ -21,10 +21,11 @@ from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 
 
 class SnapshotAsyncWorker(GenericAsyncWorker):
-
     def __init__(self, name, **kwargs):
-        self._q = f'powerloom-backend-cb-snapshot:{settings.namespace}:{settings.instance_id}'
-        self._rmq_routing = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}:EpochReleased.*'
+        self._q = (
+            f"powerloom-backend-cb-snapshot:{settings.namespace}:{settings.instance_id}"
+        )
+        self._rmq_routing = f"powerloom-backend-callback:{settings.namespace}:{settings.instance_id}:EpochReleased.*"
         super(SnapshotAsyncWorker, self).__init__(name=name, **kwargs)
 
         self._project_calculation_mapping = None
@@ -35,17 +36,20 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         self._initialized = False
 
     @notify_on_task_failure_snapshot
-    async def _processor_task(self, msg_obj: PowerloomSnapshotProcessMessage, task_type: str):
+    async def _processor_task(
+        self, msg_obj: PowerloomSnapshotProcessMessage, task_type: str
+    ):
         """Function used to process the received message object."""
         self._logger.debug(
-            'Processing callback: {}', msg_obj,
+            "Processing callback: {}",
+            msg_obj,
         )
 
         if task_type not in self._project_calculation_mapping:
             self._logger.error(
                 (
-                    'No project calculation mapping found for task type'
-                    f' {task_type}. Skipping...'
+                    "No project calculation mapping found for task type"
+                    f" {task_type}. Skipping..."
                 ),
             )
             return
@@ -55,7 +59,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             asyncio.get_running_loop(),
         )
         cur_task.set_name(
-            f'aio_pika.consumer|Processor|{task_type}|{msg_obj.contract}',
+            f"aio_pika.consumer|Processor|{task_type}|{msg_obj.contract}",
         )
         self._running_callback_tasks[self_unique_id] = cur_task
 
@@ -65,8 +69,9 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                     self._redis_conn,
                 )
             self._logger.debug(
-                'Got epoch to process for {}: {}',
-                task_type, msg_obj,
+                "Got epoch to process for {}: {}",
+                task_type,
+                msg_obj,
             )
 
             stream_processor = self._project_calculation_mapping[task_type]
@@ -93,12 +98,11 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         epoch: PowerloomSnapshotProcessMessage,
         snapshot: Union[SnapshotBase, None],
     ):
-
         if not snapshot:
             self._logger.error(
                 (
-                    'No epoch snapshot to commit. Construction of snapshot'
-                    ' failed for {} against epoch {}'
+                    "No epoch snapshot to commit. Construction of snapshot"
+                    " failed for {} against epoch {}"
                 ),
                 audit_stream,
                 epoch,
@@ -111,7 +115,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             )
 
             payload = snapshot.dict()
-            project_id = f'{audit_stream}:{epoch.contract}:{settings.namespace}'
+            project_id = f"{audit_stream}:{epoch.contract}:{settings.namespace}"
 
             commit_payload = PayloadCommitMessage(
                 message=payload,
@@ -121,10 +125,8 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 epochId=epoch.epochId,
             )
 
-            exchange = (
-                f'{settings.rabbitmq.setup.commit_payload.exchange}:{settings.namespace}'
-            )
-            routing_key = f'powerloom-backend-commit-payload:{settings.namespace}:{settings.instance_id}.Data'
+            exchange = f"{settings.rabbitmq.setup.commit_payload.exchange}:{settings.namespace}"
+            routing_key = f"powerloom-backend-commit-payload:{settings.namespace}:{settings.instance_id}.Data"
 
             # send through rabbitmq
             try:
@@ -145,14 +147,15 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                         )
 
                         self._logger.info(
-                            'Sent message to commit payload queue: {}', commit_payload,
+                            "Sent message to commit payload queue: {}",
+                            commit_payload,
                         )
 
             except Exception as e:
                 self._logger.opt(exception=True).error(
                     (
-                        'Exception committing snapshot to audit protocol:'
-                        ' {} | dump: {}'
+                        "Exception committing snapshot to audit protocol:"
+                        " {} | dump: {}"
                     ),
                     snapshot,
                     e,
@@ -177,15 +180,17 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
 
             if transformation_lambdas:
                 for each_lambda in transformation_lambdas:
-                    result = each_lambda(result, data_source_contract_address, epoch.begin, epoch.end)
+                    result = each_lambda(
+                        result, data_source_contract_address, epoch.begin, epoch.end
+                    )
 
             return result
 
         except Exception as e:
             self._logger.opt(exception=True).error(
                 (
-                    'Error while processing epoch {} for callback processor'
-                    ' of type {}'
+                    "Error while processing epoch {} for callback processor"
+                    " of type {}"
                 ),
                 epoch,
                 task_type,
@@ -193,7 +198,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             raise e
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
-        task_type = message.routing_key.split('.')[-1]
+        task_type = message.routing_key.split(".")[-1]
         if task_type not in self._task_types:
             return
 
@@ -201,7 +206,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
 
         await self.init()
 
-        self._logger.debug('task type: {}', task_type)
+        self._logger.debug("task type: {}", task_type)
 
         try:
             msg_obj: PowerloomSnapshotProcessMessage = (
@@ -209,22 +214,20 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             )
         except ValidationError as e:
             self._logger.opt(exception=True).error(
-                (
-                    'Bad message structure of callback processor. Error: {}'
-                ),
+                ("Bad message structure of callback processor. Error: {}"),
                 e,
             )
             return
         except Exception as e:
             self._logger.opt(exception=True).error(
-                (
-                    'Unexpected message structure of callback in processor. Error: {}'
-                ),
+                ("Unexpected message structure of callback in processor. Error: {}"),
                 e,
             )
             return
 
-        asyncio.ensure_future(self._processor_task(msg_obj=msg_obj, task_type=task_type))
+        asyncio.ensure_future(
+            self._processor_task(msg_obj=msg_obj, task_type=task_type)
+        )
 
     async def _init_project_calculation_mapping(self):
         if self._project_calculation_mapping is not None:
@@ -234,7 +237,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         for project_config in projects_config:
             key = project_config.project_type
             if key in self._project_calculation_mapping:
-                raise Exception('Duplicate project type found')
+                raise Exception("Duplicate project type found")
             module = importlib.import_module(project_config.processor.module)
             class_ = getattr(module, project_config.processor.class_name)
             self._project_calculation_mapping[key] = class_()

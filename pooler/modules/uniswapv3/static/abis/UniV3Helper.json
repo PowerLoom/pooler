@@ -1,0 +1,21 @@
+[
+    {
+      "inputs": [
+        {
+          "internalType": "contract IUniswapV3",
+          "name": "pool",
+          "type": "address"
+        }
+      ],
+      "name": "getTicks",
+      "outputs": [
+        {
+          "internalType": "bytes[]",
+          "name": "ticks",
+          "type": "bytes[]"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ]

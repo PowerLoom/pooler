@@ -21,14 +21,14 @@ from pooler.utils.models.message_models import PowerloomSnapshotSubmittedMessage
 from pooler.utils.rpc import RpcHelper
 
 # setup logger
-helper_logger = logger.bind(module='PowerLoom|Callback|Helpers')
+helper_logger = logger.bind(module="PowerLoom|Callback|Helpers")
 
 
 async def get_rabbitmq_connection():
     return await aio_pika.connect_robust(
         host=settings.rabbitmq.host,
         port=settings.rabbitmq.port,
-        virtual_host='/',
+        virtual_host="/",
         login=settings.rabbitmq.user,
         password=settings.rabbitmq.password,
     )
@@ -45,12 +45,13 @@ def misc_notification_callback_result_handler(fut: asyncio.Future):
     except Exception as e:
         if settings.logs.trace_enabled:
             logger.opt(exception=True).error(
-                'Exception while sending callback or notification: {}', e,
+                "Exception while sending callback or notification: {}",
+                e,
             )
         else:
-            logger.error('Exception while sending callback or notification: {}', e)
+            logger.error("Exception while sending callback or notification: {}", e)
     else:
-        logger.debug('Callback or notification result:{}', r)
+        logger.debug("Callback or notification result:{}", r)
 
 
 def notify_on_task_failure_snapshot(fn):
@@ -60,21 +61,29 @@ def notify_on_task_failure_snapshot(fn):
             await fn(self, *args, **kwargs)
         except Exception as e:
             # Logging the error trace
-            msg_obj: PowerloomSnapshotProcessMessage = kwargs['msg_obj'] if 'msg_obj' in kwargs else args[0]
-            task_type: str = kwargs['task_type'] if 'task_type' in kwargs else args[1]
+            msg_obj: PowerloomSnapshotProcessMessage = (
+                kwargs["msg_obj"] if "msg_obj" in kwargs else args[0]
+            )
+            task_type: str = kwargs["task_type"] if "task_type" in kwargs else args[1]
             if settings.logs.trace_enabled:
                 logger.opt(exception=True).error(
-                    'Error constructing snapshot against message {} for task type {} : {}', msg_obj, task_type, e,
+                    "Error constructing snapshot against message {} for task type {} : {}",
+                    msg_obj,
+                    task_type,
+                    e,
                 )
             else:
                 logger.error(
-                    'Error constructing snapshot against message {} for task type {} : {}', msg_obj, task_type, e,
+                    "Error constructing snapshot against message {} for task type {} : {}",
+                    msg_obj,
+                    task_type,
+                    e,
                 )
 
             # Sending the error details to the issue reporting service
             contract = msg_obj.contract
             epoch_id = msg_obj.epochId
-            project_id = f'{task_type}:{contract}:{settings.namespace}'
+            project_id = f"{task_type}:{contract}:{settings.namespace}"
 
             if settings.reporting.service_url:
                 f = asyncio.ensure_future(
@@ -82,11 +91,11 @@ def notify_on_task_failure_snapshot(fn):
                         url=settings.reporting.service_url,
                         json=SnapshotterIssue(
                             instanceID=settings.instance_id,
-                            issueType='MISSED_SNAPSHOT',
+                            issueType="MISSED_SNAPSHOT",
                             projectID=project_id,
                             epochId=str(epoch_id),
                             timeOfReporting=str(time.time()),
-                            extra=json.dumps({'issueDetails': f'Error : {e}'}),
+                            extra=json.dumps({"issueDetails": f"Error : {e}"}),
                         ).dict(),
                     ),
                 )
@@ -98,11 +107,11 @@ def notify_on_task_failure_snapshot(fn):
                         url=settings.reporting.slack_url,
                         json=SnapshotterIssue(
                             instanceID=settings.instance_id,
-                            issueType='MISSED_SNAPSHOT',
+                            issueType="MISSED_SNAPSHOT",
                             projectID=project_id,
                             epochId=str(epoch_id),
                             timeOfReporting=str(time.time()),
-                            extra=json.dumps({'issueDetails': f'Error : {e}'}),
+                            extra=json.dumps({"issueDetails": f"Error : {e}"}),
                         ).dict(),
                     ),
                 )
@@ -118,38 +127,44 @@ def notify_on_task_failure_aggregate(fn):
             await fn(self, *args, **kwargs)
 
         except Exception as e:
-            msg_obj = kwargs['msg_obj'] if 'msg_obj' in kwargs else args[0]
-            task_type = kwargs['task_type'] if 'task_type' in kwargs else args[1]
+            msg_obj = kwargs["msg_obj"] if "msg_obj" in kwargs else args[0]
+            task_type = kwargs["task_type"] if "task_type" in kwargs else args[1]
             # Logging the error trace
             if settings.logs.trace_enabled:
                 logger.opt(exception=True).error(
-                    'Error constructing snapshot or aggregate against message {} for task type {} : {}',
-                    msg_obj, task_type, e,
+                    "Error constructing snapshot or aggregate against message {} for task type {} : {}",
+                    msg_obj,
+                    task_type,
+                    e,
                 )
             else:
                 logger.error(
-                    'Error constructing snapshot against message {} for task type {} : {}',
-                    msg_obj, task_type, e,
+                    "Error constructing snapshot against message {} for task type {} : {}",
+                    msg_obj,
+                    task_type,
+                    e,
                 )
 
             # Sending the error details to the issue reporting service
             if isinstance(msg_obj, PowerloomCalculateAggregateMessage):
-                underlying_project_ids = [project.projectId for project in msg_obj.messages]
-                unique_project_id = ''.join(sorted(underlying_project_ids))
+                underlying_project_ids = [
+                    project.projectId for project in msg_obj.messages
+                ]
+                unique_project_id = "".join(sorted(underlying_project_ids))
 
                 project_hash = hashlib.sha3_256(unique_project_id.encode()).hexdigest()
 
-                project_id = f'{task_type}:{project_hash}:{settings.namespace}'
+                project_id = f"{task_type}:{project_hash}:{settings.namespace}"
                 epoch_id = msg_obj.epochId
 
             elif isinstance(msg_obj, PowerloomSnapshotSubmittedMessage):
-                contract = msg_obj.projectId.split(':')[-2]
-                project_id = f'{task_type}:{contract}:{settings.namespace}'
+                contract = msg_obj.projectId.split(":")[-2]
+                project_id = f"{task_type}:{contract}:{settings.namespace}"
                 epoch_id = msg_obj.epochId
 
             else:
-                project_id = 'UNKNOWN'
-                epoch_id = 'UNKNOWN'
+                project_id = "UNKNOWN"
+                epoch_id = "UNKNOWN"
 
             if settings.reporting.service_url:
                 f = asyncio.ensure_future(
@@ -157,11 +172,11 @@ def notify_on_task_failure_aggregate(fn):
                         url=settings.reporting.service_url,
                         json=SnapshotterIssue(
                             instanceID=settings.instance_id,
-                            issueType='MISSED_SNAPSHOT',
+                            issueType="MISSED_SNAPSHOT",
                             projectID=project_id,
                             epochId=str(epoch_id),
                             timeOfReporting=str(time.time()),
-                            extra=json.dumps({'issueDetails': f'Error : {e}'}),
+                            extra=json.dumps({"issueDetails": f"Error : {e}"}),
                         ).dict(),
                     ),
                 )
@@ -173,11 +188,11 @@ def notify_on_task_failure_aggregate(fn):
                         url=settings.reporting.slack_url,
                         json=SnapshotterIssue(
                             instanceID=settings.instance_id,
-                            issueType='MISSED_SNAPSHOT',
+                            issueType="MISSED_SNAPSHOT",
                             projectID=project_id,
                             epochId=str(epoch_id),
                             timeOfReporting=str(time.time()),
-                            extra=json.dumps({'issueDetails': f'Error : {e}'}),
+                            extra=json.dumps({"issueDetails": f"Error : {e}"}),
                         ).dict(),
                     ),
                 )
@@ -252,6 +267,5 @@ class GenericProcessorMultiProjectAggregate(ABC):
         ipfs_reader: AsyncIPFSClient,
         protocol_state_contract,
         project_id: str,
-
     ):
         pass

@@ -6,8 +6,8 @@ from pydantic import BaseModel
 
 
 class UserStatusEnum(str, Enum):
-    active = 'active'
-    inactive = 'inactive'
+    active = "active"
+    inactive = "inactive"
 
 
 class AddApiKeyRequest(BaseModel):
@@ -31,7 +31,7 @@ class UserAllDetailsResponse(AppOwnerModel):
 class AuthCheck(BaseModel):
     authorized: bool = False
     api_key: str
-    reason: str = ''
+    reason: str = ""
     owner: Optional[AppOwnerModel] = None
 
 

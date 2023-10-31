@@ -4,7 +4,7 @@ from pooler.utils.models.settings_model import AggregatorConfig
 from pooler.utils.models.settings_model import ProjectsConfig
 from pooler.utils.models.settings_model import Settings
 
-settings_file = open('config/settings.json', 'r')
+settings_file = open("config/settings.json", "r")
 settings_dict = json.load(settings_file)
 
 settings: Settings = Settings(**settings_dict)

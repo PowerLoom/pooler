@@ -40,13 +40,13 @@ def rabbitmq_and_redis_cleanup(fn):
         except (GenericExitOnSignal, KeyboardInterrupt):
             try:
                 self._logger.debug(
-                    'Waiting for RabbitMQ interactor thread to join...',
+                    "Waiting for RabbitMQ interactor thread to join...",
                 )
                 self._rabbitmq_thread.join()
-                self._logger.debug('RabbitMQ interactor thread joined.')
+                self._logger.debug("RabbitMQ interactor thread joined.")
                 if self._last_processed_block:
                     self._logger.debug(
-                        'Saving last processed epoch to redis...',
+                        "Saving last processed epoch to redis...",
                     )
                     self.ev_loop.run_until_complete(
                         self._redis_conn.set(
@@ -56,12 +56,13 @@ def rabbitmq_and_redis_cleanup(fn):
                     )
             except Exception as E:
                 self._logger.opt(exception=True).error(
-                    'Error while saving progress: {}', E,
+                    "Error while saving progress: {}",
+                    E,
                 )
         except Exception as E:
-            self._logger.opt(exception=True).error('Error while running: {}', E)
+            self._logger.opt(exception=True).error("Error while running: {}", E)
         finally:
-            self._logger.debug('Shutting down!')
+            self._logger.debug("Shutting down!")
             sys.exit(0)
 
     return wrapper
@@ -83,14 +84,14 @@ class EventDetectorProcess(multiprocessing.Process):
         self._rabbitmq_queue = queue.Queue()
         self._shutdown_initiated = False
         self._logger = logger.bind(
-            module=f'{name}|{settings.namespace}-{settings.instance_id[:5]}',
+            module=f"{name}|{settings.namespace}-{settings.instance_id[:5]}",
         )
 
         self._exchange = (
-            f'{settings.rabbitmq.setup.event_detector.exchange}:{settings.namespace}'
+            f"{settings.rabbitmq.setup.event_detector.exchange}:{settings.namespace}"
         )
         self._routing_key_prefix = (
-            f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.'
+            f"powerloom-event-detector:{settings.namespace}:{settings.instance_id}."
         )
         self._aioredis_pool = None
         self._redis_conn = None
@@ -104,25 +105,25 @@ class EventDetectorProcess(multiprocessing.Process):
             self._logger,
         )
         self.contract_address = settings.protocol_state.address
-        self.contract = self.rpc_helper.get_current_node()['web3_client'].eth.contract(
+        self.contract = self.rpc_helper.get_current_node()["web3_client"].eth.contract(
             address=Web3.toChecksumAddress(
                 self.contract_address,
             ),
             abi=self.contract_abi,
         )
 
-# event EpochReleased(uint256 indexed epochId, uint256 begin, uint256 end, uint256 timestamp);
-# event SnapshotFinalized(uint256 indexed epochId, uint256 epochEnd, string projectId,
-#     string snapshotCid, uint256 timestamp);
+        # event EpochReleased(uint256 indexed epochId, uint256 begin, uint256 end, uint256 timestamp);
+        # event SnapshotFinalized(uint256 indexed epochId, uint256 epochEnd, string projectId,
+        #     string snapshotCid, uint256 timestamp);
 
         EVENTS_ABI = {
-            'EpochReleased': self.contract.events.EpochReleased._get_event_abi(),
-            'SnapshotFinalized': self.contract.events.SnapshotFinalized._get_event_abi(),
+            "EpochReleased": self.contract.events.EpochReleased._get_event_abi(),
+            "SnapshotFinalized": self.contract.events.SnapshotFinalized._get_event_abi(),
         }
 
         EVENT_SIGS = {
-            'EpochReleased': 'EpochReleased(uint256,uint256,uint256,uint256)',
-            'SnapshotFinalized': 'SnapshotFinalized(uint256,uint256,string,string,uint256)',
+            "EpochReleased": "EpochReleased(uint256,uint256,uint256,uint256)",
+            "SnapshotFinalized": "SnapshotFinalized(uint256,uint256,string,string,uint256)",
         }
 
         self.event_sig, self.event_abi = get_event_sig_and_abi(
@@ -148,18 +149,18 @@ class EventDetectorProcess(multiprocessing.Process):
         """
         events_log = await self.rpc_helper.get_events_logs(
             **{
-                'contract_address': self.contract_address,
-                'to_block': to_block,
-                'from_block': from_block,
-                'topics': [self.event_sig],
-                'event_abi': self.event_abi,
-                'redis_conn': self._redis_conn,
+                "contract_address": self.contract_address,
+                "to_block": to_block,
+                "from_block": from_block,
+                "topics": [self.event_sig],
+                "event_abi": self.event_abi,
+                "redis_conn": self._redis_conn,
             },
         )
 
         events = []
         for log in events_log:
-            if log.event == 'EpochReleased':
+            if log.event == "EpochReleased":
                 event = EpochReleasedEvent(
                     begin=log.args.begin,
                     end=log.args.end,
@@ -169,7 +170,7 @@ class EventDetectorProcess(multiprocessing.Process):
                 )
                 events.append((log.event, event))
 
-            elif log.event == 'SnapshotFinalized':
+            elif log.event == "SnapshotFinalized":
                 event = SnapshotFinalizedEvent(
                     epochId=log.args.epochId,
                     epochEnd=log.args.epochEnd,
@@ -180,7 +181,7 @@ class EventDetectorProcess(multiprocessing.Process):
                 )
                 events.append((log.event, event))
 
-        self._logger.info('Events: {}', events)
+        self._logger.info("Events: {}", events)
         return events
 
     def _interactor_wrapper(self, q: queue.Queue):  # run in a separate thread
@@ -191,35 +192,34 @@ class EventDetectorProcess(multiprocessing.Process):
         self._rabbitmq_interactor.run()  # blocking
 
     def _generic_exit_handler(self, signum, sigframe):
-        if (
-            signum in [SIGINT, SIGTERM, SIGQUIT] and
-            not self._shutdown_initiated
-        ):
+        if signum in [SIGINT, SIGTERM, SIGQUIT] and not self._shutdown_initiated:
             self._shutdown_initiated = True
             self._rabbitmq_interactor.stop()
             raise GenericExitOnSignal
 
     def _broadcast_event(self, event_type: str, event: EventBase):
         """Broadcast event to the RabbitMQ queue and save update in redis."""
-        self._logger.info('Broadcasting event: {}', event)
+        self._logger.info("Broadcasting event: {}", event)
         brodcast_msg = (
-            event.json().encode('utf-8'),
+            event.json().encode("utf-8"),
             self._exchange,
-            f'{self._routing_key_prefix}{event_type}',
+            f"{self._routing_key_prefix}{event_type}",
         )
         self._rabbitmq_queue.put(brodcast_msg)
 
     async def _detect_events(self):
         while True:
             try:
-                current_block = await self.rpc_helper.get_current_block(redis_conn=self._redis_conn)
-                self._logger.info('Current block: {}', current_block)
+                current_block = await self.rpc_helper.get_current_block(
+                    redis_conn=self._redis_conn
+                )
+                self._logger.info("Current block: {}", current_block)
 
             except Exception as e:
                 self._logger.opt(exception=True).error(
                     (
-                        'Unable to fetch current block, ERROR: {}, '
-                        'sleeping for {} seconds.'
+                        "Unable to fetch current block, ERROR: {}, "
+                        "sleeping for {} seconds."
                     ),
                     e,
                     settings.rpc.polling_interval,
@@ -242,19 +242,21 @@ class EventDetectorProcess(multiprocessing.Process):
             if self._last_processed_block:
                 if current_block - self._last_processed_block >= 10:
                     self._logger.warning(
-                        'Last processed block is too far behind current block, '
-                        'processing current block',
+                        "Last processed block is too far behind current block, "
+                        "processing current block",
                     )
                     self._last_processed_block = current_block - 1
 
                 # Get events from current block to last_processed_block
                 try:
-                    events = await self.get_events(self._last_processed_block + 1, current_block)
+                    events = await self.get_events(
+                        self._last_processed_block + 1, current_block
+                    )
                 except Exception as e:
                     self._logger.opt(exception=True).error(
                         (
-                            'Unable to fetch events from block {} to block {}, '
-                            'ERROR: {}, sleeping for {} seconds.'
+                            "Unable to fetch events from block {} to block {}, "
+                            "ERROR: {}, sleeping for {} seconds."
                         ),
                         self._last_processed_block + 1,
                         current_block,
@@ -265,9 +267,8 @@ class EventDetectorProcess(multiprocessing.Process):
                     continue
 
             else:
-
                 self._logger.debug(
-                    'No last processed epoch found, processing current block',
+                    "No last processed epoch found, processing current block",
                 )
 
                 try:
@@ -275,8 +276,8 @@ class EventDetectorProcess(multiprocessing.Process):
                 except Exception as e:
                     self._logger.opt(exception=True).error(
                         (
-                            'Unable to fetch events from block {} to block {}, '
-                            'ERROR: {}, sleeping for {} seconds.'
+                            "Unable to fetch events from block {} to block {}, "
+                            "ERROR: {}, sleeping for {} seconds."
                         ),
                         current_block,
                         current_block,
@@ -288,19 +289,22 @@ class EventDetectorProcess(multiprocessing.Process):
 
             for event_type, event in events:
                 self._logger.info(
-                    'Processing event: {}', event,
+                    "Processing event: {}",
+                    event,
                 )
                 self._broadcast_event(event_type, event)
 
             self._last_processed_block = current_block
 
-            await self._redis_conn.set(event_detector_last_processed_block, json.dumps(current_block))
+            await self._redis_conn.set(
+                event_detector_last_processed_block, json.dumps(current_block)
+            )
             self._logger.info(
-                'DONE: Processed blocks till, saving in redis: {}',
+                "DONE: Processed blocks till, saving in redis: {}",
                 current_block,
             )
             self._logger.info(
-                'Sleeping for {} seconds...',
+                "Sleeping for {} seconds...",
                 settings.rpc.polling_interval,
             )
             await asyncio.sleep(settings.rpc.polling_interval)
@@ -311,7 +315,7 @@ class EventDetectorProcess(multiprocessing.Process):
             signal.signal(signame, self._generic_exit_handler)
         self._rabbitmq_thread = threading.Thread(
             target=self._interactor_wrapper,
-            kwargs={'q': self._rabbitmq_queue},
+            kwargs={"q": self._rabbitmq_queue},
         )
         self.ev_loop = asyncio.get_event_loop()
 

@@ -5,7 +5,7 @@ from gunicorn.app.base import BaseApplication
 from gunicorn.glogging import Logger
 from loguru import logger
 
-LOG_LEVEL = logging.getLevelName(os.environ.get('LOG_LEVEL', 'DEBUG'))
+LOG_LEVEL = logging.getLevelName(os.environ.get("LOG_LEVEL", "DEBUG"))
 
 
 class InterceptHandler(logging.Handler):
@@ -31,9 +31,9 @@ class InterceptHandler(logging.Handler):
 class StubbedGunicornLogger(Logger):
     def setup(self, cfg):
         handler = logging.NullHandler()
-        self.error_logger = logging.getLogger('gunicorn.error')
+        self.error_logger = logging.getLogger("gunicorn.error")
         self.error_logger.addHandler(handler)
-        self.access_logger = logging.getLogger('gunicorn.access')
+        self.access_logger = logging.getLogger("gunicorn.access")
         self.access_logger.addHandler(handler)
         self.error_log.setLevel(LOG_LEVEL)
         self.access_log.setLevel(LOG_LEVEL)

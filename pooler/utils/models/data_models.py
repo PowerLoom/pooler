@@ -22,7 +22,7 @@ class SnapshotterIssue(BaseModel):
     projectID: str
     epochId: str
     timeOfReporting: str
-    extra: Optional[str] = ''
+    extra: Optional[str] = ""
 
 
 class TimeoutConfig(BaseModel):
@@ -77,13 +77,15 @@ class ProjectSpecificState(BaseModel):
 
 
 class ProtocolState(BaseModel):
-    project_specific_states: Dict[str, ProjectSpecificState]  # project ID -> project specific state
+    project_specific_states: Dict[
+        str, ProjectSpecificState
+    ]  # project ID -> project specific state
     synced_till_epoch_id: int
 
 
 class SnapshotterReportState(Enum):
-    MISSED_SNAPSHOT = 'MISSED_SNAPSHOT'
-    SUBMITTED_INCORRECT_SNAPSHOT = 'SUBMITTED_INCORRECT_SNAPSHOT'
+    MISSED_SNAPSHOT = "MISSED_SNAPSHOT"
+    SUBMITTED_INCORRECT_SNAPSHOT = "SUBMITTED_INCORRECT_SNAPSHOT"
 
 
 class ProjectStatus(BaseModel):
@@ -109,7 +111,7 @@ class SnapshotterIncorrectSubmission(BaseModel):
     epochId: int
     incorrectCid: str
     payloadDump: str
-    reason: str = ''
+    reason: str = ""
 
 
 class SnapshotterStatusReport(BaseModel):
@@ -118,7 +120,7 @@ class SnapshotterStatusReport(BaseModel):
     finalizedSnapshotCid: str
     finalizedSnapshot: Dict[str, Any] = {}
     state: SnapshotterReportState
-    reason: str = ''
+    reason: str = ""
 
 
 class SnapshotterMissedSnapshotSubmission(BaseModel):
@@ -133,7 +135,7 @@ class SnapshotterIncorrectSnapshotSubmission(BaseModel):
     submittedSnapshot: Optional[Dict[str, Any]]
     finalizedSnapshotCid: str
     finalizedSnapshot: Optional[Dict[str, Any]]
-    reason: str = ''
+    reason: str = ""
 
 
 class SnapshotterProjectStatus(BaseModel):
