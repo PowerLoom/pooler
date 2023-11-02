@@ -5,7 +5,8 @@ import time
 
 from aio_pika import IncomingMessage
 from pydantic import ValidationError
-
+from ipfs_client.main import AsyncIPFSClient
+from ipfs_client.main import AsyncIPFSClientSingleton
 from snapshotter.settings.config import projects_config
 from snapshotter.settings.config import settings
 from snapshotter.utils.callback_helpers import send_failure_notifications_async
@@ -22,6 +23,10 @@ from snapshotter.utils.redis.redis_keys import submitted_base_snapshots_key
 
 
 class SnapshotAsyncWorker(GenericAsyncWorker):
+    _ipfs_singleton: AsyncIPFSClientSingleton
+    _ipfs_writer_client: AsyncIPFSClient
+    _ipfs_reader_client: AsyncIPFSClient
+
     def __init__(self, name, **kwargs):
         self._q = f'powerloom-backend-cb-snapshot:{settings.namespace}:{settings.instance_id}'
         self._rmq_routing = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}:EpochReleased.*'
@@ -138,8 +143,9 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                     ).json(),
                 },
             )
-            await self._send_payload_commit_service_queue(
+            await self._commit_payload(
                 type_=task_type,
+                _ipfs_writer_client=self._ipfs_writer_client,
                 project_id=project_id,
                 epoch=msg_obj,
                 snapshot=snapshot,
@@ -194,7 +200,14 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             class_ = getattr(module, project_config.processor.class_name)
             self._project_calculation_mapping[key] = class_()
 
+    async def _init_ipfs_client(self):
+        self._ipfs_singleton = AsyncIPFSClientSingleton(settings.ipfs)
+        await self._ipfs_singleton.init_sessions()
+        self._ipfs_writer_client = self._ipfs_singleton._ipfs_write_client
+        self._ipfs_reader_client = self._ipfs_singleton._ipfs_read_client
+
     async def init_worker(self):
         if not self._initialized:
             await self._init_project_calculation_mapping()
+            await self._init_ipfs_client()
             await self.init()

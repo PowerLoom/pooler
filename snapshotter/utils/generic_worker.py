@@ -24,7 +24,7 @@ from ipfs_client.main import AsyncIPFSClient
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 import tenacity
 from snapshotter.settings.config import settings
-from snapshotter.utils.callback_helpers import get_rabbitmq_channel
+from snapshotter.utils.callback_helpers import get_rabbitmq_channel, send_failure_notifications_async
 from snapshotter.utils.callback_helpers import get_rabbitmq_robust_connection_async
 from snapshotter.utils.data_utils import get_source_chain_id
 from snapshotter.utils.default_logger import logger
@@ -302,7 +302,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                     ).json(),
                 },
             )
-    
+
     async def _on_rabbitmq_message(self, message: IncomingMessage):
         pass
 
