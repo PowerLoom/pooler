@@ -14,3 +14,5 @@ Powerloom
 .vscode
 .github
 .mypy_cache
+requirements.txt
+**/*.whl
