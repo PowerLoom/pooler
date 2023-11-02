@@ -27,7 +27,7 @@ async def get_token_price_in_block_range(
     """
     try:
         token_price_dict = dict()
-        token_address = Web3.toChecksumAddress(token_metadata["address"])
+        token_address = Web3.to_checksum_address(token_metadata["address"])
         # check if cahce exist for given epoch
         cached_price_dict = await redis_conn.zrangebyscore(
             name=uniswap_pair_cached_block_height_token_price.format(
@@ -49,7 +49,7 @@ async def get_token_price_in_block_range(
             }
             return price_dict
 
-        if token_address == Web3.toChecksumAddress(
+        if token_address == Web3.to_checksum_address(
             worker_settings.contract_addresses.WETH
         ):
             token_price_dict = await get_eth_price_usd(
@@ -101,7 +101,7 @@ async def get_token_price_in_block_range(
 
             await redis_conn.zadd(
                 name=uniswap_pair_cached_block_height_token_price.format(
-                    Web3.toChecksumAddress(token_metadata["address"]),
+                    Web3.to_checksum_address(token_metadata["address"]),
                 ),
                 mapping=redis_cache_mapping,  # timestamp so zset do not ignore same height on multiple heights
             )

@@ -97,9 +97,10 @@ async def get_eth_price_usd(
             return price_dict
 
         pair_abi_dict = get_contract_abi_dict(pair_contract_abi)
+        
 
         # Get the current sqrtPriceX96 value from the pool
-        sqrtPriceX96 = pair_contract.functions.slot0().call()[0]
+        # sqrtPriceX96 = pair_contract.functions.slot0().call()[0]
         # NOTE: We can further optimize below call by batching them all,
         # but that would be a large batch call for RPC node
 
@@ -148,27 +149,21 @@ async def get_eth_price_usd(
                 token1_decimals=TOKENS_DECIMALS["WETH"],
             )
 
-            eth_usdc_price, usdc_eth_price = float(
-                price0,
-            ) * 10 ** (
-                token0.decimals + token1.decimals
-            ), float(price1) / 10 ** (token0.decimals + token1.decimals)
-
             eth_usdt_price_, usdt_eth_price_ = sqrtPriceX96ToTokenPrices(
                 sqrtPriceX96=usdt_eth_sqrt_price_x96,
                 token0_decimals=TOKENS_DECIMALS["USDT"],
                 token1_decimals=TOKENS_DECIMALS["WETH"],
             )
 
-            eth_usdt_price, usdt_eth_price = float(
-                price1,
-            ) / 10 ** (
-                token0.decimals + token1.decimals
-            ), float(price0) * 10 ** (token0.decimals + token1.decimals)
+            # eth_usdt_price, usdt_eth_price = float(
+            #     price1,
+            # ) / 10 ** (
+            #     token0.decimals + token1.decimals
+            # ), float(price0) * 10 ** (token0.decimals + token1.decimals)
 
             # using fixed weightage for now, will use liquidity based weightage later
 
-            eth_price_usd = (eth_dai_price + eth_usdc_price + eth_usdt_price) / 3
+            eth_price_usd = (eth_dai_price + eth_usdc_price_ + eth_usdt_price_) / 3
 
             eth_price_usd_dict[block_num] = float(eth_price_usd)
             redis_cache_mapping[

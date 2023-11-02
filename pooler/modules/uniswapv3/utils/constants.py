@@ -44,6 +44,10 @@ helper_contract_abi = read_json_file(
 
 override_address = Web3.to_checksum_address("0x" + "1" * 40)
 
+helper_contract = current_node['web3_client'].eth.contract(
+    address=Web3.to_checksum_address(
+        override_address), abi=helper_contract_abi)
+
 # Init Uniswap V2 Core contract Objects
 router_contract_obj = current_node["web3_client"].eth.contract(
     address=Web3.to_checksum_address(

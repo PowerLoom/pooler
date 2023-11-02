@@ -13,7 +13,7 @@ from pooler.utils.redis.rate_limiter import load_rate_limiter_scripts
 from pooler.utils.redis.redis_conn import provide_async_redis_conn_insta
 
 w3 = Web3(Web3.HTTPProvider(settings.rpc.full_nodes[0].url))
-pair_address = Web3.toChecksumAddress(
+pair_address = Web3.to_checksum_address(
     "0x97c4adc5d28a86f9470c70dd91dc6cc2f20d2d4d",
 )
 
@@ -55,13 +55,13 @@ async def get_token_price_at_block_height(
 
         # else fetch from rpc
         stable_coins_addresses = {
-            "USDC": Web3.toChecksumAddress(
+            "USDC": Web3.to_checksum_address(
                 worker_settings.contract_addresses.USDC,
             ),
-            "DAI": Web3.toChecksumAddress(
+            "DAI": Web3.to_checksum_address(
                 worker_settings.contract_addresses.DAI,
             ),
-            "USDT": Web3.toChecksumAddress(
+            "USDT": Web3.to_checksum_address(
                 worker_settings.contract_addresses.USDT,
             ),
         }
@@ -71,20 +71,20 @@ async def get_token_price_at_block_height(
             "USDC": 6,
         }
         non_stable_coins_addresses = {
-            Web3.toChecksumAddress(worker_settings.contract_addresses.agEUR): {
-                "token0": Web3.toChecksumAddress(
+            Web3.to_checksum_address(worker_settings.contract_addresses.agEUR): {
+                "token0": Web3.to_checksum_address(
                     worker_settings.contract_addresses.agEUR,
                 ),
-                "token1": Web3.toChecksumAddress(
+                "token1": Web3.to_checksum_address(
                     worker_settings.contract_addresses.FEI,
                 ),
                 "decimals": 18,
             },
-            Web3.toChecksumAddress(worker_settings.contract_addresses.SYN): {
-                "token0": Web3.toChecksumAddress(
+            Web3.to_checksum_address(worker_settings.contract_addresses.SYN): {
+                "token0": Web3.to_checksum_address(
                     worker_settings.contract_addresses.SYN,
                 ),
-                "token1": Web3.toChecksumAddress(
+                "token1": Web3.to_checksum_address(
                     worker_settings.contract_addresses.FRAX,
                 ),
                 "decimals": 18,
@@ -95,7 +95,7 @@ async def get_token_price_at_block_height(
         token_amount_multiplier = 10**18
 
         # check if token is a stable coin if so then ignore price fetch call
-        if Web3.toChecksumAddress(token_metadata["address"]) in list(
+        if Web3.to_checksum_address(token_metadata["address"]) in list(
             stable_coins_addresses.values(),
         ):
             token_price = 1
@@ -110,10 +110,10 @@ async def get_token_price_at_block_height(
 
         # check if token has no pair with stablecoin and weth if so then use hardcoded path
         elif non_stable_coins_addresses.get(
-            Web3.toChecksumAddress(token_metadata["address"]),
+            Web3.to_checksum_address(token_metadata["address"]),
         ):
             contract_metadata = non_stable_coins_addresses.get(
-                Web3.toChecksumAddress(token_metadata["address"]),
+                Web3.to_checksum_address(token_metadata["address"]),
             )
             if not contract_metadata:
                 return None
@@ -123,7 +123,7 @@ async def get_token_price_at_block_height(
                     [
                         contract_metadata["token0"],
                         contract_metadata["token1"],
-                        Web3.toChecksumAddress(
+                        Web3.to_checksum_address(
                             worker_settings.contract_addresses.USDC,
                         ),
                     ],
@@ -148,9 +148,9 @@ async def get_token_price_at_block_height(
         # 1. if is not equals to weth then check its price against each stable coin take out heighest
         # 2. if price is still 0/None then pass path as token->weth-usdt
         # 3. if price is still 0/None then increase token amount in path (token->weth-usdc)
-        elif Web3.toChecksumAddress(
+        elif Web3.to_checksum_address(
             token_metadata["address"],
-        ) != Web3.toChecksumAddress(worker_settings.contract_addresses.WETH):
+        ) != Web3.to_checksum_address(worker_settings.contract_addresses.WETH):
             # iterate over all stable coin to find price
             stable_coins_len = len(stable_coins_addresses)
             for key, value in stable_coins_addresses.items():
@@ -159,7 +159,7 @@ async def get_token_price_at_block_height(
                         token_contract_obj.functions.getAmountsOut(
                             10 ** int(token_metadata["decimals"]),
                             [
-                                Web3.toChecksumAddress(
+                                Web3.to_checksum_address(
                                     token_metadata["address"],
                                 ),
                                 value,
@@ -204,7 +204,7 @@ async def get_token_price_at_block_height(
                                 10 ** int(token_metadata["decimals"])
                                 * token_amount_multiplier,
                                 [
-                                    Web3.toChecksumAddress(
+                                    Web3.to_checksum_address(
                                         token_metadata["address"],
                                     ),
                                     value,
@@ -261,11 +261,11 @@ async def get_token_price_at_block_height(
                     token_contract_obj.functions.getAmountsOut(
                         10 ** int(token_metadata["decimals"]),
                         [
-                            Web3.toChecksumAddress(token_metadata["address"]),
-                            Web3.toChecksumAddress(
+                            Web3.to_checksum_address(token_metadata["address"]),
+                            Web3.to_checksum_address(
                                 worker_settings.contract_addresses.WETH,
                             ),
-                            Web3.toChecksumAddress(
+                            Web3.to_checksum_address(
                                 worker_settings.contract_addresses.USDT,
                             ),
                         ],
@@ -310,11 +310,11 @@ async def get_token_price_at_block_height(
                         )
                         * token_amount_multiplier,
                         [
-                            Web3.toChecksumAddress(token_metadata["address"]),
-                            Web3.toChecksumAddress(
+                            Web3.to_checksum_address(token_metadata["address"]),
+                            Web3.to_checksum_address(
                                 worker_settings.contract_addresses.WETH,
                             ),
-                            Web3.toChecksumAddress(
+                            Web3.to_checksum_address(
                                 worker_settings.contract_addresses.USDT,
                             ),
                         ],
@@ -358,10 +358,10 @@ async def get_token_price_at_block_height(
                 token_contract_obj.functions.getAmountsOut(
                     10 ** int(token_metadata["decimals"]),
                     [
-                        Web3.toChecksumAddress(
+                        Web3.to_checksum_address(
                             worker_settings.contract_addresses.WETH,
                         ),
-                        Web3.toChecksumAddress(
+                        Web3.to_checksum_address(
                             worker_settings.contract_addresses.USDT,
                         ),
                     ],
@@ -392,7 +392,7 @@ async def get_token_price_at_block_height(
 
 async def get_all_pairs_token_price(loop, redis_conn: aioredis.Redis = None):
     router_contract_obj = w3.eth.contract(
-        address=Web3.toChecksumAddress(
+        address=Web3.to_checksum_address(
             worker_settings.contract_addresses.iuniswap_v2_router,
         ),
         abi=router_contract_abi,
@@ -436,13 +436,13 @@ async def get_all_pairs_token_price(loop, redis_conn: aioredis.Redis = None):
 @provide_async_redis_conn_insta
 async def get_pair_tokens_price(pair, loop, redis_conn: aioredis.Redis = None):
     router_contract_obj = w3.eth.contract(
-        address=Web3.toChecksumAddress(
+        address=Web3.to_checksum_address(
             worker_settings.contract_addresses.iuniswap_v2_router,
         ),
         abi=router_contract_abi,
     )
 
-    pair_address = Web3.toChecksumAddress(pair)
+    pair_address = Web3.to_checksum_address(pair)
     rate_limiting_lua_scripts = await load_rate_limiter_scripts(redis_conn)
     pair_per_token_metadata = await get_pair_metadata(
         rate_limit_lua_script_shas=rate_limiting_lua_scripts,

@@ -179,7 +179,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             self.protocol_state_contract = self._anchor_rpc_helper.get_current_node()[
                 "web3_client"
             ].eth.contract(
-                address=Web3.toChecksumAddress(
+                address=Web3.to_checksum_address(
                     self.protocol_state_contract_address,
                 ),
                 abi=self.protocol_state_contract_abi,

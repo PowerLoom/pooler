@@ -106,7 +106,7 @@ class EventDetectorProcess(multiprocessing.Process):
         )
         self.contract_address = settings.protocol_state.address
         self.contract = self.rpc_helper.get_current_node()["web3_client"].eth.contract(
-            address=Web3.toChecksumAddress(
+            address=Web3.to_checksum_address(
                 self.contract_address,
             ),
             abi=self.contract_abi,
@@ -160,26 +160,26 @@ class EventDetectorProcess(multiprocessing.Process):
 
         events = []
         for log in events_log:
-            if log.event == "EpochReleased":
+            if log['event'] == "EpochReleased":
                 event = EpochReleasedEvent(
-                    begin=log.args.begin,
-                    end=log.args.end,
-                    epochId=log.args.epochId,
-                    timestamp=log.args.timestamp,
+                    begin=log['args']['begin'],
+                    end=log['args']['end'],
+                    epochId=log['args']['epochId'],
+                    timestamp=log['args']['timestamp'],
                     broadcastId=str(uuid.uuid4()),
                 )
-                events.append((log.event, event))
+                events.append((log['event'], event))
 
-            elif log.event == "SnapshotFinalized":
+            elif log['event'] == "SnapshotFinalized":
                 event = SnapshotFinalizedEvent(
-                    epochId=log.args.epochId,
-                    epochEnd=log.args.epochEnd,
-                    projectId=log.args.projectId,
-                    snapshotCid=log.args.snapshotCid,
-                    timestamp=log.args.timestamp,
+                    epochId=log['args']['epochId'],
+                    epochEnd=log['args']['epochEnd'],
+                    projectId=log['args']['projectId'],
+                    snapshotCid=log['args']['snapshotCid'],
+                    timestamp=log['args']['timestamp'],
                     broadcastId=str(uuid.uuid4()),
                 )
-                events.append((log.event, event))
+                events.append((log['event'], event))
 
         self._logger.info("Events: {}", events)
         return events

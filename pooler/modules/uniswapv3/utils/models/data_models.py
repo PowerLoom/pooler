@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, TypedDict
 from typing import List
 
 from pydantic import BaseModel
@@ -50,3 +50,7 @@ class epoch_event_trade_data(BaseModel):
     Mint: event_trade_data
     Burn: event_trade_data
     Trades: trade_data
+
+
+
+

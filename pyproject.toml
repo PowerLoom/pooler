@@ -33,6 +33,7 @@ ifps-client = {git = "https://git@github.com/PowerLoom/py-ipfs-client.git"}
 web3 = "^6.4.0"
 
 
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

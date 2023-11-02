@@ -62,6 +62,14 @@ class ContractAddresses(BaseModel):
         ...,
         example="0x0d4a11d5EEaaC28EC3F61d100daF4d40471f1852",
     )
+    WETH: str = Field(
+        ...,
+        example="0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+    )
+    MAKER: str = Field(
+        ...,
+        example="0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2",
+    )
 
 
 class Settings(BaseModel):

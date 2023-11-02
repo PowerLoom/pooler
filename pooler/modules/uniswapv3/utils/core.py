@@ -4,7 +4,6 @@ import json
 from redis import asyncio as aioredis
 from web3 import Web3
 
-from .constants import pair_contract_abi
 from .constants import UNISWAP_EVENTS_ABI
 from .constants import UNISWAP_TRADE_EVENT_SIGS
 from .helpers import get_pair_metadata
@@ -15,15 +14,8 @@ from .pricing import (
     get_token_price_in_block_range,
 )
 from pooler.modules.uniswapv3.total_value_locked import calculate_reserves
-from pooler.modules.uniswapv3.total_value_locked import calculate_tvl_from_ticks
 from pooler.modules.uniswapv3.total_value_locked import get_events
-from pooler.modules.uniswapv3.total_value_locked import transform_tick_bytes_to_list
-from pooler.modules.uniswapv3.utils.models.message_models import (
-    UniswapPairTotalReservesSnapshot,
-)
 from pooler.utils.default_logger import logger
-from pooler.utils.models.message_models import EpochBaseSnapshot
-from pooler.utils.rpc import get_contract_abi_dict
 from pooler.utils.rpc import get_event_sig_and_abi
 from pooler.utils.rpc import RpcHelper
 from pooler.utils.snapshot_utils import (
@@ -44,7 +36,7 @@ async def get_pair_reserves(
     core_logger.debug(
         f"Starting pair total reserves query for: {pair_address}",
     )
-    pair_address = Web3.toChecksumAddress(pair_address)
+    pair_address = Web3.to_checksum_address(pair_address)
 
     if fetch_timestamp:
         try:
@@ -101,7 +93,7 @@ async def get_pair_reserves(
         f"Total reserves fetched token prices for: {pair_address}",
     )
 
-    initial_reserves = calculate_reserves(
+    initial_reserves = await calculate_reserves(
         pair_address,
         from_block,
         pair_per_token_metadata,
@@ -113,7 +105,7 @@ async def get_pair_reserves(
         f"Total reserves fetched tick data for : {pair_address}",
     )
     # grab mint/burn events in range
-    events = get_events(
+    events = await get_events(
         pair_address=pair_address,
         rpc=rpc_helper,
         from_block=from_block,
@@ -128,20 +120,20 @@ async def get_pair_reserves(
     reserves_array = [initial_reserves]
     reserves_array = [
         [
-            reserves_array[-1][0] + event.args.amount0,
-            reserves_array[-1][1] + event.args.amount1,
+            reserves_array[-1][0] + event['args']['amount0'],
+            reserves_array[-1][1] + event['args']['amount1'],
         ]
-        if event.event == "Mint"
+        if event['event'] == "Mint"
         else [
-            reserves_array[-1][0] - event.args.amount0,
-            reserves_array[-1][1] - event.args.amount1,
+            reserves_array[-1][0] - event['args']['amount0'],
+            reserves_array[-1][1] - event['args']['amount1'],
         ]
         for event in events
     ]
 
     token0_decimals = pair_per_token_metadata["token0"]["decimals"]
     token1_decimals = pair_per_token_metadata["token1"]["decimals"]
-
+    
     pair_reserves_arr = dict()
     block_count = 0
     for block_num in range(from_block, to_block + 1):
@@ -333,7 +325,7 @@ async def get_pair_trade_volume(
     rpc_helper: RpcHelper,
     fetch_timestamp=True,
 ):
-    data_source_contract_address = Web3.toChecksumAddress(
+    data_source_contract_address = Web3.to_checksum_address(
         data_source_contract_address,
     )
     block_details_dict = dict()

@@ -70,7 +70,7 @@ async def startup_boilerplate():
     app.state.protocol_state_contract = app.state.anchor_rpc_helper.get_current_node()[
         "web3_client"
     ].eth.contract(
-        address=Web3.toChecksumAddress(
+        address=Web3.to_checksum_address(
             protocol_state_contract_address,
         ),
         abi=protocol_state_contract_abi,

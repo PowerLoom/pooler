@@ -11,3 +11,6 @@ uniswapTokenData
 **/*settings.json
 **/*.backup
 Powerloom
+.vscode
+.github
+.mypy_cache

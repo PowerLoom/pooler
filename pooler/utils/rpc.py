@@ -29,6 +29,7 @@ from web3.eth import AsyncEth
 from web3.types import TxParams
 from web3.types import Wei
 
+
 from pooler.settings.config import settings
 from pooler.utils.default_logger import logger
 from pooler.utils.exceptions import RPCException
@@ -218,7 +219,7 @@ class RpcHelper(object):
             retry_state.outcome.exception(),
         )
 
-    async def _async_web3_call(self, contract_function, redis_conn, from_address=None):
+    async def _async_web3_call(self, contract_function, redis_conn, from_address=None, block=None, overrides=None):
         """Make async web3 call"""
 
         @retry(
@@ -245,7 +246,7 @@ class RpcHelper(object):
                     rate_limit_lua_script_shas=self._rate_limit_lua_script_shas,
                     limit_incr_by=1,
                 )
-
+                # NOTE is there a reason this is set to 0? 
                 params: TxParams = {"gas": Wei(0), "gasPrice": Wei(0)}
 
                 if not contract_function.address:
@@ -283,7 +284,14 @@ class RpcHelper(object):
                 if from_address:
                     payload["from"] = from_address
 
-                data = await node["web3_client_async"].eth.call(payload)
+                data = await node["web3_client_async"].eth.call(
+                    payload, block_identifier=block, state_override=overrides
+                    )
+                
+                # if we're doing a state override call, at time of writing it means grabbing tick data
+                # more efficient to use eth_abi to decode rather than web3 codec
+                if overrides is not None:
+                    return data
 
                 decoded_data = node["web3_client_async"].codec.decode(
                     output_type,
@@ -357,7 +365,7 @@ class RpcHelper(object):
 
         return current_block
 
-    async def web3_call(self, tasks, redis_conn, from_address=None):
+    async def web3_call(self, tasks, redis_conn, from_address=None, block=None, overrides=None):
         """
         Call web3 functions in parallel
         """
@@ -370,6 +378,9 @@ class RpcHelper(object):
                     contract_function=task,
                     redis_conn=redis_conn,
                     from_address=from_address,
+                    block=block,
+                    overrides=overrides
+                
                 )
                 for task in tasks
             ]
@@ -636,7 +647,7 @@ class RpcHelper(object):
                 codec: ABICodec = web3_provider.codec
                 all_events = []
                 for log in event_log:
-                    abi = event_abi.get(log.topics[0].hex(), "")
+                    abi = event_abi.get(log['topics'][0].hex(), "")
                     evt = get_event_data(codec, abi, log)
                     all_events.append(evt)
 

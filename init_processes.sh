@@ -7,6 +7,11 @@ pm2 start pm2.config.js
 echo 'waiting for processes to start..';
 sleep 10
 
+
+# DEBUG MODE
+# poetry run python -m debugpy --listen 0.0.0.0:5678 --wait-for-client -m pooler.processhub_cmd start ProcessorDistributor
+# sleep 3
+
 poetry run python -m pooler.processhub_cmd start ProcessorDistributor
 sleep 3
 

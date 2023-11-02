@@ -1,3 +1,4 @@
+import asyncio
 import functools
 import json
 from typing import Union
@@ -9,10 +10,8 @@ from eth_typing.evm import ChecksumAddress
 from web3 import Web3
 from web3.contract import Contract
 
-from pooler.modules.uniswapv3.utils.constants import helper_contract_abi
-from pooler.modules.uniswapv3.utils.constants import max_gas_static_call
+from pooler.modules.uniswapv3.utils.constants import helper_contract
 from pooler.modules.uniswapv3.utils.constants import override_address
-from pooler.modules.uniswapv3.utils.constants import pair_contract_abi
 from pooler.modules.uniswapv3.utils.constants import univ3_helper_bytecode
 from pooler.modules.uniswapv3.utils.constants import UNISWAP_EVENTS_ABI
 
@@ -21,10 +20,10 @@ from pooler.utils.rpc import RpcHelper
 AddressLike = Union[Address, ChecksumAddress]
 
 
-def transform_tick_bytes_to_list(tickData):
+def transform_tick_bytes_to_list(tickData: bytes):
     # eth_abi decode tickdata as a bytes[]
     bytes_decoded_arr = abi.decode(
-        ("bytes[]", "(int128,int24)"), tickData, strict=False
+        ("bytes[]", "(int128,int24)"), tickData
     )
     ticks = [
         {
@@ -136,58 +135,34 @@ def _load_abi(path: str) -> str:
 
 
 async def calculate_reserves(
-    pair_address,
+    pair_address: str,
     from_block,
     pair_per_token_metadata,
     rpc_helper: RpcHelper,
     redis_conn,
 ):
-    w3_client = rpc_helper.get_current_node()
-    w3 = (
-        w3_client["web3_client_async"]
-        if w3_client["web3_client_async"]
-        else w3_client["web3_client"]
-    )
 
     # get token price function takes care of its own rate limit
     overrides = {
         override_address: {"code": univ3_helper_bytecode},
     }
-
-    override_contract = w3.eth.contract(
-        abi=helper_contract_abi, address=override_address
-    )
-
-    # create a web3 transaction object for a static state override call to the getTicks function of the helper
-    txn_params = override_contract.functions.getTicks(
-        Web3.to_checksum_address(pair_address)
-    ).build_transaction(
-        {
-            "gas": max_gas_static_call,
-        },
-    )
-
-    # get tick data
-    # build a web3 eth_call with txn_params and use overrides for state override calls
-    response = w3.eth.call(
-        txn_params, block_identifier=from_block, state_override=overrides
-    )
-
-    # to_checksum_address the helper address, and make an eth_call to get the tick data
-    # the call functions in rpc_helper.py do not correctly decode the tick byte data
-
-    ticks_list = transform_tick_bytes_to_list(response)
-    pair_contract_obj: Contract = w3.eth.contract(
-        address=Web3.to_checksum_address(pair_address),
-        abi=pair_contract_abi,
-    )
-
-    tasks = [
-        pair_contract_obj.functions.slot0(),
+    
+    tick_tasks = [helper_contract.functions.getTicks(pair_address)]
+    slot0_tasks: list(Contract.functions) = [
+        helper_contract.functions.slot0(),
     ]
+    
+    # cant batch these tasks due to implementation of web3_call re: state override
+    tickDataResponse, slot0Response = await asyncio.gather(
+        rpc_helper.web3_call(tick_tasks, redis_conn, overrides=overrides, block=from_block),
+        rpc_helper.web3_call(slot0_tasks, redis_conn, block=from_block),
+        )
+        
 
-    slot0 = await rpc_helper.web3_call(tasks, redis_conn)
-    sqrt_price = slot0[0][0]
+    ticks_list = transform_tick_bytes_to_list(tickDataResponse[0])
+    slot0 = slot0Response[0]
+
+    sqrt_price = slot0[0]
     t0_reserves, t1_reserves = calculate_tvl_from_ticks(
         ticks_list,
         pair_per_token_metadata,
