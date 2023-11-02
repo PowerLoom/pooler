@@ -348,6 +348,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             timeout=Timeout(timeout=settings.web3storage.timeout),
             follow_redirects=False,
             transport=self._web3_storage_upload_transport,
+            headers={'Authorization': 'Bearer ' + settings.web3storage.api_token},
         )
 
     async def init(self):
