@@ -17,7 +17,7 @@ from pooler.modules.uniswapv3.utils.constants import override_address
 from pooler.modules.uniswapv3.utils.constants import univ3_helper_bytecode
 from pooler.modules.uniswapv3.utils.constants import UNISWAP_EVENTS_ABI
 
-from pooler.utils.rpc import RpcHelper
+from pooler.utils.rpc import RpcHelper, get_event_sig_and_abi
 
 AddressLike = Union[Address, ChecksumAddress]
 
@@ -103,49 +103,23 @@ async def get_events(
 
     redis_con,
 ):
-    # TODO abstract this out to a existing function
-    mint_topic = Web3.keccak(
-        text=UNISWAP_TRADE_EVENT_SIGS.get("Mint"),  
-    ).hex()
-    burn_topic = Web3.keccak(
-        text=UNISWAP_TRADE_EVENT_SIGS.get("Burn"),
-    ).hex()
 
-    topics = [[mint_topic], [burn_topic]]
-
-
+    event_sig, event_abi = get_event_sig_and_abi(
+        UNISWAP_TRADE_EVENT_SIGS,
+        UNISWAP_EVENTS_ABI,
+    )
     
-    event_abi = dict()
     
-    event_abi[mint_topic] = UNISWAP_EVENTS_ABI.get("Mint")
-    event_abi[burn_topic] = UNISWAP_EVENTS_ABI.get("Burn")
-
-    
-    try: 
-        mint_events, burn_events =  await asyncio.gather(
-            rpc.get_events_logs(
-            contract_address=pair_address,
-            to_block=to_block,
-            from_block=from_block,
-            topics=topics[0],
-            event_abi=event_abi,
-            redis_conn=redis_con,
-            ),
-            rpc.get_events_logs(
-                contract_address=pair_address,
-                to_block=to_block,
-                from_block=from_block,
-                topics=topics[1],
-                event_abi=event_abi,
-                redis_conn=redis_con,
-                )
-            )
-    except Exception as e:
-        # bubble
-        raise e
-    
+    mint_events, burn_events =  await rpc.get_events_logs(
+        contract_address=pair_address,
+        to_block=to_block,
+        from_block=from_block,
+        topics=event_sig,
+        event_abi=event_abi,
+        redis_conn=redis_con,
+        ) 
     events = mint_events + burn_events
-    
+
     return events
 
 

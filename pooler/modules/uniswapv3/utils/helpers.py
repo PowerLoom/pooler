@@ -311,7 +311,7 @@ async def get_token_eth_price_dict(
             
                 # cache price at height
         if len(token_eth_price_dict) > 0:
-            
+
             redis_cache_mapping = {
                 json.dumps({"blockHeight": height, "price": price}): int(
                     height,
@@ -335,6 +335,7 @@ async def get_token_eth_price_dict(
 
     except Exception as e:
         # TODO BETTER ERROR HANDLING
+        helper_logger.debug(f"error while fetching token price for {token_address}, error_msg:{e}") 
         raise e
     
 
