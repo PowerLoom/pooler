@@ -201,7 +201,7 @@ def extract_trade_volume_log(
     token1_amount_usd = 0
 
     def token_native_and_usd_amount(token, token_type, token_price_map):
-        if log['args'].get(token_type) <= 0:
+        if log['args'].get(token_type) == 0:
             return 0, 0
 
         token_amount = log['args'].get(token_type) / 10 ** int(
