@@ -36,7 +36,7 @@ from snapshotter.utils.models.data_models import ProcessorWorkerDetails, Snapsho
 from snapshotter.utils.models.data_models import SnapshotterPing
 from snapshotter.utils.models.message_models import ProcessHubCommand
 from snapshotter.utils.rabbitmq_helpers import RabbitmqSelectLoopInteractor
-from snapshotter.utils.redis.redis_conn import REDIS_CONN_CONF, provide_redis_conn
+from snapshotter.utils.redis.redis_conn import REDIS_CONN_CONF, provide_redis_conn_repsawning_thread
 from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key, epoch_id_project_to_state_mapping
 from snapshotter.utils.rpc import RpcHelper
 from snapshotter.utils.snapshot_worker import SnapshotAsyncWorker
@@ -77,6 +77,7 @@ class ProcessHubCore(Process):
         self._last_reporting_service_ping = 0
         self._last_epoch_processing_health_check = 0
         self._start_time = 0
+        self._last_respawn_time = 0
         self._source_chain_block_time = 0
         self._epoch_size = 0
         self._thread_shutdown_event = threading.Event()
@@ -129,42 +130,49 @@ class ProcessHubCore(Process):
                 self._logger.debug('Process ID {} joined...', pid)
                 break
 
-    @provide_redis_conn
+    @provide_redis_conn_repsawning_thread
     def internal_state_reporter(self, redis_conn: redis.Redis = None):
         while not self._thread_shutdown_event.wait(timeout=2):
-            proc_id_map = dict()
-            for k, v in self._spawned_processes_map.items():
-                if v:
-                    proc_id_map[k] = v
-                else:
-                    proc_id_map[k] = -1
-            proc_id_map['callback_workers'] = dict()
-            for (
-                k,
-                unique_worker_entries,
-            ) in self._spawned_cb_processes_map.items():
-                proc_id_map['callback_workers'][k] = dict()
-                for (
-                    worker_unique_id,
-                    worker_process_details,
-                ) in unique_worker_entries.items():
-                    if worker_process_details is not None:
-                        proc_id_map['callback_workers'][k][worker_unique_id] = {
-                            'pid': worker_process_details.pid,
-                            'id': worker_process_details.unique_name,
-                        }
+            if self._last_respawn_time == 0 or (self._last_respawn_time != 0 and int(time.time()) - self._last_respawn_time >= 30):
+                # allow time for callback workers to fully respawn before writing process table update
+                proc_id_map = dict()
+                for k, v in self._spawned_processes_map.items():
+                    if v:
+                        proc_id_map[k] = v
                     else:
-                        proc_id_map['callback_workers'][k][worker_unique_id] = {
-                            'pid': 'null',
-                            'id': '',
-                        }
-            proc_id_map['callback_workers'] = json.dumps(
-                proc_id_map['callback_workers'],
-            )
-            redis_conn.hset(
-                name=f'powerloom:snapshotter:{settings.namespace}:{settings.instance_id}:Processes',
-                mapping=proc_id_map,
-            )
+                        proc_id_map[k] = -1
+                proc_id_map['callback_workers'] = dict()
+                for (
+                    k,
+                    unique_worker_entries,
+                ) in self._spawned_cb_processes_map.items():
+                    proc_id_map['callback_workers'][k] = dict()
+                    for (
+                        worker_unique_id,
+                        worker_process_details,
+                    ) in unique_worker_entries.items():
+                        if worker_process_details is not None:
+                            proc_id_map['callback_workers'][k][worker_unique_id] = {
+                                'pid': worker_process_details.pid,
+                                'id': worker_process_details.unique_name,
+                            }
+                        else:
+                            proc_id_map['callback_workers'][k][worker_unique_id] = {
+                                'pid': 'null',
+                                'id': '',
+                            }
+                proc_id_map['callback_workers'] = json.dumps(
+                    proc_id_map['callback_workers'],
+                )
+                try:
+                    redis_conn.hset(
+                        name=f'powerloom:snapshotter:{settings.namespace}:{settings.instance_id}:Processes',
+                        mapping=proc_id_map,
+                    )
+                except Exception as e:
+                    self._logger.opt(exception=True).error(
+                        'Error while updating process map in redis: {}', e,
+                    )
             if settings.reporting.service_url and int(time.time()) - self._last_reporting_service_ping >= 30:
                 self._last_reporting_service_ping = int(time.time())
                 try:
@@ -179,19 +187,16 @@ class ProcessHubCore(Process):
                         self._logger.error(
                             'Error while pinging reporting service: {}', e,
                         )
-            if int(time.time()) - self._last_epoch_processing_health_check >= 60:
-                if self._source_chain_block_time != 0 and self._epoch_size != 0:
-                    if int(time.time()) - self._start_time <= 4 * self._source_chain_block_time * self._epoch_size:
-                        # self._logger.info(
-                        #     'Skipping epoch processing health check because '
-                        #     'not enough time has passed for 4 epochs to consider health check since process start | '
-                        #     'Start time: {} | Currentime: {} | Source chain block time: {}',
-                        #     datetime.fromtimestamp(self._start_time).isoformat(),
-                        #     datetime.now().isoformat(),
-                        #     self._source_chain_block_time,
-                        # )
-                        continue
-                else:
+            if int(time.time()) - self._last_epoch_processing_health_check <= 4 * self._source_chain_block_time * self._epoch_size:
+                # self._logger.info(
+                #     'Skipping epoch processing health check because '
+                #     'not enough time has passed for 4 epochs to consider health check since last health check | '
+                #     'Start time: {} | Currentime: {} | Source chain block time: {}',
+                #     datetime.fromtimestamp(self._start_time).isoformat(),
+                #     datetime.now().isoformat(),
+                #     self._source_chain_block_time,
+                # )
+                if not (self._source_chain_block_time != 0 and self._epoch_size != 0):
                     self._logger.info(
                         'Skipping epoch processing health check because source chain block time or epoch size is not known | '
                         'Source chain block time: {} | Epoch size: {}',
@@ -296,11 +301,27 @@ class ProcessHubCore(Process):
                     )
                     self._logger.info('Proceeding to respawn all children because epochs were found unhealthy: {}', epoch_health)
                     self._respawn_all_children()
+                    time.sleep(10)
         self._logger.error(
             (
                 'Caught thread shutdown notification event. Deleting process'
                 ' worker map in redis...'
             ),
+        )
+        send_failure_notifications_sync(
+            client=self._httpx_client,
+            message=SnapshotterIssue(
+                instanceID=settings.instance_id,
+                issueType=SnapshotterReportState.CRASHED_CHILD_WORKER.value,
+                projectID='',
+                epochId='',
+                timeOfReporting=datetime.now().isoformat(),
+                extra=json.dumps(
+                    {
+                        'message': 'internal thread shutdown event caught and deleting process worker map in redis',
+                    }
+                ),
+            )
         )
         redis_conn.delete(
             f'powerloom:snapshotter:{settings.namespace}:{settings.instance_id}:Processes',
@@ -486,7 +507,7 @@ class ProcessHubCore(Process):
         self._kill_all_children()
         self._launch_all_children()
         self._start_time = time.time()
-        self._last_epoch_processing_health_check = 0
+        self._last_respawn_time = int(time.time())
 
     def _launch_all_children(self):
         self._logger.debug('=' * 80)
