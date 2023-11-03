@@ -66,7 +66,6 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
         self._running_callback_tasks: Dict[str, asyncio.Task] = dict()
         super(GenericAsyncWorker, self).__init__(name=name, **kwargs)
-        self._logger = logger.bind(module=self.name)
         self.protocol_state_contract = None
         self._qos = 20
 
@@ -368,6 +367,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._initialized = True
 
     def run(self) -> None:
+        self._logger = logger.bind(module=self.name)
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         resource.setrlimit(
             resource.RLIMIT_NOFILE,

@@ -187,10 +187,11 @@ class ProcessHubCore(Process):
                         self._logger.error(
                             'Error while pinging reporting service: {}', e,
                         )
-            if int(time.time()) - self._last_epoch_processing_health_check <= 4 * self._source_chain_block_time * self._epoch_size:
+            if (self._last_epoch_processing_health_check != 0 and int(time.time()) - self._last_epoch_processing_health_check > 4 * self._source_chain_block_time * self._epoch_size) or \
+                    (self._last_epoch_processing_health_check == 0 and self._start_time != 0 and int(time.time()) - self._start_time > 4 * self._source_chain_block_time * self._epoch_size):
                 # self._logger.info(
                 #     'Skipping epoch processing health check because '
-                #     'not enough time has passed for 4 epochs to consider health check since last health check | '
+                #     'not enough time has passed for 4 epochs to consider health check since last health check or start time | '
                 #     'Start time: {} | Currentime: {} | Source chain block time: {}',
                 #     datetime.fromtimestamp(self._start_time).isoformat(),
                 #     datetime.now().isoformat(),

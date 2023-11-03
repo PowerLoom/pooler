@@ -179,8 +179,7 @@ class RpcHelper(object):
                     },
                 )
             except Exception as exc:
-
-                self._logger.opt(exception=True).error(
+                self._logger.opt(exception=settings.logs.trace_enabled).error(
                     (
                         'Error while initialising one of the web3 providers,'
                         f' err_msg: {exc}'
@@ -297,8 +296,7 @@ class RpcHelper(object):
                     underlying_exception=e,
                     extra_info={'msg': str(e)},
                 )
-
-                self._logger.opt(lazy=True).trace(
+                self._logger.opt(exception=settings.logs.trace_enabled).error(
                     (
                         'Error while making web3 batch call'
                     ),

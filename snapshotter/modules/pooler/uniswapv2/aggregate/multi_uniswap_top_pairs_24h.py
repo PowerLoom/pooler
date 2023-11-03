@@ -18,7 +18,6 @@ class AggreagateTopPairsProcessor(GenericProcessorAggregate):
 
     def __init__(self) -> None:
         self.transformation_lambdas = []
-        self._logger = logger.bind(module='AggregateTopPairsProcessor')
 
     async def compute(
         self,
@@ -31,7 +30,8 @@ class AggreagateTopPairsProcessor(GenericProcessorAggregate):
         project_id: str,
 
     ):
-        self._logger.info(f'Calculating 24h top pairs trade volume and reserves data for {msg_obj}')
+        self._logger = logger.bind(module='AggregateTopPairsProcessor')
+        self._logger.info(f'Calculating 24h top pairs trade volume and reserves data')
 
         epoch_id = msg_obj.epochId
 
