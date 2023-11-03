@@ -97,9 +97,9 @@ class GenericAsyncWorker(multiprocessing.Process):
         retry=tenacity.retry_if_not_exception_type(httpx.HTTPStatusError),
         after=web3_storage_retry_state_callback,
     )
-    async def _upload_web3_storage(self, snapshot: Union[BaseModel, AggregateBase]):
+    async def _upload_web3_storage(self, snapshot: bytes):
         web3_storage_settings = settings.web3storage
-        files = {'file': json.dumps(snapshot.dict(by_alias=True), sort_keys=True).encode('utf-8')}
+        files = {'file': snapshot}
         r = await self._web3_storage_upload_client.post(
             url=f'{web3_storage_settings.url}{web3_storage_settings.upload_url_suffix}',
             files=files,
@@ -123,8 +123,10 @@ class GenericAsyncWorker(multiprocessing.Process):
     ):
         # payload commit sequence begins
         # upload to IPFS
+        snapshot_json = json.dumps(snapshot.dict(by_alias=True), sort_keys=True)
+        snapshot_bytes = snapshot_json.encode('utf-8')
         try:
-            snapshot_cid = await _ipfs_writer_client.add_bytes(json.dumps(snapshot.dict(by_alias=True), sort_keys=True).encode('utf-8'))
+            snapshot_cid = await _ipfs_writer_client.add_bytes(snapshot_bytes)
         except Exception as e:
             self._logger.opt(exception=True).error(
                 'Exception uploading snapshot to IPFS for epoch {}: {}, Error: {},'
@@ -149,7 +151,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             )
             await self._redis_conn.zadd(
                 name=submitted_unfinalized_snapshot_cids(project_id),
-                mapping={unfinalized_entry.json(): epoch.epochId},
+                mapping={unfinalized_entry.json(sort_keys=True): epoch.epochId},
             )
             # publish snapshot submitted event to event detector queue
             snapshot_submitted_message = PowerloomSnapshotSubmittedMessage(
@@ -205,7 +207,7 @@ class GenericAsyncWorker(multiprocessing.Process):
 
         # upload to web3 storage
         if storage_flag:
-            asyncio.ensure_future(self._upload_web3_storage(snapshot))
+            asyncio.ensure_future(self._upload_web3_storage(snapshot_bytes))
 
     async def _rabbitmq_consumer(self, loop):
         self._rmq_connection_pool = Pool(get_rabbitmq_robust_connection_async, max_size=5, loop=loop)
