@@ -2,13 +2,18 @@ import asyncio
 import json
 import multiprocessing
 import resource
-from signal import SIGINT, SIGQUIT, SIGTERM
 import time
 from functools import partial
+from signal import SIGINT
+from signal import signal
+from signal import SIGQUIT
+from signal import SIGTERM
 from typing import Dict
 from typing import Union
 from uuid import uuid4
-from signal import signal
+
+import httpx
+import tenacity
 from aio_pika import IncomingMessage
 from aio_pika import Message
 from aio_pika.pool import Pool
@@ -17,35 +22,42 @@ from httpx import AsyncClient
 from httpx import AsyncHTTPTransport
 from httpx import Limits
 from httpx import Timeout
-import httpx
+from ipfs_client.main import AsyncIPFSClient
 from pydantic import BaseModel
 from redis import asyncio as aioredis
+from tenacity import retry
+from tenacity import stop_after_attempt
+from tenacity import wait_random_exponential
 from web3 import Web3
-from ipfs_client.main import AsyncIPFSClient
-from tenacity import retry, stop_after_attempt, wait_random_exponential
-import tenacity
+
 from snapshotter.settings.config import settings
-from snapshotter.utils.callback_helpers import get_rabbitmq_channel, send_failure_notifications_async
+from snapshotter.utils.callback_helpers import get_rabbitmq_channel
 from snapshotter.utils.callback_helpers import get_rabbitmq_robust_connection_async
+from snapshotter.utils.callback_helpers import send_failure_notifications_async
 from snapshotter.utils.data_utils import get_source_chain_id
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.file_utils import read_json_file
-from snapshotter.utils.models.data_models import SnapshotterIssue, SnapshotterReportState, SnapshotterStates, UnfinalizedSnapshot
+from snapshotter.utils.models.data_models import SnapshotterIssue
+from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
+from snapshotter.utils.models.data_models import UnfinalizedSnapshot
 from snapshotter.utils.models.message_models import AggregateBase
 from snapshotter.utils.models.message_models import PayloadCommitMessage
 from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
 from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
 from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessage
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
-from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping, submitted_unfinalized_snapshot_cids
+from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
+from snapshotter.utils.redis.redis_keys import submitted_unfinalized_snapshot_cids
 from snapshotter.utils.rpc import RpcHelper
 
 
 def web3_storage_retry_state_callback(retry_state: tenacity.RetryCallState):
     if retry_state and retry_state.outcome.failed:
-        logger.warning(f'Encountered web3 storage upload exception: {retry_state.outcome.exception()} | args: {retry_state.args}, kwargs:{retry_state.kwargs}')
+        logger.warning(
+            f'Encountered web3 storage upload exception: {retry_state.outcome.exception()} | args: {retry_state.args}, kwargs:{retry_state.kwargs}',
+        )
 
 
 class GenericAsyncWorker(multiprocessing.Process):
@@ -123,7 +135,7 @@ class GenericAsyncWorker(multiprocessing.Process):
     ):
         # payload commit sequence begins
         # upload to IPFS
-        snapshot_json = json.dumps(snapshot.dict(by_alias=True), sort_keys=True)
+        snapshot_json = json.dumps(snapshot.dict(by_alias=True), sort_keys=True, separators=(',', ':'))
         snapshot_bytes = snapshot_json.encode('utf-8')
         try:
             snapshot_cid = await _ipfs_writer_client.add_bytes(snapshot_bytes)
