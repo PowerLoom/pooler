@@ -99,7 +99,7 @@ class GenericAsyncWorker(multiprocessing.Process):
     )
     async def _upload_web3_storage(self, snapshot: Union[BaseModel, AggregateBase]):
         web3_storage_settings = settings.web3storage
-        files = {'file': json.dumps(snapshot.dict(by_alias=True)).encode('utf-8')}
+        files = {'file': json.dumps(snapshot.dict(by_alias=True), sort_keys=True).encode('utf-8')}
         r = await self._web3_storage_upload_client.post(
             url=f'{web3_storage_settings.url}{web3_storage_settings.upload_url_suffix}',
             files=files,
@@ -124,7 +124,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         # payload commit sequence begins
         # upload to IPFS
         try:
-            snapshot_cid = await _ipfs_writer_client.add_json(snapshot.dict(by_alias=True))
+            snapshot_cid = await _ipfs_writer_client.add_bytes(json.dumps(snapshot.dict(by_alias=True), sort_keys=True).encode('utf-8'))
         except Exception as e:
             self._logger.opt(exception=True).error(
                 'Exception uploading snapshot to IPFS for epoch {}: {}, Error: {},'
