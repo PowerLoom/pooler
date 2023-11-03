@@ -151,8 +151,8 @@ async def get_pair_reserves(
             if event['name'] == 'Mint' 
             else acc - event['args']['amount1'], events_in_block, 0)
         
-        token0USD = token0Amount * token0_price_map.get(block_num, 0)
-        token1USD = token1Amount * token1_price_map.get(block_num, 0)
+        token0USD = token0Amount * token0_price_map.get(block_num, 0) * (10 ** -int(pair_per_token_metadata["token0"]["decimals"]))
+        token1USD = token1Amount * (1 / token1_price_map.get(block_num, 0)) * (10 ** -int(pair_per_token_metadata["token1"]["decimals"]))
         
 
         token0Price = token0_price_map.get(block_num, 0)
