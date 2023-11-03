@@ -17,6 +17,7 @@ from httpx import AsyncClient
 from httpx import AsyncHTTPTransport
 from httpx import Limits
 from httpx import Timeout
+import httpx
 from pydantic import BaseModel
 from redis import asyncio as aioredis
 from web3 import Web3
@@ -40,6 +41,11 @@ from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMe
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping, submitted_unfinalized_snapshot_cids
 from snapshotter.utils.rpc import RpcHelper
+
+
+def web3_storage_retry_state_callback(retry_state: tenacity.RetryCallState):
+    if retry_state and retry_state.outcome.failed:
+        logger.warning(f'Encountered web3 storage upload exception: {retry_state.outcome.exception()} | args: {retry_state.args}, kwargs:{retry_state.kwargs}')
 
 
 class GenericAsyncWorker(multiprocessing.Process):
@@ -85,21 +91,22 @@ class GenericAsyncWorker(multiprocessing.Process):
         if signum in [SIGINT, SIGTERM, SIGQUIT]:
             self._core_rmq_consumer.cancel()
 
-    def _web3_storage_retry_state_callback(self, retry_state: tenacity.RetryCallState):
-        if retry_state and retry_state.outcome.failed:
-            self._logger.warning(f'Encountered web3 storage upload exception: {retry_state.outcome.exception()} | args: {retry_state.args}, kwargs:{retry_state.kwargs}')
-
     @retry(
         wait=wait_random_exponential(multiplier=1, max=10),
         stop=stop_after_attempt(5),
+        retry=tenacity.retry_if_not_exception_type(httpx.HTTPStatusError),
+        after=web3_storage_retry_state_callback,
     )
     async def _upload_web3_storage(self, snapshot: Union[BaseModel, AggregateBase]):
         web3_storage_settings = settings.web3storage
-        await self._web3_storage_upload_client.post(
+        files = {'file': json.dumps(snapshot.dict(by_alias=True)).encode('utf-8')}
+        r = await self._web3_storage_upload_client.post(
             url=f'{web3_storage_settings.url}{web3_storage_settings.upload_url_suffix}',
-            json=snapshot.dict(by_alias=True),
+            files=files,
         )
-        self._logger.info('Uploaded snapshot to web3 storage: {}', snapshot)
+        r.raise_for_status()
+        resp = r.json()
+        self._logger.info('Uploaded snapshot to web3 storage: {} | Response: {}', snapshot, resp)
 
     async def _commit_payload(
             self,
