@@ -68,8 +68,8 @@ class DelegateAsyncWorker(GenericAsyncWorker):
                 response_msg=result,
             )
         except Exception as e:
-            self._logger.opt(exception=True).error(
-                'Exception while processing tx receipt fetch for {}', msg_obj,
+            self._logger.opt(exception=settings.logs.trace_enabled).error(
+                'Exception while processing tx receipt fetch for {}: {}', msg_obj, e
             )
 
             notification_message = DelegateTaskProcessorIssue(
@@ -117,7 +117,7 @@ class DelegateAsyncWorker(GenericAsyncWorker):
                 )
 
         except Exception as e:
-            self._logger.opt(exception=True).error(
+            self._logger.opt(exception=settings.logs.trace_enabled).error(
                 (
                     'Exception sending message to delegate :'
                     ' {} | dump: {}'

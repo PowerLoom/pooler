@@ -2,7 +2,7 @@ import json
 
 from pydantic import ValidationError
 from redis import asyncio as aioredis
-
+from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.generic_delegator_preloader import DelegatorPreloaderAsyncWorker
 from snapshotter.utils.helper_functions import preloading_entry_exit_logger
@@ -18,7 +18,6 @@ class TxPreloadWorker(DelegatorPreloaderAsyncWorker):
     def __init__(self) -> None:
         super(TxPreloadWorker, self).__init__()
         self._task_type = 'txreceipt'
-        self._logger = logger.bind(module='TxPreloadWorker')
 
     async def _handle_filter_worker_response_message(self, message: bytes):
         try:
@@ -26,7 +25,7 @@ class TxPreloadWorker(DelegatorPreloaderAsyncWorker):
                 PowerloomDelegateTxReceiptWorkerResponseMessage.parse_raw(message)
             )
         except ValidationError:
-            self._logger.opt(exception=True).error(
+            self._logger.opt(exception=settings.logs.trace_enabled).error(
                 'Bad message structure of txreceiptResponse',
             )
             return
@@ -69,6 +68,7 @@ class TxPreloadWorker(DelegatorPreloaderAsyncWorker):
 
     @preloading_entry_exit_logger
     async def compute(self, epoch: EpochBase, redis_conn: aioredis.Redis, rpc_helper: RpcHelper):
+        self._logger = logger.bind(module='TxPreloadWorker')
         self._epoch = epoch
         self._redis_conn = redis_conn
 

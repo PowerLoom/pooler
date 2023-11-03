@@ -71,10 +71,6 @@ class GenericAsyncWorker(multiprocessing.Process):
 
         self._rate_limiting_lua_scripts = None
 
-        self.protocol_state_contract_abi = read_json_file(
-            settings.protocol_state.abi,
-            self._logger,
-        )
         self.protocol_state_contract_address = settings.protocol_state.address
         self._commit_payload_exchange = (
             f'{settings.rabbitmq.setup.commit_payload.exchange}:{settings.namespace}'
@@ -368,6 +364,10 @@ class GenericAsyncWorker(multiprocessing.Process):
 
     def run(self) -> None:
         self._logger = logger.bind(module=self.name)
+        self.protocol_state_contract_abi = read_json_file(
+            settings.protocol_state.abi,
+            self._logger,
+        )
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         resource.setrlimit(
             resource.RLIMIT_NOFILE,
