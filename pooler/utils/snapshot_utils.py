@@ -52,17 +52,15 @@ def safeDiv(numerator, denominator):
 
 
 def sqrtPriceX96ToTokenPrices(sqrtPriceX96, token0_decimals, token1_decimals):
-    num = Decimal(sqrtPriceX96) ** 2
-    denom = Decimal(Q192)
-    price1 = (
-        num
-        / denom
-        * exponentToBigDecimal(token0_decimals)
-        / exponentToBigDecimal(token1_decimals)
-    )
-    price0 = safeDiv(Decimal("1"), price1)
-    return [price0, price1]
+    # https://blog.uniswap.org/uniswap-v3-math-primer
 
+    price0 = ((sqrtPriceX96 / (2**96))** 2) / (10 ** token1_decimals / 10 ** token0_decimals)
+    price1 = 1 / price0
+    
+    price0 = round(price0, token0_decimals)
+    price1 = round(price1, token1_decimals)
+
+    return price0, price1
 
 async def get_eth_price_usd(
     from_block,
@@ -83,7 +81,9 @@ async def get_eth_price_usd(
             min=int(from_block),
             max=int(to_block),
         )
+    
         if cached_price_dict and len(cached_price_dict) == to_block - (from_block - 1):
+            
             price_dict = {
                 json.loads(
                     price.decode(
@@ -136,35 +136,32 @@ async def get_eth_price_usd(
             dai_eth_sqrt_price_x96 = dai_eth_slot0_list[block_count][0]
             usdc_eth_sqrt_price_x96 = usdc_eth_slot0_list[block_count][0]
             usdt_eth_sqrt_price_x96 = usdt_eth_slot0_list[block_count][0]
-
+            # 1 dai / x ether  1 ether / x dai
             eth_dai_price, dai_eth_price = sqrtPriceX96ToTokenPrices(
                 sqrtPriceX96=dai_eth_sqrt_price_x96,
                 token0_decimals=TOKENS_DECIMALS["DAI"],
                 token1_decimals=TOKENS_DECIMALS["WETH"],
+            
             )
 
             eth_usdc_price_, usdc_eth_price_ = sqrtPriceX96ToTokenPrices(
                 sqrtPriceX96=usdc_eth_sqrt_price_x96,
                 token0_decimals=TOKENS_DECIMALS["USDC"],
                 token1_decimals=TOKENS_DECIMALS["WETH"],
+            
             )
 
-            eth_usdt_price_, usdt_eth_price_ = sqrtPriceX96ToTokenPrices(
+            usdt_eth_price_, eth_usdt_price_ = sqrtPriceX96ToTokenPrices(
                 sqrtPriceX96=usdt_eth_sqrt_price_x96,
-                token0_decimals=TOKENS_DECIMALS["USDT"],
-                token1_decimals=TOKENS_DECIMALS["WETH"],
+                token0_decimals=TOKENS_DECIMALS["WETH"],
+                token1_decimals=TOKENS_DECIMALS["USDT"],
+            
             )
-
-            # eth_usdt_price, usdt_eth_price = float(
-            #     price1,
-            # ) / 10 ** (
-            #     token0.decimals + token1.decimals
-            # ), float(price0) * 10 ** (token0.decimals + token1.decimals)
 
             # using fixed weightage for now, will use liquidity based weightage later
 
             eth_price_usd = (eth_dai_price + eth_usdc_price_ + eth_usdt_price_) / 3
-
+            
             eth_price_usd_dict[block_num] = float(eth_price_usd)
             redis_cache_mapping[
                 json.dumps(
@@ -173,6 +170,7 @@ async def get_eth_price_usd(
             ] = int(block_num)
             block_count += 1
 
+        
         # cache price at height
         source_chain_epoch_size = int(
             await redis_conn.get(source_chain_epoch_size_key())
@@ -188,7 +186,7 @@ async def get_eth_price_usd(
                 max=int(from_block) - source_chain_epoch_size * 4,
             ),
         )
-
+        
         return eth_price_usd_dict
 
     except Exception as err:
@@ -299,6 +297,7 @@ async def warm_up_cache_for_snapshot_constructors(
             to_block=to_block,
             redis_conn=redis_conn,
             rpc_helper=rpc_helper,
+            logger=rpc_helper._logger
         ),
         get_block_details_in_block_range(
             from_block=from_block,

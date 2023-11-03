@@ -1,19 +1,22 @@
 import asyncio
 import functools
 from functools import reduce
+import json
 
 from redis import asyncio as aioredis
 from web3 import Web3
 
 from ..redis_keys import uniswap_pair_contract_tokens_addresses
+from ..redis_keys import uniswap_cached_block_height_token_eth_price
 from ..redis_keys import uniswap_pair_contract_tokens_data
 from ..redis_keys import uniswap_tokens_pair_map
 from ..settings.config import settings as worker_settings
 from .constants import current_node
 from .constants import erc20_abi
 from .constants import pair_contract_abi
+from .constants import quoter_1inch_contract_abi
 from pooler.utils.default_logger import logger
-from pooler.utils.rpc import RpcHelper
+from pooler.utils.rpc import RpcHelper, get_contract_abi_dict
 
 
 helper_logger = logger.bind(module="PowerLoom|Uniswap|Helpers")
@@ -174,6 +177,7 @@ async def get_pair_metadata(
             tasks.append(token0.functions.symbol())
             tasks.append(token0.functions.decimals())
 
+
             # if Web3.to_checksum_address(
             #     worker_settings.contract_addresses.MAKER,
             # ) == Web3.to_checksum_address(token1Addr):
@@ -250,3 +254,92 @@ async def get_pair_metadata(
             ),
         )
         raise err
+    
+
+async def get_token_eth_price_dict(
+    token_address: str,
+    token_decimals: int,
+    from_block,
+    to_block,
+    redis_conn,
+    rpc_helper: RpcHelper,
+    ):
+    """
+    returns a dict of token price in eth for each block and stores it in redis
+    """
+    
+    token_address = Web3.to_checksum_address(token_address)
+    # check if cache exists
+    token_eth_price_dict = dict()
+    cached_token_price_dict = await redis_conn.zrangebyscore(
+        name=uniswap_cached_block_height_token_eth_price.format(token_address),
+        min=from_block,
+        max=to_block,
+    )
+    if len(cached_token_price_dict) > 0:
+        token_eth_price_dict = {
+            int(json.loads(price)["blockHeight"]): json.loads(price)["price"]
+            for price in cached_token_price_dict
+        }
+        
+        return token_eth_price_dict
+
+    # get token price function takes care of its own rate limit
+    try: 
+        # 1 token / x token
+        token_eth_quote = await rpc_helper.batch_eth_call_on_block_range(
+            abi_dict= get_contract_abi_dict(
+                abi=quoter_1inch_contract_abi
+            ),
+            contract_address=worker_settings.contract_addresses.QUOTER_1INCH,
+            from_block=from_block,
+            to_block=to_block,
+            function_name="getRateToEth",
+            params=[
+                token_address,
+                True
+            ],
+            redis_conn=redis_conn,
+        )
+        block_counter = 0
+        # parse token_eth_quote and store in dict
+        if len(token_eth_quote) > 0:
+            token_eth_quote = [1 / (quote[0] * (10 ** (-36 + token_decimals))) for quote in token_eth_quote]
+            for block_num in range(from_block, to_block + 1):
+                token_eth_price_dict[block_num] = token_eth_quote[block_counter]
+                block_counter += 1
+            
+                # cache price at height
+        if len(token_eth_price_dict) > 0:
+            
+            redis_cache_mapping = {
+                json.dumps({"blockHeight": height, "price": price}): int(
+                    height,
+                )
+                for height, price in token_eth_price_dict.items()
+            }
+
+            await redis_conn.zadd(
+                name=uniswap_cached_block_height_token_eth_price.format(
+                    Web3.to_checksum_address(token_address),
+                ),
+                mapping=redis_cache_mapping,  # timestamp so zset do not ignore same height on multiple heights
+            )
+
+            return token_eth_price_dict
+
+        else:
+            return token_eth_price_dict
+                
+
+
+    except Exception as e:
+        # TODO BETTER ERROR HANDLING
+        raise e
+    
+
+
+
+
+        
+

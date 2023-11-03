@@ -3,6 +3,8 @@ import json
 from redis import asyncio as aioredis
 from web3 import Web3
 
+from pooler.modules.uniswapv3.utils.helpers import get_token_eth_price_dict
+
 from ..redis_keys import (
     uniswap_pair_cached_block_height_token_price,
 )
@@ -21,6 +23,7 @@ async def get_token_price_in_block_range(
     redis_conn: aioredis.Redis,
     rpc_helper: RpcHelper,
     debug_log=True,
+    logger=logger
 ):
     """
     returns the price of a token at a given block range
@@ -28,6 +31,7 @@ async def get_token_price_in_block_range(
     try:
         token_price_dict = dict()
         token_address = Web3.to_checksum_address(token_metadata["address"])
+        token_decimals = int(token_metadata["decimals"])
         # check if cahce exist for given epoch
         cached_price_dict = await redis_conn.zrangebyscore(
             name=uniswap_pair_cached_block_height_token_price.format(
@@ -36,6 +40,7 @@ async def get_token_price_in_block_range(
             min=int(from_block),
             max=int(to_block),
         )
+        
         if cached_price_dict and len(cached_price_dict) == to_block - (from_block - 1):
             price_dict = {
                 json.loads(
@@ -47,11 +52,13 @@ async def get_token_price_in_block_range(
                 )["price"]
                 for price in cached_price_dict
             }
+            
             return price_dict
 
         if token_address == Web3.to_checksum_address(
             worker_settings.contract_addresses.WETH
         ):
+            
             token_price_dict = await get_eth_price_usd(
                 from_block=from_block,
                 to_block=to_block,
@@ -59,22 +66,41 @@ async def get_token_price_in_block_range(
                 rpc_helper=rpc_helper,
             )
         else:
-            token_eth_price_dict = dict()
-            sqrtPriceLimitX96 = 0
+            
 
             # Technically we just need max of 4 checks to get the price, that too only first time.
             # Check against WETH pair, if not found, check against USDC pair, if not found, check against USDT pair, if not found, check against DAI pair.
             # price = quoter.functions.quoteExactInputSingle(
             # "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640", "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", 3000, 1, sqrtPriceLimitX96
             # ).call()
+            # we want to get the price of token in terms of eth vs on chain resources. 
+            # so we need to call the 1inchQuoter contract and transform it to either token/eth or eth/token, lets find out
+            # token_eth_price_dict = await get_token_eth_price(
+            #  amount token per 1 eth
+            token_eth_price_dict = await get_token_eth_price_dict(
+                token_address=token_address,
+                token_decimals=token_decimals,  
+                from_block=from_block,
+                to_block=to_block,
+                redis_conn=redis_conn,
+                rpc_helper=rpc_helper,
+            )
+
+
+            # need if token is usd, we have amt per 1 eth  and if we get eth_usd_price_dict we  have amt eth per 1 usd
+
 
             if len(token_eth_price_dict) > 0:
+                
                 eth_usd_price_dict = await get_eth_price_usd(
                     from_block=from_block,
                     to_block=to_block,
                     redis_conn=redis_conn,
                     rpc_helper=rpc_helper,
+
                 )
+                logger.debug(f"eth_usd_price_dict: {eth_usd_price_dict}")
+                logger.debug(f"token_eth_price_dict: {token_eth_price_dict}")   
                 for block_num in range(from_block, to_block + 1):
                     token_price_dict[block_num] = token_eth_price_dict.get(
                         block_num,
@@ -82,8 +108,9 @@ async def get_token_price_in_block_range(
                     ) * eth_usd_price_dict.get(block_num, 0)
             else:
                 for block_num in range(from_block, to_block + 1):
+                
                     token_price_dict[block_num] = 0
-
+        
             if debug_log:
                 pricing_logger.debug(
                     f"{token_metadata['symbol']}: price is {token_price_dict}"

@@ -11,6 +11,8 @@ from web3 import Web3
 from web3.contract import Contract
 
 from pooler.modules.uniswapv3.utils.constants import helper_contract
+from pooler.modules.uniswapv3.utils.constants import UNISWAP_TRADE_EVENT_SIGS
+from pooler.modules.uniswapv3.utils.constants import pair_contract_abi
 from pooler.modules.uniswapv3.utils.constants import override_address
 from pooler.modules.uniswapv3.utils.constants import univ3_helper_bytecode
 from pooler.modules.uniswapv3.utils.constants import UNISWAP_EVENTS_ABI
@@ -98,28 +100,53 @@ async def get_events(
     rpc: RpcHelper,
     from_block,
     to_block,
+
     redis_con,
 ):
+    # TODO abstract this out to a existing function
     mint_topic = Web3.keccak(
-        text="Mint(address,address,uint256,uint256,uint128,int24)",
+        text=UNISWAP_TRADE_EVENT_SIGS.get("Mint"),  
     ).hex()
     burn_topic = Web3.keccak(
-        text="Burn(address,address,uint256,uint256,uint128,int24)",
+        text=UNISWAP_TRADE_EVENT_SIGS.get("Burn"),
     ).hex()
+
     topics = [[mint_topic], [burn_topic]]
 
+
+    
     event_abi = dict()
+    
     event_abi[mint_topic] = UNISWAP_EVENTS_ABI.get("Mint")
     event_abi[burn_topic] = UNISWAP_EVENTS_ABI.get("Burn")
 
-    return await rpc.get_events_logs(
-        contract_address=pair_address,
-        to_block=to_block,
-        from_block=from_block,
-        topics=topics,
-        event_abi=event_abi,
-        redis_con=redis_con,
-    )
+    
+    try: 
+        mint_events, burn_events =  await asyncio.gather(
+            rpc.get_events_logs(
+            contract_address=pair_address,
+            to_block=to_block,
+            from_block=from_block,
+            topics=topics[0],
+            event_abi=event_abi,
+            redis_conn=redis_con,
+            ),
+            rpc.get_events_logs(
+                contract_address=pair_address,
+                to_block=to_block,
+                from_block=from_block,
+                topics=topics[1],
+                event_abi=event_abi,
+                redis_conn=redis_con,
+                )
+            )
+    except Exception as e:
+        # bubble
+        raise e
+    
+    events = mint_events + burn_events
+    
+    return events
 
 
 @functools.lru_cache()
@@ -146,16 +173,17 @@ async def calculate_reserves(
     overrides = {
         override_address: {"code": univ3_helper_bytecode},
     }
-    
+    current_node = rpc_helper.get_current_node()
+    pair_contract = current_node['web3_client'].eth.contract(address=pair_address, abi=pair_contract_abi)
     tick_tasks = [helper_contract.functions.getTicks(pair_address)]
-    slot0_tasks: list(Contract.functions) = [
-        helper_contract.functions.slot0(),
+    slot0_tasks = [
+        pair_contract.functions.slot0(),
     ]
     
     # cant batch these tasks due to implementation of web3_call re: state override
     tickDataResponse, slot0Response = await asyncio.gather(
         rpc_helper.web3_call(tick_tasks, redis_conn, overrides=overrides, block=from_block),
-        rpc_helper.web3_call(slot0_tasks, redis_conn, block=from_block),
+        rpc_helper.web3_call(slot0_tasks, redis_conn, block=from_block,),
         )
         
 

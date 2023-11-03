@@ -31,6 +31,10 @@ class UniswapContractAbis(BaseModel):
         ...,
         example="pooler/modules/uniswapv3/static/abis/UniswapTradeEvents.json",
     )
+    quoter_1inch: str = Field(
+        ...,
+        example="pooler/modules/uniswapv3/static/abis/OneInchQuoter.json",
+    )
 
 
 class ContractAddresses(BaseModel):
@@ -69,6 +73,10 @@ class ContractAddresses(BaseModel):
     MAKER: str = Field(
         ...,
         example="0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2",
+    )
+    QUOTER_1INCH: str = Field(
+        ...,
+        example="0x07D91f5fb9Bf7798734C3f606dB065549F6893bb",
     )
 
 

@@ -505,6 +505,7 @@ class RpcHelper(object):
             function_name,
             params,
         )
+
         rpc_query = []
         request_id = 1
         for block in range(from_block, to_block + 1):
@@ -530,7 +531,6 @@ class RpcHelper(object):
             rpc_query, redis_conn=redis_conn
         )
         rpc_response = []
-
         response = response_data if isinstance(response_data, list) else [response_data]
         for result in response:
             rpc_response.append(
@@ -587,6 +587,7 @@ class RpcHelper(object):
         topics,
         event_abi,
         redis_conn,
+        
     ):
         if not self._initialized:
             await self.init(redis_conn)
@@ -644,13 +645,14 @@ class RpcHelper(object):
                 event_log = await web3_provider.eth.get_logs(
                     event_log_query,
                 )
+                
                 codec: ABICodec = web3_provider.codec
                 all_events = []
                 for log in event_log:
                     abi = event_abi.get(log['topics'][0].hex(), "")
                     evt = get_event_data(codec, abi, log)
                     all_events.append(evt)
-
+                
                 return all_events
             except Exception as e:
                 exc = RPCException(
@@ -664,7 +666,8 @@ class RpcHelper(object):
                     underlying_exception=e,
                     extra_info=f"RPC_GET_EVENT_LOGS_ERROR: {str(e)}",
                 )
-                self._logger.trace("Error in get_events_logs, error {}", str(exc))
+                self._logger.debug("Error in get_events_logs, error {}", str(exc))
+                
                 raise exc
 
         return await f(node_idx=0)
