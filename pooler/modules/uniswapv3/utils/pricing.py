@@ -23,7 +23,6 @@ async def get_token_price_in_block_range(
     redis_conn: aioredis.Redis,
     rpc_helper: RpcHelper,
     debug_log=True,
-    logger=logger
 ):
     """
     returns the price of a token at a given block range
@@ -99,8 +98,7 @@ async def get_token_price_in_block_range(
                     rpc_helper=rpc_helper,
 
                 )
-                logger.debug(f"eth_usd_price_dict: {eth_usd_price_dict}")
-                logger.debug(f"token_eth_price_dict: {token_eth_price_dict}")   
+ 
                 for block_num in range(from_block, to_block + 1):
                     token_price_dict[block_num] = token_eth_price_dict.get(
                         block_num,

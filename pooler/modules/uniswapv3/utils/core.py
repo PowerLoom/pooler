@@ -79,7 +79,6 @@ async def get_pair_reserves(
             redis_conn=redis_conn,
             rpc_helper=rpc_helper,
             debug_log=False,
-            logger=core_logger
     
         ),
         get_token_price_in_block_range(
@@ -89,7 +88,6 @@ async def get_pair_reserves(
             redis_conn=redis_conn,
             rpc_helper=rpc_helper,
             debug_log=False,
-            logger=core_logger
             
         ),
     )
@@ -152,7 +150,7 @@ async def get_pair_reserves(
             else acc - event['args']['amount1'], events_in_block, 0)
         
         token0USD = token0Amount * token0_price_map.get(block_num, 0) * (10 ** -int(pair_per_token_metadata["token0"]["decimals"]))
-        token1USD = token1Amount * (1 / token1_price_map.get(block_num, 0)) * (10 ** -int(pair_per_token_metadata["token1"]["decimals"]))
+        token1USD = token1Amount * token1_price_map.get(block_num, 0) * (10 ** -int(pair_per_token_metadata["token1"]["decimals"]))
         
 
         token0Price = token0_price_map.get(block_num, 0)

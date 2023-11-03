@@ -17,6 +17,8 @@ async def test_web3_async_call():
     await aioredis_pool.populate()
     writer_redis_pool = aioredis_pool._aioredis_pool
     rpc_helper = RpcHelper(settings.anchor_chain_rpc)
+    
+
     await rpc_helper.init(writer_redis_pool)
     sync_w3_client = Web3(HTTPProvider(settings.anchor_chain_rpc.full_nodes[0].url))
     contract_obj = sync_w3_client.eth.contract(
