@@ -22,6 +22,7 @@ from httpx import AsyncClient
 from httpx import AsyncHTTPTransport
 from httpx import Limits
 from httpx import Timeout
+from ipfs_client.dag import IPFSAsyncClientError
 from ipfs_client.main import AsyncIPFSClient
 from pydantic import BaseModel
 from redis import asyncio as aioredis
@@ -57,6 +58,13 @@ def web3_storage_retry_state_callback(retry_state: tenacity.RetryCallState):
     if retry_state and retry_state.outcome.failed:
         logger.warning(
             f'Encountered web3 storage upload exception: {retry_state.outcome.exception()} | args: {retry_state.args}, kwargs:{retry_state.kwargs}',
+        )
+
+
+def ipfs_upload_retry_state_callback(retry_state: tenacity.RetryCallState):
+    if retry_state and retry_state.outcome.failed:
+        logger.warning(
+            f'Encountered ipfs upload exception: {retry_state.outcome.exception()} | args: {retry_state.args}, kwargs:{retry_state.kwargs}',
         )
 
 
@@ -111,6 +119,9 @@ class GenericAsyncWorker(multiprocessing.Process):
     )
     async def _upload_web3_storage(self, snapshot: bytes):
         web3_storage_settings = settings.web3storage
+        # if no api token is provided, skip
+        if not web3_storage_settings.api_token:
+            return
         files = {'file': snapshot}
         r = await self._web3_storage_upload_client.post(
             url=f'{web3_storage_settings.url}{web3_storage_settings.upload_url_suffix}',
@@ -119,6 +130,16 @@ class GenericAsyncWorker(multiprocessing.Process):
         r.raise_for_status()
         resp = r.json()
         self._logger.info('Uploaded snapshot to web3 storage: {} | Response: {}', snapshot, resp)
+
+    @retry(
+        wait=wait_random_exponential(multiplier=1, max=10),
+        stop=stop_after_attempt(5),
+        retry=tenacity.retry_if_not_exception_type(IPFSAsyncClientError),
+        after=ipfs_upload_retry_state_callback,
+    )
+    async def _upload_to_ipfs(self, snapshot: bytes, _ipfs_writer_client: AsyncIPFSClient):
+        snapshot_cid = await _ipfs_writer_client.add_bytes(snapshot)
+        return snapshot_cid
 
     async def _commit_payload(
             self,
@@ -138,7 +159,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         snapshot_json = json.dumps(snapshot.dict(by_alias=True), sort_keys=True, separators=(',', ':'))
         snapshot_bytes = snapshot_json.encode('utf-8')
         try:
-            snapshot_cid = await _ipfs_writer_client.add_bytes(snapshot_bytes)
+            snapshot_cid = await self._upload_to_ipfs(snapshot_bytes, _ipfs_writer_client)
         except Exception as e:
             self._logger.opt(exception=True).error(
                 'Exception uploading snapshot to IPFS for epoch {}: {}, Error: {},'
