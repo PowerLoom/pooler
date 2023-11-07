@@ -142,6 +142,13 @@ class IPFSconfig(BaseModel):
 class Web3Storage(BaseModel):
     upload_snapshots: bool
     upload_aggregates: bool
+    url: str
+    upload_url_suffix: str
+    api_token: str
+    timeout: int
+    max_idle_conns: int
+    idle_conn_timeout: int
+    # rate_limit: Optional[IPFSWriterRateLimit] = None
 
 
 class Settings(BaseModel):

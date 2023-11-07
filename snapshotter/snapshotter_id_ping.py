@@ -1,6 +1,7 @@
 import asyncio
 import sys
 from web3 import Web3
+from eth_utils.address import to_checksum_address
 from snapshotter.auth.helpers.redis_conn import RedisPoolCache
 from snapshotter.settings.config import settings
 from snapshotter.utils.file_utils import read_json_file
@@ -22,12 +23,12 @@ async def main():
     )
     snapshotters_arr_query = await anchor_rpc.web3_call(
         [
-            protocol_state_contract.functions.getAllSnapshotters(),
+            protocol_state_contract.functions.getSnapshotters(),
         ],
         redis_conn
     )
     allowed_snapshotters = snapshotters_arr_query[0]
-    if settings.instance_id in allowed_snapshotters:
+    if to_checksum_address(settings.instance_id) in allowed_snapshotters:
         print('Snapshotting allowed...')
         await redis_conn.set(
             active_status_key,

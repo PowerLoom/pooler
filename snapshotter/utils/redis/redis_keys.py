@@ -102,3 +102,7 @@ def epoch_id_project_to_state_mapping(epoch_id, state_id):
 
 def submitted_base_snapshots_key(epoch_id, project_id):
     return f'submittedBaseSnapshots:{epoch_id}:{project_id}'
+
+
+def submitted_unfinalized_snapshot_cids(project_id):
+    return f'projectID:{project_id}:unfinalizedSnapshots'

@@ -14,7 +14,7 @@ class EpochBaseSnapshot(BaseModel):
 class SnapshotBase(BaseModel):
     contract: str
     chainHeightRange: EpochBaseSnapshot
-    timestamp: float
+    timestamp: int
 
 
 class UniswapPairTotalReservesSnapshot(SnapshotBase):
