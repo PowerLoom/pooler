@@ -166,7 +166,7 @@ async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, proj
     return submission_data
 
 
-async def get_sumbmission_data_bulk(
+async def get_submission_data_bulk(
     redis_conn: aioredis.Redis,
     cids: List[str],
     ipfs_reader,
@@ -368,7 +368,7 @@ async def get_project_epoch_snapshot_bulk(
         if cid and 'null' not in cid:
             valid_cid_data_with_epochs.append((cid, epoch_id))
 
-    all_snapshot_data = await get_sumbmission_data_bulk(
+    all_snapshot_data = await get_submission_data_bulk(
         redis_conn, [cid for cid, _ in valid_cid_data_with_epochs], ipfs_reader, [
             project_id,
         ] * len(valid_cid_data_with_epochs),

@@ -100,6 +100,7 @@ async def startup_boilerplate():
     app.state.ipfs_reader_client = app.state.ipfs_singleton._ipfs_read_client
     app.state.epoch_size = 0
 
+
 # Health check endpoint
 @app.get('/health')
 async def health_check(
