@@ -1,4 +1,5 @@
 import json
+from threading import currentThread
 from typing import List
 
 from fastapi import Depends
@@ -36,6 +37,7 @@ from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import epoch_process_report_cached_key
 from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_key
+from snapshotter.utils.redis.redis_keys import active_status_key
 from snapshotter.utils.rpc import RpcHelper
 
 
@@ -96,12 +98,25 @@ async def startup_boilerplate():
     app.state.ipfs_singleton = AsyncIPFSClientSingleton(settings.ipfs)
     await app.state.ipfs_singleton.init_sessions()
     app.state.ipfs_reader_client = app.state.ipfs_singleton._ipfs_read_client
+    app.state.epoch_size = 0
 
-# Health check endpoint that returns 200 OK
 
-
+# Health check endpoint
 @app.get('/health')
-async def health_check():
+async def health_check(
+    request: Request,
+    response: Response,
+):
+    redis_conn: aioredis.Redis = request.app.state.redis_pool
+    _ = await redis_conn.get(active_status_key)
+    if _:
+        active_status = bool(int(_))
+        if not active_status:
+            response.status_code = 503
+            return {
+                'status': 'error',
+                'message': 'Snapshotter is not active',
+            }
     return {'status': 'OK'}
 
 # get current epoch
@@ -527,14 +542,30 @@ async def get_snapshotter_epoch_processing_status(
             'message': f'Unable to get current epoch, error: {e}',
         }
     current_epoch_id = current_epoch['epochId']
+    if request.app.state.epoch_size == 0:
+        [epoch_size, ] = await request.app.state.anchor_rpc_helper.web3_call(
+            [request.app.state.protocol_state_contract.functions.EPOCH_SIZE()],
+            redis_conn=request.app.state.redis_pool,
+        )
+        rest_logger.info(f'Setting Epoch size: {epoch_size}')
+        request.app.state.epoch_size = epoch_size
     for epoch_id in range(current_epoch_id, current_epoch_id - 30 - 1, -1):
         epoch_specific_report = SnapshotterEpochProcessingReportItem.construct()
-        epoch_specific_report.epochId = epoch_id
         epoch_release_status = await redis_conn.get(
             epoch_id_epoch_released_key(epoch_id=epoch_id),
         )
         if not epoch_release_status:
             continue
+        epoch_specific_report.epochId = epoch_id
+        if epoch_id == current_epoch_id:
+            epoch_specific_report.epochEnd = current_epoch['end']
+        else:
+            epoch_specific_report.epochEnd = current_epoch['end'] - (
+                (current_epoch_id - epoch_id) * request.app.state.epoch_size
+            )
+            rest_logger.debug(
+                f'Epoch End for epoch_id: {epoch_id} is {epoch_specific_report.epochEnd}',
+            )
         epoch_specific_report.transitionStatus = dict()
         if epoch_release_status:
             epoch_specific_report.transitionStatus['EPOCH_RELEASED'] = SnapshotterStateUpdate(
@@ -559,7 +590,7 @@ async def get_snapshotter_epoch_processing_status(
         epoch_processing_final_report.append(epoch_specific_report)
     await redis_conn.set(
         epoch_process_report_cached_key,
-        json.dumps(list(map(lambda x: x.json(), epoch_processing_final_report))),
+        json.dumps(list(map(lambda x: x.dict(), epoch_processing_final_report))),
         ex=60,
     )
     return paginate(epoch_processing_final_report)

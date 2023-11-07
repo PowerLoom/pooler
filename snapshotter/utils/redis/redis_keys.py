@@ -36,6 +36,8 @@ epoch_process_report_cached_key = 'epochProcessReport'
 
 snapshot_submission_window_key = 'snapshotSubmissionWindow'
 
+active_status_key = f'snapshotterActiveStatus:{settings.namespace}'
+
 # project finalzed data zset
 
 
@@ -100,3 +102,7 @@ def epoch_id_project_to_state_mapping(epoch_id, state_id):
 
 def submitted_base_snapshots_key(epoch_id, project_id):
     return f'submittedBaseSnapshots:{epoch_id}:{project_id}'
+
+
+def submitted_unfinalized_snapshot_cids(project_id):
+    return f'projectID:{project_id}:unfinalizedSnapshots'

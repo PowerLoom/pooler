@@ -13,14 +13,14 @@
   "rpc": {
     "full_nodes": [{
       "url": "https://rpc-url",
-      "rate_limit": "10000000/day;2000/minute;100/second"
+      "rate_limit": "100000000/day;20000/minute;1000/second"
     }],
     "archive_nodes": [],
     "force_archive_blocks": 100,
     "retry": 5,
     "request_time_out": 5,
     "skip_epoch_threshold_blocks": 30,
-    "polling_interval": 15,
+    "polling_interval": 10,
     "connection_limits":{
       "max_connections": 100,
       "max_keepalive_connections": 50,
@@ -84,9 +84,9 @@
     "address": "protocol-state-contract"
   },
   "callback_worker_config": {
-    "num_delegate_workers": 8,
-    "num_snapshot_workers": 2,
-    "num_aggregation_workers": 4
+    "num_delegate_workers": 0,
+    "num_snapshot_workers": 8,
+    "num_aggregation_workers": 12
   },
   "ipfs": {
     "url": "ipfs-writer-url",
@@ -113,12 +113,18 @@
   },
   "web3storage":{
     "upload_snapshots": false,
-    "upload_aggregates": true
+    "upload_aggregates": true,
+    "url": "https://api.web3.storage",
+    "upload_url_suffix": "/upload",
+    "api_token": "web3-storage-token",
+    "timeout": 30,
+    "max_idle_conns": 5,
+    "idle_conn_timeout": 300
   },
   "anchor_chain_rpc": {
     "full_nodes": [{
       "url": "https://prost-rpc-url",
-      "rate_limit": "100000000/day;18000/minute;300/second"
+      "rate_limit": "100000000/day;20000/minute;1000/second"
     }],
     "retry": 5,
     "request_time_out": 5,

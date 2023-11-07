@@ -2,6 +2,7 @@ import asyncio
 import json
 import multiprocessing
 import queue
+import resource
 import signal
 import sys
 import threading
@@ -21,6 +22,7 @@ from snapshotter.utils.models.data_models import EpochReleasedEvent
 from snapshotter.utils.models.data_models import EventBase
 from snapshotter.utils.models.data_models import ProjectsUpdatedEvent
 from snapshotter.utils.models.data_models import SnapshotFinalizedEvent
+from snapshotter.utils.models.data_models import SnapshottersUpdatedEvent
 from snapshotter.utils.rabbitmq_helpers import RabbitmqThreadedSelectLoopInteractor
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import event_detector_last_processed_block
@@ -119,12 +121,15 @@ class EventDetectorProcess(multiprocessing.Process):
             'EpochReleased': self.contract.events.EpochReleased._get_event_abi(),
             'SnapshotFinalized': self.contract.events.SnapshotFinalized._get_event_abi(),
             'ProjectsUpdated': self.contract.events.ProjectsUpdated._get_event_abi(),
+            'allSnapshottersUpdated': self.contract.events.allSnapshottersUpdated._get_event_abi(),
         }
 
         EVENT_SIGS = {
             'EpochReleased': 'EpochReleased(uint256,uint256,uint256,uint256)',
             'SnapshotFinalized': 'SnapshotFinalized(uint256,uint256,string,string,uint256)',
             'ProjectsUpdated': 'ProjectsUpdated(string,bool,uint256)',
+            'allSnapshottersUpdated': 'allSnapshottersUpdated(address,bool)',
+
         }
 
         self.event_sig, self.event_abi = get_event_sig_and_abi(
@@ -184,6 +189,13 @@ class EventDetectorProcess(multiprocessing.Process):
                     projectId=log.args.projectId,
                     allowed=log.args.allowed,
                     enableEpochId=log.args.enableEpochId,
+                    timestamp=int(time.time()),
+                )
+                events.append((log.event, event))
+            elif log.event == 'allSnapshottersUpdated':
+                event = SnapshottersUpdatedEvent(
+                    snapshotterAddress=log.args.snapshotterAddress,
+                    allowed=log.args.allowed,
                     timestamp=int(time.time()),
                 )
                 events.append((log.event, event))
@@ -315,6 +327,11 @@ class EventDetectorProcess(multiprocessing.Process):
 
     @rabbitmq_and_redis_cleanup
     def run(self):
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        resource.setrlimit(
+            resource.RLIMIT_NOFILE,
+            (settings.rlimit.file_descriptors, hard),
+        )
         for signame in [signal.SIGINT, signal.SIGTERM, signal.SIGQUIT]:
             signal.signal(signame, self._generic_exit_handler)
         self._rabbitmq_thread = threading.Thread(

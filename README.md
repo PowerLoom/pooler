@@ -7,6 +7,13 @@
   - [Preloading](#preloading)
   - [Base Snapshot Generation](#base-snapshot-generation)
   - [Snapshot Finalization](#snapshot-finalization)
+  - [Epoch processing state transitions](#epoch-processing-state-transitions)
+    - [`EPOCH_RELEASED`](#epoch_released)
+    - [`PRELOAD`](#preload)
+    - [`SNAPSHOT_BUILD`](#snapshot_build)
+    - [`SNAPSHOT_SUBMIT_PAYLOAD_COMMIT`](#snapshot_submit_payload_commit)
+    - [`RELAYER_SEND`](#relayer_send)
+    - [`SNAPSHOT_FINALIZE`](#snapshot_finalize)
   - [Aggregation and data composition - snapshot generation of higher-order data points on base snapshots](#aggregation-and-data-composition---snapshot-generation-of-higher-order-data-points-on-base-snapshots)
 - [Major Components](#major-components)
   - [System Event Detector](#system-event-detector)
@@ -19,6 +26,11 @@
 - [Development Instructions](#development-instructions)
   - [Configuration](#configuration)
 - [Monitoring and Debugging](#monitoring-and-debugging)
+  - [Internal Snapshotter APIs](#internal-snapshotter-apis)
+    - [`GET /internal/snapshotter/epochProcessingStatus`](#get-internalsnapshotterepochprocessingstatus)
+    - [`GET /internal/snapshotter/status`](#get-internalsnapshotterstatus)
+    - [`GET /internal/snapshotter/status/{project_id}`](#get-internalsnapshotterstatusproject_id)
+    - [`GET /internal/snapshotter/status/{project_id}?data=true`](#get-internalsnapshotterstatusproject_iddatatrue)
 - [For Contributors](#for-contributors)
 - [Pooler: Case study and extending this implementation](#pooler-case-study-and-extending-this-implementation)
 - [Extending pooler with a Uniswap v2 data point](#extending-pooler-with-a-uniswap-v2-data-point)
@@ -135,6 +147,48 @@ All snapshots per project reach consensus on the protocol state contract which r
 ```
 event SnapshotFinalized(uint256 indexed epochId, uint256 epochEnd, string projectId, string snapshotCid, uint256 timestamp);
 ```
+
+### Epoch processing state transitions
+
+The following is a sequence of states that an epoch goes through from the point epoch is released until `SnapshotFinalized` event is received by the processor distributor for the specific epoch. These state transitions can be inspected in detail as noted in the section on [internal snapshotter APIs](#internal-snapshotter-apis).
+
+---
+
+#### `EPOCH_RELEASED`
+
+The state name is self explanatory.
+
+
+#### `PRELOAD`
+
+For every [project type's preloader specifications](https://github.com/PowerLoom/pooler/blob/bcc245d228acce504ba803b9b50fd89c8eb05984/README.md#preloading), the status of all the preloading dependencies being satisfied is captured here:
+
+https://github.com/PowerLoom/pooler/blob/bcc245d228acce504ba803b9b50fd89c8eb05984/snapshotter/processor_distributor.py#L227-L251
+
+#### `SNAPSHOT_BUILD`
+
+The snapshot builders as configured in [`projects.json`](https://github.com/PowerLoom/pooler/blob/56c3dd71b5ec0abf58db3407ef3539f3457076f5/README.md#base-snapshot-generation) are executed. Also refer to the [case study of the current implementation of Pooler](https://github.com/PowerLoom/pooler/blob/56c3dd71b5ec0abf58db3407ef3539f3457076f5/README.md#pooler-case-study-and-extending-this-implementation) for a detailed look at snapshot building for base as well as aggregates. 
+
+
+https://github.com/PowerLoom/pooler/blob/bcc245d228acce504ba803b9b50fd89c8eb05984/snapshotter/utils/snapshot_worker.py#L100-L120
+
+#### `SNAPSHOT_SUBMIT_PAYLOAD_COMMIT`
+
+Captures the status of  propagation of the built snapshot to the [payload commit service in Audit Protocol](https://github.com/PowerLoom/audit-protocol/blob/1d8b1ae0789ba3260ddb358231ac4b597ec8a65f/docs/Introduction.md#payload-commit-service) for further submission to the protocol state contract. 
+
+https://github.com/PowerLoom/pooler/blob/bcc245d228acce504ba803b9b50fd89c8eb05984/snapshotter/utils/generic_worker.py#L166-L195
+
+
+#### `RELAYER_SEND`
+
+Payload commit service has sent the snapshot to a transaction relayer to submit to the protocol state contract.
+
+
+#### `SNAPSHOT_FINALIZE`
+
+[Finalized snapshot](https://github.com/PowerLoom/pooler/blob/56c3dd71b5ec0abf58db3407ef3539f3457076f5/README.md#snapshot-finalization) accepted against an epoch via a `SnapshotFinalized` event.
+
+https://github.com/PowerLoom/pooler/blob/bcc245d228acce504ba803b9b50fd89c8eb05984/snapshotter/processor_distributor.py#L475-L482
 
 ### Aggregation and data composition - snapshot generation of higher-order data points on base snapshots
 
@@ -342,6 +396,171 @@ Login to the pooler docker container using `docker exec -it deploy-boost-1 bash`
 - To see all logs you can run `pm2 logs`
 - To see logs for a specific process you can run `pm2 logs <Process Identifier>`
 - To see only error logs you can run `pm2 logs --err`
+
+### Internal Snapshotter APIs
+
+All implementations of a snapshotter come equipped with a barebones API service that return detailed insights into its state. You can tunnel into port 8002 of an instance running the snapshotter and right away try out the internal APIs among others by visting the FastAPI generated SwaggerUI.
+
+```
+http://localhost:8002/docs
+```
+
+![Snapshotter API SwaggerUI](snapshotter/static/docs/assets/SnapshotterSwaggerUI.png)
+
+#### `GET /internal/snapshotter/epochProcessingStatus`
+
+As detailed out in the section on [epoch processing state transitions](#epoch-processing-state-transitions), this internal API endpoint offers the most detailed insight into each epoch's processing status as it passes through the snapshot builders and is sent out for consensus.
+
+>NOTE: The endpoint, though paginated and cached, serves a raw dump of insights into an epoch's state transitions and the payloads are significantly large enough for requests to timeout or to clog the internal API's limited resource. Hence it is advisable to query somewhere between 1 to 5 epochs. The same can be specified as the `size` query parameter.
+
+**Sample Request:**
+
+```bash
+curl -X 'GET' \
+  'http://localhost:8002/internal/snapshotter/epochProcessingStatus?page=1&size=3' \
+  -H 'accept: application/json'
+```
+
+**Sample Response:**
+
+```json
+{
+    "items": [
+      {
+        "epochId": 43523,
+        "transitionStatus": {
+          "EPOCH_RELEASED": {
+            "status": "success",
+            "error": null,
+            "extra": null,
+            "timestamp": 1692530595
+          },
+          "PRELOAD": {
+            "pairContract_pair_total_reserves": {
+              "status": "success",
+              "error": null,
+              "extra": null,
+              "timestamp": 1692530595
+            },
+          },
+          "SNAPSHOT_BUILD": {
+            "aggregate_24h_stats_lite:35ee1886fa4665255a0d0486c6079c4719c82f0f62ef9e96a98f26fde2e8a106:UNISWAPV2": {
+              "status": "success",
+              "error": null,
+              "extra": null,
+              "timestamp": 1692530596
+            },
+          },
+          "SNAPSHOT_SUBMIT_PAYLOAD_COMMIT": {
+
+          },
+         "RELAYER_SEND": {
+
+         },
+        "SNAPSHOT_FINALIZE": {
+
+        },
+      },
+    }
+   ],
+   "total": 3,
+   "page": 1,
+   "size": 3,
+   "pages": 1
+}
+```
+
+`/status`
+Returns the overall status of all the projects
+
+Response
+```json
+{
+  "totalSuccessfulSubmissions": 10,
+  "totalMissedSubmissions": 5,
+  "totalIncorrectSubmissions": 1,
+  "projects":[
+    {
+      "projectId": "projectid"
+      "successfulSubmissions": 3,
+      "missedSubmissions": 2,
+      "incorrectSubmissions": 1
+    },
+  ]
+}
+```
+#### `GET /internal/snapshotter/status`
+Returns the overall status of all the projects
+
+Response
+```json
+{
+  "totalSuccessfulSubmissions": 10,
+  "totalMissedSubmissions": 5,
+  "totalIncorrectSubmissions": 1,
+  "projects":[
+    {
+      "projectId": "projectid"
+      "successfulSubmissions": 3,
+      "missedSubmissions": 2,
+      "incorrectSubmissions": 1
+    },
+  ]
+}
+```
+
+#### `GET /internal/snapshotter/status/{project_id}`
+Returns project specific detailed status report
+
+Response
+```json
+{
+  "missedSubmissions": [
+    {
+      "epochId": 10,
+      "finalizedSnapshotCid": "cid",
+      "reason": "error/exception/trace"
+    }
+  ],
+  "incorrectSubmissions": [
+    {
+      "epochId": 12,
+      "submittedSnapshotCid": "snapshotcid",
+      "finalizedSnapshotCid": "finalizedsnapshotcid",
+      "reason": "reason for incorrect submission"
+    }
+  ]
+}
+```
+#### `GET /internal/snapshotter/status/{project_id}?data=true`
+Returns project specific detailed status report with snapshot data
+
+Response
+```json
+{
+  "missedSubmissions": [
+    {
+      "epochId": 10,
+      "finalizedSnapshotCid": "cid",
+      "reason": "error/exception/trace"
+    }
+  ],
+  "incorrectSubmissions": [
+    {
+      "epochId": 12,
+      "submittedSnapshotCid": "snapshotcid",
+      "submittedSnapshot": {}
+      "finalizedSnapshotCid": "finalizedsnapshotcid",
+      "finalizedSnapshot": {},
+      "reason": "reason for incorrect submission"
+    }
+  ]
+}
+```
+
+
+
+
 
 ## For Contributors
 We use [pre-commit hooks](https://pre-commit.com/) to ensure our code quality is maintained over time. For this contributors need to do a one-time setup by running the following commands.

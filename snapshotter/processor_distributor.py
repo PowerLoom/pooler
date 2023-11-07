@@ -4,6 +4,8 @@ import importlib
 import json
 import multiprocessing
 import queue
+import resource
+from signal import SIGINT, SIGQUIT, SIGTERM, signal
 import time
 from collections import defaultdict
 from functools import partial
@@ -41,6 +43,7 @@ from snapshotter.utils.default_logger import logger
 from snapshotter.utils.models.data_models import PreloaderAsyncFutureDetails
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
+from snapshotter.utils.models.data_models import SnapshottersUpdatedEvent
 from snapshotter.utils.models.message_models import EpochBase
 from snapshotter.utils.models.message_models import PayloadCommitFinalizedMessage
 from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
@@ -50,6 +53,7 @@ from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMess
 from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessage
 from snapshotter.utils.models.settings_model import AggregateOn
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
+from snapshotter.utils.redis.redis_keys import active_status_key
 from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import project_finalized_data_zset
@@ -112,6 +116,11 @@ class ProcessorDistributor(multiprocessing.Process):
             follow_redirects=False,
             transport=self._async_transport,
         )
+
+    def _signal_handler(self, signum, frame):
+        if signum in [SIGINT, SIGTERM, SIGQUIT]:
+            self._core_rmq_consumer.cancel()
+
 
     async def _init_redis_pool(self):
         self._aioredis_pool = RedisPoolCache()
@@ -199,7 +208,6 @@ class ProcessorDistributor(multiprocessing.Process):
                     project_data = []
                     for project in relevant_projects:
                         data_source = project.split(':')[-2]
-                        data_source = '_'.join(to_checksum_address(d) for d in data_source.split('_'))
                         project_data.append(
                             data_source,
                         )
@@ -443,7 +451,6 @@ class ProcessorDistributor(multiprocessing.Process):
                         if project_config.projects is None:
                             continue
                         data_source = msg_obj.projectId.split(':')[-2]
-                        data_source = '_'.join(to_checksum_address(d) for d in data_source.split('_'))
                         if msg_obj.allowed:
                             project_config.projects.append(data_source)
                             project_config.projects = list(set(project_config.projects))
@@ -662,7 +669,15 @@ class ProcessorDistributor(multiprocessing.Process):
                     int(time.time()),
                 )
                 asyncio.ensure_future(self._cleanup_older_epoch_status(_.epochId))
-            await self._epoch_release_processor(message)
+
+            _ = await self._redis_conn.get(active_status_key)
+            if _:
+                active_status = bool(int(_))
+                if not active_status:
+                    self._logger.error('System is not active, ignoring released Epoch')
+                else:
+                    await self._epoch_release_processor(message)
+
         elif message_type == 'SnapshotSubmitted':
             await self._distribute_callbacks_aggregate(
                 message,
@@ -674,7 +689,14 @@ class ProcessorDistributor(multiprocessing.Process):
             )
         elif message_type == 'ProjectsUpdated':
             await self._update_all_projects(message)
-
+        elif message_type == 'allSnapshottersUpdated':
+            msg_cast = SnapshottersUpdatedEvent.parse_raw(message.body)
+            if msg_cast.snapshotterAddress == to_checksum_address(settings.instance_id):
+                if self._redis_conn:
+                    await self._redis_conn.set(
+                        active_status_key,
+                        int(msg_cast.allowed),
+                    )
         else:
             self._logger.error(
                 (
@@ -706,6 +728,13 @@ class ProcessorDistributor(multiprocessing.Process):
         self._logger = logger.bind(
             module=f'Powerloom|Callbacks|ProcessDistributor:{settings.namespace}-{settings.instance_id}',
         )
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        resource.setrlimit(
+            resource.RLIMIT_NOFILE,
+            (settings.rlimit.file_descriptors, hard),
+        )
+        for signame in [SIGINT, SIGTERM, SIGQUIT]:
+            signal(signame, self._signal_handler)
         asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
         ev_loop = asyncio.get_event_loop()
         ev_loop.run_until_complete(self.init_worker())
