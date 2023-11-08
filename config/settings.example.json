@@ -113,7 +113,13 @@
   },
   "web3storage":{
     "upload_snapshots": false,
-    "upload_aggregates": true
+    "upload_aggregates": true,
+    "url": "https://api.web3.storage",
+    "upload_url_suffix": "/upload",
+    "api_token": "web3-storage-token",
+    "timeout": 30,
+    "max_idle_conns": 5,
+    "idle_conn_timeout": 300
   },
   "anchor_chain_rpc": {
     "full_nodes": [{

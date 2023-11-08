@@ -66,7 +66,6 @@ class AggreagateTradeVolumeProcessor(GenericProcessorAggregate):
         project_id: str,
     ):
         # skipping calculate from scratch for pretest and testnet participants if they are not 'full' nodes
-        # TODO: check against snapshotter identity on protocol state contract
         self._logger.info('skipping calculate from scratch for pretest')
         return
 

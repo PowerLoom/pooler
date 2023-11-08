@@ -41,7 +41,6 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         self._single_project_types = set()
         self._multi_project_types = set()
         self._task_types = set()
-        self._ipfs_singleton = None
 
         for config in aggregator_config:
             if config.aggregate_on == AggregateOn.single_project:
@@ -148,13 +147,6 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 },
             )
         else:
-            await self._send_payload_commit_service_queue(
-                type_=task_type,
-                project_id=project_id,
-                epoch=msg_obj,
-                snapshot=snapshot,
-                storage_flag=settings.web3storage.upload_aggregates,
-            )
             if not snapshot:
                 await self._redis_conn.hset(
                     name=epoch_id_project_to_state_mapping(
@@ -187,6 +179,14 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                             status='success', timestamp=int(time.time()),
                         ).json(),
                     },
+                )
+                await self._commit_payload(
+                    type_=task_type,
+                    project_id=project_id,
+                    epoch=msg_obj,
+                    snapshot=snapshot,
+                    storage_flag=settings.web3storage.upload_aggregates,
+                    _ipfs_writer_client=self._ipfs_writer_client,
                 )
             self._logger.debug(
                 'Updated epoch processing status in aggregation worker for project {} for transition {}',
@@ -273,11 +273,10 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             self._project_calculation_mapping[key] = class_()
 
     async def _init_ipfs_client(self):
-        if not self._ipfs_singleton:
-            self._ipfs_singleton = AsyncIPFSClientSingleton(settings.ipfs)
-            await self._ipfs_singleton.init_sessions()
-            self._ipfs_writer_client = self._ipfs_singleton._ipfs_write_client
-            self._ipfs_reader_client = self._ipfs_singleton._ipfs_read_client
+        self._ipfs_singleton = AsyncIPFSClientSingleton(settings.ipfs)
+        await self._ipfs_singleton.init_sessions()
+        self._ipfs_writer_client = self._ipfs_singleton._ipfs_write_client
+        self._ipfs_reader_client = self._ipfs_singleton._ipfs_read_client
 
     async def init_worker(self):
         if not self._initialized:
