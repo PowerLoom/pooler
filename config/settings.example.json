@@ -109,6 +109,13 @@
       "max_connections": 100,
       "max_keepalive_connections": 50,
       "keepalive_expiry": 300
+    },
+    "remote_pinning": {
+      "enabled": false,
+      "service_name": "",
+      "service_endpoint": "",
+      "service_token": "",
+      "background_pinning": false
     }
   },
   "web3storage":{
