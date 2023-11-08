@@ -87,7 +87,7 @@ sed -i'.backup' "s#ipfs-writer-url#$ipfs_url#" config/settings.json
 sed -i'.backup' "s#ipfs-writer-key#$ipfs_api_key#" config/settings.json
 sed -i'.backup' "s#ipfs-writer-secret#$ipfs_api_secret#" config/settings.json
 
-sed -i'.backup' "s#web3-storage-token#$web3_storage_token#" settings.json
+sed -i'.backup' "s#web3-storage-token#$web3_storage_token#" config/settings.json
 
 sed -i'.backup' "s#ipfs-reader-url#$ipfs_url#" config/settings.json
 sed -i'.backup' "s#ipfs-reader-key#$ipfs_api_key#" config/settings.json
