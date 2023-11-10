@@ -28,6 +28,7 @@ from snapshotter.utils.redis.redis_keys import project_snapshotter_status_report
 from snapshotter.utils.redis.redis_keys import source_chain_block_time_key
 from snapshotter.utils.redis.redis_keys import source_chain_epoch_size_key
 from snapshotter.utils.redis.redis_keys import source_chain_id_key
+from snapshotter.utils.rpc import get_event_sig_and_abi
 
 logger = logger.bind(module='data_helper')
 
@@ -219,6 +220,60 @@ async def get_source_chain_id(redis_conn: aioredis.Redis, state_contract_obj, rp
             source_chain_id,
         )
         return source_chain_id
+
+
+async def build_projects_list_from_events(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper):
+
+    EVENT_SIGS = {
+        'ProjectsUpdated': 'ProjectsUpdated(string,bool,uint256)',
+    }
+
+    EVENT_ABI = {
+        'ProjectsUpdated': state_contract_obj.events.ProjectsUpdated._get_event_abi(),
+    }
+
+    [start_block] = await rpc_helper.web3_call(
+        [state_contract_obj.functions.DeploymentBlockNumber()],
+        redis_conn=redis_conn,
+    )
+
+    current_block = await rpc_helper.get_current_block_number(redis_conn)
+    event_sig, event_abi = get_event_sig_and_abi(EVENT_SIGS, EVENT_ABI)
+
+    # from start_block to current block, get all events in batches of 1000, 10 requests parallelly
+    request_task_batch_size = 10
+    project_updates = set()
+    for cumulative_block_range in range(start_block, current_block, 1000 * request_task_batch_size):
+        # split into 10 requests
+        tasks = []
+        for block_range in range(
+            cumulative_block_range,
+            min(current_block, cumulative_block_range + 1000 * request_task_batch_size),
+            1000,
+        ):
+            tasks.append(
+                rpc_helper.get_events_logs(
+                    **{
+                        'contract_address': state_contract_obj.address,
+                        'to_block': min(current_block, block_range + 1000),
+                        'from_block': block_range,
+                        'topics': [event_sig],
+                        'event_abi': event_abi,
+                        'redis_conn': redis_conn,
+                    },
+                ),
+            )
+
+        block_range_event_logs = await asyncio.gather(*tasks)
+
+        for event_logs in block_range_event_logs:
+            for event_log in event_logs:
+                if event_log.args.allowed:
+                    project_updates.add(event_log.args.projectId)
+                else:
+                    project_updates.discard(event_log.args.projectId)
+
+    return list(project_updates)
 
 
 async def get_projects_list(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper):

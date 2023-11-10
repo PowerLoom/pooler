@@ -1,4 +1,5 @@
 import asyncio
+import uuid
 from collections import defaultdict
 from typing import Any
 from typing import Dict
@@ -7,6 +8,10 @@ import aio_pika
 import aiorwlock
 from aio_pika import Message
 from redis import asyncio as aioredis
+from tenacity import retry
+from tenacity import retry_if_exception_type
+from tenacity import stop_after_attempt
+from tenacity import wait_random_exponential
 
 from snapshotter.init_rabbitmq import get_delegate_worker_request_queue_routing_key
 from snapshotter.init_rabbitmq import get_delegate_worker_response_queue_routing_key_pattern
@@ -20,14 +25,15 @@ from snapshotter.utils.rpc import RpcHelper
 
 class DelegatorPreloaderAsyncWorker(GenericDelegatorPreloader):
     def __init__(self, **kwargs):
-        self._qos = 10
-        self._filter_worker_exchange_name = f'{settings.rabbitmq.setup.delegated_worker.exchange}:{settings.namespace}'
+        self._qos = 1
+        self._filter_worker_request_exchange_name = f'{settings.rabbitmq.setup.delegated_worker.exchange}:Request:{settings.namespace}'
+        self._filter_worker_response_exchange_name = f'{settings.rabbitmq.setup.delegated_worker.exchange}:Response:{settings.namespace}'
         self._filter_worker_request_queue, \
             self._filter_worker_request_routing_key = get_delegate_worker_request_queue_routing_key()
         # request IDs on which responses are awaited. preloading is complete when this set is empty
         self._awaited_delegated_response_ids = set()
         # epoch ID -> task type/ID (for eg, txHash) -> response object on task (for. eg tx receipt against txHash)
-        self._collected_response_objects: Dict[int, Dict[str, Dict[Any, Any]]] = defaultdict(dict)
+        self._collected_response_objects: Dict[str, Dict[Any, Any]] = defaultdict(dict)
         self._filter_worker_response_queue = None
         self._filter_worker_response_routing_key = None
         self._rw_lock = aiorwlock.RWLock()
@@ -35,6 +41,8 @@ class DelegatorPreloaderAsyncWorker(GenericDelegatorPreloader):
         self._redis_conn = None
         self._channel = None
         self._q_obj = None
+        self._unique_id = None
+        self._response_exchange = None
 
     async def cleanup(self):
         if self._redis_conn:
@@ -62,14 +70,24 @@ class DelegatorPreloaderAsyncWorker(GenericDelegatorPreloader):
         self,
         message: aio_pika.abc.AbstractIncomingMessage,
     ):
-        if message.routing_key.split('.')[-1] != f'{self._epoch.epochId}_{self._task_type}':
+        if message.routing_key.split('.')[-1] != self._unique_id:
             await message.nack(requeue=True)
             return
         else:
             await message.ack()
         asyncio.ensure_future(self._handle_filter_worker_response_message(message.body))
 
-    async def compute(
+    @retry(
+        reraise=True,
+        retry=retry_if_exception_type(Exception),
+        stop=stop_after_attempt(2),
+        wait=wait_random_exponential(multiplier=1, max=3),
+
+    )
+    async def compute_with_retry(self, epoch: EpochBase, redis_conn: aioredis.Redis, rpc_helper: RpcHelper):
+        return await self.compute_with_delegate_workers(epoch=epoch, redis_conn=redis_conn, rpc_helper=rpc_helper)
+
+    async def compute_with_delegate_workers(
             self,
             epoch: EpochBase,
             redis_conn: aioredis.Redis,
@@ -77,14 +95,42 @@ class DelegatorPreloaderAsyncWorker(GenericDelegatorPreloader):
     ):
         self._redis_conn = redis_conn
         self._awaited_delegated_response_ids = set(self._request_id_query_obj_map.keys())
+        self._unique_id = str(uuid.uuid4())
         async with await get_rabbitmq_basic_connection_async() as rmq_conn:
             self._channel = await rmq_conn.channel()
-            await self._channel.set_qos(10)
+            await self._channel.set_qos(self._qos)
+
+            self._q_obj = await self._channel.declare_queue(exclusive=True)
+
+            self._filter_worker_response_queue, \
+                _filter_worker_response_routing_key_pattern = get_delegate_worker_response_queue_routing_key_pattern()
+
+            self._filter_worker_response_routing_key = _filter_worker_response_routing_key_pattern.replace(
+                '*', self._unique_id,
+            )
+
+            self._logger.debug(
+                'Consuming {} fetch response queue {} '
+                'in preloader, with routing key {}',
+                self._task_type,
+                self._filter_worker_response_queue,
+                self._filter_worker_response_routing_key,
+            )
+            self._response_exchange = await self._channel.get_exchange(
+                name=self._filter_worker_response_exchange_name,
+            )
+            await self._q_obj.bind(self._response_exchange, routing_key=self._filter_worker_response_routing_key)
+            self._consumer_tag = await self._q_obj.consume(
+                callback=self._on_filter_worker_response_message,
+            )
+            asyncio.ensure_future(self._periodic_awaited_responses_checker())
+
             self._exchange = await self._channel.get_exchange(
-                name=self._filter_worker_exchange_name,
+                name=self._filter_worker_request_exchange_name,
             )
             query_tasks = list()
             for query_obj in self._request_id_query_obj_map.values():
+                query_obj.extra['unique_id'] = self._unique_id
                 message_data = query_obj.json().encode('utf-8')
 
                 # Prepare a message to send
@@ -103,33 +149,11 @@ class DelegatorPreloaderAsyncWorker(GenericDelegatorPreloader):
             )
             asyncio.ensure_future(asyncio.gather(*query_tasks, return_exceptions=True))
 
-            self._filter_worker_response_queue, \
-                _filter_worker_response_routing_key_pattern = get_delegate_worker_response_queue_routing_key_pattern()
-
-            self._filter_worker_response_routing_key = _filter_worker_response_routing_key_pattern.replace(
-                '*', f'{epoch.epochId}_{self._task_type}',
-            )
-
-            self._q_obj = await self._channel.declare_queue(exclusive=True)
-
-            self._logger.debug(
-                'Consuming {} fetch response queue {} '
-                'in preloader, with routing key {}',
-                self._task_type,
-                self._filter_worker_response_queue,
-                self._filter_worker_response_routing_key,
-            )
-            await self._q_obj.bind(self._exchange, routing_key=self._filter_worker_response_routing_key)
-            self._consumer_tag = await self._q_obj.consume(
-                callback=self._on_filter_worker_response_message,
-            )
-            asyncio.ensure_future(self._periodic_awaited_responses_checker())
-
             try:
                 await asyncio.wait_for(self._preload_finished_event.wait(), timeout=preloader_config.timeout)
                 await self.cleanup()
             except asyncio.TimeoutError:
-                self._logger.error(
+                self._logger.warning(
                     'Preloading task {} for epoch {} timed out after {} seconds',
                     self._task_type, epoch.epochId, preloader_config.timeout,
                 )
@@ -138,6 +162,6 @@ class DelegatorPreloaderAsyncWorker(GenericDelegatorPreloader):
                     f'Preloading task {self._task_type} for epoch {epoch.epochId} timed out after {preloader_config.timeout} seconds',
                 )
             except Exception as e:
-                self._logger.error('Exception while waiting for preloading to complete: {}', e)
+                self._logger.warning('Exception while waiting for preloading to complete: {}', e)
                 await self.cleanup()
                 raise e

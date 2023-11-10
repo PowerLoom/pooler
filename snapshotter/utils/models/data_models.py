@@ -188,3 +188,8 @@ class SnapshotterProjectStatus(BaseModel):
 class UnfinalizedSnapshot(BaseModel):
     snapshotCid: str
     snapshot: Dict[str, Any]
+
+
+class TaskStatusRequest(BaseModel):
+    task_type: str
+    wallet_address: str

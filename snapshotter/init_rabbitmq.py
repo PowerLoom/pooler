@@ -1,4 +1,3 @@
-import aio_pika
 import pika
 
 from snapshotter.settings.config import settings
@@ -161,19 +160,27 @@ def init_commit_payload_queue(
 def init_delegate_worker_queue(
     ch: pika.adapters.blocking_connection.BlockingChannel,
 ) -> None:
-    delegated_worker_exchange_name = (
-        f'{settings.rabbitmq.setup.delegated_worker.exchange}:{settings.namespace}'
+    delegated_worker_response_exchange_name = (
+        f'{settings.rabbitmq.setup.delegated_worker.exchange}:Response:{settings.namespace}'
     )
 
     ch.exchange_declare(
-        exchange=delegated_worker_exchange_name, exchange_type='direct', durable=True,
+        exchange=delegated_worker_response_exchange_name, exchange_type='direct', durable=True,
+    )
+
+    delegated_worker_request_exchange_name = (
+        f'{settings.rabbitmq.setup.delegated_worker.exchange}:Request:{settings.namespace}'
+    )
+
+    ch.exchange_declare(
+        exchange=delegated_worker_request_exchange_name, exchange_type='direct', durable=True,
     )
 
     request_queue_name, request_queue_routing_key = get_delegate_worker_request_queue_routing_key()
 
     init_queue(
         ch,
-        exchange_name=delegated_worker_exchange_name,
+        exchange_name=delegated_worker_request_exchange_name,
         queue_name=request_queue_name,
         routing_key=request_queue_routing_key,
         bind=True,

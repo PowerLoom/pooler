@@ -28,6 +28,10 @@ rpc_blocknumber_calls = (
     'rpc:blocknumber:' + settings.namespace + ':calls'
 )
 
+rpc_get_block_number_calls = (
+    'rpc:blockNumber:' + settings.namespace + ':calls'
+)
+
 rpc_get_transaction_receipt_calls = (
     'rpc:transactionReceipt:' + settings.namespace + ':calls'
 )

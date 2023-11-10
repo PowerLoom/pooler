@@ -23,7 +23,8 @@ class DelegateAsyncWorker(GenericAsyncWorker):
     def __init__(self, name, **kwargs):
         super(DelegateAsyncWorker, self).__init__(name=name, **kwargs)
         self._qos = 1
-        self._exchange_name = f'{settings.rabbitmq.setup.delegated_worker.exchange}:{settings.namespace}'
+        self._exchange_name = f'{settings.rabbitmq.setup.delegated_worker.exchange}:Request:{settings.namespace}'
+        self._response_exchange_name = f'{settings.rabbitmq.setup.delegated_worker.exchange}:Response:{settings.namespace}'
         self._delegate_task_calculation_mapping = None
         self._task_types = []
         for task in delegate_tasks:
@@ -62,7 +63,6 @@ class DelegateAsyncWorker(GenericAsyncWorker):
             )
 
             self._logger.trace('got result from delegate worker compute {}', result)
-
             await self._send_delegate_worker_response_queue(
                 request_msg=msg_obj,
                 response_msg=result,
@@ -97,7 +97,7 @@ class DelegateAsyncWorker(GenericAsyncWorker):
         response_queue_name, response_routing_key_pattern = get_delegate_worker_response_queue_routing_key_pattern()
 
         response_routing_key = response_routing_key_pattern.replace(
-            '*', f'{request_msg.epochId}_{request_msg.task_type}',
+            '*', request_msg.extra['unique_id'],
         )
 
         # send through rabbitmq
@@ -106,7 +106,7 @@ class DelegateAsyncWorker(GenericAsyncWorker):
                 # Prepare a message to send
                 delegate_workers_response_exchange = await channel.get_exchange(
                     # request and response payloads for delegate workers are sent through the same exchange
-                    name=self._exchange_name,
+                    name=self._response_exchange_name,
                 )
                 message_data = response_msg.json().encode('utf-8')
                 # Prepare a message to send
@@ -175,7 +175,3 @@ class DelegateAsyncWorker(GenericAsyncWorker):
             module = importlib.import_module(delegate_task.module)
             class_ = getattr(module, delegate_task.class_name)
             self._delegate_task_calculation_mapping[key] = class_()
-
-
-# wkr = DelegateAsyncWorker("test")
-# wkr.start()

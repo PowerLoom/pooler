@@ -1,18 +1,12 @@
-from datetime import datetime
-from distutils import core
 import json
 import os
-from re import S
 import resource
 import threading
 import time
-from urllib.parse import urljoin
 import uuid
-import psutil
-import pydantic
-import redis
-import httpx
+from datetime import datetime
 from multiprocessing import Process
+from re import S
 from signal import SIGCHLD
 from signal import SIGINT
 from signal import signal
@@ -21,7 +15,15 @@ from signal import SIGTERM
 from threading import Thread
 from typing import Dict
 from typing import Optional
+from urllib.parse import urljoin
+
+import httpx
+import psutil
+import pydantic
+import redis
+from distutils import core
 from eth_utils.address import to_checksum_address
+
 from snapshotter.processor_distributor import ProcessorDistributor
 from snapshotter.settings.config import settings
 from snapshotter.system_event_detector import EventDetectorProcess
@@ -32,12 +34,19 @@ from snapshotter.utils.delegate_worker import DelegateAsyncWorker
 from snapshotter.utils.exceptions import SelfExitException
 from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.helper_functions import cleanup_proc_hub_children
-from snapshotter.utils.models.data_models import ProcessorWorkerDetails, SnapshotterEpochProcessingReportItem, SnapshotterIssue, SnapshotterReportState, SnapshotterStateUpdate, SnapshotterStates
+from snapshotter.utils.models.data_models import ProcessorWorkerDetails
+from snapshotter.utils.models.data_models import SnapshotterEpochProcessingReportItem
+from snapshotter.utils.models.data_models import SnapshotterIssue
 from snapshotter.utils.models.data_models import SnapshotterPing
+from snapshotter.utils.models.data_models import SnapshotterReportState
+from snapshotter.utils.models.data_models import SnapshotterStates
+from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.message_models import ProcessHubCommand
 from snapshotter.utils.rabbitmq_helpers import RabbitmqSelectLoopInteractor
-from snapshotter.utils.redis.redis_conn import REDIS_CONN_CONF, provide_redis_conn
-from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key, epoch_id_project_to_state_mapping
+from snapshotter.utils.redis.redis_conn import provide_redis_conn
+from snapshotter.utils.redis.redis_conn import REDIS_CONN_CONF
+from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
+from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.rpc import RpcHelper
 from snapshotter.utils.snapshot_worker import SnapshotAsyncWorker
 
@@ -95,7 +104,7 @@ class ProcessHubCore(Process):
                         projectID='',
                         epochId='',
                         timeOfReporting=datetime.now().isoformat(),
-                    )
+                    ),
                 )
             self.rabbitmq_interactor.stop()
             # raise GenericExitOnSignal
@@ -174,7 +183,7 @@ class ProcessHubCore(Process):
                     )
                 except Exception as e:
                     if settings.logs.trace_enabled:
-                        self._logger.opt(exception=True).error('Error while pinging reporting service: {}', e,)
+                        self._logger.opt(exception=True).error('Error while pinging reporting service: {}', e)
                     else:
                         self._logger.error(
                             'Error while pinging reporting service: {}', e,
@@ -201,7 +210,7 @@ class ProcessHubCore(Process):
                     continue
                 self._last_epoch_processing_health_check = int(time.time())
                 self._logger.debug(
-                    'Continuing with epoch processing health check since 4 or more epochs have passed since process start'
+                    'Continuing with epoch processing health check since 4 or more epochs have passed since process start',
                 )
                 # check for epoch processing status
                 try:
@@ -290,11 +299,13 @@ class ProcessHubCore(Process):
                             extra=json.dumps(
                                 {
                                     'epoch_health': epoch_health,
-                                }
+                                },
                             ),
-                        )
+                        ),
                     )
-                    self._logger.info('Proceeding to respawn all children because epochs were found unhealthy: {}', epoch_health)
+                    self._logger.info(
+                        'Proceeding to respawn all children because epochs were found unhealthy: {}', epoch_health,
+                    )
                     self._respawn_all_children()
         self._logger.error(
             (
@@ -512,7 +523,7 @@ class ProcessHubCore(Process):
         self._redis_connection_pool_sync = redis.BlockingConnectionPool(**REDIS_CONN_CONF)
         self._redis_conn_sync = redis.Redis(connection_pool=self._redis_connection_pool_sync)
         self._anchor_rpc_helper = RpcHelper(
-            rpc_settings=settings.anchor_chain_rpc
+            rpc_settings=settings.anchor_chain_rpc,
         )
         self._anchor_rpc_helper._load_web3_providers_and_rate_limits()
         protocol_abi = read_json_file(settings.protocol_state.abi, self._logger)

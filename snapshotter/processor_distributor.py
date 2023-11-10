@@ -5,10 +5,13 @@ import json
 import multiprocessing
 import queue
 import resource
-from signal import SIGINT, SIGQUIT, SIGTERM, signal
 import time
 from collections import defaultdict
 from functools import partial
+from signal import SIGINT
+from signal import signal
+from signal import SIGQUIT
+from signal import SIGTERM
 from typing import Awaitable
 from typing import Dict
 from typing import List
@@ -35,12 +38,12 @@ from snapshotter.settings.config import projects_config
 from snapshotter.settings.config import settings
 from snapshotter.utils.callback_helpers import get_rabbitmq_channel
 from snapshotter.utils.callback_helpers import get_rabbitmq_robust_connection_async
+from snapshotter.utils.data_utils import build_projects_list_from_events
 from snapshotter.utils.data_utils import get_projects_list
 from snapshotter.utils.data_utils import get_snapshot_submision_window
 from snapshotter.utils.data_utils import get_source_chain_epoch_size
 from snapshotter.utils.data_utils import get_source_chain_id
 from snapshotter.utils.default_logger import logger
-from snapshotter.utils.models.data_models import PreloaderAsyncFutureDetails
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.data_models import SnapshottersUpdatedEvent
@@ -57,6 +60,7 @@ from snapshotter.utils.redis.redis_keys import active_status_key
 from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import project_finalized_data_zset
+from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_key
 from snapshotter.utils.redis.redis_keys import snapshot_submission_window_key
 from snapshotter.utils.rpc import RpcHelper
 
@@ -120,7 +124,6 @@ class ProcessorDistributor(multiprocessing.Process):
     def _signal_handler(self, signum, frame):
         if signum in [SIGINT, SIGTERM, SIGQUIT]:
             self._core_rmq_consumer.cancel()
-
 
     async def _init_redis_pool(self):
         self._aioredis_pool = RedisPoolCache()
@@ -187,6 +190,32 @@ class ProcessorDistributor(multiprocessing.Process):
                 rpc_helper=self._anchor_rpc_helper,
                 state_contract_obj=protocol_state_contract,
             )
+
+            # self._projects_list = await build_projects_list_from_events(
+            #     redis_conn=self._redis_conn,
+            #     rpc_helper=self._anchor_rpc_helper,
+            #     state_contract_obj=protocol_state_contract,
+            # )
+
+            # self._logger.info('Generated project list with {} projects', self._projects_list)
+
+            # # NOTE: For phase2 going if a more txn data based approach instead of project based approach
+            # #  since number of projects can grow exponentially. TLDR is snapshotters will monitor
+            # #  and generate snapshots for all relevant transations and extra submissions will just be ignored
+            # #  at the relayer level.
+            # self._projects_list = []
+            # # iterate over project list fetched
+            # for project_type, project_config in self._project_type_config_mapping.items():
+            #     project_type = project_config.project_type
+            #     if project_config.projects == []:
+            #         relevant_projects = set(filter(lambda x: project_type in x, self._projects_list))
+            #         project_data = set()
+            #         for project in relevant_projects:
+            #             data_source = project.split(':')[-2]
+            #             project_data.add(
+            #                 data_source,
+            #             )
+            #         project_config.projects = list(project_data)
 
             submission_window = await get_snapshot_submision_window(
                 redis_conn=self._redis_conn,
@@ -325,6 +354,16 @@ class ProcessorDistributor(multiprocessing.Process):
                 )
                 continue
 
+        # for project_type, project_config in self._project_type_config_mapping.items():
+        #     if not project_config.preload_tasks:
+        #         # release for snapshotting
+        #         asyncio.ensure_future(
+        #             self._distribute_callbacks_snapshotting(
+        #                 project_type, msg_obj,
+        #             ),
+        #         )
+        #         continue
+
         asyncio.ensure_future(
             self._preloader_waiter(
                 epoch=msg_obj,
@@ -350,6 +389,7 @@ class ProcessorDistributor(multiprocessing.Process):
         self._newly_added_projects = self._newly_added_projects.union(
             await self._enable_pending_projects_for_epoch(msg_obj.epochId),
         )
+        # await self._enable_pending_projects_for_epoch(msg_obj.epochId)
 
         asyncio.ensure_future(self._exec_preloaders(msg_obj=msg_obj))
 
@@ -429,6 +469,27 @@ class ProcessorDistributor(multiprocessing.Process):
                     f' {project_type} : {process_unit}',
                 )
 
+            # process_unit = PowerloomSnapshotProcessMessage(
+            #     begin=epoch.begin,
+            #     end=epoch.end,
+            #     epochId=epoch.epochId,
+            #     bulk_mode=True,
+            # )
+
+            # msg_body = Message(process_unit.json().encode('utf-8'))
+            # queuing_tasks.append(
+            #     exchange.publish(
+            #         routing_key=f'powerloom-backend-callback:{settings.namespace}'
+            #         f':{settings.instance_id}:EpochReleased.{project_type}',
+            #         message=msg_body,
+            #     ),
+            # )
+
+            # self._logger.debug(
+            #     'Sent out message to be processed by worker'
+            #     f' {project_type} : {process_unit}',
+            # )
+
             results = await asyncio.gather(*queuing_tasks, return_exceptions=True)
 
         for result in results:
@@ -460,6 +521,19 @@ class ProcessorDistributor(multiprocessing.Process):
                                 items.remove(data_source)
                                 project_config.projects = list(items)
 
+                # for project_type, project_config in self._project_type_config_mapping.items():
+                #     projects_set = project_config.projects
+                #     if project_type in msg_obj.projectId:
+                #         if project_config.projects is None:
+                #             continue
+                #         data_source = msg_obj.projectId.split(':')[-2]
+                #         if msg_obj.allowed:
+                #             projects_set.add(data_source)
+                #         else:
+                #             if data_source in project_config.projects:
+                #                 projects_set.discard(data_source)
+                #     project_config.projects = list(projects_set)
+
         return set([msg.projectId.lower() for msg in pending_project_msgs if msg.allowed])
 
     async def _update_all_projects(self, message: IncomingMessage):
@@ -483,6 +557,12 @@ class ProcessorDistributor(multiprocessing.Process):
             )
         else:
             return
+
+        # set project last finalized epoch in redis
+        await self._redis_conn.set(
+            project_last_finalized_epoch_key(msg_obj.projectId),
+            msg_obj.epochId,
+        )
 
         # Add to project finalized data zset
         await self._redis_conn.zadd(

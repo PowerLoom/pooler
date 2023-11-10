@@ -53,17 +53,17 @@ class TxPreloadWorker(DelegatorPreloaderAsyncWorker):
                 return
         async with self._rw_lock.writer_lock:
             self._awaited_delegated_response_ids.remove(msg_obj.requestId)
-            self._collected_response_objects[msg_obj.epochId].update(
+            self._collected_response_objects.update(
                 {msg_obj.txHash: msg_obj.txReceipt},
             )
 
     async def _on_delegated_responses_complete(self):
-        if self._collected_response_objects[self._epoch.epochId]:
+        if self._collected_response_objects:
             await self._redis_conn.hset(
                 name=epoch_txs_htable(epoch_id=self._epoch.epochId),
                 mapping={
                     k: json.dumps(v)
-                    for k, v in self._collected_response_objects[self._epoch.epochId].items()
+                    for k, v in self._collected_response_objects.items()
                 },
             )
 
@@ -96,4 +96,4 @@ class TxPreloadWorker(DelegatorPreloaderAsyncWorker):
             msg_obj.requestId: msg_obj
             for msg_obj in tx_receipt_query_messages
         }
-        return await super(TxPreloadWorker, self).compute(epoch, redis_conn, rpc_helper)
+        return await super(TxPreloadWorker, self).compute_with_retry(epoch, redis_conn, rpc_helper)
