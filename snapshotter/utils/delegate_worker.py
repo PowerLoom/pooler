@@ -28,8 +28,8 @@ class DelegateAsyncWorker(GenericAsyncWorker):
         self._delegate_task_calculation_mapping = None
         self._task_types = []
         for task in delegate_tasks:
-            type_ = task.task_type
-            self._task_types.append(type_)
+            task_type = task.task_type
+            self._task_types.append(task_type)
 
         self._q, self._rmq_routing = get_delegate_worker_request_queue_routing_key()
 

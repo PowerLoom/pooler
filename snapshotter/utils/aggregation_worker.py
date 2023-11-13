@@ -49,28 +49,28 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 self._multi_project_types.add(config.project_type)
             self._task_types.add(config.project_type)
 
-    def _gen_single_type_project_id(self, type_, epoch):
+    def _gen_single_type_project_id(self, task_type, epoch):
         data_source = epoch.projectId.split(':')[-2]
-        project_id = f'{type_}:{data_source}:{settings.namespace}'
+        project_id = f'{task_type}:{data_source}:{settings.namespace}'
         return project_id
 
-    def _gen_multiple_type_project_id(self, type_, epoch):
+    def _gen_multiple_type_project_id(self, task_type, epoch):
 
         underlying_project_ids = [project.projectId for project in epoch.messages]
         unique_project_id = ''.join(sorted(underlying_project_ids))
 
         project_hash = hashlib.sha3_256(unique_project_id.encode()).hexdigest()
 
-        project_id = f'{type_}:{project_hash}:{settings.namespace}'
+        project_id = f'{task_type}:{project_hash}:{settings.namespace}'
         return project_id
 
-    def _gen_project_id(self, type_, epoch):
-        if type_ in self._single_project_types:
-            return self._gen_single_type_project_id(type_, epoch)
-        elif type_ in self._multi_project_types:
-            return self._gen_multiple_type_project_id(type_, epoch)
+    def _gen_project_id(self, task_type, epoch):
+        if task_type in self._single_project_types:
+            return self._gen_single_type_project_id(task_type, epoch)
+        elif task_type in self._multi_project_types:
+            return self._gen_multiple_type_project_id(task_type, epoch)
         else:
-            raise ValueError(f'Unknown project type {type_}')
+            raise ValueError(f'Unknown project type {task_type}')
 
     async def _processor_task(
         self,
@@ -181,7 +181,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                     },
                 )
                 await self._commit_payload(
-                    type_=task_type,
+                    task_type=task_type,
                     project_id=project_id,
                     epoch=msg_obj,
                     snapshot=snapshot,

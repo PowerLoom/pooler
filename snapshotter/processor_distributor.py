@@ -231,9 +231,9 @@ class ProcessorDistributor(multiprocessing.Process):
 
             # iterate over project list fetched
             for project_config in self.projects_config:
-                type_ = project_config.project_type
+                task_type = project_config.project_type
                 if project_config.projects == []:
-                    relevant_projects = set(filter(lambda x: type_ in x, self._projects_list))
+                    relevant_projects = set(filter(lambda x: task_type in x, self._projects_list))
                     project_data = []
                     for project in relevant_projects:
                         data_source = project.split(':')[-2]
@@ -507,8 +507,8 @@ class ProcessorDistributor(multiprocessing.Process):
             for msg_obj in pending_project_msgs:
                 # Update projects list
                 for project_config in self.projects_config:
-                    type_ = project_config.project_type
-                    if type_ in msg_obj.projectId:
+                    task_type = project_config.project_type
+                    if task_type in msg_obj.projectId:
                         if project_config.projects is None:
                             continue
                         data_source = msg_obj.projectId.split(':')[-2]
@@ -636,7 +636,7 @@ class ProcessorDistributor(multiprocessing.Process):
                 name=self._callback_exchange_name,
             )
             for config in aggregator_config:
-                type_ = config.project_type
+                task_type = config.project_type
                 if config.aggregate_on == AggregateOn.single_project:
                     if config.filters.projectId not in process_unit.projectId:
                         self._logger.trace(f'projectId mismatch {process_unit.projectId} {config.filters.projectId}')
@@ -645,7 +645,7 @@ class ProcessorDistributor(multiprocessing.Process):
                     rabbitmq_publish_tasks.append(
                         exchange.publish(
                             routing_key=f'powerloom-backend-callback:{settings.namespace}:'
-                            f'{settings.instance_id}:CalculateAggregate.{type_}',
+                            f'{settings.instance_id}:CalculateAggregate.{task_type}',
                             message=Message(process_unit.json().encode('utf-8')),
                         ),
                     )
@@ -697,7 +697,7 @@ class ProcessorDistributor(multiprocessing.Process):
                         rabbitmq_publish_tasks.append(
                             exchange.publish(
                                 routing_key=f'powerloom-backend-callback:{settings.namespace}'
-                                f':{settings.instance_id}:CalculateAggregate.{type_}',
+                                f':{settings.instance_id}:CalculateAggregate.{task_type}',
                                 message=Message(final_msg.json().encode('utf-8')),
                             ),
                         )

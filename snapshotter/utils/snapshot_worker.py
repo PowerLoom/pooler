@@ -2,6 +2,7 @@ import asyncio
 import importlib
 import json
 import time
+from typing import Optional
 
 from aio_pika import IncomingMessage
 from ipfs_client.main import AsyncIPFSClient
@@ -35,23 +36,27 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         self._project_calculation_mapping = None
         self._task_types = []
         for project_config in projects_config:
-            type_ = project_config.project_type
-            self._task_types.append(type_)
+            task_type = project_config.project_type
+            self._task_types.append(task_type)
         self._submission_window = None
 
-    def _gen_project_id(self, type_: str, epoch):
-        if not epoch.data_source:
+    def _gen_project_id(self, task_type: str, data_source: Optional[str] = None, primary_data_source: Optional[str] = None):
+        if not data_source:
             # For generic use cases that don't have a data source like block details
-            project_id = f'{type_}:{settings.namespace}'
+            project_id = f'{task_type}:{settings.namespace}'
         else:
-            if epoch.primary_data_source:
-                project_id = f'{type_}:{epoch.primary_data_source}_{epoch.data_source}:{settings.namespace}'
+            if primary_data_source:
+                project_id = f'{task_type}:{primary_data_source.lower()}_{data_source.lower()}:{settings.namespace}'
             else:
-                project_id = f'{type_}:{epoch.data_source}:{settings.namespace}'
+                project_id = f'{task_type}:{data_source.lower()}:{settings.namespace}'
         return project_id
 
     async def _process_single_mode(self, msg_obj: PowerloomSnapshotProcessMessage, task_type: str):
-        project_id = self._gen_project_id(type_=task_type, epoch=msg_obj)
+        project_id = self._gen_project_id(
+            task_type=task_type,
+            data_source=msg_obj.data_source,
+            primary_data_source=msg_obj.primary_data_source,
+        )
 
         try:
             task_processor = self._project_calculation_mapping[task_type]
@@ -123,7 +128,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             )
 
             await self._commit_payload(
-                type_=task_type,
+                task_type=task_type,
                 _ipfs_writer_client=self._ipfs_writer_client,
                 project_id=project_id,
                 epoch=msg_obj,
@@ -132,7 +137,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             )
 
     async def _process_bulk_mode(self, msg_obj: PowerloomSnapshotProcessMessage, task_type: str):
-        # project_id = self._gen_project_id(type_=task_type, epoch=msg_obj)
 
         try:
             task_processor = self._project_calculation_mapping[task_type]
@@ -186,20 +190,29 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             )
         else:
 
-            # NOTE: Bulk mode is primarily for boost and there won't be any aggregation. Caching of data in redis is not required.
-            # await self._redis_conn.set(
-            #     name=submitted_base_snapshots_key(
-            #         epoch_id=msg_obj.epochId, project_id=project_id,
-            #     ),
-            #     value=snapshot.json(),
-            #     # block time is about 2 seconds on anchor chain, keeping it around ten times the submission window
-            #     ex=self._submission_window * 10 * 2,
-            # )
-
             self._logger.info('Sending snapshots to commit service: {}', snapshots)
 
-            for data_source, snapshot in snapshots:
-                project_id = f'{task_type}:{data_source.lower()}:{settings.namespace}'
+            for project_data_source, snapshot in snapshots:
+                data_sources = project_data_source.split('_')
+                if len(data_sources) == 1:
+                    data_source = data_sources[0]
+                    primary_data_source = None
+                else:
+                    primary_data_source, data_source = data_sources
+
+                project_id = self._gen_project_id(
+                    task_type=task_type, data_source=data_source, primary_data_source=primary_data_source,
+                )
+
+                await self._redis_conn.set(
+                    name=submitted_base_snapshots_key(
+                        epoch_id=msg_obj.epochId, project_id=project_id,
+                    ),
+                    value=snapshot.json(),
+                    # block time is about 2 seconds on anchor chain, keeping it around ten times the submission window
+                    ex=self._submission_window * 10 * 2,
+                )
+
                 await self._redis_conn.hset(
                     name=epoch_id_project_to_state_mapping(
                         epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
@@ -211,7 +224,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                     },
                 )
                 await self._commit_payload(
-                    type_=task_type,
+                    task_type=task_type,
                     _ipfs_writer_client=self._ipfs_writer_client,
                     project_id=project_id,
                     epoch=msg_obj,
@@ -240,7 +253,11 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             if submission_window:
                 self._submission_window = int(submission_window)
 
-        project_id = self._gen_project_id(type_=task_type, epoch=msg_obj)
+        project_id = self._gen_project_id(
+            task_type=task_type,
+            data_source=msg_obj.data_source,
+            primary_data_source=msg_obj.primary_data_source,
+        )
 
         try:
             if not self._rate_limiting_lua_scripts:
@@ -321,7 +338,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 },
             )
             await self._commit_payload(
-                type_=task_type,
+                task_type=task_type,
                 _ipfs_writer_client=self._ipfs_writer_client,
                 project_id=project_id,
                 epoch=msg_obj,

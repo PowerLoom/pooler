@@ -143,7 +143,7 @@ class GenericAsyncWorker(multiprocessing.Process):
 
     async def _commit_payload(
             self,
-            type_: str,
+            task_type: str,
             _ipfs_writer_client: AsyncIPFSClient,
             project_id: str,
             epoch: Union[
@@ -232,7 +232,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                 pass
             # send to relayer dispatch queue
             await self._send_payload_commit_service_queue(
-                type_=type_,
+                task_type=task_type,
                 project_id=project_id,
                 epoch=epoch,
                 snapshot_cid=snapshot_cid,
@@ -265,7 +265,7 @@ class GenericAsyncWorker(multiprocessing.Process):
 
     async def _send_payload_commit_service_queue(
         self,
-        type_: str,
+        task_type: str,
         project_id: str,
         epoch: Union[
             PowerloomSnapshotProcessMessage,
