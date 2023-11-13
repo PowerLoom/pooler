@@ -110,16 +110,15 @@ async def get_events(
     )
     
     
-    mint_events, burn_events =  await rpc.get_events_logs(
+    events = await rpc.get_events_logs(
         contract_address=pair_address,
         to_block=to_block,
         from_block=from_block,
         topics=event_sig,
         event_abi=event_abi,
         redis_conn=redis_con,
-        ) 
-    events = mint_events + burn_events
-
+        )
+    
     return events
 
 
