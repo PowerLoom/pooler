@@ -105,26 +105,24 @@ The size of an epoch is configurable. Let that be referred to as `size(E)`
 
 Preloaders perform an important function of fetching low-level data for eg. block details, and transaction receipts so that subsequent base snapshot building can proceed without performing unnecessary redundant calls that ultimately save on access costs on RPC and other queries on the underlying node infrastructure for the source data blockchain.
 
-Each project type within the project configuration as found in [`config/projects.json`](config/projects.example.json) can specify the preloaders that their base snapshot builds depend on. Once the dependent preloaders have completed their fetches, the [Processor Distributor](#processor-distributor) subsequently triggers the base snapshot builders for each project type.
+Each project type within the project configuration as found in [`config/projects.json`](https://github.com/PowerLoom/snapshotter-phase2-configs/blob/ddb4eba16b282fdf4c7211e17b4291fba942982a/projects.example.json) can specify the preloaders that their base snapshot builds depend on. Once the dependent preloaders have completed their fetches, the [Processor Distributor](#processor-distributor) subsequently triggers the base snapshot builders for each project type.
 
-https://github.com/PowerLoom/wallet-boost/blob/47bdd83b09d786e885bf3187f2a4baa495b6c794/config/projects.example.json#L3-L12
+https://github.com/PowerLoom/pooler/blob/5e7cc3812074d91e8d7d85058554bb1175bf8070/config/projects.example.json#L3-L12
 
 The preloaders implement one of the following two generic interfaces
 
 * `GenericPreloader`
 
-https://github.com/PowerLoom/wallet-boost/blob/a36078ea7f4b2692933065cbd1c3b4ec42478e1d/snapshotter/utils/callback_helpers.py#L109-L126
+https://github.com/PowerLoom/pooler/blob/5e7cc3812074d91e8d7d85058554bb1175bf8070/snapshotter/utils/callback_helpers.py#L109-L126
 
 * `GenericDelegatorPreloader`. Such preloaders are tasked with fetching large volumes of data and utilize [delegated workers](#delegation-workers-for-preloaders) to which they submit large workloads over a request queue and wait for the results to be returned over a response queue.
 
-https://github.com/PowerLoom/wallet-boost/blob/47bdd83b09d786e885bf3187f2a4baa495b6c794/snapshotter/utils/callback_helpers.py#L129-L161
+https://github.com/PowerLoom/pooler/blob/5e7cc3812074d91e8d7d85058554bb1175bf8070/snapshotter/utils/callback_helpers.py#L129-L161
 
 
+The preloaders can be found in the [`snapshotter/utils/preloaders`](snapshotter/utils/preloaders/) directory. The preloaders that are available to project configuration entries are exposed through the [`config/preloader.json`](https://github.com/PowerLoom/snapshotter-phase2-configs/blob/zkevm_with_remote_pinning/preloader.json) configuration.
 
-The preloaders can be found in the [`snapshotter/utils/preloaders`](snapshotter/utils/preloaders/) directory. The preloaders that are available to project configuration entries are exposed through the [`config/preloader.json`](config/preloader.json) configuration.
-
-https://github.com/PowerLoom/wallet-boost/blob/a36078ea7f4b2692933065cbd1c3b4ec42478e1d/config/preloader.json#L1-L27
-
+https://github.com/PowerLoom/snapshotter-phase2-configs/blob/zkevm_with_remote_pinning/preloader.json#L1-L27
 
 At the moment, we have 3 generic preloaders built into the snapshotter template.
 - [Block Details](snapshotter/utils/preloaders/block_details/preloader.py) - It prefetches and stores block details for blocks in each Epoch and stores it in Redis
@@ -132,11 +130,6 @@ At the moment, we have 3 generic preloaders built into the snapshotter template.
 - [Tx Receipts](snapshotter/utils/preloaders/tx_receipts/preloader.py) - It prefetches all transaction details present in each Epoch and stores the data in Redis. Since fetching all block transactions is a lot of work, it utilizes the [delegated workers](#delegation-workers-for-preloaders) architecture to parallelize and fetch data in a fast and reliable way
 
 More preloaders can be easily added depending on the use case user is snapshotting for. It is as simple as writing logic in `preloader.py`, adding the preloader config to `config/preloader.json`, and adding the preloader dependency in `config/projects.json`
-
-The [processor distributor](#processor-distributor) resolves the preloading dependency and triggers base snapshot generation within the following code segment:
-
-https://github.com/PowerLoom/wallet-boost/blob/a36078ea7f4b2692933065cbd1c3b4ec42478e1d/snapshotter/processor_distributor.py#L172-L229
-
 
  ### Base Snapshot Generation
 
@@ -149,18 +142,18 @@ https://github.com/PowerLoom/wallet-boost/blob/a36078ea7f4b2692933065cbd1c3b4ec4
  * an array of "<addr1>_<addr2>" strings that denote the relationship between two EVM addresses (for eg ERC20 balance of `addr2` against a token contract `addr1`)
  * data sources can be dynamically added on the protocol state contract which the [processor distributor](#processor-distributor) syncs with:
 
-https://github.com/PowerLoom/wallet-boost/blob/a36078ea7f4b2692933065cbd1c3b4ec42478e1d/snapshotter/processor_distributor.py#L596-L599
+https://github.com/PowerLoom/pooler/blob/5892eeb9433d8f4b8aa677006d98a1dde0458cb7/snapshotter/processor_distributor.py#L596-L599
 
 
 
-https://github.com/PowerLoom/wallet-boost/blob/a36078ea7f4b2692933065cbd1c3b4ec42478e1d/snapshotter/processor_distributor.py#L408-L418
+https://github.com/PowerLoom/pooler/blob/5892eeb9433d8f4b8aa677006d98a1dde0458cb7/snapshotter/processor_distributor.py#L408-L418
 
 
 
 The project ID is ultimately generated in the following manner:
 
 
-https://github.com/PowerLoom/wallet-boost/blob/47bdd83b09d786e885bf3187f2a4baa495b6c794/snapshotter/utils/snapshot_worker.py#L29-L38
+https://github.com/PowerLoom/pooler/blob/5892eeb9433d8f4b8aa677006d98a1dde0458cb7/snapshotter/utils/snapshot_worker.py#L29-L38
 
 
  The snapshots generated by workers defined in this config are the fundamental data models on which higher-order aggregates and richer data points are built. The `SnapshotSubmitted` event generated on such base snapshots further triggers the building of sophisticated aggregates, super-aggregates, filters, and other data composites on top of them.
@@ -175,7 +168,7 @@ Bulk Mode is highly effective in situations where the project list is continuall
 
 An important advantage of Bulk Mode is that, since all transaction receipts are preloaded, this approach can efficiently scale to accommodate a large number of project types with little to no increase in RPC (Remote Procedure Call) calls.
 
-https://github.com/PowerLoom/wallet-boost/blob/d14d7af052f2f2115d1a2f06cf0a476732974463/snapshotter/utils/snapshot_worker.py#L193-L212
+https://github.com/PowerLoom/pooler/blob/5892eeb9433d8f4b8aa677006d98a1dde0458cb7/snapshotter/utils/snapshot_worker.py#L193-L212
 
  ### Data source signaling
 
@@ -185,11 +178,11 @@ In this present implementation of the wallet boost use case, such sources are ad
 
 Every time a new project is added for either of these two types on the protocol state smart contract by an off-chain data source-detector and signaller, a `ProjectUpdated` event is emitted according to the following data model
 
-https://github.com/PowerLoom/wallet-boost/blob/a36078ea7f4b2692933065cbd1c3b4ec42478e1d/snapshotter/utils/models/data_models.py#L77-L80
+https://github.com/PowerLoom/pooler/blob/5892eeb9433d8f4b8aa677006d98a1dde0458cb7/snapshotter/utils/models/data_models.py#L102-L105
 
 The snapshotting for every such dynamically added project is initiated only when the `epochId`, corresponding to the field `enableEpochId` contained within the `ProjectUpdated` event, is released. The [processor distributor](#processor-distributor) correctly triggers the snapshotting workflow for such dynamically added data sources in the following segment:
 
-https://github.com/PowerLoom/wallet-boost/blob/a36078ea7f4b2692933065cbd1c3b4ec42478e1d/snapshotter/processor_distributor.py#L383-L399
+https://github.com/PowerLoom/pooler/blob/5892eeb9433d8f4b8aa677006d98a1dde0458cb7/snapshotter/processor_distributor.py#L383-L399
 
 
 
@@ -208,7 +201,7 @@ Workers as defined in `config/aggregator.json` are triggered by the appropriate 
 
 In case of aggregation over multiple projects, their project IDs are generated with a combination of the hash of the dependee project IDs along with the namespace
 
-https://github.com/PowerLoom/wallet-boost/blob/47bdd83b09d786e885bf3187f2a4baa495b6c794/snapshotter/utils/aggregation_worker.py#L116-L124
+https://github.com/PowerLoom/pooler/blob/5892eeb9433d8f4b8aa677006d98a1dde0458cb7/snapshotter/utils/aggregation_worker.py#L116-L124
 
 
 ## Major Components
@@ -235,24 +228,24 @@ The Processor Distributor, defined in [`processor_distributor.py`](snapshotter/p
 * It reads the events forwarded by the event detector to the `f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}'` RabbitMQ queue bound to a topic exchange as configured in `settings.rabbitmq.setup.event_detector.exchange`([code-ref: RabbitMQ exchanges and queue setup in pooler](snapshotter/init_rabbitmq.py))
 * It creates and distributes processing messages based on the preloader configuration present in `config/preloader.json`, the project configuration present in `config/projects.json` and `config/aggregator.json`, and the topic pattern used in the routing key received from the topic exchange
   * For [`EpochReleased` events](#epoch-generation), it forwards such messages to base snapshot builders for data source contracts as configured in `config/projects.json` for the current epoch information contained in the event.
-    https://github.com/PowerLoom/wallet-boost/blob/47bdd83b09d786e885bf3187f2a4baa495b6c794/snapshotter/processor_distributor.py#L125-L141
+    https://github.com/PowerLoom/pooler/blob/5892eeb9433d8f4b8aa677006d98a1dde0458cb7/snapshotter/processor_distributor.py#L125-L141
   * For [`SnapshotSubmitted` events](#base-snapshot-generation), it forwards such messages to single and multi-project aggregate topic routing keys.
-    https://github.com/PowerLoom/wallet-boost/blob/47bdd83b09d786e885bf3187f2a4baa495b6c794/snapshotter/processor_distributor.py#L228-L303
+    https://github.com/PowerLoom/pooler/blob/5892eeb9433d8f4b8aa677006d98a1dde0458cb7/snapshotter/processor_distributor.py#L228-L303
 
 
 ### Delegation Workers for preloaders
 
 The preloaders often fetch and cache large volumes of data, for eg, all the transaction receipts for a block on the data source blockchain. In such a case, a single worker will never be enough to feasibly fetch the data for a timely base snapshot generation and subsequent aggregate snapshot generations to finally reach a consensus.
 
-Hence such workers are defined as `delegate_tasks` in [`config/preloader.json`](config/preloader.json) and the [process hub core](#process-hub-core) launches a certain number of workers as defined in the primary settings file, `config/settings.json` under the key `callback_worker_config.num_delegate_workers`.
+Hence such workers are defined as `delegate_tasks` in [`config/preloader.json`](https://github.com/PowerLoom/snapshotter-phase2-configs/blob/zkevm_with_remote_pinning/preloader.json) and the [process hub core](#process-hub-core) launches a certain number of workers as defined in the primary settings file, `config/settings.json` under the key `callback_worker_config.num_delegate_workers`.
 
-https://github.com/PowerLoom/wallet-boost/blob/47bdd83b09d786e885bf3187f2a4baa495b6c794/config/preloader.json#L19-L25
+https://github.com/PowerLoom/pooler/blob/5892eeb9433d8f4b8aa677006d98a1dde0458cb7/config/preloader.json#L19-L25
 
-https://github.com/PowerLoom/wallet-boost/blob/47bdd83b09d786e885bf3187f2a4baa495b6c794/config/settings.example.json#L86-L90
+https://github.com/PowerLoom/pooler/blob/5892eeb9433d8f4b8aa677006d98a1dde0458cb7/config/settings.example.json#L86-L90
 
 Delegation workers operate over a simple request-response queue architecture over RabbitMQ.
 
-https://github.com/PowerLoom/wallet-boost/blob/3a0ef66ac8f4f12b06bb5961ac2fdc7b37bd27b3/snapshotter/init_rabbitmq.py#L63-L72
+https://github.com/PowerLoom/pooler/blob/5892eeb9433d8f4b8aa677006d98a1dde0458cb7/snapshotter/init_rabbitmq.py#L63-L72
 
 One of the preloaders bundled with this snapshotter peer is tasked with fetching all the transaction receipts within a given epoch's block range and because of the volume of data to be fetched it delegates this work to a bunch of delegation worker
 
@@ -261,15 +254,15 @@ One of the preloaders bundled with this snapshotter peer is tasked with fetching
 
 As a common functionality shared by all preloaders that utilize delegate workers, this logic is present in the generic class `DelegatorPreloaderAsyncWorker` that all such preloaders inherit. Here you can observe the workload is sent to the delegation workers
 
-https://github.com/PowerLoom/wallet-boost/blob/3a0ef66ac8f4f12b06bb5961ac2fdc7b37bd27b3/snapshotter/utils/generic_delegator_preloader.py#L74-L98
+https://github.com/PowerLoom/pooler/blob/5892eeb9433d8f4b8aa677006d98a1dde0458cb7/snapshotter/utils/generic_delegator_preloader.py#L74-L98
 
 Upon sending out the workloads tagged by unique request IDs, the delegator sets up a temporary exclusive queue to which only the delegation workers meant for the task type push their responses.
 
-https://github.com/PowerLoom/wallet-boost/blob/3a0ef66ac8f4f12b06bb5961ac2fdc7b37bd27b3/snapshotter/utils/generic_delegator_preloader.py#L100-L120
+https://github.com/PowerLoom/pooler/blob/5892eeb9433d8f4b8aa677006d98a1dde0458cb7/snapshotter/utils/generic_delegator_preloader.py#L100-L120
 
 The corresponding response being pushed by the delegation workers can be found here in the generic class `DelegateAsyncWorker` that all such workers should inherit from:
 
-https://github.com/PowerLoom/wallet-boost/blob/3a0ef66ac8f4f12b06bb5961ac2fdc7b37bd27b3/snapshotter/utils/delegate_worker.py#L58-L69
+https://github.com/PowerLoom/pooler/blob/5892eeb9433d8f4b8aa677006d98a1dde0458cb7/snapshotter/utils/delegate_worker.py#L58-L69
 
 ![Delegation worker dependent preloading architecture](snapshotter/static/docs/assets/DelegationPreloading.png)
 
@@ -279,9 +272,9 @@ The callback workers are the ones that build the base snapshot and aggregation s
 
 They listen to new messages on the RabbitMQ topic exchange as described in the following configuration, and the topic queue's initialization is as follows.
 
-https://github.com/PowerLoom/wallet-boost/blob/47bdd83b09d786e885bf3187f2a4baa495b6c794/config/settings.example.json#L42-L44
+https://github.com/PowerLoom/snapshotter-phase2-configs/blob/ddb4eba16b282fdf4c7211e17b4291fba942982a/settings.example.json#L42-44
 
-https://github.com/PowerLoom/wallet-boost/blob/47bdd83b09d786e885bf3187f2a4baa495b6c794/snapshotter/init_rabbitmq.py#L118-L140
+https://github.com/PowerLoom/pooler/blob/5892eeb9433d8f4b8aa677006d98a1dde0458cb7/snapshotter/init_rabbitmq.py#L118-L140
 
 Upon receiving a message from the processor distributor after preloading is complete, the workers do most of the heavy lifting along with some sanity checks and then call the `compute()` callback function on the project's configured snapshot worker class to transform the dependent data points as cached by the preloaders to finally generate the base snapshots.
 
@@ -303,8 +296,8 @@ Among many things, the core API allows you to **access the finalized CID as well
 
 The main endpoint implementations can be found as follows:
 
-https://github.com/PowerLoom/wallet-boost/blob/47bdd83b09d786e885bf3187f2a4baa495b6c794/snapshotter/core_api.py#L186-L268
-https://github.com/PowerLoom/wallet-boost/blob/47bdd83b09d786e885bf3187f2a4baa495b6c794/snapshotter/core_api.py#L273-L324
+https://github.com/PowerLoom/pooler/blob/5892eeb9433d8f4b8aa677006d98a1dde0458cb7/snapshotter/core_api.py#L186-L268
+https://github.com/PowerLoom/pooler/blob/5892eeb9433d8f4b8aa677006d98a1dde0458cb7/snapshotter/core_api.py#L273-L324
 
 The first endpoint in `GET /last_finalized_epoch/{project_id}` returns the last finalized EpochId for a given project ID and the second one is `GET /data/{epoch_id}/{project_id}/` which can be used to return the actual snapshot data for a given EpochId and ProjectId.
 
@@ -337,12 +330,12 @@ These instructions are needed to run the system using [`build-docker.sh`](build-
 
 ### Configuration
 Pooler needs the following config files to be present
-* **`settings.json` in `pooler/auth/settings`**: Changes are trivial. Copy [`config/auth_settings.example.json`](config/auth_settings.example.json) to `config/auth_settings.json`. This enables an authentication layer over the core API exposed by the pooler snapshotter.
+* **`settings.json` in `pooler/auth/settings`**: Changes are trivial. Copy [`config/auth_settings.example.json`](https://github.com/PowerLoom/snapshotter-phase2-configs/blob/ddb4eba16b282fdf4c7211e17b4291fba942982a/auth_settings.example.json) to `config/auth_settings.json`. This enables an authentication layer over the core API exposed by the pooler snapshotter.
 * settings files in `config/`
-    * **[`config/projects.json`](config/projects.example.json)**: Each entry in this configuration file defines the most fundamental unit of data representation in Powerloom Protocol, that is, a project. It is of the following schema
+    * **[`config/projects.json`](https://github.com/PowerLoom/snapshotter-phase2-configs/blob/ddb4eba16b282fdf4c7211e17b4291fba942982a/projects.example.json)**: Each entry in this configuration file defines the most fundamental unit of data representation in Powerloom Protocol, that is, a project. It is of the following schema
         ```javascript
         {
-            "project_type": "boost:eth_getBalance",
+            "project_type": "zkevm:bungee_bridge",
             //An empty array indicates the data sources are to be loaded from the protocol state contract
             //If the project's key is missing, the snapshot build does not depend on a singular data source (for eg, an Ethereum block that is finalized)
             //It otherwise can be an array of EVM address strings or,
@@ -354,16 +347,16 @@ Pooler needs the following config files to be present
                 "block_transactions"
             ],
             "processor":{
-                "module": "snapshotter.modules.boost.eth_balance",
-                "class_name": "EthBalanceProcessor"
+                "module": "snapshotter.modules.boost.bungee_bridge",
+                "class_name": "BungeeBridgeProcessor"
             }
         }
 
         ```
-        Copy over [`config/projects.example.json`](config/projects.example.json) to `config/projects.json`. For more details, read on in the [use case study](#wallet-boost-case-study-of-this-implementation) for this current implementation.
+        Copy over [`config/projects.example.json`](https://github.com/PowerLoom/snapshotter-phase2-configs/blob/ddb4eba16b282fdf4c7211e17b4291fba942982a/projects.example.json) to `config/projects.json`. For more details, read on in the [use case study](#pooler-case-study-of-this-implementation) for this current implementation.
     * To begin with, you can keep the workers and contracts as specified in the example files.
 
-    * **`config/settings.json`**: This is the primary configuration. We've provided a settings template in `config/settings.example.json` to help you get started. Copy over [`config/settings.example.json`](config/settings.example.json) to `config/settings.json`. There can be a lot to fine tune but the following are essential.
+    * **`config/settings.json`**: This is the primary configuration. We've provided a settings template in `config/settings.example.json` to help you get started. Copy over [`config/settings.example.json`](https://github.com/PowerLoom/snapshotter-phase2-configs/blob/ddb4eba16b282fdf4c7211e17b4291fba942982a/settings.example.json) to `config/settings.json`. There can be a lot to fine tune but the following are essential.
         - `instance_id`: This is the unique public key for your node to participate in consensus. It is currently registered on approval of an application (refer [deploy](https://github.com/PowerLoom/deploy) repo for more details on applying).
         - `namespace`, is the unique key used to identify your project namespace around which all consensus activity takes place.
         - RPC service URL(s) and rate limit configurations. Rate limits are service provider specific, different RPC providers have different rate limits. Example rate limit config for a node looks something like this `"100000000/day;20000/minute;2500/second"`
@@ -399,7 +392,7 @@ This case study serves as a testament to the effectiveness and versatility of th
 
 The snapshot builders can be found under the snapshotter-specific implementation directory: [`snapshotter/modules/boost`](snapshotter/modules/boost/). Every snapshot builder must implement the interface of [`GenericProcessorSnapshot`](snapshotter/utils/callback_helpers.py)
 
-https://github.com/PowerLoom/wallet-boost/blob/a36078ea7f4b2692933065cbd1c3b4ec42478e1d/snapshotter/utils/callback_helpers.py#L89-L106
+https://github.com/PowerLoom/pooler/blob/5892eeb9433d8f4b8aa677006d98a1dde0458cb7/snapshotter/utils/callback_helpers.py#L89-L106
 
 * `compute()` is the callback where the snapshot extraction and generation logic needs to be written. It receives the following inputs:
   * `epoch` (current epoch details)
@@ -414,22 +407,22 @@ https://github.com/PowerLoom/wallet-boost/blob/a36078ea7f4b2692933065cbd1c3b4ec4
 
 `compute()` should return an instance of a Pydantic model which is in turn used by the payload commit service helper method to convert the data structure to a `dict`.
 
-https://github.com/PowerLoom/wallet-boost/blob/a36078ea7f4b2692933065cbd1c3b4ec42478e1d/snapshotter/utils/generic_worker.py#L133-L135
+https://github.com/PowerLoom/pooler/blob/5892eeb9433d8f4b8aa677006d98a1dde0458cb7/snapshotter/utils/generic_worker.py#L133-L135
 
 
-Looking at the pre-supplied [example configuration of `config/projects.json`](config/projects.example.json), we can find the following snapshots being generated
+Looking at the pre-supplied [example configuration of `config/projects.json`](https://github.com/PowerLoom/snapshotter-phase2-configs/blob/ddb4eba16b282fdf4c7211e17b4291fba942982a/projects.example.json), we can find the following snapshots being generated
 
 #### `zkevm:bungee_bridge`
 
 Snapshot builder: [snapshotter/modules/boost/eth_balance.py](snapshotter/modules/boost/bungee_brige.py)
 
-https://github.com/PowerLoom/wallet-boost/blob/4cc64b4abd5a4d4cfb0b512dd9932031bbf611ba/config/projects.example.json#L3-L14
+https://github.com/PowerLoom/pooler/blob/4cc64b4abd5a4d4cfb0b512dd9932031bbf611ba/config/projects.example.json#L3-L14
 
 Its preloader dependency is [`block_transactions`](snapshotter/utils/preloaders/tx_receipts/preloader.py) as seen in the [preloader configuration](#preloading).
 
 The snapshot builder then goes through all preloaded block transactions, filters out, and then generates relevant snapshots for wallet address that received funds from the Bungee Bridge refuel contract during that epoch.
 
-https://github.com/PowerLoom/wallet-boost/blob/4cc64b4abd5a4d4cfb0b512dd9932031bbf611ba/snapshotter/modules/boost/bungee_bridge.py#L25-L92
+https://github.com/PowerLoom/pooler/blob/4cc64b4abd5a4d4cfb0b512dd9932031bbf611ba/snapshotter/modules/boost/bungee_bridge.py#L25-L92
 
 ## Find us
 
