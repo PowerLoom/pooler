@@ -209,104 +209,104 @@ class ProcessHubCore(Process):
                     )
                     continue
                 self._last_epoch_processing_health_check = int(time.time())
-                self._logger.debug(
-                    'Continuing with epoch processing health check since 4 or more epochs have passed since process start',
-                )
+                # self._logger.debug(
+                #     'Continuing with epoch processing health check since 4 or more epochs have passed since process start',
+                # )
                 # check for epoch processing status
-                try:
-                    current_epoch_data = self._protocol_state_contract.functions.currentEpoch().call()
-                    current_epoch = {
-                        'begin': current_epoch_data[0],
-                        'end': current_epoch_data[1],
-                        'epochId': current_epoch_data[2],
-                    }
+                # try:
+                #     current_epoch_data = self._protocol_state_contract.functions.currentEpoch().call()
+                #     current_epoch = {
+                #         'begin': current_epoch_data[0],
+                #         'end': current_epoch_data[1],
+                #         'epochId': current_epoch_data[2],
+                #     }
 
-                except Exception as e:
-                    self._logger.exception(
-                        'Exception in get_current_epoch',
-                        e=e,
-                    )
-                    continue
-                current_epoch_id = current_epoch['epochId']
-                epoch_health = dict()
-                # check from previous epoch processing status until 2 further epochs
-                for epoch_id in range(current_epoch_id - 1, current_epoch_id - 3 - 1, -1):
-                    epoch_specific_report = SnapshotterEpochProcessingReportItem.construct()
-                    success_percentage = 0
-                    divisor = 1
-                    epoch_specific_report.epochId = epoch_id
-                    for state in SnapshotterStates:
-                        if state not in [SnapshotterStates.SNAPSHOT_BUILD, SnapshotterStates.RELAYER_SEND]:
-                            continue
-                        state_report_entries = self._redis_conn_sync.hgetall(
-                            name=epoch_id_project_to_state_mapping(epoch_id=epoch_id, state_id=state.value),
-                        )
-                        if state_report_entries:
-                            project_state_report_entries = dict()
-                            epoch_specific_report.transitionStatus = dict()
-                            # epoch_specific_report.transitionStatus[state.value] = dict()
-                            project_state_report_entries = {
-                                project_id.decode('utf-8'): SnapshotterStateUpdate.parse_raw(project_state_entry)
-                                for project_id, project_state_entry in state_report_entries.items()
-                            }
-                            epoch_specific_report.transitionStatus[state.value] = project_state_report_entries
-                            success_percentage += len(
-                                [
-                                    project_state_report_entry
-                                    for project_state_report_entry in project_state_report_entries.values()
-                                    if project_state_report_entry.status == 'success'
-                                ],
-                            ) / len(project_state_report_entries)
-                            success_percentage /= divisor
-                            divisor += 1
-                        else:
-                            epoch_specific_report.transitionStatus[state.value] = None
-                    if success_percentage != 0:
-                        self._logger.debug(
-                            'Epoch {} processing success percentage within states {}: {}',
-                            list(epoch_specific_report.transitionStatus.keys()),
-                            epoch_id,
-                            success_percentage * 100,
-                        )
+                # except Exception as e:
+                #     self._logger.exception(
+                #         'Exception in get_current_epoch',
+                #         e=e,
+                #     )
+                #     continue
+                # current_epoch_id = current_epoch['epochId']
+                # epoch_health = dict()
+                # # check from previous epoch processing status until 2 further epochs
+                # for epoch_id in range(current_epoch_id - 1, current_epoch_id - 3 - 1, -1):
+                #     epoch_specific_report = SnapshotterEpochProcessingReportItem.construct()
+                #     success_percentage = 0
+                #     divisor = 1
+                #     epoch_specific_report.epochId = epoch_id
+                #     for state in SnapshotterStates:
+                #         if state not in [SnapshotterStates.SNAPSHOT_BUILD, SnapshotterStates.RELAYER_SEND]:
+                #             continue
+                #         state_report_entries = self._redis_conn_sync.hgetall(
+                #             name=epoch_id_project_to_state_mapping(epoch_id=epoch_id, state_id=state.value),
+                #         )
+                #         if state_report_entries:
+                #             project_state_report_entries = dict()
+                #             epoch_specific_report.transitionStatus = dict()
+                #             # epoch_specific_report.transitionStatus[state.value] = dict()
+                #             project_state_report_entries = {
+                #                 project_id.decode('utf-8'): SnapshotterStateUpdate.parse_raw(project_state_entry)
+                #                 for project_id, project_state_entry in state_report_entries.items()
+                #             }
+                #             epoch_specific_report.transitionStatus[state.value] = project_state_report_entries
+                #             success_percentage += len(
+                #                 [
+                #                     project_state_report_entry
+                #                     for project_state_report_entry in project_state_report_entries.values()
+                #                     if project_state_report_entry.status == 'success'
+                #                 ],
+                #             ) / len(project_state_report_entries)
+                #             success_percentage /= divisor
+                #             divisor += 1
+                #         else:
+                #             epoch_specific_report.transitionStatus[state.value] = None
+                #     if success_percentage != 0:
+                #         self._logger.debug(
+                #             'Epoch {} processing success percentage within states {}: {}',
+                #             list(epoch_specific_report.transitionStatus.keys()),
+                #             epoch_id,
+                #             success_percentage * 100,
+                #         )
 
-                    if any([x is None for x in epoch_specific_report.transitionStatus.values()]):
-                        epoch_health[epoch_id] = False
-                        self._logger.debug(
-                            'Marking epoch {} as unhealthy due to missing state reports against transitions {}',
-                            epoch_id,
-                            [x for x, y in epoch_specific_report.transitionStatus.items() if y is None],
-                        )
-                    if success_percentage < 0.5:
-                        epoch_health[epoch_id] = False
-                        self._logger.debug(
-                            'Marking epoch {} as unhealthy due to low success percentage: {}',
-                            epoch_id,
-                            success_percentage,
-                        )
-                if len([epoch_id for epoch_id, healthy in epoch_health.items() if not healthy]) >= 2:
-                    self._logger.debug(
-                        'Sending unhealthy epoch report to reporting service: {}',
-                        epoch_health,
-                    )
-                    send_failure_notifications_sync(
-                        client=self._httpx_client,
-                        message=SnapshotterIssue(
-                            instanceID=settings.instance_id,
-                            issueType=SnapshotterReportState.UNHEALTHY_EPOCH_PROCESSING.value,
-                            projectID='',
-                            epochId='',
-                            timeOfReporting=datetime.now().isoformat(),
-                            extra=json.dumps(
-                                {
-                                    'epoch_health': epoch_health,
-                                },
-                            ),
-                        ),
-                    )
-                    self._logger.info(
-                        'Proceeding to respawn all children because epochs were found unhealthy: {}', epoch_health,
-                    )
-                    self._respawn_all_children()
+                #     if any([x is None for x in epoch_specific_report.transitionStatus.values()]):
+                #         epoch_health[epoch_id] = False
+                #         self._logger.debug(
+                #             'Marking epoch {} as unhealthy due to missing state reports against transitions {}',
+                #             epoch_id,
+                #             [x for x, y in epoch_specific_report.transitionStatus.items() if y is None],
+                #         )
+                #     if success_percentage < 0.5:
+                #         epoch_health[epoch_id] = False
+                #         self._logger.debug(
+                #             'Marking epoch {} as unhealthy due to low success percentage: {}',
+                #             epoch_id,
+                #             success_percentage,
+                #         )
+                # if len([epoch_id for epoch_id, healthy in epoch_health.items() if not healthy]) >= 2:
+                #     self._logger.debug(
+                #         'Sending unhealthy epoch report to reporting service: {}',
+                #         epoch_health,
+                #     )
+                #     send_failure_notifications_sync(
+                #         client=self._httpx_client,
+                #         message=SnapshotterIssue(
+                #             instanceID=settings.instance_id,
+                #             issueType=SnapshotterReportState.UNHEALTHY_EPOCH_PROCESSING.value,
+                #             projectID='',
+                #             epochId='',
+                #             timeOfReporting=datetime.now().isoformat(),
+                #             extra=json.dumps(
+                #                 {
+                #                     'epoch_health': epoch_health,
+                #                 },
+                #             ),
+                #         ),
+                #     )
+                #     self._logger.info(
+                #         'Proceeding to respawn all children because epochs were found unhealthy: {}', epoch_health,
+                #     )
+                #     self._respawn_all_children()
         self._logger.error(
             (
                 'Caught thread shutdown notification event. Deleting process'
