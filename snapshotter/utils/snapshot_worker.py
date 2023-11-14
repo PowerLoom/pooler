@@ -253,98 +253,20 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             if submission_window:
                 self._submission_window = int(submission_window)
 
-        project_id = self._gen_project_id(
-            task_type=task_type,
-            data_source=msg_obj.data_source,
-            primary_data_source=msg_obj.primary_data_source,
+        if not self._rate_limiting_lua_scripts:
+            self._rate_limiting_lua_scripts = await load_rate_limiter_scripts(
+                self._redis_conn,
+            )
+        self._logger.debug(
+            'Got epoch to process for {}: {}',
+            task_type, msg_obj,
         )
 
-        try:
-            if not self._rate_limiting_lua_scripts:
-                self._rate_limiting_lua_scripts = await load_rate_limiter_scripts(
-                    self._redis_conn,
-                )
-            self._logger.debug(
-                'Got epoch to process for {}: {}',
-                task_type, msg_obj,
-            )
-
-            # bulk mode
-            if msg_obj.bulk_mode:
-                await self._process_bulk_mode(msg_obj=msg_obj, task_type=task_type)
-            else:
-                await self._process_single_mode(msg_obj=msg_obj, task_type=task_type)
-            await self._redis_conn.close()
-
-            task_processor = self._project_calculation_mapping[task_type]
-
-            snapshot = await task_processor.compute(
-                epoch=msg_obj,
-                redis_conn=self._redis_conn,
-                rpc_helper=self._rpc_helper,
-            )
-
-            if task_processor.transformation_lambdas:
-                for each_lambda in task_processor.transformation_lambdas:
-                    snapshot = each_lambda(snapshot, msg_obj.data_source, msg_obj.begin, msg_obj.end)
-
-        except Exception as e:
-            self._logger.opt(exception=True).error(
-                'Exception processing callback for epoch: {}, Error: {},'
-                'sending failure notifications', msg_obj, e,
-            )
-
-            notification_message = SnapshotterIssue(
-                instanceID=settings.instance_id,
-                issueType=SnapshotterReportState.MISSED_SNAPSHOT.value,
-                projectID=project_id,
-                epochId=str(msg_obj.epochId),
-                timeOfReporting=str(time.time()),
-                extra=json.dumps({'issueDetails': f'Error : {e}'}),
-            )
-
-            await send_failure_notifications_async(
-                client=self._client, message=notification_message,
-            )
-            await self._redis_conn.hset(
-                name=epoch_id_project_to_state_mapping(
-                    epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
-                ),
-                mapping={
-                    project_id: SnapshotterStateUpdate(
-                        status='failed', error=str(e), timestamp=int(time.time()),
-                    ).json(),
-                },
-            )
+        # bulk mode
+        if msg_obj.bulk_mode:
+            await self._process_bulk_mode(msg_obj=msg_obj, task_type=task_type)
         else:
-
-            await self._redis_conn.set(
-                name=submitted_base_snapshots_key(
-                    epoch_id=msg_obj.epochId, project_id=project_id,
-                ),
-                value=snapshot.json(),
-                # block time is about 2 seconds on anchor chain, keeping it around ten times the submission window
-                ex=self._submission_window * 10 * 2,
-            )
-
-            await self._redis_conn.hset(
-                name=epoch_id_project_to_state_mapping(
-                    epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
-                ),
-                mapping={
-                    project_id: SnapshotterStateUpdate(
-                        status='success', timestamp=int(time.time()),
-                    ).json(),
-                },
-            )
-            await self._commit_payload(
-                task_type=task_type,
-                _ipfs_writer_client=self._ipfs_writer_client,
-                project_id=project_id,
-                epoch=msg_obj,
-                snapshot=snapshot,
-                storage_flag=settings.web3storage.upload_snapshots,
-            )
+            await self._process_single_mode(msg_obj=msg_obj, task_type=task_type)
         await self._redis_conn.close()
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
