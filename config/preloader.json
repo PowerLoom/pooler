@@ -23,5 +23,5 @@
           "class_name": "TxReceiptProcessor"
         }
     ],
-    "timeout": 60
+    "timeout": 90
 }
