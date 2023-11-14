@@ -297,7 +297,6 @@ async def warm_up_cache_for_snapshot_constructors(
             to_block=to_block,
             redis_conn=redis_conn,
             rpc_helper=rpc_helper,
-            logger=rpc_helper._logger
         ),
         get_block_details_in_block_range(
             from_block=from_block,
