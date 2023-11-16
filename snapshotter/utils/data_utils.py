@@ -277,13 +277,17 @@ async def build_projects_list_from_events(redis_conn: aioredis.Redis, state_cont
 
 
 async def get_projects_list(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper):
-    tasks = [
-        state_contract_obj.functions.getProjects(),
-    ]
+    try:
+        tasks = [
+            state_contract_obj.functions.getProjects(),
+        ]
 
-    [projects_list] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
+        [projects_list] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
+        return projects_list
 
-    return projects_list
+    except Exception as e:
+        logger.warning('Error while fetching projects list from contract', error=e)
+        return []
 
 
 async def get_snapshot_submision_window(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper):
