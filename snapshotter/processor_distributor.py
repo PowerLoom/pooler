@@ -1,5 +1,4 @@
 import asyncio
-import copy
 import importlib
 import json
 import multiprocessing
@@ -38,7 +37,6 @@ from snapshotter.settings.config import projects_config
 from snapshotter.settings.config import settings
 from snapshotter.utils.callback_helpers import get_rabbitmq_channel
 from snapshotter.utils.callback_helpers import get_rabbitmq_robust_connection_async
-from snapshotter.utils.data_utils import build_projects_list_from_events
 from snapshotter.utils.data_utils import get_projects_list
 from snapshotter.utils.data_utils import get_snapshot_submision_window
 from snapshotter.utils.data_utils import get_source_chain_epoch_size
@@ -63,6 +61,7 @@ from snapshotter.utils.redis.redis_keys import project_finalized_data_zset
 from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_key
 from snapshotter.utils.redis.redis_keys import snapshot_submission_window_key
 from snapshotter.utils.rpc import RpcHelper
+# from snapshotter.utils.data_utils import build_projects_list_from_events
 
 
 class ProcessorDistributor(multiprocessing.Process):
@@ -92,7 +91,6 @@ class ProcessorDistributor(multiprocessing.Process):
         )
         self._payload_commit_routing_key = f'powerloom-backend-commit-payload:{settings.namespace}:{settings.instance_id}.Finalized'
 
-        self.projects_config = copy.copy(projects_config)
         self._upcoming_project_changes = defaultdict(list)
         self._preload_completion_conditions: Dict[
             int, Awaitable,
@@ -101,7 +99,7 @@ class ProcessorDistributor(multiprocessing.Process):
         self._shutdown_initiated = False
         self._all_preload_tasks = set()
         self._project_type_config_mapping = dict()
-        for project_config in self.projects_config:
+        for project_config in projects_config:
             self._project_type_config_mapping[project_config.project_type] = project_config
             for proload_task in project_config.preload_tasks:
                 self._all_preload_tasks.add(proload_task)
@@ -191,6 +189,9 @@ class ProcessorDistributor(multiprocessing.Process):
                 state_contract_obj=protocol_state_contract,
             )
 
+            # TODO: will be used after full project management overhaul
+            # using project set for now, keeping empty if not present in contract
+
             # self._projects_list = await build_projects_list_from_events(
             #     redis_conn=self._redis_conn,
             #     rpc_helper=self._anchor_rpc_helper,
@@ -199,23 +200,18 @@ class ProcessorDistributor(multiprocessing.Process):
 
             # self._logger.info('Generated project list with {} projects', self._projects_list)
 
-            # # NOTE: For phase2 going if a more txn data based approach instead of project based approach
-            # #  since number of projects can grow exponentially. TLDR is snapshotters will monitor
-            # #  and generate snapshots for all relevant transations and extra submissions will just be ignored
-            # #  at the relayer level.
-            # self._projects_list = []
-            # # iterate over project list fetched
-            # for project_type, project_config in self._project_type_config_mapping.items():
-            #     project_type = project_config.project_type
-            #     if project_config.projects == []:
-            #         relevant_projects = set(filter(lambda x: project_type in x, self._projects_list))
-            #         project_data = set()
-            #         for project in relevant_projects:
-            #             data_source = project.split(':')[-2]
-            #             project_data.add(
-            #                 data_source,
-            #             )
-            #         project_config.projects = list(project_data)
+            # iterate over project list fetched
+            for project_type, project_config in self._project_type_config_mapping.items():
+                project_type = project_config.project_type
+                if project_config.projects == []:
+                    relevant_projects = set(filter(lambda x: project_type in x, self._projects_list))
+                    project_data = set()
+                    for project in relevant_projects:
+                        data_source = project.split(':')[-2]
+                        project_data.add(
+                            data_source,
+                        )
+                    project_config.projects = list(project_data)
 
             submission_window = await get_snapshot_submision_window(
                 redis_conn=self._redis_conn,
@@ -228,19 +224,6 @@ class ProcessorDistributor(multiprocessing.Process):
                     snapshot_submission_window_key,
                     submission_window,
                 )
-
-            # iterate over project list fetched
-            for project_config in self.projects_config:
-                task_type = project_config.project_type
-                if project_config.projects == []:
-                    relevant_projects = set(filter(lambda x: task_type in x, self._projects_list))
-                    project_data = []
-                    for project in relevant_projects:
-                        data_source = project.split(':')[-2]
-                        project_data.append(
-                            data_source,
-                        )
-                    project_config.projects = project_data
 
     async def _preloader_waiter(
         self,
@@ -344,25 +327,16 @@ class ProcessorDistributor(multiprocessing.Process):
                 )
                 f = preloader_obj.compute(**preloader_compute_kwargs)
                 self._preload_completion_conditions[msg_obj.epochId][preloader.task_type] = f
-        for project_config in self.projects_config:
+
+        for project_type, project_config in self._project_type_config_mapping.items():
             if not project_config.preload_tasks:
                 # release for snapshotting
                 asyncio.ensure_future(
                     self._distribute_callbacks_snapshotting(
-                        project_config.project_type, msg_obj,
+                        project_type, msg_obj,
                     ),
                 )
                 continue
-
-        # for project_type, project_config in self._project_type_config_mapping.items():
-        #     if not project_config.preload_tasks:
-        #         # release for snapshotting
-        #         asyncio.ensure_future(
-        #             self._distribute_callbacks_snapshotting(
-        #                 project_type, msg_obj,
-        #             ),
-        #         )
-        #         continue
 
         asyncio.ensure_future(
             self._preloader_waiter(
@@ -389,7 +363,6 @@ class ProcessorDistributor(multiprocessing.Process):
         self._newly_added_projects = self._newly_added_projects.union(
             await self._enable_pending_projects_for_epoch(msg_obj.epochId),
         )
-        # await self._enable_pending_projects_for_epoch(msg_obj.epochId)
 
         asyncio.ensure_future(self._exec_preloaders(msg_obj=msg_obj))
 
@@ -405,6 +378,28 @@ class ProcessorDistributor(multiprocessing.Process):
 
             project_config = self._project_type_config_mapping[project_type]
 
+            # handling bulk mode projects
+            if project_config.bulk_mode:
+                process_unit = PowerloomSnapshotProcessMessage(
+                    begin=epoch.begin,
+                    end=epoch.end,
+                    epochId=epoch.epochId,
+                    bulk_mode=True,
+                )
+
+                msg_body = Message(process_unit.json().encode('utf-8'))
+                await exchange.publish(
+                    routing_key=f'powerloom-backend-callback:{settings.namespace}'
+                    f':{settings.instance_id}:EpochReleased.{project_type}',
+                    message=msg_body,
+                )
+
+                self._logger.debug(
+                    'Sent out message to be processed by worker'
+                    f' {project_type} : {process_unit}',
+                )
+                return
+            # handling projects with no data sources
             if project_config.projects is None:
                 project_id = f'{project_type}:{settings.namespace}'
                 if project_id.lower() in self._newly_added_projects:
@@ -431,6 +426,7 @@ class ProcessorDistributor(multiprocessing.Process):
                 )
                 return
 
+            # handling projects with data sources
             for project in project_config.projects:
                 project_id = f'{project_type}:{project}:{settings.namespace}'
 
@@ -469,27 +465,6 @@ class ProcessorDistributor(multiprocessing.Process):
                     f' {project_type} : {process_unit}',
                 )
 
-            # process_unit = PowerloomSnapshotProcessMessage(
-            #     begin=epoch.begin,
-            #     end=epoch.end,
-            #     epochId=epoch.epochId,
-            #     bulk_mode=True,
-            # )
-
-            # msg_body = Message(process_unit.json().encode('utf-8'))
-            # queuing_tasks.append(
-            #     exchange.publish(
-            #         routing_key=f'powerloom-backend-callback:{settings.namespace}'
-            #         f':{settings.instance_id}:EpochReleased.{project_type}',
-            #         message=msg_body,
-            #     ),
-            # )
-
-            # self._logger.debug(
-            #     'Sent out message to be processed by worker'
-            #     f' {project_type} : {process_unit}',
-            # )
-
             results = await asyncio.gather(*queuing_tasks, return_exceptions=True)
 
         for result in results:
@@ -506,33 +481,18 @@ class ProcessorDistributor(multiprocessing.Process):
         else:
             for msg_obj in pending_project_msgs:
                 # Update projects list
-                for project_config in self.projects_config:
-                    task_type = project_config.project_type
-                    if task_type in msg_obj.projectId:
+                for project_type, project_config in self._project_type_config_mapping.items():
+                    projects_set = set(project_config.projects)
+                    if project_type in msg_obj.projectId:
                         if project_config.projects is None:
                             continue
                         data_source = msg_obj.projectId.split(':')[-2]
                         if msg_obj.allowed:
-                            project_config.projects.append(data_source)
-                            project_config.projects = list(set(project_config.projects))
+                            projects_set.add(data_source)
                         else:
                             if data_source in project_config.projects:
-                                items = set(project_config.projects)
-                                items.remove(data_source)
-                                project_config.projects = list(items)
-
-                # for project_type, project_config in self._project_type_config_mapping.items():
-                #     projects_set = project_config.projects
-                #     if project_type in msg_obj.projectId:
-                #         if project_config.projects is None:
-                #             continue
-                #         data_source = msg_obj.projectId.split(':')[-2]
-                #         if msg_obj.allowed:
-                #             projects_set.add(data_source)
-                #         else:
-                #             if data_source in project_config.projects:
-                #                 projects_set.discard(data_source)
-                #     project_config.projects = list(projects_set)
+                                projects_set.discard(data_source)
+                    project_config.projects = list(projects_set)
 
         return set([msg.projectId.lower() for msg in pending_project_msgs if msg.allowed])
 
