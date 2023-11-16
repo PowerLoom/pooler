@@ -168,8 +168,8 @@ async def get_pair_reserves(
         )
 
         pair_reserves_dict[block_num] = {
-            "token0": token0Amount,
-            "token1": token1Amount,
+            "token0": {"reserves": token0Amount, "decimals": pair_per_token_metadata["token0"]["decimals"]},
+            "token1": {"reserves": token1Amount, "decimals": pair_per_token_metadata["token1"]["decimals"]},
             "token0USD": token0USD,
             "token1USD": token1USD,
             "token0Price": token0Price,

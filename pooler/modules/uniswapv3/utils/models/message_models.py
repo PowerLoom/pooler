@@ -10,11 +10,11 @@ from pooler.utils.models.message_models import SnapshotBase
 class UniswapPairTotalReservesSnapshot(SnapshotBase):
     token0Reserves: Dict[
         str,
-        float,
+        dict,
     ]  # block number to corresponding total reserves
     token1Reserves: Dict[
         str,
-        float,
+        dict,
     ]  # block number to corresponding total reserves
     token0ReservesUSD: Dict[str, float]
     token1ReservesUSD: Dict[str, float]

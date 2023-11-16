@@ -31,7 +31,7 @@ httpx = "^0.24.0"
 fastapi = "^0.95.1"
 ifps-client = {git = "https://git@github.com/PowerLoom/py-ipfs-client.git"}
 web3 = "^6.4.0"
-
+gql = "^3.4.1"
 
 
 [build-system]
