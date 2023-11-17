@@ -1,0 +1,455 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="">
+  <head><meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="snapshotter.auth.helpers package" href="snapshotter.auth.helpers.html" /><link rel="prev" title="Powerloom Snapshotter" href="snapshotter.html" />
+
+    <!-- Generated with Sphinx 7.1.2 and Furo 2023.09.10 -->
+        <title>snapshotter.auth package - Powerloom Snapshotter 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=a746c00c" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=135e06be" />
+    <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=eafc0fe6" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=36a5483c" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f8f8f8;
+  --color-code-foreground: black;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-half" viewBox="0 0 24 24">
+    <title>Auto light/dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-shadow">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M13 12h5" />
+      <path d="M13 15h4" />
+      <path d="M13 18h1" />
+      <path d="M13 9h4" />
+      <path d="M13 6h1" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc">
+<label class="overlay sidebar-overlay" for="__navigation">
+  <div class="visually-hidden">Hide navigation sidebar</div>
+</label>
+<label class="overlay toc-overlay" for="__toc">
+  <div class="visually-hidden">Hide table of contents sidebar</div>
+</label>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <div class="visually-hidden">Toggle site navigation sidebar</div>
+        <i class="icon"><svg><use href="#svg-menu"></use></svg></i>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="index.html"><div class="brand">Powerloom Snapshotter 0.1 documentation</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle">
+          <div class="visually-hidden">Toggle Light / Dark / Auto color theme</div>
+          <svg class="theme-icon-when-auto"><use href="#svg-sun-half"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <div class="visually-hidden">Toggle table of contents sidebar</div>
+        <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="index.html">
+  
+  
+  <span class="sidebar-brand-text">Powerloom Snapshotter 0.1 documentation</span>
+  
+</a><form class="sidebar-search-container" method="get" action="search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current has-children"><a class="reference internal" href="snapshotter.html">Powerloom Snapshotter</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><div class="visually-hidden">Toggle navigation of Powerloom Snapshotter</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul class="current">
+<li class="toctree-l2 current has-children current-page"><a class="current reference internal" href="#">snapshotter.auth package</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><div class="visually-hidden">Toggle navigation of snapshotter.auth package</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.auth.helpers.html">snapshotter.auth.helpers package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.auth.settings.html">snapshotter.auth.settings package</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="snapshotter.utils.html">snapshotter.utils package</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><div class="visually-hidden">Toggle navigation of snapshotter.utils package</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.models.html">snapshotter.utils.models package</a></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="snapshotter.utils.preloaders.html">snapshotter.utils.preloaders package</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><div class="visually-hidden">Toggle navigation of snapshotter.utils.preloaders package</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.preloaders.block_details.html">snapshotter.utils.preloaders.block_details package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.preloaders.eth_price.html">snapshotter.utils.preloaders.eth_price package</a></li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="snapshotter.utils.preloaders.tx_receipts.html">snapshotter.utils.preloaders.tx_receipts package</a><input class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" role="switch" type="checkbox"/><label for="toctree-checkbox-5"><div class="visually-hidden">Toggle navigation of snapshotter.utils.preloaders.tx_receipts package</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="snapshotter.utils.preloaders.tx_receipts.delegated_worker.html">snapshotter.utils.preloaders.tx_receipts.delegated_worker package</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.redis.html">snapshotter.utils.redis package</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle">
+              <div class="visually-hidden">Toggle Light / Dark / Auto color theme</div>
+              <svg class="theme-icon-when-auto"><use href="#svg-sun-half"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <div class="visually-hidden">Toggle table of contents sidebar</div>
+            <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
+          </label>
+        </div>
+        <article role="main">
+          <section id="snapshotter-auth-package">
+<h1>snapshotter.auth package<a class="headerlink" href="#snapshotter-auth-package" title="Permalink to this heading">#</a></h1>
+<section id="subpackages">
+<h2>Subpackages<a class="headerlink" href="#subpackages" title="Permalink to this heading">#</a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="snapshotter.auth.helpers.html">snapshotter.auth.helpers package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="snapshotter.auth.helpers.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="snapshotter.auth.helpers.html#module-snapshotter.auth.helpers.data_models">snapshotter.auth.helpers.data_models module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.AddApiKeyRequest"><code class="docutils literal notranslate"><span class="pre">AddApiKeyRequest</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.AddApiKeyRequest.api_key"><code class="docutils literal notranslate"><span class="pre">AddApiKeyRequest.api_key</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.AppOwnerModel"><code class="docutils literal notranslate"><span class="pre">AppOwnerModel</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.AppOwnerModel.active"><code class="docutils literal notranslate"><span class="pre">AppOwnerModel.active</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.AppOwnerModel.callsCount"><code class="docutils literal notranslate"><span class="pre">AppOwnerModel.callsCount</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.AppOwnerModel.email"><code class="docutils literal notranslate"><span class="pre">AppOwnerModel.email</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.AppOwnerModel.next_reset_at"><code class="docutils literal notranslate"><span class="pre">AppOwnerModel.next_reset_at</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.AppOwnerModel.rate_limit"><code class="docutils literal notranslate"><span class="pre">AppOwnerModel.rate_limit</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.AppOwnerModel.throttledCount"><code class="docutils literal notranslate"><span class="pre">AppOwnerModel.throttledCount</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.AuthCheck"><code class="docutils literal notranslate"><span class="pre">AuthCheck</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.AuthCheck.api_key"><code class="docutils literal notranslate"><span class="pre">AuthCheck.api_key</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.AuthCheck.authorized"><code class="docutils literal notranslate"><span class="pre">AuthCheck.authorized</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.AuthCheck.owner"><code class="docutils literal notranslate"><span class="pre">AuthCheck.owner</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.AuthCheck.reason"><code class="docutils literal notranslate"><span class="pre">AuthCheck.reason</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.RateLimitAuthCheck"><code class="docutils literal notranslate"><span class="pre">RateLimitAuthCheck</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.RateLimitAuthCheck.current_limit"><code class="docutils literal notranslate"><span class="pre">RateLimitAuthCheck.current_limit</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.RateLimitAuthCheck.rate_limit_passed"><code class="docutils literal notranslate"><span class="pre">RateLimitAuthCheck.rate_limit_passed</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.RateLimitAuthCheck.retry_after"><code class="docutils literal notranslate"><span class="pre">RateLimitAuthCheck.retry_after</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.RateLimitAuthCheck.violated_limit"><code class="docutils literal notranslate"><span class="pre">RateLimitAuthCheck.violated_limit</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.UserAllDetailsResponse"><code class="docutils literal notranslate"><span class="pre">UserAllDetailsResponse</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.UserAllDetailsResponse.active_api_keys"><code class="docutils literal notranslate"><span class="pre">UserAllDetailsResponse.active_api_keys</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.UserAllDetailsResponse.revoked_api_keys"><code class="docutils literal notranslate"><span class="pre">UserAllDetailsResponse.revoked_api_keys</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.UserStatusEnum"><code class="docutils literal notranslate"><span class="pre">UserStatusEnum</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.UserStatusEnum.active"><code class="docutils literal notranslate"><span class="pre">UserStatusEnum.active</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.UserStatusEnum.inactive"><code class="docutils literal notranslate"><span class="pre">UserStatusEnum.inactive</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="snapshotter.auth.helpers.html#module-snapshotter.auth.helpers.helpers">snapshotter.auth.helpers.helpers module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.helpers.auth_check"><code class="docutils literal notranslate"><span class="pre">auth_check()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.helpers.check_user_details"><code class="docutils literal notranslate"><span class="pre">check_user_details()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.helpers.incr_success_calls_count"><code class="docutils literal notranslate"><span class="pre">incr_success_calls_count()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.helpers.incr_throttled_calls_count"><code class="docutils literal notranslate"><span class="pre">incr_throttled_calls_count()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.helpers.inject_rate_limit_fail_response"><code class="docutils literal notranslate"><span class="pre">inject_rate_limit_fail_response()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.helpers.rate_limit_auth_check"><code class="docutils literal notranslate"><span class="pre">rate_limit_auth_check()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="snapshotter.auth.helpers.html#module-snapshotter.auth.helpers.redis_conn">snapshotter.auth.helpers.redis_conn module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.redis_conn.RedisPoolCache"><code class="docutils literal notranslate"><span class="pre">RedisPoolCache</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.redis_conn.RedisPoolCache.populate"><code class="docutils literal notranslate"><span class="pre">RedisPoolCache.populate()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.redis_conn.construct_redis_url"><code class="docutils literal notranslate"><span class="pre">construct_redis_url()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.redis_conn.get_aioredis_pool"><code class="docutils literal notranslate"><span class="pre">get_aioredis_pool()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="snapshotter.auth.helpers.html#module-snapshotter.auth.helpers.redis_keys">snapshotter.auth.helpers.redis_keys module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.redis_keys.all_users_set"><code class="docutils literal notranslate"><span class="pre">all_users_set()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.redis_keys.api_key_to_owner_key"><code class="docutils literal notranslate"><span class="pre">api_key_to_owner_key()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.redis_keys.user_active_api_keys_set"><code class="docutils literal notranslate"><span class="pre">user_active_api_keys_set()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.redis_keys.user_details_htable"><code class="docutils literal notranslate"><span class="pre">user_details_htable()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.redis_keys.user_revoked_api_keys_set"><code class="docutils literal notranslate"><span class="pre">user_revoked_api_keys_set()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="snapshotter.auth.helpers.html#module-snapshotter.auth.helpers">Module contents</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="snapshotter.auth.settings.html">snapshotter.auth.settings package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="snapshotter.auth.settings.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="snapshotter.auth.settings.html#module-snapshotter.auth.settings.settings_models">snapshotter.auth.settings.settings_models module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.auth.settings.html#snapshotter.auth.settings.settings_models.AuthSettings"><code class="docutils literal notranslate"><span class="pre">AuthSettings</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.settings.html#snapshotter.auth.settings.settings_models.AuthSettings.bind"><code class="docutils literal notranslate"><span class="pre">AuthSettings.bind</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.settings.html#snapshotter.auth.settings.settings_models.AuthSettings.redis"><code class="docutils literal notranslate"><span class="pre">AuthSettings.redis</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.auth.settings.html#snapshotter.auth.settings.settings_models.RedisConfig"><code class="docutils literal notranslate"><span class="pre">RedisConfig</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.settings.html#snapshotter.auth.settings.settings_models.RedisConfig.db"><code class="docutils literal notranslate"><span class="pre">RedisConfig.db</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.settings.html#snapshotter.auth.settings.settings_models.RedisConfig.host"><code class="docutils literal notranslate"><span class="pre">RedisConfig.host</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.settings.html#snapshotter.auth.settings.settings_models.RedisConfig.password"><code class="docutils literal notranslate"><span class="pre">RedisConfig.password</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.settings.html#snapshotter.auth.settings.settings_models.RedisConfig.port"><code class="docutils literal notranslate"><span class="pre">RedisConfig.port</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.auth.settings.html#snapshotter.auth.settings.settings_models.ServerListenerConfig"><code class="docutils literal notranslate"><span class="pre">ServerListenerConfig</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.settings.html#snapshotter.auth.settings.settings_models.ServerListenerConfig.host"><code class="docutils literal notranslate"><span class="pre">ServerListenerConfig.host</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.settings.html#snapshotter.auth.settings.settings_models.ServerListenerConfig.port"><code class="docutils literal notranslate"><span class="pre">ServerListenerConfig.port</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="snapshotter.auth.settings.html#module-snapshotter.auth.settings">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this heading">#</a></h2>
+</section>
+<section id="module-snapshotter.auth.conf">
+<span id="snapshotter-auth-conf-module"></span><h2>snapshotter.auth.conf module<a class="headerlink" href="#module-snapshotter.auth.conf" title="Permalink to this heading">#</a></h2>
+</section>
+<section id="module-snapshotter.auth.gunicorn_auth_entry_launcher">
+<span id="snapshotter-auth-gunicorn-auth-entry-launcher-module"></span><h2>snapshotter.auth.gunicorn_auth_entry_launcher module<a class="headerlink" href="#module-snapshotter.auth.gunicorn_auth_entry_launcher" title="Permalink to this heading">#</a></h2>
+</section>
+<section id="module-snapshotter.auth.server_entry">
+<span id="snapshotter-auth-server-entry-module"></span><h2>snapshotter.auth.server_entry module<a class="headerlink" href="#module-snapshotter.auth.server_entry" title="Permalink to this heading">#</a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="snapshotter.auth.server_entry.add_api_key">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.server_entry.</span></span><span class="sig-name descname"><span class="pre">add_api_key</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">api_key_request</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.AddApiKeyRequest" title="snapshotter.auth.helpers.data_models.AddApiKeyRequest"><span class="pre">AddApiKeyRequest</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">email</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">request</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Request</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">response</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Response</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.auth.server_entry.add_api_key" title="Permalink to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="snapshotter.auth.server_entry.create_update_user">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.server_entry.</span></span><span class="sig-name descname"><span class="pre">create_update_user</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Request</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">user_cu_request</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.AppOwnerModel" title="snapshotter.auth.helpers.data_models.AppOwnerModel"><span class="pre">AppOwnerModel</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">response</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Response</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.auth.server_entry.create_update_user" title="Permalink to this definition">#</a></dt>
+<dd><p>can be used for both creating a new entity or updating an entity’s information in the redis htable</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="snapshotter.auth.server_entry.get_all_users">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.server_entry.</span></span><span class="sig-name descname"><span class="pre">get_all_users</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Request</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">response</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Response</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.auth.server_entry.get_all_users" title="Permalink to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="snapshotter.auth.server_entry.get_user_details">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.server_entry.</span></span><span class="sig-name descname"><span class="pre">get_user_details</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Request</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">response</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Response</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">email</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.auth.server_entry.get_user_details" title="Permalink to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="snapshotter.auth.server_entry.revoke_api_key">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.server_entry.</span></span><span class="sig-name descname"><span class="pre">revoke_api_key</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">api_key_request</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="snapshotter.auth.helpers.html#snapshotter.auth.helpers.data_models.AddApiKeyRequest" title="snapshotter.auth.helpers.data_models.AddApiKeyRequest"><span class="pre">AddApiKeyRequest</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">email</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">request</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Request</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">response</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Response</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.auth.server_entry.revoke_api_key" title="Permalink to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="snapshotter.auth.server_entry.startup_boilerplate">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.server_entry.</span></span><span class="sig-name descname"><span class="pre">startup_boilerplate</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.auth.server_entry.startup_boilerplate" title="Permalink to this definition">#</a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="module-snapshotter.auth">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-snapshotter.auth" title="Permalink to this heading">#</a></h2>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="snapshotter.auth.helpers.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">snapshotter.auth.helpers package</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="snapshotter.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Powerloom Snapshotter</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2023, Powerloom Inc.
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">snapshotter.auth package</a><ul>
+<li><a class="reference internal" href="#subpackages">Subpackages</a></li>
+<li><a class="reference internal" href="#submodules">Submodules</a></li>
+<li><a class="reference internal" href="#module-snapshotter.auth.conf">snapshotter.auth.conf module</a></li>
+<li><a class="reference internal" href="#module-snapshotter.auth.gunicorn_auth_entry_launcher">snapshotter.auth.gunicorn_auth_entry_launcher module</a></li>
+<li><a class="reference internal" href="#module-snapshotter.auth.server_entry">snapshotter.auth.server_entry module</a><ul>
+<li><a class="reference internal" href="#snapshotter.auth.server_entry.add_api_key"><code class="docutils literal notranslate"><span class="pre">add_api_key()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.auth.server_entry.create_update_user"><code class="docutils literal notranslate"><span class="pre">create_update_user()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.auth.server_entry.get_all_users"><code class="docutils literal notranslate"><span class="pre">get_all_users()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.auth.server_entry.get_user_details"><code class="docutils literal notranslate"><span class="pre">get_user_details()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.auth.server_entry.revoke_api_key"><code class="docutils literal notranslate"><span class="pre">revoke_api_key()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.auth.server_entry.startup_boilerplate"><code class="docutils literal notranslate"><span class="pre">startup_boilerplate()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-snapshotter.auth">Module contents</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script data-url_root="./" id="documentation_options" src="_static/documentation_options.js?v=e031e9a9"></script>
+    <script src="_static/doctools.js?v=888ff710"></script>
+    <script src="_static/sphinx_highlight.js?v=4825356b"></script>
+    <script src="_static/scripts/furo.js?v=32e29ea5"></script>
+    </body>
+</html>

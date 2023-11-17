@@ -34,6 +34,10 @@ def process_up(pid):
 
 @app.command()
 def processReport():
+    """
+    This function retrieves process details from Redis cache and prints their running status.
+    It prints the running status of System Event Detector, Processor Distributor, and Worker Processes.
+    """
     connection_pool = redis.BlockingConnectionPool(**REDIS_CONN_CONF)
     redis_conn = redis.Redis(connection_pool=connection_pool)
     map_raw = redis_conn.hgetall(
@@ -89,6 +93,16 @@ def processReport():
     context_settings={'allow_extra_args': True, 'ignore_unknown_options': True},
 )
 def start(ctx: typer.Context, process_str_id: str):
+    """
+    Starts a process with the given process_str_id by sending a command to ProcessHubCore through RabbitMQ.
+
+    Args:
+    - ctx: typer.Context object
+    - process_str_id: str, the identifier of the process to be started
+
+    Returns:
+    - None
+    """
     if process_str_id not in PROC_STR_ID_TO_CLASS_MAP.keys():
         typer.secho(
             'Unknown Process identifier supplied. Check list with listProcesses command',
@@ -122,6 +136,16 @@ def stop(
         help='Using this flag allows you to pass a process ID instead of the name',
     ),
 ):
+    """
+    Stop a process by sending a command to ProcessHubCore.
+
+    Args:
+        process_str_id (str): The identifier of the process to stop.
+        pid (bool): If True, process_str_id is interpreted as a process ID instead of a name.
+
+    Returns:
+        None
+    """
     if not pid:
         if (
             process_str_id not in PROC_STR_ID_TO_CLASS_MAP.keys() and
@@ -169,6 +193,9 @@ def stop(
 
 @app.command()
 def respawn():
+    """
+    Sends a 'respawn' command to the ProcessHubCore via RabbitMQ.
+    """
     c = create_rabbitmq_conn()
     typer.secho('Opening RabbitMQ channel...', fg=typer.colors.GREEN)
     ch = c.channel()

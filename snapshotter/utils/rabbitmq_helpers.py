@@ -21,6 +21,15 @@ logger = logger.bind(module='Powerloom|RabbitmqHelpers')
 
 
 def log_retry_callback(retry_state: RetryCallState) -> bool:
+    """
+    Logs the attempt number of the retry state and returns True if the exception is an AMQPError and the attempt number is less than 5.
+
+    Args:
+        retry_state (RetryCallState): The retry state object.
+
+    Returns:
+        bool: True if the exception is an AMQPError and the attempt number is less than 5, False otherwise.
+    """
     print(
         'In rabbitmq reconnection helper decorator. attempt number: ',
         retry_state.attempt_number,
@@ -32,6 +41,15 @@ def log_retry_callback(retry_state: RetryCallState) -> bool:
 
 
 def resume_on_rabbitmq_fail(fn) -> Any:
+    """
+    Decorator function that retries the wrapped function in case of RabbitMQ failure.
+
+    Args:
+        fn: The function to be wrapped.
+
+    Returns:
+        The wrapped function.
+    """
     @wraps(fn)
     def wrapper(*args, **kwargs):
         ret = None

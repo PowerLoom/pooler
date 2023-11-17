@@ -8,10 +8,20 @@ from snapshotter.utils.exceptions import GenericExitOnSignal
 
 
 def generic_exit_handler(signum, frame):
+    """
+    A signal handler function that raises a GenericExitOnSignal exception.
+
+    Args:
+        signum (int): The signal number.
+        frame (frame): The current stack frame at the time the signal was received.
+    """
     raise GenericExitOnSignal
 
 
 def main():
+    """
+    Launches the ProcessHubCore and waits for it to join. Handles SIGINT, SIGTERM, and SIGQUIT signals.
+    """
     for signame in [signal.SIGINT, signal.SIGTERM, signal.SIGQUIT]:
         signal.signal(signame, generic_exit_handler)
 

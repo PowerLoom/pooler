@@ -30,6 +30,13 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
     _ipfs_reader_client: AsyncIPFSClient
 
     def __init__(self, name, **kwargs):
+        """
+        Initializes a SnapshotAsyncWorker object.
+
+        Args:
+            name (str): The name of the worker.
+            **kwargs: Additional keyword arguments to be passed to the AsyncWorker constructor.
+        """
         self._q = f'powerloom-backend-cb-snapshot:{settings.namespace}:{settings.instance_id}'
         self._rmq_routing = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}:EpochReleased.*'
         super(SnapshotAsyncWorker, self).__init__(name=name, **kwargs)
@@ -41,6 +48,17 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         self._submission_window = None
 
     def _gen_project_id(self, task_type: str, data_source: Optional[str] = None, primary_data_source: Optional[str] = None):
+        """
+        Generates a project ID based on the given task type, data source, and primary data source.
+
+        Args:
+            task_type (str): The type of task.
+            data_source (Optional[str], optional): The data source. Defaults to None.
+            primary_data_source (Optional[str], optional): The primary data source. Defaults to None.
+
+        Returns:
+            str: The generated project ID.
+        """
         if not data_source:
             # For generic use cases that don't have a data source like block details
             project_id = f'{task_type}:{settings.namespace}'
@@ -52,6 +70,19 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         return project_id
 
     async def _process_single_mode(self, msg_obj: PowerloomSnapshotProcessMessage, task_type: str):
+        """
+        Processes a single mode snapshot task for a given message object and task type.
+
+        Args:
+            msg_obj (PowerloomSnapshotProcessMessage): The message object containing the snapshot task details.
+            task_type (str): The type of task to be performed.
+
+        Raises:
+            Exception: If an error occurs while processing the snapshot task.
+
+        Returns:
+            None
+        """
         project_id = self._gen_project_id(
             task_type=task_type,
             data_source=msg_obj.data_source,
@@ -137,7 +168,19 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             )
 
     async def _process_bulk_mode(self, msg_obj: PowerloomSnapshotProcessMessage, task_type: str):
+        """
+        Processes the given PowerloomSnapshotProcessMessage object in bulk mode.
 
+        Args:
+            msg_obj (PowerloomSnapshotProcessMessage): The message object to process.
+            task_type (str): The type of task to perform.
+
+        Raises:
+            Exception: If an error occurs while processing the message.
+
+        Returns:
+            None
+        """
         try:
             task_processor = self._project_calculation_mapping[task_type]
 
@@ -233,7 +276,16 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 )
 
     async def _processor_task(self, msg_obj: PowerloomSnapshotProcessMessage, task_type: str):
-        """Function used to process the received message object."""
+        """
+        Process a PowerloomSnapshotProcessMessage object for a given task type.
+
+        Args:
+            msg_obj (PowerloomSnapshotProcessMessage): The message object to process.
+            task_type (str): The type of task to perform.
+
+        Returns:
+            None
+        """
         self._logger.debug(
             'Processing callback: {}', msg_obj,
         )
@@ -270,6 +322,16 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         await self._redis_conn.close()
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
+        """
+        Callback function that is called when a message is received from RabbitMQ.
+        It processes the message and starts the processor task.
+
+        Args:
+            message (IncomingMessage): The incoming message from RabbitMQ.
+
+        Returns:
+            None
+        """
         task_type = message.routing_key.split('.')[-1]
         if task_type not in self._task_types:
             return
@@ -304,6 +366,13 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         asyncio.ensure_future(self._processor_task(msg_obj=msg_obj, task_type=task_type))
 
     async def _init_project_calculation_mapping(self):
+        """
+        Initializes the project calculation mapping by generating a dictionary that maps project types to their corresponding
+        calculation classes.
+
+        Raises:
+            Exception: If a duplicate project type is found in the projects configuration.
+        """
         if self._project_calculation_mapping is not None:
             return
         # Generate project function mapping
@@ -317,12 +386,19 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             self._project_calculation_mapping[key] = class_()
 
     async def _init_ipfs_client(self):
+        """
+        Initializes the IPFS client by creating a singleton instance of AsyncIPFSClientSingleton
+        and initializing its sessions. The write and read clients are then assigned to instance variables.
+        """
         self._ipfs_singleton = AsyncIPFSClientSingleton(settings.ipfs)
         await self._ipfs_singleton.init_sessions()
         self._ipfs_writer_client = self._ipfs_singleton._ipfs_write_client
         self._ipfs_reader_client = self._ipfs_singleton._ipfs_read_client
 
     async def init_worker(self):
+        """
+        Initializes the worker by initializing project calculation mapping, IPFS client, and other necessary components.
+        """
         if not self._initialized:
             await self._init_project_calculation_mapping()
             await self._init_ipfs_client()

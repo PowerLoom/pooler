@@ -23,6 +23,12 @@ REDIS_CONN_CONF = {
 
 
 def construct_redis_url():
+    """
+    Constructs a Redis URL based on the REDIS_CONN_CONF dictionary.
+
+    Returns:
+        str: Redis URL constructed from REDIS_CONN_CONF dictionary.
+    """
     if REDIS_CONN_CONF['password']:
         return (
             f'redis://{REDIS_CONN_CONF["password"]}@{REDIS_CONN_CONF["host"]}:{REDIS_CONN_CONF["port"]}'
@@ -35,6 +41,15 @@ def construct_redis_url():
 
 
 async def get_aioredis_pool(pool_size=200):
+    """
+    Returns an aioredis Redis connection pool.
+
+    Args:
+        pool_size (int): Maximum number of connections to the Redis server.
+
+    Returns:
+        aioredis.Redis: Redis connection pool.
+    """
     pool = ConnectionPool.from_url(
         url=construct_redis_url(),
         retry_on_error=[redis.exceptions.ReadOnlyError],
@@ -49,7 +64,16 @@ def create_redis_conn(
     connection_pool: redis.BlockingConnectionPool,
 ) -> redis.Redis:
     """
-    Contextmanager that will create and teardown a session.
+    Context manager for creating a Redis connection using a connection pool.
+
+    Args:
+        connection_pool (redis.BlockingConnectionPool): The connection pool to use.
+
+    Yields:
+        redis.Redis: A Redis connection object.
+
+    Raises:
+        redis_exc.RedisError: If there is an error connecting to Redis.
     """
     try:
         redis_conn = redis.Redis(connection_pool=connection_pool)
@@ -67,6 +91,11 @@ def create_redis_conn(
     reraise=True,
 )
 def provide_redis_conn(fn):
+    """
+    Decorator function that provides a Redis connection object to the decorated function.
+    If the decorated function already has a Redis connection object in its arguments or keyword arguments,
+    it will be used. Otherwise, a new connection object will be created and passed to the function.
+    """
     @wraps(fn)
     def wrapper(*args, **kwargs):
         arg_conn = 'redis_conn'
@@ -91,6 +120,15 @@ def provide_redis_conn(fn):
 
 
 def provide_async_redis_conn(fn):
+    """
+    Decorator function that provides an async Redis connection to the decorated function.
+
+    Args:
+        fn: The function to be decorated.
+
+    Returns:
+        The decorated function.
+    """
     @wraps(fn)
     async def async_redis_conn_wrapper(*args, **kwargs):
         redis_conn_raw = await kwargs['request'].app.redis_pool.acquire()
@@ -107,9 +145,17 @@ def provide_async_redis_conn(fn):
     return async_redis_conn_wrapper
 
 
-# TODO: check wherever this is used and instead
-#       attempt to supply the aioredis.Redis object from an instantiated connection pool
 def provide_async_redis_conn_insta(fn):
+    """
+    A decorator function that provides an async Redis connection instance to the decorated function.
+
+    Args:
+        fn: The function to be decorated.
+
+    Returns:
+        The decorated function with an async Redis connection instance.
+
+    """
     @wraps(fn)
     async def wrapped(*args, **kwargs):
         arg_conn = 'redis_conn'
@@ -155,10 +201,19 @@ def provide_async_redis_conn_insta(fn):
 
 class RedisPoolCache:
     def __init__(self, pool_size=2000):
+        """
+        Initializes a Redis connection object with the specified connection pool size.
+
+        Args:
+            pool_size (int): The maximum number of connections to keep in the pool.
+        """
         self._aioredis_pool = None
         self._pool_size = pool_size
 
     async def populate(self):
+        """
+        Populates the Redis connection pool with the specified number of connections.
+        """
         if not self._aioredis_pool:
             self._aioredis_pool: aioredis.Redis = await get_aioredis_pool(
                 self._pool_size,
