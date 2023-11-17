@@ -12,6 +12,11 @@ from snapshotter.utils.rpc import RpcHelper
 
 
 async def main():
+    """
+    Checks if snapshotting is allowed for the given instance ID by querying the protocol state contract.
+    If snapshotting is allowed, sets the active status key in Redis to True and exits with code 0.
+    If snapshotting is not allowed, sets the active status key in Redis to False and exits with code 1.
+    """
     aioredis_pool = RedisPoolCache(pool_size=1000)
     await aioredis_pool.populate()
     redis_conn = aioredis_pool._aioredis_pool

@@ -77,6 +77,9 @@ app.add_middleware(
 
 @app.on_event('startup')
 async def startup_boilerplate():
+    """
+    This function initializes various state variables and caches required for the application to function properly.
+    """
     app.state.aioredis_pool = RedisPoolCache(pool_size=100)
     await app.state.aioredis_pool.populate()
     app.state.redis_pool = app.state.aioredis_pool._aioredis_pool
@@ -107,6 +110,16 @@ async def health_check(
     request: Request,
     response: Response,
 ):
+    """
+    Endpoint to check the health of the Snapshotter service.
+
+    Parameters:
+    request (Request): The incoming request object.
+    response (Response): The outgoing response object.
+
+    Returns:
+    dict: A dictionary containing the status of the service.
+    """
     redis_conn: aioredis.Redis = request.app.state.redis_pool
     _ = await redis_conn.get(active_status_key)
     if _:
@@ -119,8 +132,6 @@ async def health_check(
             }
     return {'status': 'OK'}
 
-# get current epoch
-
 
 @app.get('/current_epoch')
 async def get_current_epoch(
@@ -131,7 +142,16 @@ async def get_current_epoch(
     ),
 ):
     """
-    This endpoint is used to fetch current epoch.
+    Get the current epoch data from the protocol state contract.
+
+    Args:
+        request (Request): The incoming request object.
+        response (Response): The outgoing response object.
+        rate_limit_auth_dep (RateLimitAuthCheck, optional): The rate limit authentication check dependency.
+        Defaults to Depends(rate_limit_auth_check,).
+
+    Returns:
+        dict: A dictionary containing the current epoch data.
     """
     if not (
         rate_limit_auth_dep.rate_limit_passed and
@@ -168,7 +188,6 @@ async def get_current_epoch(
     return current_epoch
 
 
-# get epoch info
 @app.get('/epoch/{epoch_id}')
 async def get_epoch_info(
     request: Request,
@@ -179,7 +198,16 @@ async def get_epoch_info(
     ),
 ):
     """
-    This endpoint is used to fetch epoch info for a given epoch_id.
+    Get epoch information for a given epoch ID.
+
+    Args:
+        request (Request): The incoming request object.
+        response (Response): The outgoing response object.
+        epoch_id (int): The epoch ID for which to retrieve information.
+        rate_limit_auth_dep (RateLimitAuthCheck, optional): The rate limit authentication check dependency. Defaults to rate_limit_auth_check.
+
+    Returns:
+        dict: A dictionary containing epoch information including timestamp, block number, and epoch end.
     """
     if not (
         rate_limit_auth_dep.rate_limit_passed and
@@ -226,8 +254,18 @@ async def get_project_last_finalized_epoch_info(
     ),
 ):
     """
-    This endpoint is used to fetch epoch info for the last finalized epoch for a given project.
+    Get the last finalized epoch information for a given project.
+
+    Args:
+        request (Request): The incoming request object.
+        response (Response): The outgoing response object.
+        project_id (str): The ID of the project to get the last finalized epoch information for.
+        rate_limit_auth_dep (RateLimitAuthCheck, optional): The rate limit authentication dependency. Defaults to rate_limit_auth_check.
+
+    Returns:
+        dict: A dictionary containing the last finalized epoch information for the given project.
     """
+
     if not (
         rate_limit_auth_dep.rate_limit_passed and
         rate_limit_auth_dep.authorized and
@@ -300,9 +338,8 @@ async def get_project_last_finalized_epoch_info(
 
     return epoch_info
 
+
 # get data for epoch_id, project_id
-
-
 @app.get('/data/{epoch_id}/{project_id}/')
 async def get_data_for_project_id_epoch_id(
     request: Request,
@@ -314,7 +351,17 @@ async def get_data_for_project_id_epoch_id(
     ),
 ):
     """
-    This endpoint is used to fetch data for a given project_id and epoch_id.
+    Get data for a given project and epoch ID.
+
+    Args:
+        request (Request): The incoming request.
+        response (Response): The outgoing response.
+        project_id (str): The ID of the project.
+        epoch_id (int): The ID of the epoch.
+        rate_limit_auth_dep (RateLimitAuthCheck, optional): The rate limit authentication check. Defaults to Depends(rate_limit_auth_check).
+
+    Returns:
+        dict: The data for the given project and epoch ID.
     """
     if not (
         rate_limit_auth_dep.rate_limit_passed and
@@ -356,9 +403,8 @@ async def get_data_for_project_id_epoch_id(
 
     return data
 
+
 # get finalized cid for epoch_id, project_id
-
-
 @app.get('/cid/{epoch_id}/{project_id}/')
 async def get_finalized_cid_for_project_id_epoch_id(
     request: Request,
@@ -370,7 +416,17 @@ async def get_finalized_cid_for_project_id_epoch_id(
     ),
 ):
     """
-    This endpoint is used to fetch finalized cid for a given project_id and epoch_id.
+    Get finalized cid for a given project_id and epoch_id.
+
+    Args:
+        request (Request): The incoming request.
+        response (Response): The outgoing response.
+        project_id (str): The project id.
+        epoch_id (int): The epoch id.
+        rate_limit_auth_dep (RateLimitAuthCheck, optional): The rate limit auth check dependency. Defaults to rate_limit_auth_check.
+
+    Returns:
+        dict: The finalized cid for the given project_id and epoch_id.
     """
     if not (
         rate_limit_auth_dep.rate_limit_passed and
@@ -420,6 +476,18 @@ async def get_snapshotter_overall_status(
         rate_limit_auth_check,
     ),
 ):
+    """
+    Returns the overall status of the snapshotter.
+
+    Args:
+        request (Request): The incoming request.
+        response (Response): The outgoing response.
+        rate_limit_auth_dep (RateLimitAuthCheck, optional): The rate limit authentication check. Defaults to Depends(rate_limit_auth_check).
+
+    Returns:
+        dict: A dictionary containing the snapshotter status.
+    """
+
     if not (
         rate_limit_auth_dep.rate_limit_passed and
         rate_limit_auth_dep.authorized and
@@ -458,6 +526,20 @@ async def get_snapshotter_project_level_status(
         rate_limit_auth_check,
     ),
 ):
+    """
+    Get snapshotter project level status.
+
+    Args:
+        request (Request): The request object.
+        response (Response): The response object.
+        project_id (str): The project ID.
+        data (bool, optional): Whether to include data in the response. Defaults to False.
+        rate_limit_auth_dep (RateLimitAuthCheck, optional): The rate limit auth check dependency. Defaults to rate_limit_auth_check.
+
+    Returns:
+        dict: The snapshotter project status.
+    """
+
     if not (
         rate_limit_auth_dep.rate_limit_passed and
         rate_limit_auth_dep.authorized and
@@ -503,6 +585,17 @@ async def get_snapshotter_epoch_processing_status(
         rate_limit_auth_check,
     ),
 ) -> Page[SnapshotterEpochProcessingReportItem]:
+    """
+    Endpoint to get the epoch processing status report.
+
+    Args:
+        request (Request): The incoming request object.
+        response (Response): The outgoing response object.
+        rate_limit_auth_dep (RateLimitAuthCheck, optional): The rate limit authentication check dependency. Defaults to Depends(rate_limit_auth_check).
+
+    Returns:
+        Page[SnapshotterEpochProcessingReportItem]: The paginated epoch processing status report.
+    """
     if not (
         rate_limit_auth_dep.rate_limit_passed and
         rate_limit_auth_dep.authorized and
@@ -606,9 +699,17 @@ async def get_task_status_post(
     ),
 ):
     """
-    This endpoint is used to fetch task status for a given task_type and wallet_address.
-    """
+    Endpoint to get the status of a task for a given wallet address.
 
+    Args:
+        request (Request): The incoming request object.
+        response (Response): The outgoing response object.
+        task_status_request (TaskStatusRequest): The request body containing the task type and wallet address.
+        rate_limit_auth_dep (RateLimitAuthCheck, optional): The rate limit and authorization dependency. Defaults to rate_limit_auth_check.
+
+    Returns:
+        dict: A dictionary containing the status of the task and a message.
+    """
     if not (
         rate_limit_auth_dep.rate_limit_passed and
         rate_limit_auth_dep.authorized and

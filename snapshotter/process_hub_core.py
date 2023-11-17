@@ -70,6 +70,14 @@ class ProcessHubCore(Process):
     _redis_conn_sync: redis.Redis
 
     def __init__(self, name, **kwargs):
+        """
+        Initializes a new instance of the ProcessHubCore class.
+
+        Args:
+            name (str): The name of the process.
+            **kwargs: Additional keyword arguments to pass to the Process constructor.
+        """
+
         Process.__init__(self, name=name, **kwargs)
         self._spawned_processes_map: Dict[str, Optional[int]] = dict()  # process name to pid map
         self._spawned_cb_processes_map: Dict[str, Dict[str, Optional[ProcessorWorkerDetails]]] = (
@@ -92,6 +100,10 @@ class ProcessHubCore(Process):
         self._shutdown_initiated = False
 
     def signal_handler(self, signum, frame):
+        """
+        Handles the specified signal by initiating a shutdown and sending a shutdown signal
+        to the reporting service.
+        """
         if signum in [SIGINT, SIGTERM, SIGQUIT]:
             self._shutdown_initiated = True
             if settings.reporting.service_url:
@@ -110,6 +122,15 @@ class ProcessHubCore(Process):
             # raise GenericExitOnSignal
 
     def kill_process(self, pid: int):
+        """
+        Terminate a process with the given process ID (pid).
+
+        Args:
+            pid (int): The process ID of the process to be terminated.
+
+        Returns:
+            None
+        """
         p = psutil.Process(pid)
         self._logger.debug(
             'Attempting to send SIGTERM to process ID {} for following command',
@@ -140,6 +161,10 @@ class ProcessHubCore(Process):
 
     @provide_redis_conn
     def internal_state_reporter(self, redis_conn: redis.Redis = None):
+        """
+        This method reports the internal state of the process hub core to Redis and pings the reporting service.
+        It also performs a health check on epoch processing and sends a failure notification if necessary.
+        """
         while not self._thread_shutdown_event.wait(timeout=2):
             proc_id_map = dict()
             for k, v in self._spawned_processes_map.items():
@@ -318,6 +343,12 @@ class ProcessHubCore(Process):
         )
 
     def _kill_all_children(self, core_workers=True):
+        """
+        Terminate all the child processes spawned by the current process.
+
+        Args:
+            core_workers (bool): If True, terminate all the core workers as well.
+        """
         self._logger.error('Waiting on spawned callback workers to join...')
         for (
             worker_class_name,
@@ -386,6 +417,10 @@ class ProcessHubCore(Process):
             self._spawned_processes_map = dict()
 
     def _launch_snapshot_cb_workers(self):
+        """
+        Launches snapshot, aggregation and delegate workers based on the configuration specified in the settings.
+        Each worker is launched as a separate process and its details are stored in the `_spawned_cb_processes_map` dictionary.
+        """
         self._logger.debug('=' * 80)
         self._logger.debug('Launching Workers')
 
@@ -466,6 +501,16 @@ class ProcessHubCore(Process):
             )
 
     def _launch_core_worker(self, proc_name, proc_init_kwargs=dict()):
+        """
+        Launches a core worker process with the given process name and initialization arguments.
+
+        Args:
+            proc_name (str): The name of the process to launch.
+            proc_init_kwargs (dict): The initialization arguments for the process.
+
+        Returns:
+            None
+        """
         try:
             proc_details: dict = PROC_STR_ID_TO_CLASS_MAP[proc_name]
             init_kwargs = dict(name=proc_details['name'])
@@ -494,12 +539,19 @@ class ProcessHubCore(Process):
             )
 
     def _respawn_all_children(self):
+        """
+        Kills all existing child processes and launches new ones.
+        Resets the start time and last epoch processing health check.
+        """
         self._kill_all_children()
         self._launch_all_children()
         self._start_time = time.time()
         self._last_epoch_processing_health_check = 0
 
     def _launch_all_children(self):
+        """
+        Launches all the child processes for the process hub core.
+        """
         self._logger.debug('=' * 80)
         self._logger.debug('Launching Core Workers')
         self._launch_snapshot_cb_workers()
@@ -509,6 +561,13 @@ class ProcessHubCore(Process):
 
     @cleanup_proc_hub_children
     def run(self) -> None:
+        """
+        Runs the Process Hub Core.
+
+        Sets up signal handlers, resource limits, Redis connection pool, Anchor RPC helper,
+        Protocol State contract, source chain block time, epoch size, snapshot callback workers,
+        internal state reporter, RabbitMQ consumer, and raises a SelfExitException to exit the process.
+        """
         self._logger = logger.bind(module='Powerloom|ProcessHub|Core')
 
         for signame in [SIGINT, SIGTERM, SIGQUIT, SIGCHLD]:
@@ -577,6 +636,10 @@ class ProcessHubCore(Process):
         raise SelfExitException
 
     def callback(self, dont_use_ch, method, properties, body):
+        """
+        Callback function that is called when a message is received from the RabbitMQ queue.
+        Parses the message and performs the appropriate action based on the command received.
+        """
         self.rabbitmq_interactor._channel.basic_ack(
             delivery_tag=method.delivery_tag,
         )
