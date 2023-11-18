@@ -89,7 +89,7 @@ sed -i'.backup' "s#https://rpc-url#$SOURCE_RPC_URL#" config/settings.json
 
 sed -i'.backup' "s#https://prost-rpc-url#$PROST_RPC_URL#" config/settings.json
 
-sed -i'.backup' "s#web3-storage-token#$web3_storage_token#" settings.json
+sed -i'.backup' "s#web3-storage-token#$web3_storage_token#" config/settings.json
 sed -i'.backup' "s#ipfs-writer-url#$ipfs_url#" config/settings.json
 sed -i'.backup' "s#ipfs-writer-key#$ipfs_api_key#" config/settings.json
 sed -i'.backup' "s#ipfs-writer-secret#$ipfs_api_secret#" config/settings.json
