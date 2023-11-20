@@ -88,7 +88,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         super(GenericAsyncWorker, self).__init__(name=name, **kwargs)
         self._logger = logger.bind(module=self.name)
         self.protocol_state_contract = None
-        self._qos = 20
+        self._qos = 1
 
         self._rate_limiting_lua_scripts = None
 

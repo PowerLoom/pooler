@@ -20,7 +20,7 @@ from snapshotter.utils.rpc import RpcHelper
 
 class DelegatorPreloaderAsyncWorker(GenericDelegatorPreloader):
     def __init__(self, **kwargs):
-        self._qos = 10
+        self._qos = 1
         self._filter_worker_exchange_name = f'{settings.rabbitmq.setup.delegated_worker.exchange}:{settings.namespace}'
         self._filter_worker_request_queue, \
             self._filter_worker_request_routing_key = get_delegate_worker_request_queue_routing_key()
@@ -79,7 +79,7 @@ class DelegatorPreloaderAsyncWorker(GenericDelegatorPreloader):
         self._awaited_delegated_response_ids = set(self._request_id_query_obj_map.keys())
         async with await get_rabbitmq_basic_connection_async() as rmq_conn:
             self._channel = await rmq_conn.channel()
-            await self._channel.set_qos(10)
+            await self._channel.set_qos(self._qos)
             self._exchange = await self._channel.get_exchange(
                 name=self._filter_worker_exchange_name,
             )
