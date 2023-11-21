@@ -281,6 +281,16 @@
 <li class="toctree-l2"><a class="reference internal" href="snapshotter.utils.html#submodules">Submodules</a></li>
 <li class="toctree-l2"><a class="reference internal" href="snapshotter.utils.html#module-snapshotter.utils.aggregation_worker">snapshotter.utils.aggregation_worker module</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.aggregation_worker.AggregationAsyncWorker"><code class="docutils literal notranslate"><span class="pre">AggregationAsyncWorker</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.aggregation_worker.AggregationAsyncWorker._gen_multiple_type_project_id"><code class="docutils literal notranslate"><span class="pre">AggregationAsyncWorker._gen_multiple_type_project_id()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.aggregation_worker.AggregationAsyncWorker._gen_project_id"><code class="docutils literal notranslate"><span class="pre">AggregationAsyncWorker._gen_project_id()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.aggregation_worker.AggregationAsyncWorker._gen_single_type_project_id"><code class="docutils literal notranslate"><span class="pre">AggregationAsyncWorker._gen_single_type_project_id()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.aggregation_worker.AggregationAsyncWorker._init_ipfs_client"><code class="docutils literal notranslate"><span class="pre">AggregationAsyncWorker._init_ipfs_client()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.aggregation_worker.AggregationAsyncWorker._init_project_calculation_mapping"><code class="docutils literal notranslate"><span class="pre">AggregationAsyncWorker._init_project_calculation_mapping()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.aggregation_worker.AggregationAsyncWorker._ipfs_reader_client"><code class="docutils literal notranslate"><span class="pre">AggregationAsyncWorker._ipfs_reader_client</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.aggregation_worker.AggregationAsyncWorker._ipfs_singleton"><code class="docutils literal notranslate"><span class="pre">AggregationAsyncWorker._ipfs_singleton</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.aggregation_worker.AggregationAsyncWorker._ipfs_writer_client"><code class="docutils literal notranslate"><span class="pre">AggregationAsyncWorker._ipfs_writer_client</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.aggregation_worker.AggregationAsyncWorker._on_rabbitmq_message"><code class="docutils literal notranslate"><span class="pre">AggregationAsyncWorker._on_rabbitmq_message()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.aggregation_worker.AggregationAsyncWorker._processor_task"><code class="docutils literal notranslate"><span class="pre">AggregationAsyncWorker._processor_task()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.aggregation_worker.AggregationAsyncWorker.init_worker"><code class="docutils literal notranslate"><span class="pre">AggregationAsyncWorker.init_worker()</span></code></a></li>
 </ul>
 </li>
@@ -288,21 +298,45 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="snapshotter.utils.html#module-snapshotter.utils.callback_helpers">snapshotter.utils.callback_helpers module</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericDelegateProcessor"><code class="docutils literal notranslate"><span class="pre">GenericDelegateProcessor</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericDelegateProcessor._abc_impl"><code class="docutils literal notranslate"><span class="pre">GenericDelegateProcessor._abc_impl</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericDelegateProcessor.compute"><code class="docutils literal notranslate"><span class="pre">GenericDelegateProcessor.compute()</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericDelegatorPreloader"><code class="docutils literal notranslate"><span class="pre">GenericDelegatorPreloader</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericDelegatorPreloader"><code class="docutils literal notranslate"><span class="pre">GenericDelegatorPreloader</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericDelegatorPreloader._abc_impl"><code class="docutils literal notranslate"><span class="pre">GenericDelegatorPreloader._abc_impl</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericDelegatorPreloader._awaited_delegated_response_ids"><code class="docutils literal notranslate"><span class="pre">GenericDelegatorPreloader._awaited_delegated_response_ids</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericDelegatorPreloader._channel"><code class="docutils literal notranslate"><span class="pre">GenericDelegatorPreloader._channel</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericDelegatorPreloader._collected_response_objects"><code class="docutils literal notranslate"><span class="pre">GenericDelegatorPreloader._collected_response_objects</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericDelegatorPreloader._consumer_tag"><code class="docutils literal notranslate"><span class="pre">GenericDelegatorPreloader._consumer_tag</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericDelegatorPreloader._epoch"><code class="docutils literal notranslate"><span class="pre">GenericDelegatorPreloader._epoch</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericDelegatorPreloader._epoch_id"><code class="docutils literal notranslate"><span class="pre">GenericDelegatorPreloader._epoch_id</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericDelegatorPreloader._exchange"><code class="docutils literal notranslate"><span class="pre">GenericDelegatorPreloader._exchange</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericDelegatorPreloader._handle_filter_worker_response_message"><code class="docutils literal notranslate"><span class="pre">GenericDelegatorPreloader._handle_filter_worker_response_message()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericDelegatorPreloader._logger"><code class="docutils literal notranslate"><span class="pre">GenericDelegatorPreloader._logger</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericDelegatorPreloader._on_delegated_responses_complete"><code class="docutils literal notranslate"><span class="pre">GenericDelegatorPreloader._on_delegated_responses_complete()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericDelegatorPreloader._on_filter_worker_response_message"><code class="docutils literal notranslate"><span class="pre">GenericDelegatorPreloader._on_filter_worker_response_message()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericDelegatorPreloader._periodic_awaited_responses_checker"><code class="docutils literal notranslate"><span class="pre">GenericDelegatorPreloader._periodic_awaited_responses_checker()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericDelegatorPreloader._preload_successful_event"><code class="docutils literal notranslate"><span class="pre">GenericDelegatorPreloader._preload_successful_event</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericDelegatorPreloader._q_obj"><code class="docutils literal notranslate"><span class="pre">GenericDelegatorPreloader._q_obj</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericDelegatorPreloader._redis_conn"><code class="docutils literal notranslate"><span class="pre">GenericDelegatorPreloader._redis_conn</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericDelegatorPreloader._request_id_query_obj_map"><code class="docutils literal notranslate"><span class="pre">GenericDelegatorPreloader._request_id_query_obj_map</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericDelegatorPreloader._task_type"><code class="docutils literal notranslate"><span class="pre">GenericDelegatorPreloader._task_type</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericPreloader"><code class="docutils literal notranslate"><span class="pre">GenericPreloader</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericPreloader._abc_impl"><code class="docutils literal notranslate"><span class="pre">GenericPreloader._abc_impl</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericPreloader.cleanup"><code class="docutils literal notranslate"><span class="pre">GenericPreloader.cleanup()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericPreloader.compute"><code class="docutils literal notranslate"><span class="pre">GenericPreloader.compute()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericProcessorAggregate"><code class="docutils literal notranslate"><span class="pre">GenericProcessorAggregate</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericProcessorAggregate._abc_impl"><code class="docutils literal notranslate"><span class="pre">GenericProcessorAggregate._abc_impl</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericProcessorAggregate.compute"><code class="docutils literal notranslate"><span class="pre">GenericProcessorAggregate.compute()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericProcessorAggregate.transformation_lambdas"><code class="docutils literal notranslate"><span class="pre">GenericProcessorAggregate.transformation_lambdas</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericProcessorSnapshot"><code class="docutils literal notranslate"><span class="pre">GenericProcessorSnapshot</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericProcessorSnapshot._abc_impl"><code class="docutils literal notranslate"><span class="pre">GenericProcessorSnapshot._abc_impl</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericProcessorSnapshot.compute"><code class="docutils literal notranslate"><span class="pre">GenericProcessorSnapshot.compute()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.callback_helpers.GenericProcessorSnapshot.transformation_lambdas"><code class="docutils literal notranslate"><span class="pre">GenericProcessorSnapshot.transformation_lambdas</span></code></a></li>
 </ul>
@@ -351,6 +385,10 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="snapshotter.utils.html#module-snapshotter.utils.delegate_worker">snapshotter.utils.delegate_worker module</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.delegate_worker.DelegateAsyncWorker"><code class="docutils literal notranslate"><span class="pre">DelegateAsyncWorker</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.delegate_worker.DelegateAsyncWorker._init_delegate_task_calculation_mapping"><code class="docutils literal notranslate"><span class="pre">DelegateAsyncWorker._init_delegate_task_calculation_mapping()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.delegate_worker.DelegateAsyncWorker._on_rabbitmq_message"><code class="docutils literal notranslate"><span class="pre">DelegateAsyncWorker._on_rabbitmq_message()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.delegate_worker.DelegateAsyncWorker._processor_task"><code class="docutils literal notranslate"><span class="pre">DelegateAsyncWorker._processor_task()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.delegate_worker.DelegateAsyncWorker._send_delegate_worker_response_queue"><code class="docutils literal notranslate"><span class="pre">DelegateAsyncWorker._send_delegate_worker_response_queue()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.delegate_worker.DelegateAsyncWorker.init_worker"><code class="docutils literal notranslate"><span class="pre">DelegateAsyncWorker.init_worker()</span></code></a></li>
 </ul>
 </li>
@@ -371,6 +409,9 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="snapshotter.utils.html#module-snapshotter.utils.generic_delegator_preloader">snapshotter.utils.generic_delegator_preloader module</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_delegator_preloader.DelegatorPreloaderAsyncWorker"><code class="docutils literal notranslate"><span class="pre">DelegatorPreloaderAsyncWorker</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_delegator_preloader.DelegatorPreloaderAsyncWorker._abc_impl"><code class="docutils literal notranslate"><span class="pre">DelegatorPreloaderAsyncWorker._abc_impl</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_delegator_preloader.DelegatorPreloaderAsyncWorker._on_filter_worker_response_message"><code class="docutils literal notranslate"><span class="pre">DelegatorPreloaderAsyncWorker._on_filter_worker_response_message()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_delegator_preloader.DelegatorPreloaderAsyncWorker._periodic_awaited_responses_checker"><code class="docutils literal notranslate"><span class="pre">DelegatorPreloaderAsyncWorker._periodic_awaited_responses_checker()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_delegator_preloader.DelegatorPreloaderAsyncWorker.cleanup"><code class="docutils literal notranslate"><span class="pre">DelegatorPreloaderAsyncWorker.cleanup()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_delegator_preloader.DelegatorPreloaderAsyncWorker.compute_with_delegate_workers"><code class="docutils literal notranslate"><span class="pre">DelegatorPreloaderAsyncWorker.compute_with_delegate_workers()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_delegator_preloader.DelegatorPreloaderAsyncWorker.compute_with_retry"><code class="docutils literal notranslate"><span class="pre">DelegatorPreloaderAsyncWorker.compute_with_retry()</span></code></a></li>
@@ -380,6 +421,26 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="snapshotter.utils.html#module-snapshotter.utils.generic_worker">snapshotter.utils.generic_worker module</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._aioredis_pool"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._aioredis_pool</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._anchor_rpc_helper"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._anchor_rpc_helper</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._async_transport"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._async_transport</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._commit_payload"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._commit_payload()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._httpx_client"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._httpx_client</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._init_httpx_client"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._init_httpx_client()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._init_redis_pool"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._init_redis_pool()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._init_rpc_helper"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._init_rpc_helper()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._on_rabbitmq_message"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._on_rabbitmq_message()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._rabbitmq_consumer"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._rabbitmq_consumer()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._redis_conn"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._redis_conn</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._rmq_channel_pool"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._rmq_channel_pool</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._rmq_connection_pool"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._rmq_connection_pool</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._rpc_helper"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._rpc_helper</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._send_payload_commit_service_queue"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._send_payload_commit_service_queue()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._signal_handler"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._signal_handler()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._upload_to_ipfs"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._upload_to_ipfs()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._upload_web3_storage"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._upload_web3_storage()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._web3_storage_upload_client"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._web3_storage_upload_client</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._web3_storage_upload_transport"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._web3_storage_upload_transport</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker.init"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker.init()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker.run"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker.run()</span></code></a></li>
 </ul>
@@ -405,6 +466,7 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="snapshotter.utils.html#module-snapshotter.utils.helper_functions">snapshotter.utils.helper_functions module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.helper_functions._parse_value"><code class="docutils literal notranslate"><span class="pre">_parse_value()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.helper_functions.acquire_threading_semaphore"><code class="docutils literal notranslate"><span class="pre">acquire_threading_semaphore()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.helper_functions.as_completed_async"><code class="docutils literal notranslate"><span class="pre">as_completed_async()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.helper_functions.attribute_dict_to_dict"><code class="docutils literal notranslate"><span class="pre">attribute_dict_to_dict()</span></code></a></li>
@@ -478,6 +540,15 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="snapshotter.utils.html#module-snapshotter.utils.rpc">snapshotter.utils.rpc module</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper"><code class="docutils literal notranslate"><span class="pre">RpcHelper</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper._aiohttp_tcp_connector"><code class="docutils literal notranslate"><span class="pre">RpcHelper._aiohttp_tcp_connector</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper._async_web3_call"><code class="docutils literal notranslate"><span class="pre">RpcHelper._async_web3_call()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper._init_http_clients"><code class="docutils literal notranslate"><span class="pre">RpcHelper._init_http_clients()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper._load_async_web3_providers"><code class="docutils literal notranslate"><span class="pre">RpcHelper._load_async_web3_providers()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper._load_rate_limit_shas"><code class="docutils literal notranslate"><span class="pre">RpcHelper._load_rate_limit_shas()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper._load_web3_providers_and_rate_limits"><code class="docutils literal notranslate"><span class="pre">RpcHelper._load_web3_providers_and_rate_limits()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper._make_rpc_jsonrpc_call"><code class="docutils literal notranslate"><span class="pre">RpcHelper._make_rpc_jsonrpc_call()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper._on_node_exception"><code class="docutils literal notranslate"><span class="pre">RpcHelper._on_node_exception()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper._web3_aiohttp_client"><code class="docutils literal notranslate"><span class="pre">RpcHelper._web3_aiohttp_client</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper.batch_eth_call_on_block_range"><code class="docutils literal notranslate"><span class="pre">RpcHelper.batch_eth_call_on_block_range()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper.batch_eth_get_balance_on_block_range"><code class="docutils literal notranslate"><span class="pre">RpcHelper.batch_eth_get_balance_on_block_range()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper.batch_eth_get_block"><code class="docutils literal notranslate"><span class="pre">RpcHelper.batch_eth_get_block()</span></code></a></li>
@@ -503,6 +574,16 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="snapshotter.utils.html#module-snapshotter.utils.snapshot_worker">snapshotter.utils.snapshot_worker module</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.snapshot_worker.SnapshotAsyncWorker"><code class="docutils literal notranslate"><span class="pre">SnapshotAsyncWorker</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.snapshot_worker.SnapshotAsyncWorker._gen_project_id"><code class="docutils literal notranslate"><span class="pre">SnapshotAsyncWorker._gen_project_id()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.snapshot_worker.SnapshotAsyncWorker._init_ipfs_client"><code class="docutils literal notranslate"><span class="pre">SnapshotAsyncWorker._init_ipfs_client()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.snapshot_worker.SnapshotAsyncWorker._init_project_calculation_mapping"><code class="docutils literal notranslate"><span class="pre">SnapshotAsyncWorker._init_project_calculation_mapping()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.snapshot_worker.SnapshotAsyncWorker._ipfs_reader_client"><code class="docutils literal notranslate"><span class="pre">SnapshotAsyncWorker._ipfs_reader_client</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.snapshot_worker.SnapshotAsyncWorker._ipfs_singleton"><code class="docutils literal notranslate"><span class="pre">SnapshotAsyncWorker._ipfs_singleton</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.snapshot_worker.SnapshotAsyncWorker._ipfs_writer_client"><code class="docutils literal notranslate"><span class="pre">SnapshotAsyncWorker._ipfs_writer_client</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.snapshot_worker.SnapshotAsyncWorker._on_rabbitmq_message"><code class="docutils literal notranslate"><span class="pre">SnapshotAsyncWorker._on_rabbitmq_message()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.snapshot_worker.SnapshotAsyncWorker._process_bulk_mode"><code class="docutils literal notranslate"><span class="pre">SnapshotAsyncWorker._process_bulk_mode()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.snapshot_worker.SnapshotAsyncWorker._process_single_mode"><code class="docutils literal notranslate"><span class="pre">SnapshotAsyncWorker._process_single_mode()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.snapshot_worker.SnapshotAsyncWorker._processor_task"><code class="docutils literal notranslate"><span class="pre">SnapshotAsyncWorker._processor_task()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.snapshot_worker.SnapshotAsyncWorker.init_worker"><code class="docutils literal notranslate"><span class="pre">SnapshotAsyncWorker.init_worker()</span></code></a></li>
 </ul>
 </li>
@@ -861,6 +942,64 @@ frame (frame): The current stack frame at the time the signal was received.</p>
 <dt class="sig sig-object py" id="snapshotter.process_hub_core.ProcessHubCore">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.process_hub_core.</span></span><span class="sig-name descname"><span class="pre">ProcessHubCore</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.process_hub_core.ProcessHubCore" title="Permalink to this definition">#</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Process</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="snapshotter.process_hub_core.ProcessHubCore._anchor_rpc_helper">
+<span class="sig-name descname"><span class="pre">_anchor_rpc_helper</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper" title="snapshotter.utils.rpc.RpcHelper"><span class="pre">RpcHelper</span></a></em><a class="headerlink" href="#snapshotter.process_hub_core.ProcessHubCore._anchor_rpc_helper" title="Permalink to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.process_hub_core.ProcessHubCore._kill_all_children">
+<span class="sig-name descname"><span class="pre">_kill_all_children</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">core_workers</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.process_hub_core.ProcessHubCore._kill_all_children" title="Permalink to this definition">#</a></dt>
+<dd><p>Terminate all the child processes spawned by the current process.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>core_workers (bool): If True, terminate all the core workers as well.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.process_hub_core.ProcessHubCore._launch_all_children">
+<span class="sig-name descname"><span class="pre">_launch_all_children</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.process_hub_core.ProcessHubCore._launch_all_children" title="Permalink to this definition">#</a></dt>
+<dd><p>Launches all the child processes for the process hub core.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.process_hub_core.ProcessHubCore._launch_core_worker">
+<span class="sig-name descname"><span class="pre">_launch_core_worker</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">proc_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">proc_init_kwargs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">{}</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.process_hub_core.ProcessHubCore._launch_core_worker" title="Permalink to this definition">#</a></dt>
+<dd><p>Launches a core worker process with the given process name and initialization arguments.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>proc_name (str): The name of the process to launch.
+proc_init_kwargs (dict): The initialization arguments for the process.</p>
+</dd>
+<dt>Returns:</dt><dd><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.process_hub_core.ProcessHubCore._launch_snapshot_cb_workers">
+<span class="sig-name descname"><span class="pre">_launch_snapshot_cb_workers</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.process_hub_core.ProcessHubCore._launch_snapshot_cb_workers" title="Permalink to this definition">#</a></dt>
+<dd><p>Launches snapshot, aggregation and delegate workers based on the configuration specified in the settings.
+Each worker is launched as a separate process and its details are stored in the <cite>_spawned_cb_processes_map</cite> dictionary.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="snapshotter.process_hub_core.ProcessHubCore._redis_conn_sync">
+<span class="sig-name descname"><span class="pre">_redis_conn_sync</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Redis</span></em><a class="headerlink" href="#snapshotter.process_hub_core.ProcessHubCore._redis_conn_sync" title="Permalink to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="snapshotter.process_hub_core.ProcessHubCore._redis_connection_pool_sync">
+<span class="sig-name descname"><span class="pre">_redis_connection_pool_sync</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">BlockingConnectionPool</span></em><a class="headerlink" href="#snapshotter.process_hub_core.ProcessHubCore._redis_connection_pool_sync" title="Permalink to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.process_hub_core.ProcessHubCore._respawn_all_children">
+<span class="sig-name descname"><span class="pre">_respawn_all_children</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.process_hub_core.ProcessHubCore._respawn_all_children" title="Permalink to this definition">#</a></dt>
+<dd><p>Kills all existing child processes and launches new ones.
+Resets the start time and last epoch processing health check.</p>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="snapshotter.process_hub_core.ProcessHubCore.callback">
 <span class="sig-name descname"><span class="pre">callback</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dont_use_ch</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">properties</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">body</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.process_hub_core.ProcessHubCore.callback" title="Permalink to this definition">#</a></dt>
@@ -959,6 +1098,193 @@ pid (bool): If True, process_str_id is interpreted as a process ID instead of a 
 <dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.processor_distributor.</span></span><span class="sig-name descname"><span class="pre">ProcessorDistributor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor" title="Permalink to this definition">#</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Process</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._aioredis_pool">
+<span class="sig-name descname"><span class="pre">_aioredis_pool</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="snapshotter.utils.redis.html#snapshotter.utils.redis.redis_conn.RedisPoolCache" title="snapshotter.utils.redis.redis_conn.RedisPoolCache"><span class="pre">RedisPoolCache</span></a></em><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._aioredis_pool" title="Permalink to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._cache_and_forward_to_payload_commit_queue">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_cache_and_forward_to_payload_commit_queue</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">IncomingMessage</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._cache_and_forward_to_payload_commit_queue" title="Permalink to this definition">#</a></dt>
+<dd><p>Caches the snapshot data and forwards it to the payload commit queue.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>message (IncomingMessage): The incoming message containing the snapshot data.</p>
+</dd>
+<dt>Returns:</dt><dd><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._cleanup_older_epoch_status">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_cleanup_older_epoch_status</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">epoch_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._cleanup_older_epoch_status" title="Permalink to this definition">#</a></dt>
+<dd><p>Deletes the epoch status keys for the epoch that is 30 epochs older than the given epoch_id.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._distribute_callbacks_aggregate">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_distribute_callbacks_aggregate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">IncomingMessage</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._distribute_callbacks_aggregate" title="Permalink to this definition">#</a></dt>
+<dd><p>Distributes the callbacks for aggregation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>message</strong> – IncomingMessage object containing the message to be processed.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._distribute_callbacks_snapshotting">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_distribute_callbacks_snapshotting</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">project_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epoch</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="snapshotter.utils.models.html#snapshotter.utils.models.message_models.EpochBase" title="snapshotter.utils.models.message_models.EpochBase"><span class="pre">EpochBase</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._distribute_callbacks_snapshotting" title="Permalink to this definition">#</a></dt>
+<dd><p>Distributes callbacks for snapshotting to the appropriate snapshotters based on the project type and epoch.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>project_type (str): The type of project.
+epoch (EpochBase): The epoch to snapshot.</p>
+</dd>
+<dt>Returns:</dt><dd><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._enable_pending_projects_for_epoch">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_enable_pending_projects_for_epoch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">epoch_id</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Set</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._enable_pending_projects_for_epoch" title="Permalink to this definition">#</a></dt>
+<dd><p>Enables pending projects for the given epoch ID and returns a set of project IDs that were allowed.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>epoch_id</strong> (<em>Any</em>) – The epoch ID for which to enable pending projects.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A set of project IDs that were allowed.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>set</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._epoch_release_processor">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_epoch_release_processor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">IncomingMessage</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._epoch_release_processor" title="Permalink to this definition">#</a></dt>
+<dd><p>This method is called when an epoch is released. It enables pending projects for the epoch and executes preloaders.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>message (IncomingMessage): The message containing the epoch information.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._exec_preloaders">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_exec_preloaders</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msg_obj</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="snapshotter.utils.models.html#snapshotter.utils.models.message_models.EpochBase" title="snapshotter.utils.models.message_models.EpochBase"><span class="pre">EpochBase</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._exec_preloaders" title="Permalink to this definition">#</a></dt>
+<dd><p>Executes preloading tasks for the given epoch object.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>msg_obj (EpochBase): The epoch object for which preloading tasks need to be executed.</p>
+</dd>
+<dt>Returns:</dt><dd><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._init_preloader_compute_mapping">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_init_preloader_compute_mapping</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._init_preloader_compute_mapping" title="Permalink to this definition">#</a></dt>
+<dd><p>Initializes the preloader compute mapping by importing the preloader module and class and
+adding it to the mapping dictionary.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._init_rabbitmq_connection">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_init_rabbitmq_connection</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._init_rabbitmq_connection" title="Permalink to this definition">#</a></dt>
+<dd><p>Initializes the RabbitMQ connection pool and channel pool.</p>
+<p>The RabbitMQ connection pool is used to manage a pool of connections to the RabbitMQ server,
+while the channel pool is used to manage a pool of channels for each connection.</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._init_redis_pool">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_init_redis_pool</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._init_redis_pool" title="Permalink to this definition">#</a></dt>
+<dd><p>Initializes the Redis connection pool and populates it with connections.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._init_rpc_helper">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_init_rpc_helper</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._init_rpc_helper" title="Permalink to this definition">#</a></dt>
+<dd><p>Initializes the RpcHelper instance if it is not already initialized.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._load_projects_metadata">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_load_projects_metadata</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._load_projects_metadata" title="Permalink to this definition">#</a></dt>
+<dd><p>Loads the metadata for the projects, including the source chain ID, the list of projects, and the submission window
+for snapshots. It also updates the project type configuration mapping with the relevant projects.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._on_rabbitmq_message">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_on_rabbitmq_message</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">IncomingMessage</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._on_rabbitmq_message" title="Permalink to this definition">#</a></dt>
+<dd><p>Callback function to handle incoming RabbitMQ messages.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>message (IncomingMessage): The incoming RabbitMQ message.</p>
+</dd>
+<dt>Returns:</dt><dd><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._preloader_waiter">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_preloader_waiter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">epoch</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="snapshotter.utils.models.html#snapshotter.utils.models.message_models.EpochBase" title="snapshotter.utils.models.message_models.EpochBase"><span class="pre">EpochBase</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._preloader_waiter" title="Permalink to this definition">#</a></dt>
+<dd><p>Wait for all preloading tasks to complete for the given epoch, and distribute snapshot build tasks if all preloading
+dependencies are satisfied.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>epoch: The epoch for which to wait for preloading tasks to complete.</p>
+</dd>
+<dt>Returns:</dt><dd><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._rabbitmq_consumer">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_rabbitmq_consumer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">loop</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._rabbitmq_consumer" title="Permalink to this definition">#</a></dt>
+<dd><p>Consume messages from a RabbitMQ queue.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>loop: The event loop to use for the consumer.</p>
+</dd>
+<dt>Returns:</dt><dd><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._redis_conn">
+<span class="sig-name descname"><span class="pre">_redis_conn</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Redis</span></em><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._redis_conn" title="Permalink to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._signal_handler">
+<span class="sig-name descname"><span class="pre">_signal_handler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">signum</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._signal_handler" title="Permalink to this definition">#</a></dt>
+<dd><p>Signal handler method that cancels the core RMQ consumer when a SIGINT, SIGTERM, or SIGQUIT signal is received.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>signum (int): The signal number.
+frame (frame): The current stack frame at the time the signal was received.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._update_all_projects">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_update_all_projects</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">IncomingMessage</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._update_all_projects" title="Permalink to this definition">#</a></dt>
+<dd><p>Updates all projects based on the incoming message.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>message (IncomingMessage): The incoming message containing the project updates.</p>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor.init_worker">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">init_worker</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor.init_worker" title="Permalink to this definition">#</a></dt>
@@ -982,6 +1308,53 @@ initializing the worker, starting the RabbitMQ consumer, and running the event l
 <dt class="sig sig-object py" id="snapshotter.protocol_state_loader_exporter.ProtocolStateLoader">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.protocol_state_loader_exporter.</span></span><span class="sig-name descname"><span class="pre">ProtocolStateLoader</span></span><a class="headerlink" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader" title="Permalink to this definition">#</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._anchor_rpc_helper">
+<span class="sig-name descname"><span class="pre">_anchor_rpc_helper</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper" title="snapshotter.utils.rpc.RpcHelper"><span class="pre">RpcHelper</span></a></em><a class="headerlink" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._anchor_rpc_helper" title="Permalink to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._export_project_state">
+<span class="sig-name descname"><span class="pre">_export_project_state</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">project_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">first_epoch_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_epoch_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">redis_conn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Redis</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="snapshotter.utils.models.html#snapshotter.utils.models.data_models.ProjectSpecificState" title="snapshotter.utils.models.data_models.ProjectSpecificState"><span class="pre">ProjectSpecificState</span></a></span></span><a class="headerlink" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._export_project_state" title="Permalink to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._init_redis_pool">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_init_redis_pool</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._init_redis_pool" title="Permalink to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._init_rpc_helper">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_init_rpc_helper</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._init_rpc_helper" title="Permalink to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._load_finalized_cids_from_contract">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_load_finalized_cids_from_contract</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">project_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epoch_id_list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">semaphore</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._load_finalized_cids_from_contract" title="Permalink to this definition">#</a></dt>
+<dd><p>Fetches finalized CIDs for a project against a given list of epoch IDs from the contract and caches them in Redis</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._load_finalized_cids_from_contract_in_epoch_range">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_load_finalized_cids_from_contract_in_epoch_range</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">project_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">begin_epoch_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cur_epoch_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">semaphore</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._load_finalized_cids_from_contract_in_epoch_range" title="Permalink to this definition">#</a></dt>
+<dd><p>Fetches finalized CIDs for a project against an epoch ID range from the contract and caches them in Redis</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._load_project_state">
+<span class="sig-name descname"><span class="pre">_load_project_state</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">project_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project_state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="snapshotter.utils.models.html#snapshotter.utils.models.data_models.ProjectSpecificState" title="snapshotter.utils.models.data_models.ProjectSpecificState"><span class="pre">ProjectSpecificState</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">redis_conn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Redis</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._load_project_state" title="Permalink to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._protocol_state_query_semaphore">
+<span class="sig-name descname"><span class="pre">_protocol_state_query_semaphore</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">BoundedSemaphore</span></em><a class="headerlink" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._protocol_state_query_semaphore" title="Permalink to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._redis_conn">
+<span class="sig-name descname"><span class="pre">_redis_conn</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Redis</span></em><a class="headerlink" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._redis_conn" title="Permalink to this definition">#</a></dt>
+<dd></dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="snapshotter.protocol_state_loader_exporter.ProtocolStateLoader.export">
 <span class="sig-name descname"><span class="pre">export</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader.export" title="Permalink to this definition">#</a></dt>
@@ -1022,6 +1395,62 @@ If snapshotting is not allowed, sets the active status key in Redis to False and
 <dt class="sig sig-object py" id="snapshotter.system_event_detector.EventDetectorProcess">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.system_event_detector.</span></span><span class="sig-name descname"><span class="pre">EventDetectorProcess</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.system_event_detector.EventDetectorProcess" title="Permalink to this definition">#</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Process</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.system_event_detector.EventDetectorProcess._broadcast_event">
+<span class="sig-name descname"><span class="pre">_broadcast_event</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">event</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="snapshotter.utils.models.html#snapshotter.utils.models.data_models.EventBase" title="snapshotter.utils.models.data_models.EventBase"><span class="pre">EventBase</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.system_event_detector.EventDetectorProcess._broadcast_event" title="Permalink to this definition">#</a></dt>
+<dd><p>Broadcasts the given event to the RabbitMQ queue.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>event_type (str): The type of the event being broadcasted.
+event (EventBase): The event being broadcasted.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.system_event_detector.EventDetectorProcess._detect_events">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_detect_events</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.system_event_detector.EventDetectorProcess._detect_events" title="Permalink to this definition">#</a></dt>
+<dd><p>Continuously detects events by fetching the current block and comparing it to the last processed block.
+If the last processed block is too far behind the current block, it processes the current block and broadcasts the events.
+The last processed block is saved in Redis for future reference.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.system_event_detector.EventDetectorProcess._generic_exit_handler">
+<span class="sig-name descname"><span class="pre">_generic_exit_handler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">signum</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sigframe</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.system_event_detector.EventDetectorProcess._generic_exit_handler" title="Permalink to this definition">#</a></dt>
+<dd><p>Handles the generic exit signal and initiates shutdown.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>signum (int): The signal number.
+sigframe (object): The signal frame.</p>
+</dd>
+<dt>Raises:</dt><dd><p>GenericExitOnSignal: If the shutdown is initiated.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.system_event_detector.EventDetectorProcess._init_redis_pool">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_init_redis_pool</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.system_event_detector.EventDetectorProcess._init_redis_pool" title="Permalink to this definition">#</a></dt>
+<dd><p>Initializes the Redis connection pool if it hasn’t been initialized yet.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.system_event_detector.EventDetectorProcess._interactor_wrapper">
+<span class="sig-name descname"><span class="pre">_interactor_wrapper</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">q</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Queue</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.system_event_detector.EventDetectorProcess._interactor_wrapper" title="Permalink to this definition">#</a></dt>
+<dd><p>A wrapper method that runs in a separate thread and initializes a RabbitmqThreadedSelectLoopInteractor object.</p>
+<p>Args:
+- q: A queue.Queue object that is used to publish messages to RabbitMQ.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="snapshotter.system_event_detector.EventDetectorProcess._rabbitmq_queue">
+<span class="sig-name descname"><span class="pre">_rabbitmq_queue</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Queue</span></em><a class="headerlink" href="#snapshotter.system_event_detector.EventDetectorProcess._rabbitmq_queue" title="Permalink to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="snapshotter.system_event_detector.EventDetectorProcess._rabbitmq_thread">
+<span class="sig-name descname"><span class="pre">_rabbitmq_thread</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Thread</span></em><a class="headerlink" href="#snapshotter.system_event_detector.EventDetectorProcess._rabbitmq_thread" title="Permalink to this definition">#</a></dt>
+<dd></dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="snapshotter.system_event_detector.EventDetectorProcess.get_events">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_events</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">from_block</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">to_block</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.system_event_detector.EventDetectorProcess.get_events" title="Permalink to this definition">#</a></dt>
@@ -1191,6 +1620,14 @@ Detector, Worker Processor Distributor, and Worker Processes. The running status
 </li>
 <li><a class="reference internal" href="#module-snapshotter.process_hub_core">snapshotter.process_hub_core module</a><ul>
 <li><a class="reference internal" href="#snapshotter.process_hub_core.ProcessHubCore"><code class="docutils literal notranslate"><span class="pre">ProcessHubCore</span></code></a><ul>
+<li><a class="reference internal" href="#snapshotter.process_hub_core.ProcessHubCore._anchor_rpc_helper"><code class="docutils literal notranslate"><span class="pre">ProcessHubCore._anchor_rpc_helper</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.process_hub_core.ProcessHubCore._kill_all_children"><code class="docutils literal notranslate"><span class="pre">ProcessHubCore._kill_all_children()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.process_hub_core.ProcessHubCore._launch_all_children"><code class="docutils literal notranslate"><span class="pre">ProcessHubCore._launch_all_children()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.process_hub_core.ProcessHubCore._launch_core_worker"><code class="docutils literal notranslate"><span class="pre">ProcessHubCore._launch_core_worker()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.process_hub_core.ProcessHubCore._launch_snapshot_cb_workers"><code class="docutils literal notranslate"><span class="pre">ProcessHubCore._launch_snapshot_cb_workers()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.process_hub_core.ProcessHubCore._redis_conn_sync"><code class="docutils literal notranslate"><span class="pre">ProcessHubCore._redis_conn_sync</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.process_hub_core.ProcessHubCore._redis_connection_pool_sync"><code class="docutils literal notranslate"><span class="pre">ProcessHubCore._redis_connection_pool_sync</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.process_hub_core.ProcessHubCore._respawn_all_children"><code class="docutils literal notranslate"><span class="pre">ProcessHubCore._respawn_all_children()</span></code></a></li>
 <li><a class="reference internal" href="#snapshotter.process_hub_core.ProcessHubCore.callback"><code class="docutils literal notranslate"><span class="pre">ProcessHubCore.callback()</span></code></a></li>
 <li><a class="reference internal" href="#snapshotter.process_hub_core.ProcessHubCore.internal_state_reporter"><code class="docutils literal notranslate"><span class="pre">ProcessHubCore.internal_state_reporter()</span></code></a></li>
 <li><a class="reference internal" href="#snapshotter.process_hub_core.ProcessHubCore.kill_process"><code class="docutils literal notranslate"><span class="pre">ProcessHubCore.kill_process()</span></code></a></li>
@@ -1210,6 +1647,25 @@ Detector, Worker Processor Distributor, and Worker Processes. The running status
 </li>
 <li><a class="reference internal" href="#module-snapshotter.processor_distributor">snapshotter.processor_distributor module</a><ul>
 <li><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor</span></code></a><ul>
+<li><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._aioredis_pool"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._aioredis_pool</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._cache_and_forward_to_payload_commit_queue"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._cache_and_forward_to_payload_commit_queue()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._cleanup_older_epoch_status"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._cleanup_older_epoch_status()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._distribute_callbacks_aggregate"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._distribute_callbacks_aggregate()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._distribute_callbacks_snapshotting"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._distribute_callbacks_snapshotting()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._enable_pending_projects_for_epoch"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._enable_pending_projects_for_epoch()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._epoch_release_processor"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._epoch_release_processor()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._exec_preloaders"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._exec_preloaders()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._init_preloader_compute_mapping"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._init_preloader_compute_mapping()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._init_rabbitmq_connection"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._init_rabbitmq_connection()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._init_redis_pool"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._init_redis_pool()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._init_rpc_helper"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._init_rpc_helper()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._load_projects_metadata"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._load_projects_metadata()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._on_rabbitmq_message"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._on_rabbitmq_message()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._preloader_waiter"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._preloader_waiter()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._rabbitmq_consumer"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._rabbitmq_consumer()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._redis_conn"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._redis_conn</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._signal_handler"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._signal_handler()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._update_all_projects"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._update_all_projects()</span></code></a></li>
 <li><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor.init_worker"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor.init_worker()</span></code></a></li>
 <li><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor.run"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor.run()</span></code></a></li>
 </ul>
@@ -1218,6 +1674,15 @@ Detector, Worker Processor Distributor, and Worker Processes. The running status
 </li>
 <li><a class="reference internal" href="#module-snapshotter.protocol_state_loader_exporter">snapshotter.protocol_state_loader_exporter module</a><ul>
 <li><a class="reference internal" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader"><code class="docutils literal notranslate"><span class="pre">ProtocolStateLoader</span></code></a><ul>
+<li><a class="reference internal" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._anchor_rpc_helper"><code class="docutils literal notranslate"><span class="pre">ProtocolStateLoader._anchor_rpc_helper</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._export_project_state"><code class="docutils literal notranslate"><span class="pre">ProtocolStateLoader._export_project_state()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._init_redis_pool"><code class="docutils literal notranslate"><span class="pre">ProtocolStateLoader._init_redis_pool()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._init_rpc_helper"><code class="docutils literal notranslate"><span class="pre">ProtocolStateLoader._init_rpc_helper()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._load_finalized_cids_from_contract"><code class="docutils literal notranslate"><span class="pre">ProtocolStateLoader._load_finalized_cids_from_contract()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._load_finalized_cids_from_contract_in_epoch_range"><code class="docutils literal notranslate"><span class="pre">ProtocolStateLoader._load_finalized_cids_from_contract_in_epoch_range()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._load_project_state"><code class="docutils literal notranslate"><span class="pre">ProtocolStateLoader._load_project_state()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._protocol_state_query_semaphore"><code class="docutils literal notranslate"><span class="pre">ProtocolStateLoader._protocol_state_query_semaphore</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._redis_conn"><code class="docutils literal notranslate"><span class="pre">ProtocolStateLoader._redis_conn</span></code></a></li>
 <li><a class="reference internal" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader.export"><code class="docutils literal notranslate"><span class="pre">ProtocolStateLoader.export()</span></code></a></li>
 <li><a class="reference internal" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader.init"><code class="docutils literal notranslate"><span class="pre">ProtocolStateLoader.init()</span></code></a></li>
 <li><a class="reference internal" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader.load"><code class="docutils literal notranslate"><span class="pre">ProtocolStateLoader.load()</span></code></a></li>
@@ -1232,6 +1697,13 @@ Detector, Worker Processor Distributor, and Worker Processes. The running status
 </li>
 <li><a class="reference internal" href="#module-snapshotter.system_event_detector">snapshotter.system_event_detector module</a><ul>
 <li><a class="reference internal" href="#snapshotter.system_event_detector.EventDetectorProcess"><code class="docutils literal notranslate"><span class="pre">EventDetectorProcess</span></code></a><ul>
+<li><a class="reference internal" href="#snapshotter.system_event_detector.EventDetectorProcess._broadcast_event"><code class="docutils literal notranslate"><span class="pre">EventDetectorProcess._broadcast_event()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.system_event_detector.EventDetectorProcess._detect_events"><code class="docutils literal notranslate"><span class="pre">EventDetectorProcess._detect_events()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.system_event_detector.EventDetectorProcess._generic_exit_handler"><code class="docutils literal notranslate"><span class="pre">EventDetectorProcess._generic_exit_handler()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.system_event_detector.EventDetectorProcess._init_redis_pool"><code class="docutils literal notranslate"><span class="pre">EventDetectorProcess._init_redis_pool()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.system_event_detector.EventDetectorProcess._interactor_wrapper"><code class="docutils literal notranslate"><span class="pre">EventDetectorProcess._interactor_wrapper()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.system_event_detector.EventDetectorProcess._rabbitmq_queue"><code class="docutils literal notranslate"><span class="pre">EventDetectorProcess._rabbitmq_queue</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.system_event_detector.EventDetectorProcess._rabbitmq_thread"><code class="docutils literal notranslate"><span class="pre">EventDetectorProcess._rabbitmq_thread</span></code></a></li>
 <li><a class="reference internal" href="#snapshotter.system_event_detector.EventDetectorProcess.get_events"><code class="docutils literal notranslate"><span class="pre">EventDetectorProcess.get_events()</span></code></a></li>
 <li><a class="reference internal" href="#snapshotter.system_event_detector.EventDetectorProcess.run"><code class="docutils literal notranslate"><span class="pre">EventDetectorProcess.run()</span></code></a></li>
 </ul>

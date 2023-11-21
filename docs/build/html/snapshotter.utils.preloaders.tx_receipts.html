@@ -223,6 +223,7 @@
 <li class="toctree-l2"><a class="reference internal" href="snapshotter.utils.preloaders.tx_receipts.delegated_worker.html#submodules">Submodules</a></li>
 <li class="toctree-l2"><a class="reference internal" href="snapshotter.utils.preloaders.tx_receipts.delegated_worker.html#module-snapshotter.utils.preloaders.tx_receipts.delegated_worker.tx_receipts">snapshotter.utils.preloaders.tx_receipts.delegated_worker.tx_receipts module</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.preloaders.tx_receipts.delegated_worker.html#snapshotter.utils.preloaders.tx_receipts.delegated_worker.tx_receipts.TxReceiptProcessor"><code class="docutils literal notranslate"><span class="pre">TxReceiptProcessor</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.preloaders.tx_receipts.delegated_worker.html#snapshotter.utils.preloaders.tx_receipts.delegated_worker.tx_receipts.TxReceiptProcessor._abc_impl"><code class="docutils literal notranslate"><span class="pre">TxReceiptProcessor._abc_impl</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.preloaders.tx_receipts.delegated_worker.html#snapshotter.utils.preloaders.tx_receipts.delegated_worker.tx_receipts.TxReceiptProcessor.compute"><code class="docutils literal notranslate"><span class="pre">TxReceiptProcessor.compute()</span></code></a></li>
 </ul>
 </li>
@@ -243,6 +244,21 @@
 <dt class="sig sig-object py" id="snapshotter.utils.preloaders.tx_receipts.preloader.TxPreloadWorker">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.utils.preloaders.tx_receipts.preloader.</span></span><span class="sig-name descname"><span class="pre">TxPreloadWorker</span></span><a class="headerlink" href="#snapshotter.utils.preloaders.tx_receipts.preloader.TxPreloadWorker" title="Permalink to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_delegator_preloader.DelegatorPreloaderAsyncWorker" title="snapshotter.utils.generic_delegator_preloader.DelegatorPreloaderAsyncWorker"><code class="xref py py-class docutils literal notranslate"><span class="pre">DelegatorPreloaderAsyncWorker</span></code></a></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="snapshotter.utils.preloaders.tx_receipts.preloader.TxPreloadWorker._abc_impl">
+<span class="sig-name descname"><span class="pre">_abc_impl</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">&lt;_abc._abc_data</span> <span class="pre">object&gt;</span></em><a class="headerlink" href="#snapshotter.utils.preloaders.tx_receipts.preloader.TxPreloadWorker._abc_impl" title="Permalink to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.utils.preloaders.tx_receipts.preloader.TxPreloadWorker._handle_filter_worker_response_message">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_handle_filter_worker_response_message</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bytes</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.utils.preloaders.tx_receipts.preloader.TxPreloadWorker._handle_filter_worker_response_message" title="Permalink to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.utils.preloaders.tx_receipts.preloader.TxPreloadWorker._on_delegated_responses_complete">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_on_delegated_responses_complete</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.utils.preloaders.tx_receipts.preloader.TxPreloadWorker._on_delegated_responses_complete" title="Permalink to this definition">#</a></dt>
+<dd></dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="snapshotter.utils.preloaders.tx_receipts.preloader.TxPreloadWorker.compute">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">compute</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">epoch</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="snapshotter.utils.models.html#snapshotter.utils.models.message_models.EpochBase" title="snapshotter.utils.models.message_models.EpochBase"><span class="pre">EpochBase</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">redis_conn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Redis</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rpc_helper</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper" title="snapshotter.utils.rpc.RpcHelper"><span class="pre">RpcHelper</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.utils.preloaders.tx_receipts.preloader.TxPreloadWorker.compute" title="Permalink to this definition">#</a></dt>
@@ -316,6 +332,9 @@
 <li><a class="reference internal" href="#submodules">Submodules</a></li>
 <li><a class="reference internal" href="#module-snapshotter.utils.preloaders.tx_receipts.preloader">snapshotter.utils.preloaders.tx_receipts.preloader module</a><ul>
 <li><a class="reference internal" href="#snapshotter.utils.preloaders.tx_receipts.preloader.TxPreloadWorker"><code class="docutils literal notranslate"><span class="pre">TxPreloadWorker</span></code></a><ul>
+<li><a class="reference internal" href="#snapshotter.utils.preloaders.tx_receipts.preloader.TxPreloadWorker._abc_impl"><code class="docutils literal notranslate"><span class="pre">TxPreloadWorker._abc_impl</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.utils.preloaders.tx_receipts.preloader.TxPreloadWorker._handle_filter_worker_response_message"><code class="docutils literal notranslate"><span class="pre">TxPreloadWorker._handle_filter_worker_response_message()</span></code></a></li>
+<li><a class="reference internal" href="#snapshotter.utils.preloaders.tx_receipts.preloader.TxPreloadWorker._on_delegated_responses_complete"><code class="docutils literal notranslate"><span class="pre">TxPreloadWorker._on_delegated_responses_complete()</span></code></a></li>
 <li><a class="reference internal" href="#snapshotter.utils.preloaders.tx_receipts.preloader.TxPreloadWorker.compute"><code class="docutils literal notranslate"><span class="pre">TxPreloadWorker.compute()</span></code></a></li>
 </ul>
 </li>

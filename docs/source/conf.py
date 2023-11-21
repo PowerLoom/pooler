@@ -23,6 +23,12 @@ extensions = [
     'sphinx_automodapi.automodsumm',
 ]
 
+autodoc_default_options = {
+    'members': True,
+    'undoc-members': True,
+    'private-members': True,
+}
+
 templates_path = ['_templates']
 exclude_patterns = []
 

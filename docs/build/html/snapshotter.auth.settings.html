@@ -225,6 +225,11 @@
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.settings.settings_models.</span></span><span class="sig-name descname"><span class="pre">AuthSettings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">redis</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#snapshotter.auth.settings.settings_models.RedisConfig" title="snapshotter.auth.settings.settings_models.RedisConfig"><span class="pre">RedisConfig</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">bind</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#snapshotter.auth.settings.settings_models.ServerListenerConfig" title="snapshotter.auth.settings.settings_models.ServerListenerConfig"><span class="pre">ServerListenerConfig</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.auth.settings.settings_models.AuthSettings" title="Permalink to this definition">#</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModel</span></code></p>
 <dl class="py attribute">
+<dt class="sig sig-object py" id="snapshotter.auth.settings.settings_models.AuthSettings._abc_impl">
+<span class="sig-name descname"><span class="pre">_abc_impl</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">&lt;_abc._abc_data</span> <span class="pre">object&gt;</span></em><a class="headerlink" href="#snapshotter.auth.settings.settings_models.AuthSettings._abc_impl" title="Permalink to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.settings.settings_models.AuthSettings.bind">
 <span class="sig-name descname"><span class="pre">bind</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#snapshotter.auth.settings.settings_models.ServerListenerConfig" title="snapshotter.auth.settings.settings_models.ServerListenerConfig"><span class="pre">ServerListenerConfig</span></a></em><a class="headerlink" href="#snapshotter.auth.settings.settings_models.AuthSettings.bind" title="Permalink to this definition">#</a></dt>
 <dd></dd></dl>
@@ -240,6 +245,11 @@
 <dt class="sig sig-object py" id="snapshotter.auth.settings.settings_models.RedisConfig">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.settings.settings_models.</span></span><span class="sig-name descname"><span class="pre">RedisConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">host</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'127.0.0.1'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">6379</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">db</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">password</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.auth.settings.settings_models.RedisConfig" title="Permalink to this definition">#</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModel</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="snapshotter.auth.settings.settings_models.RedisConfig._abc_impl">
+<span class="sig-name descname"><span class="pre">_abc_impl</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">&lt;_abc._abc_data</span> <span class="pre">object&gt;</span></em><a class="headerlink" href="#snapshotter.auth.settings.settings_models.RedisConfig._abc_impl" title="Permalink to this definition">#</a></dt>
+<dd></dd></dl>
+
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.settings.settings_models.RedisConfig.db">
 <span class="sig-name descname"><span class="pre">db</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#snapshotter.auth.settings.settings_models.RedisConfig.db" title="Permalink to this definition">#</a></dt>
@@ -266,6 +276,11 @@
 <dt class="sig sig-object py" id="snapshotter.auth.settings.settings_models.ServerListenerConfig">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.settings.settings_models.</span></span><span class="sig-name descname"><span class="pre">ServerListenerConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">host</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'0.0.0.0'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.auth.settings.settings_models.ServerListenerConfig" title="Permalink to this definition">#</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModel</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="snapshotter.auth.settings.settings_models.ServerListenerConfig._abc_impl">
+<span class="sig-name descname"><span class="pre">_abc_impl</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">&lt;_abc._abc_data</span> <span class="pre">object&gt;</span></em><a class="headerlink" href="#snapshotter.auth.settings.settings_models.ServerListenerConfig._abc_impl" title="Permalink to this definition">#</a></dt>
+<dd></dd></dl>
+
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.settings.settings_models.ServerListenerConfig.host">
 <span class="sig-name descname"><span class="pre">host</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#snapshotter.auth.settings.settings_models.ServerListenerConfig.host" title="Permalink to this definition">#</a></dt>
@@ -343,11 +358,13 @@
 <li><a class="reference internal" href="#submodules">Submodules</a></li>
 <li><a class="reference internal" href="#module-snapshotter.auth.settings.settings_models">snapshotter.auth.settings.settings_models module</a><ul>
 <li><a class="reference internal" href="#snapshotter.auth.settings.settings_models.AuthSettings"><code class="docutils literal notranslate"><span class="pre">AuthSettings</span></code></a><ul>
+<li><a class="reference internal" href="#snapshotter.auth.settings.settings_models.AuthSettings._abc_impl"><code class="docutils literal notranslate"><span class="pre">AuthSettings._abc_impl</span></code></a></li>
 <li><a class="reference internal" href="#snapshotter.auth.settings.settings_models.AuthSettings.bind"><code class="docutils literal notranslate"><span class="pre">AuthSettings.bind</span></code></a></li>
 <li><a class="reference internal" href="#snapshotter.auth.settings.settings_models.AuthSettings.redis"><code class="docutils literal notranslate"><span class="pre">AuthSettings.redis</span></code></a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#snapshotter.auth.settings.settings_models.RedisConfig"><code class="docutils literal notranslate"><span class="pre">RedisConfig</span></code></a><ul>
+<li><a class="reference internal" href="#snapshotter.auth.settings.settings_models.RedisConfig._abc_impl"><code class="docutils literal notranslate"><span class="pre">RedisConfig._abc_impl</span></code></a></li>
 <li><a class="reference internal" href="#snapshotter.auth.settings.settings_models.RedisConfig.db"><code class="docutils literal notranslate"><span class="pre">RedisConfig.db</span></code></a></li>
 <li><a class="reference internal" href="#snapshotter.auth.settings.settings_models.RedisConfig.host"><code class="docutils literal notranslate"><span class="pre">RedisConfig.host</span></code></a></li>
 <li><a class="reference internal" href="#snapshotter.auth.settings.settings_models.RedisConfig.password"><code class="docutils literal notranslate"><span class="pre">RedisConfig.password</span></code></a></li>
@@ -355,6 +372,7 @@
 </ul>
 </li>
 <li><a class="reference internal" href="#snapshotter.auth.settings.settings_models.ServerListenerConfig"><code class="docutils literal notranslate"><span class="pre">ServerListenerConfig</span></code></a><ul>
+<li><a class="reference internal" href="#snapshotter.auth.settings.settings_models.ServerListenerConfig._abc_impl"><code class="docutils literal notranslate"><span class="pre">ServerListenerConfig._abc_impl</span></code></a></li>
 <li><a class="reference internal" href="#snapshotter.auth.settings.settings_models.ServerListenerConfig.host"><code class="docutils literal notranslate"><span class="pre">ServerListenerConfig.host</span></code></a></li>
 <li><a class="reference internal" href="#snapshotter.auth.settings.settings_models.ServerListenerConfig.port"><code class="docutils literal notranslate"><span class="pre">ServerListenerConfig.port</span></code></a></li>
 </ul>
