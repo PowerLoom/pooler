@@ -14,7 +14,7 @@ from .models.data_models import trade_data
 from .pricing import (
     get_token_price_in_block_range,
 )
-from pooler.modules.uniswapv3.total_value_locked import calculate_reserves
+from pooler.modules.uniswapv3.total_value_locked import calculate_reserves, get_tick_info
 from pooler.modules.uniswapv3.total_value_locked import get_events
 from pooler.utils.default_logger import logger
 from pooler.utils.rpc import get_event_sig_and_abi
@@ -492,3 +492,78 @@ async def get_pair_trade_volume(
     epoch_trade_logs.update({"timestamp": max_block_timestamp})
     core_logger.debug(f"epoch_trade_logs: {epoch_trade_logs}")
     return epoch_trade_logs
+
+
+async def get_liquidity_depth(
+    pair_address,
+    from_block,
+    to_block,
+    redis_conn: aioredis.Redis,
+    rpc_helper: RpcHelper,
+    fetch_timestamp=False,
+):
+    core_logger.debug(
+    f"Starting liquidity depth query for: {pair_address}",
+    )
+    pair_address = Web3.to_checksum_address(pair_address)
+
+    if fetch_timestamp:
+        try:
+            block_details_dict = await get_block_details_in_block_range(
+                from_block,
+                to_block,
+                redis_conn=redis_conn,
+                rpc_helper=rpc_helper,
+            )
+        except Exception as err:
+            core_logger.opt(exception=True).error(
+                (
+                    "Error attempting to get block details of block-range"
+                    " {}-{}: {}, retrying again"
+                ),
+                from_block,
+                to_block,
+                err,
+            )
+            raise err
+    else:
+        block_details_dict = dict()
+
+    pair_per_token_metadata = await get_pair_metadata(
+        pair_address=pair_address,
+        redis_conn=redis_conn,
+        rpc_helper=rpc_helper,
+    )
+
+    # grab ticks in range and calculate initial liquidity depth
+
+    ticks_list, slot0 = get_tick_info(
+        pair_address,
+        from_block,
+        rpc_helper,
+        redis_conn,
+    )
+
+    liquidity_depth_initial = calculate_liquidity_depth(
+        ticks_list, 
+        slot0,
+        pair_per_token_metadata)
+
+
+
+    events = await get_events(
+        pair_address=pair_address,
+        rpc=rpc_helper,
+        from_block=from_block,
+        to_block=to_block,
+        redis_con=redis_conn,
+    )
+
+
+def calculate_liquidity_depth(
+        ticks_list,
+        slot0,
+        pair_per_token_metadata,
+    ):  
+    liquidity_depth_dict = dict()
+    

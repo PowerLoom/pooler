@@ -293,6 +293,9 @@ class ProcessorDistributor(multiprocessing.Process):
                     self._logger.info(
                         f"projectId mismatch {process_unit.projectId} {config.filters.projectId}"
                     )
+                    self._logger.info(
+                        f"projectID config: {config.filters.projectId} process_unit: {process_unit.projectId}"
+                    )
                     continue
 
                 await self._publish_message_to_queue(

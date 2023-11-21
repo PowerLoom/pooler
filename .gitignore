@@ -16,3 +16,5 @@ Powerloom
 .mypy_cache
 requirements.txt
 **/*.whl
+script2.py
+script.py
