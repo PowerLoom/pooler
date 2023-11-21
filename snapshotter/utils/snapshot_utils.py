@@ -170,7 +170,7 @@ async def get_eth_price_usd(
         return eth_price_usd_dict
 
     except Exception as err:
-        snapshot_util_logger.opt(exception=True).error(
+        snapshot_util_logger.opt(exception=settings.logs.trace_enabled).error(
             f'RPC ERROR failed to fetch ETH price, error_msg:{err}',
         )
         raise err
@@ -249,7 +249,7 @@ async def get_block_details_in_block_range(
         return block_details_dict
 
     except Exception as e:
-        snapshot_util_logger.opt(exception=True, lazy=True).trace(
+        snapshot_util_logger.opt(exception=settings.logs.trace_enabled, lazy=True).trace(
             'Unable to fetch block details, error_msg:{err}',
             err=lambda: str(e),
         )

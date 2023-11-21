@@ -86,16 +86,11 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
         self._running_callback_tasks: Dict[str, asyncio.Task] = dict()
         super(GenericAsyncWorker, self).__init__(name=name, **kwargs)
-        self._logger = logger.bind(module=self.name)
         self.protocol_state_contract = None
         self._qos = 1
 
         self._rate_limiting_lua_scripts = None
 
-        self.protocol_state_contract_abi = read_json_file(
-            settings.protocol_state.abi,
-            self._logger,
-        )
         self.protocol_state_contract_address = settings.protocol_state.address
         self._commit_payload_exchange = (
             f'{settings.rabbitmq.setup.commit_payload.exchange}:{settings.namespace}'
@@ -401,6 +396,11 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._initialized = True
 
     def run(self) -> None:
+        self._logger = logger.bind(module=self.name)
+        self.protocol_state_contract_abi = read_json_file(
+            settings.protocol_state.abi,
+            self._logger,
+        )
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         resource.setrlimit(
             resource.RLIMIT_NOFILE,

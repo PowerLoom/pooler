@@ -120,7 +120,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                     snapshot = each_lambda(snapshot, msg_obj)
 
         except Exception as e:
-            self._logger.opt(exception=True).error(
+            self._logger.opt(exception=settings.logs.trace_enabled).error(
                 'Exception processing callback for epoch: {}, Error: {},'
                 'sending failure notifications', msg_obj, e,
             )
@@ -209,7 +209,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             try:
                 msg_obj: PowerloomSnapshotSubmittedMessage = PowerloomSnapshotSubmittedMessage.parse_raw(message.body)
             except ValidationError as e:
-                self._logger.opt(exception=True).error(
+                self._logger.opt(exception=settings.logs.trace_enabled).error(
                     (
                         'Bad message structure of callback processor. Error: {}'
                     ),
@@ -217,7 +217,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 )
                 return
             except Exception as e:
-                self._logger.opt(exception=True).error(
+                self._logger.opt(exception=settings.logs.trace_enabled).error(
                     (
                         'Unexpected message structure of callback in processor. Error: {}'
                     ),
@@ -230,7 +230,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                     PowerloomCalculateAggregateMessage.parse_raw(message.body)
                 )
             except ValidationError as e:
-                self._logger.opt(exception=True).error(
+                self._logger.opt(exception=settings.logs.trace_enabled).error(
                     (
                         'Bad message structure of callback processor. Error: {}'
                     ),
@@ -238,7 +238,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 )
                 return
             except Exception as e:
-                self._logger.opt(exception=True).error(
+                self._logger.opt(exception=settings.logs.trace_enabled).error(
                     (
                         'Unexpected message structure of callback in processor. Error: {}'
                     ),

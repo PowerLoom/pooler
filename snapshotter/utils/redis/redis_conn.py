@@ -90,6 +90,36 @@ def provide_redis_conn(fn):
     return wrapper
 
 
+def provide_redis_conn_repsawning_thread(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        arg_conn = 'redis_conn'
+        func_params = fn.__code__.co_varnames
+        conn_in_args = arg_conn in func_params and func_params.index(
+            arg_conn,
+        ) < len(args)
+        conn_in_kwargs = arg_conn in kwargs
+        if conn_in_args or conn_in_kwargs:
+            return fn(*args, **kwargs)
+        else:
+            connection_pool = redis.BlockingConnectionPool(**REDIS_CONN_CONF)
+            while True:
+                try:
+                    with create_redis_conn(connection_pool) as redis_obj:
+                        kwargs[arg_conn] = redis_obj
+                        logger.debug(
+                            'Returning after populating redis connection object',
+                        )
+                        return fn(*args, **kwargs)
+                except Exception as e:
+                    logger.opt(exception=True).error(e)
+                    continue
+                # if no exception was caught and the thread returns normally, it is the sign of a shutdown event being set
+
+    return wrapper
+
+
+
 def provide_async_redis_conn(fn):
     @wraps(fn)
     async def async_redis_conn_wrapper(*args, **kwargs):

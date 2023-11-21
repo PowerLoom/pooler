@@ -4,6 +4,8 @@ import json
 from redis import asyncio as aioredis
 from web3 import Web3
 
+from snapshotter.settings.config import settings
+
 from ..redis_keys import (
     uniswap_pair_cached_block_height_token_price,
 )
@@ -354,7 +356,7 @@ async def get_token_price_in_block_range(
         return token_price_dict
 
     except Exception as err:
-        pricing_logger.opt(exception=True, lazy=True).trace(
+        pricing_logger.opt(exception=settings.logs.trace_enabled, lazy=True).trace(
             (
                 'Error while calculating price of token:'
                 f" {token_metadata['symbol']} | {token_metadata['address']}|"
