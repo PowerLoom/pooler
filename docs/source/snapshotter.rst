@@ -1,6 +1,11 @@
 Powerloom Snapshotter
 =====================
 
+.. automodule:: snapshotter
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Subpackages
 -----------
 
@@ -13,7 +18,7 @@ Subpackages
 Submodules
 ----------
 
-snapshotter.core\_api module
+snapshotter.core\_api
 ----------------------------
 
 .. automodule:: snapshotter.core_api
@@ -21,7 +26,7 @@ snapshotter.core\_api module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.gunicorn\_core\_launcher module
+snapshotter.gunicorn\_core\_launcher
 -------------------------------------------
 
 .. automodule:: snapshotter.gunicorn_core_launcher
@@ -29,7 +34,7 @@ snapshotter.gunicorn\_core\_launcher module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.init\_rabbitmq module
+snapshotter.init\_rabbitmq
 ---------------------------------
 
 .. automodule:: snapshotter.init_rabbitmq
@@ -37,7 +42,7 @@ snapshotter.init\_rabbitmq module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.launch\_process\_hub\_core module
+snapshotter.launch\_process\_hub\_core
 ---------------------------------------------
 
 .. automodule:: snapshotter.launch_process_hub_core
@@ -45,7 +50,7 @@ snapshotter.launch\_process\_hub\_core module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.process\_hub\_core module
+snapshotter.process\_hub\_core
 -------------------------------------
 
 .. automodule:: snapshotter.process_hub_core
@@ -53,7 +58,7 @@ snapshotter.process\_hub\_core module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.processhub\_cmd module
+snapshotter.processhub\_cmd
 ----------------------------------
 
 .. automodule:: snapshotter.processhub_cmd
@@ -61,7 +66,7 @@ snapshotter.processhub\_cmd module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.processor\_distributor module
+snapshotter.processor\_distributor
 -----------------------------------------
 
 .. automodule:: snapshotter.processor_distributor
@@ -69,7 +74,7 @@ snapshotter.processor\_distributor module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.protocol\_state\_loader\_exporter module
+snapshotter.protocol\_state\_loader\_exporter
 ----------------------------------------------------
 
 .. automodule:: snapshotter.protocol_state_loader_exporter
@@ -77,7 +82,7 @@ snapshotter.protocol\_state\_loader\_exporter module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.snapshotter\_id\_ping module
+snapshotter.snapshotter\_id\_ping
 ----------------------------------------
 
 .. automodule:: snapshotter.snapshotter_id_ping
@@ -85,7 +90,7 @@ snapshotter.snapshotter\_id\_ping module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.system\_event\_detector module
+snapshotter.system\_event\_detector
 ------------------------------------------
 
 .. automodule:: snapshotter.system_event_detector
@@ -93,18 +98,10 @@ snapshotter.system\_event\_detector module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.worker\_process\_report module
+snapshotter.worker\_process\_report
 ------------------------------------------
 
 .. automodule:: snapshotter.worker_process_report
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Module contents
----------------
-
-.. automodule:: snapshotter
    :members:
    :undoc-members:
    :show-inheritance:

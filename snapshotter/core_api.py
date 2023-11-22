@@ -6,6 +6,9 @@ from fastapi import FastAPI
 from fastapi import Request
 from fastapi import Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi_pagination import add_pagination
+from fastapi_pagination import Page
+from fastapi_pagination import paginate
 from ipfs_client.main import AsyncIPFSClientSingleton
 from pydantic import Field
 from redis import asyncio as aioredis
@@ -59,7 +62,10 @@ protocol_state_contract_address = settings.protocol_state.address
 origins = ['*']
 app = FastAPI()
 # for pagination of epoch processing status reports
-
+Page = Page.with_custom_options(
+    size=Field(10, ge=1, le=30),
+)
+add_pagination(app)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -578,7 +584,7 @@ async def get_snapshotter_epoch_processing_status(
     rate_limit_auth_dep: RateLimitAuthCheck = Depends(
         rate_limit_auth_check,
     ),
-) -> SnapshotterEpochProcessingReportItem:
+) -> Page[SnapshotterEpochProcessingReportItem]:
     """
     Endpoint to get the epoch processing status report.
 
@@ -588,7 +594,7 @@ async def get_snapshotter_epoch_processing_status(
         rate_limit_auth_dep (RateLimitAuthCheck, optional): The rate limit authentication check dependency. Defaults to Depends(rate_limit_auth_check).
 
     Returns:
-        SnapshotterEpochProcessingReportItem: The epoch processing status report.
+        Page[SnapshotterEpochProcessingReportItem]: The paginated epoch processing status report.
     """
     if not (
         rate_limit_auth_dep.rate_limit_passed and
@@ -605,7 +611,7 @@ async def get_snapshotter_epoch_processing_status(
                 json.loads(_),
             ),
         )
-        return epoch_processing_final_report
+        return paginate(epoch_processing_final_report)
     epoch_processing_final_report: List[SnapshotterEpochProcessingReportItem] = list()
     try:
         [current_epoch_data] = await request.app.state.anchor_rpc_helper.web3_call(

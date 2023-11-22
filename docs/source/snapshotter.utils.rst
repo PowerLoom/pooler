@@ -1,6 +1,11 @@
 snapshotter.utils package
 =========================
 
+.. automodule:: snapshotter.utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Subpackages
 -----------
 
@@ -14,7 +19,7 @@ Subpackages
 Submodules
 ----------
 
-snapshotter.utils.aggregation\_worker module
+snapshotter.utils.aggregation\_worker
 --------------------------------------------
 
 .. automodule:: snapshotter.utils.aggregation_worker
@@ -22,7 +27,7 @@ snapshotter.utils.aggregation\_worker module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.utils.callback\_helpers module
+snapshotter.utils.callback\_helpers
 ------------------------------------------
 
 .. automodule:: snapshotter.utils.callback_helpers
@@ -30,7 +35,7 @@ snapshotter.utils.callback\_helpers module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.utils.constants module
+snapshotter.utils.constants
 ----------------------------------
 
 .. automodule:: snapshotter.utils.constants
@@ -38,7 +43,7 @@ snapshotter.utils.constants module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.utils.data\_utils module
+snapshotter.utils.data\_utils
 ------------------------------------
 
 .. automodule:: snapshotter.utils.data_utils
@@ -46,7 +51,7 @@ snapshotter.utils.data\_utils module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.utils.default\_logger module
+snapshotter.utils.default\_logger
 ----------------------------------------
 
 .. automodule:: snapshotter.utils.default_logger
@@ -54,7 +59,7 @@ snapshotter.utils.default\_logger module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.utils.delegate\_worker module
+snapshotter.utils.delegate\_worker
 -----------------------------------------
 
 .. automodule:: snapshotter.utils.delegate_worker
@@ -62,7 +67,7 @@ snapshotter.utils.delegate\_worker module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.utils.exceptions module
+snapshotter.utils.exceptions
 -----------------------------------
 
 .. automodule:: snapshotter.utils.exceptions
@@ -70,7 +75,7 @@ snapshotter.utils.exceptions module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.utils.file\_utils module
+snapshotter.utils.file\_utils
 ------------------------------------
 
 .. automodule:: snapshotter.utils.file_utils
@@ -78,7 +83,7 @@ snapshotter.utils.file\_utils module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.utils.generic\_delegator\_preloader module
+snapshotter.utils.generic\_delegator\_preloader
 ------------------------------------------------------
 
 .. automodule:: snapshotter.utils.generic_delegator_preloader
@@ -86,7 +91,7 @@ snapshotter.utils.generic\_delegator\_preloader module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.utils.generic\_worker module
+snapshotter.utils.generic\_worker
 ----------------------------------------
 
 .. automodule:: snapshotter.utils.generic_worker
@@ -94,7 +99,7 @@ snapshotter.utils.generic\_worker module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.utils.gunicorn module
+snapshotter.utils.gunicorn
 ---------------------------------
 
 .. automodule:: snapshotter.utils.gunicorn
@@ -102,7 +107,7 @@ snapshotter.utils.gunicorn module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.utils.helper\_functions module
+snapshotter.utils.helper\_functions
 ------------------------------------------
 
 .. automodule:: snapshotter.utils.helper_functions
@@ -110,7 +115,7 @@ snapshotter.utils.helper\_functions module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.utils.rabbitmq\_helpers module
+snapshotter.utils.rabbitmq\_helpers
 ------------------------------------------
 
 .. automodule:: snapshotter.utils.rabbitmq_helpers
@@ -118,7 +123,7 @@ snapshotter.utils.rabbitmq\_helpers module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.utils.rpc module
+snapshotter.utils.rpc
 ----------------------------
 
 .. automodule:: snapshotter.utils.rpc
@@ -126,7 +131,7 @@ snapshotter.utils.rpc module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.utils.snapshot\_utils module
+snapshotter.utils.snapshot\_utils
 ----------------------------------------
 
 .. automodule:: snapshotter.utils.snapshot_utils
@@ -134,7 +139,7 @@ snapshotter.utils.snapshot\_utils module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.utils.snapshot\_worker module
+snapshotter.utils.snapshot\_worker
 -----------------------------------------
 
 .. automodule:: snapshotter.utils.snapshot_worker
@@ -142,18 +147,10 @@ snapshotter.utils.snapshot\_worker module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.utils.utility\_functions module
+snapshotter.utils.utility\_functions
 -------------------------------------------
 
 .. automodule:: snapshotter.utils.utility_functions
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Module contents
----------------
-
-.. automodule:: snapshotter.utils
    :members:
    :undoc-members:
    :show-inheritance:

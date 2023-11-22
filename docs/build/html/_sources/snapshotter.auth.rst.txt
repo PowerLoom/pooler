@@ -1,6 +1,11 @@
 snapshotter.auth package
 ========================
 
+.. automodule:: snapshotter.auth
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Subpackages
 -----------
 
@@ -13,34 +18,10 @@ Subpackages
 Submodules
 ----------
 
-snapshotter.auth.conf module
-----------------------------
-
-.. automodule:: snapshotter.auth.conf
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-snapshotter.auth.gunicorn\_auth\_entry\_launcher module
--------------------------------------------------------
-
-.. automodule:: snapshotter.auth.gunicorn_auth_entry_launcher
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-snapshotter.auth.server\_entry module
+snapshotter.auth.server\_entry
 -------------------------------------
 
 .. automodule:: snapshotter.auth.server_entry
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Module contents
----------------
-
-.. automodule:: snapshotter.auth
    :members:
    :undoc-members:
    :show-inheritance:

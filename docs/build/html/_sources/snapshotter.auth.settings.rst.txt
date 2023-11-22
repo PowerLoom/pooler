@@ -1,21 +1,18 @@
 snapshotter.auth.settings package
 =================================
 
-Submodules
-----------
-
-snapshotter.auth.settings.settings\_models module
--------------------------------------------------
-
-.. automodule:: snapshotter.auth.settings.settings_models
+.. automodule:: snapshotter.auth.settings
    :members:
    :undoc-members:
    :show-inheritance:
 
-Module contents
----------------
+Submodules
+----------
 
-.. automodule:: snapshotter.auth.settings
+snapshotter.auth.settings.settings\_models
+-------------------------------------------------
+
+.. automodule:: snapshotter.auth.settings.settings_models
    :members:
    :undoc-members:
    :show-inheritance:

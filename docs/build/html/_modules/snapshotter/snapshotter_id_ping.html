@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>snapshotter.snapshotter_id_ping &mdash; Powerloom Snapshotter 0.1 documentation</title>
+      <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+
+        <script src="../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js?v=e031e9a9"></script>
+        <script src="../../_static/doctools.js?v=888ff710"></script>
+        <script src="../../_static/sphinx_highlight.js?v=4825356b"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+</head>
+
+<body class="wy-body-for-nav">
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+
+
+          <a href="../../index.html">
+
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../snapshotter.html">Powerloom Snapshotter</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Powerloom Snapshotter</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">snapshotter.snapshotter_id_ping</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+
+  <h1>Source code for snapshotter.snapshotter_id_ping</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+
+<span class="kn">from</span> <span class="nn">eth_utils.address</span> <span class="kn">import</span> <span class="n">to_checksum_address</span>
+<span class="kn">from</span> <span class="nn">web3</span> <span class="kn">import</span> <span class="n">Web3</span>
+
+<span class="kn">from</span> <span class="nn">snapshotter.auth.helpers.redis_conn</span> <span class="kn">import</span> <span class="n">RedisPoolCache</span>
+<span class="kn">from</span> <span class="nn">snapshotter.settings.config</span> <span class="kn">import</span> <span class="n">settings</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.file_utils</span> <span class="kn">import</span> <span class="n">read_json_file</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">active_status_key</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.rpc</span> <span class="kn">import</span> <span class="n">RpcHelper</span>
+
+
+<div class="viewcode-block" id="main"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.snapshotter_id_ping.main">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Checks if snapshotting is allowed for the given instance ID by querying the protocol state contract.</span>
+<span class="sd">    If snapshotting is allowed, sets the active status key in Redis to True and exits with code 0.</span>
+<span class="sd">    If snapshotting is not allowed, sets the active status key in Redis to False and exits with code 1.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">aioredis_pool</span> <span class="o">=</span> <span class="n">RedisPoolCache</span><span class="p">(</span><span class="n">pool_size</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
+    <span class="k">await</span> <span class="n">aioredis_pool</span><span class="o">.</span><span class="n">populate</span><span class="p">()</span>
+    <span class="n">redis_conn</span> <span class="o">=</span> <span class="n">aioredis_pool</span><span class="o">.</span><span class="n">_aioredis_pool</span>
+    <span class="n">anchor_rpc</span> <span class="o">=</span> <span class="n">RpcHelper</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">anchor_chain_rpc</span><span class="p">)</span>
+    <span class="n">protocol_abi</span> <span class="o">=</span> <span class="n">read_json_file</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">protocol_state</span><span class="o">.</span><span class="n">abi</span><span class="p">)</span>
+    <span class="n">protocol_state_contract</span> <span class="o">=</span> <span class="n">anchor_rpc</span><span class="o">.</span><span class="n">get_current_node</span><span class="p">()[</span><span class="s1">&#39;web3_client&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">eth</span><span class="o">.</span><span class="n">contract</span><span class="p">(</span>
+        <span class="n">address</span><span class="o">=</span><span class="n">Web3</span><span class="o">.</span><span class="n">toChecksumAddress</span><span class="p">(</span>
+            <span class="n">settings</span><span class="o">.</span><span class="n">protocol_state</span><span class="o">.</span><span class="n">address</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="n">abi</span><span class="o">=</span><span class="n">protocol_abi</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">snapshotters_arr_query</span> <span class="o">=</span> <span class="k">await</span> <span class="n">anchor_rpc</span><span class="o">.</span><span class="n">web3_call</span><span class="p">(</span>
+        <span class="p">[</span>
+            <span class="n">protocol_state_contract</span><span class="o">.</span><span class="n">functions</span><span class="o">.</span><span class="n">getSnapshotters</span><span class="p">(),</span>
+        <span class="p">],</span>
+        <span class="n">redis_conn</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">allowed_snapshotters</span> <span class="o">=</span> <span class="n">snapshotters_arr_query</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">to_checksum_address</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">instance_id</span><span class="p">)</span> <span class="ow">in</span> <span class="n">allowed_snapshotters</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Snapshotting allowed...&#39;</span><span class="p">)</span>
+        <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+            <span class="n">active_status_key</span><span class="p">,</span>
+            <span class="nb">int</span><span class="p">(</span><span class="kc">True</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Snapshotting not allowed...&#39;</span><span class="p">)</span>
+        <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span></div>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, Powerloom Inc..</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+</body>
+</html>

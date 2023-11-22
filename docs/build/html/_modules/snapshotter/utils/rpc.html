@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>snapshotter.utils.rpc &mdash; Powerloom Snapshotter 0.1 documentation</title>
+      <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+
+        <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js?v=e031e9a9"></script>
+        <script src="../../../_static/doctools.js?v=888ff710"></script>
+        <script src="../../../_static/sphinx_highlight.js?v=4825356b"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+</head>
+
+<body class="wy-body-for-nav">
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+
+
+          <a href="../../../index.html">
+
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../snapshotter.html">Powerloom Snapshotter</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Powerloom Snapshotter</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">snapshotter.utils.rpc</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+
+  <h1>Source code for snapshotter.utils.rpc</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Union</span>
+
+<span class="kn">import</span> <span class="nn">eth_abi</span>
+<span class="kn">import</span> <span class="nn">tenacity</span>
+<span class="kn">from</span> <span class="nn">aiohttp</span> <span class="kn">import</span> <span class="n">ClientSession</span>
+<span class="kn">from</span> <span class="nn">aiohttp</span> <span class="kn">import</span> <span class="n">ClientTimeout</span>
+<span class="kn">from</span> <span class="nn">aiohttp</span> <span class="kn">import</span> <span class="n">TCPConnector</span>
+<span class="kn">from</span> <span class="nn">async_limits</span> <span class="kn">import</span> <span class="n">parse_many</span> <span class="k">as</span> <span class="n">limit_parse_many</span>
+<span class="kn">from</span> <span class="nn">eth_abi.codec</span> <span class="kn">import</span> <span class="n">ABICodec</span>
+<span class="kn">from</span> <span class="nn">eth_utils</span> <span class="kn">import</span> <span class="n">keccak</span>
+<span class="kn">from</span> <span class="nn">hexbytes</span> <span class="kn">import</span> <span class="n">HexBytes</span>
+<span class="kn">from</span> <span class="nn">httpx</span> <span class="kn">import</span> <span class="n">AsyncClient</span>
+<span class="kn">from</span> <span class="nn">httpx</span> <span class="kn">import</span> <span class="n">AsyncHTTPTransport</span>
+<span class="kn">from</span> <span class="nn">httpx</span> <span class="kn">import</span> <span class="n">Limits</span>
+<span class="kn">from</span> <span class="nn">httpx</span> <span class="kn">import</span> <span class="n">Timeout</span>
+<span class="kn">from</span> <span class="nn">tenacity</span> <span class="kn">import</span> <span class="n">retry</span>
+<span class="kn">from</span> <span class="nn">tenacity</span> <span class="kn">import</span> <span class="n">retry_if_exception_type</span>
+<span class="kn">from</span> <span class="nn">tenacity</span> <span class="kn">import</span> <span class="n">stop_after_attempt</span>
+<span class="kn">from</span> <span class="nn">tenacity</span> <span class="kn">import</span> <span class="n">wait_random_exponential</span>
+<span class="kn">from</span> <span class="nn">web3</span> <span class="kn">import</span> <span class="n">Web3</span>
+<span class="kn">from</span> <span class="nn">web3._utils.abi</span> <span class="kn">import</span> <span class="n">map_abi_data</span>
+<span class="kn">from</span> <span class="nn">web3._utils.events</span> <span class="kn">import</span> <span class="n">get_event_data</span>
+<span class="kn">from</span> <span class="nn">web3._utils.normalizers</span> <span class="kn">import</span> <span class="n">BASE_RETURN_NORMALIZERS</span>
+<span class="kn">from</span> <span class="nn">web3.eth</span> <span class="kn">import</span> <span class="n">AsyncEth</span>
+<span class="kn">from</span> <span class="nn">web3.types</span> <span class="kn">import</span> <span class="n">TxParams</span>
+<span class="kn">from</span> <span class="nn">web3.types</span> <span class="kn">import</span> <span class="n">Wei</span>
+
+<span class="kn">from</span> <span class="nn">snapshotter.settings.config</span> <span class="kn">import</span> <span class="n">settings</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.default_logger</span> <span class="kn">import</span> <span class="n">logger</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.exceptions</span> <span class="kn">import</span> <span class="n">RPCException</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.settings_model</span> <span class="kn">import</span> <span class="n">RPCConfigBase</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.rate_limiter</span> <span class="kn">import</span> <span class="n">check_rpc_rate_limit</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.rate_limiter</span> <span class="kn">import</span> <span class="n">load_rate_limiter_scripts</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">rpc_blocknumber_calls</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">rpc_get_block_number_calls</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">rpc_get_event_logs_calls</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">rpc_get_transaction_receipt_calls</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">rpc_json_rpc_calls</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">rpc_web3_calls</span>
+
+
+<div class="viewcode-block" id="get_contract_abi_dict"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rpc.get_contract_abi_dict">[docs]</a><span class="k">def</span> <span class="nf">get_contract_abi_dict</span><span class="p">(</span><span class="n">abi</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Returns a dictionary of function signatures, inputs, outputs and full ABI for a given contract ABI.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        abi (list): List of dictionaries representing the contract ABI.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: Dictionary containing function signatures, inputs, outputs and full ABI.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">abi_dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">abi_obj</span> <span class="ow">in</span> <span class="p">[</span><span class="n">obj</span> <span class="k">for</span> <span class="n">obj</span> <span class="ow">in</span> <span class="n">abi</span> <span class="k">if</span> <span class="n">obj</span><span class="p">[</span><span class="s1">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;function&#39;</span><span class="p">]:</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="n">abi_obj</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span>
+        <span class="n">input_types</span> <span class="o">=</span> <span class="p">[</span><span class="nb">input</span><span class="p">[</span><span class="s1">&#39;type&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="nb">input</span> <span class="ow">in</span> <span class="n">abi_obj</span><span class="p">[</span><span class="s1">&#39;inputs&#39;</span><span class="p">]]</span>
+        <span class="n">output_types</span> <span class="o">=</span> <span class="p">[</span><span class="n">output</span><span class="p">[</span><span class="s1">&#39;type&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">output</span> <span class="ow">in</span> <span class="n">abi_obj</span><span class="p">[</span><span class="s1">&#39;outputs&#39;</span><span class="p">]]</span>
+        <span class="n">abi_dict</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;signature&#39;</span><span class="p">:</span> <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">(</span><span class="si">{}</span><span class="s1">)&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="s1">&#39;,&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">input_types</span><span class="p">)),</span>
+            <span class="s1">&#39;output&#39;</span><span class="p">:</span> <span class="n">output_types</span><span class="p">,</span>
+            <span class="s1">&#39;input&#39;</span><span class="p">:</span> <span class="n">input_types</span><span class="p">,</span>
+            <span class="s1">&#39;abi&#39;</span><span class="p">:</span> <span class="n">abi_obj</span><span class="p">,</span>
+        <span class="p">}</span>
+
+    <span class="k">return</span> <span class="n">abi_dict</span></div>
+
+
+<div class="viewcode-block" id="get_encoded_function_signature"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rpc.get_encoded_function_signature">[docs]</a><span class="k">def</span> <span class="nf">get_encoded_function_signature</span><span class="p">(</span><span class="n">abi_dict</span><span class="p">,</span> <span class="n">function_name</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">List</span><span class="p">,</span> <span class="kc">None</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Returns the encoded function signature for a given function name and parameters.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        abi_dict (dict): The ABI dictionary for the contract.</span>
+<span class="sd">        function_name (str): The name of the function.</span>
+<span class="sd">        params (list or None): The list of parameters for the function.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        str: The encoded function signature.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">function_signature</span> <span class="o">=</span> <span class="n">abi_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">function_name</span><span class="p">)[</span><span class="s1">&#39;signature&#39;</span><span class="p">]</span>
+    <span class="n">encoded_signature</span> <span class="o">=</span> <span class="s1">&#39;0x&#39;</span> <span class="o">+</span> <span class="n">keccak</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">function_signature</span><span class="p">)</span><span class="o">.</span><span class="n">hex</span><span class="p">()[:</span><span class="mi">8</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">params</span><span class="p">:</span>
+        <span class="n">encoded_signature</span> <span class="o">+=</span> <span class="n">eth_abi</span><span class="o">.</span><span class="n">encode_abi</span><span class="p">(</span>
+            <span class="n">abi_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">function_name</span><span class="p">)[</span><span class="s1">&#39;input&#39;</span><span class="p">],</span>
+            <span class="n">params</span><span class="p">,</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">hex</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">encoded_signature</span></div>
+
+
+<div class="viewcode-block" id="get_event_sig_and_abi"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rpc.get_event_sig_and_abi">[docs]</a><span class="k">def</span> <span class="nf">get_event_sig_and_abi</span><span class="p">(</span><span class="n">event_signatures</span><span class="p">,</span> <span class="n">event_abis</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Given a dictionary of event signatures and a dictionary of event ABIs,</span>
+<span class="sd">    returns a tuple containing a list of event signatures and a dictionary of</span>
+<span class="sd">    event ABIs keyed by their corresponding signature hash.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">event_sig</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="s1">&#39;0x&#39;</span> <span class="o">+</span> <span class="n">keccak</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">sig</span><span class="p">)</span><span class="o">.</span><span class="n">hex</span><span class="p">()</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">sig</span> <span class="ow">in</span> <span class="n">event_signatures</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+    <span class="p">]</span>
+    <span class="n">event_abi</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s1">&#39;0x&#39;</span> <span class="o">+</span>
+        <span class="n">keccak</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">sig</span><span class="p">)</span><span class="o">.</span><span class="n">hex</span><span class="p">():</span> <span class="n">event_abis</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+            <span class="n">name</span><span class="p">,</span>
+            <span class="s1">&#39;incorrect event name&#39;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">sig</span> <span class="ow">in</span> <span class="n">event_signatures</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">event_sig</span><span class="p">,</span> <span class="n">event_abi</span></div>
+
+
+<div class="viewcode-block" id="RpcHelper"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper">[docs]</a><span class="k">class</span> <span class="nc">RpcHelper</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="n">_aiohttp_tcp_connector</span><span class="p">:</span> <span class="n">TCPConnector</span>
+    <span class="n">_web3_aiohttp_client</span><span class="p">:</span> <span class="n">ClientSession</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rpc_settings</span><span class="p">:</span> <span class="n">RPCConfigBase</span> <span class="o">=</span> <span class="n">settings</span><span class="o">.</span><span class="n">rpc</span><span class="p">,</span> <span class="n">archive_mode</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initializes an instance of the RpcHelper class.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            rpc_settings (RPCConfigBase, optional): The RPC configuration settings to use. Defaults to settings.rpc.</span>
+<span class="sd">            archive_mode (bool, optional): Whether to operate in archive mode. Defaults to False.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_archive_mode</span> <span class="o">=</span> <span class="n">archive_mode</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rpc_settings</span> <span class="o">=</span> <span class="n">rpc_settings</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_nodes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_current_node_index</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_node_count</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rate_limit_lua_script_shas</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sync_nodes_initialized</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span> <span class="o">=</span> <span class="n">logger</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">module</span><span class="o">=</span><span class="s1">&#39;Powerloom|RpcHelper&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_client</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_async_transport</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rate_limit_lua_script_shas</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_aiohttp_tcp_connector</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_web3_aiohttp_client</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="RpcHelper._load_rate_limit_shas"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper._load_rate_limit_shas">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_load_rate_limit_shas</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">redis_conn</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Loads the rate limit Lua script SHA values from Redis if they haven&#39;t already been loaded.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            redis_conn: Redis connection object.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rate_limit_lua_script_shas</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rate_limit_lua_script_shas</span> <span class="o">=</span> <span class="k">await</span> <span class="n">load_rate_limiter_scripts</span><span class="p">(</span>
+            <span class="n">redis_conn</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="RpcHelper._init_http_clients"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper._init_http_clients">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_init_http_clients</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initializes the HTTP clients for making RPC requests.</span>
+
+<span class="sd">        If the client has already been initialized, this function returns immediately.</span>
+
+<span class="sd">        :return: None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_async_transport</span> <span class="o">=</span> <span class="n">AsyncHTTPTransport</span><span class="p">(</span>
+            <span class="n">limits</span><span class="o">=</span><span class="n">Limits</span><span class="p">(</span>
+                <span class="n">max_connections</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rpc_settings</span><span class="o">.</span><span class="n">connection_limits</span><span class="o">.</span><span class="n">max_connections</span><span class="p">,</span>
+                <span class="n">max_keepalive_connections</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rpc_settings</span><span class="o">.</span><span class="n">connection_limits</span><span class="o">.</span><span class="n">max_keepalive_connections</span><span class="p">,</span>
+                <span class="n">keepalive_expiry</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rpc_settings</span><span class="o">.</span><span class="n">connection_limits</span><span class="o">.</span><span class="n">keepalive_expiry</span><span class="p">,</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_client</span> <span class="o">=</span> <span class="n">AsyncClient</span><span class="p">(</span>
+            <span class="n">timeout</span><span class="o">=</span><span class="n">Timeout</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">),</span>
+            <span class="n">follow_redirects</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">transport</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_async_transport</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_aiohttp_tcp_connector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_aiohttp_tcp_connector</span> <span class="o">=</span> <span class="n">TCPConnector</span><span class="p">(</span>
+            <span class="n">keepalive_timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rpc_settings</span><span class="o">.</span><span class="n">connection_limits</span><span class="o">.</span><span class="n">keepalive_expiry</span><span class="p">,</span>
+            <span class="n">limit</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_web3_aiohttp_client</span> <span class="o">=</span> <span class="n">ClientSession</span><span class="p">(</span>
+            <span class="n">connector</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_aiohttp_tcp_connector</span><span class="p">,</span>
+            <span class="n">timeout</span><span class="o">=</span><span class="n">ClientTimeout</span><span class="p">(</span><span class="n">total</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rpc_settings</span><span class="o">.</span><span class="n">request_time_out</span><span class="p">),</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="RpcHelper._load_async_web3_providers"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper._load_async_web3_providers">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_load_async_web3_providers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Loads async web3 providers for each node in the list of nodes.</span>
+<span class="sd">        If a node already has a web3 client, it is skipped.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodes</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">node</span><span class="p">[</span><span class="s1">&#39;web3_client_async&#39;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">node</span><span class="p">[</span><span class="s1">&#39;web3_client_async&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Web3</span><span class="p">(</span>
+                <span class="n">Web3</span><span class="o">.</span><span class="n">AsyncHTTPProvider</span><span class="p">(</span><span class="n">node</span><span class="p">[</span><span class="s1">&#39;rpc_url&#39;</span><span class="p">]),</span>
+                <span class="n">modules</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;eth&#39;</span><span class="p">:</span> <span class="p">(</span><span class="n">AsyncEth</span><span class="p">,)},</span>
+                <span class="n">middlewares</span><span class="o">=</span><span class="p">[],</span>
+            <span class="p">)</span></div>
+
+<div class="viewcode-block" id="RpcHelper.init"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper.init">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">init</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">redis_conn</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initializes the RPC client by loading web3 providers and rate limits,</span>
+<span class="sd">        loading rate limit SHAs, initializing HTTP clients, and loading async</span>
+<span class="sd">        web3 providers.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            redis_conn: Redis connection object.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync_nodes_initialized</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_load_web3_providers_and_rate_limits</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_sync_nodes_initialized</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load_rate_limit_shas</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_http_clients</span><span class="p">()</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load_async_web3_providers</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span> <span class="o">=</span> <span class="kc">True</span></div>
+
+<div class="viewcode-block" id="RpcHelper._load_web3_providers_and_rate_limits"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper._load_web3_providers_and_rate_limits">[docs]</a>    <span class="k">def</span> <span class="nf">_load_web3_providers_and_rate_limits</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Load web3 providers and rate limits based on the archive mode.</span>
+<span class="sd">        If archive mode is True, load archive nodes, otherwise load full nodes.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_archive_mode</span><span class="p">:</span>
+            <span class="n">nodes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rpc_settings</span><span class="o">.</span><span class="n">archive_nodes</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">nodes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rpc_settings</span><span class="o">.</span><span class="n">full_nodes</span>
+
+        <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">nodes</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_nodes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="p">{</span>
+                        <span class="s1">&#39;web3_client&#39;</span><span class="p">:</span> <span class="n">Web3</span><span class="p">(</span><span class="n">Web3</span><span class="o">.</span><span class="n">HTTPProvider</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">url</span><span class="p">)),</span>
+                        <span class="s1">&#39;web3_client_async&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+                        <span class="s1">&#39;rate_limit&#39;</span><span class="p">:</span> <span class="n">limit_parse_many</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">rate_limit</span><span class="p">),</span>
+                        <span class="s1">&#39;rpc_url&#39;</span><span class="p">:</span> <span class="n">node</span><span class="o">.</span><span class="n">url</span><span class="p">,</span>
+                    <span class="p">},</span>
+                <span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                    <span class="p">(</span>
+                        <span class="s1">&#39;Error while initialising one of the web3 providers,&#39;</span>
+                        <span class="sa">f</span><span class="s1">&#39; err_msg: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s1">&#39;</span>
+                    <span class="p">),</span>
+                <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodes</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_node_count</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_nodes</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="RpcHelper.get_current_node"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper.get_current_node">[docs]</a>    <span class="k">def</span> <span class="nf">get_current_node</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns the current node to use for RPC calls.</span>
+
+<span class="sd">        If the sync nodes have not been initialized, it initializes them by loading web3 providers and rate limits.</span>
+<span class="sd">        If there are no full nodes available, it raises an exception.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The current node to use for RPC calls.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync_nodes_initialized</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_load_web3_providers_and_rate_limits</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_sync_nodes_initialized</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_node_count</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s1">&#39;No full nodes available&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodes</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_current_node_index</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="RpcHelper._on_node_exception"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper._on_node_exception">[docs]</a>    <span class="k">def</span> <span class="nf">_on_node_exception</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">retry_state</span><span class="p">:</span> <span class="n">tenacity</span><span class="o">.</span><span class="n">RetryCallState</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Callback function to handle exceptions raised during RPC calls to nodes.</span>
+<span class="sd">        It updates the node index to retry the RPC call on the next node.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            retry_state (tenacity.RetryCallState): The retry state object containing information about the retry.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">exc_idx</span> <span class="o">=</span> <span class="n">retry_state</span><span class="o">.</span><span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;node_idx&#39;</span><span class="p">]</span>
+        <span class="n">next_node_idx</span> <span class="o">=</span> <span class="p">(</span><span class="n">retry_state</span><span class="o">.</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;node_idx&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">_node_count</span>
+        <span class="n">retry_state</span><span class="o">.</span><span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;node_idx&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">next_node_idx</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+            <span class="s1">&#39;Found exception while performing RPC </span><span class="si">{}</span><span class="s1"> on node </span><span class="si">{}</span><span class="s1"> at idx </span><span class="si">{}</span><span class="s1">. &#39;</span>
+            <span class="s1">&#39;Injecting next node </span><span class="si">{}</span><span class="s1"> at idx </span><span class="si">{}</span><span class="s1"> | exception: </span><span class="si">{}</span><span class="s1"> &#39;</span><span class="p">,</span>
+            <span class="n">retry_state</span><span class="o">.</span><span class="n">fn</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodes</span><span class="p">[</span><span class="n">exc_idx</span><span class="p">],</span> <span class="n">exc_idx</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodes</span><span class="p">[</span><span class="n">next_node_idx</span><span class="p">],</span>
+            <span class="n">next_node_idx</span><span class="p">,</span> <span class="n">retry_state</span><span class="o">.</span><span class="n">outcome</span><span class="o">.</span><span class="n">exception</span><span class="p">(),</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="RpcHelper.get_current_block_number"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper.get_current_block_number">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_current_block_number</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">redis_conn</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns the current block number of the Ethereum blockchain.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            redis_conn: Redis connection object.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The current block number of the Ethereum blockchain.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            RPCException: If an error occurs while making the RPC call.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nd">@retry</span><span class="p">(</span>
+            <span class="n">reraise</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">retry</span><span class="o">=</span><span class="n">retry_if_exception_type</span><span class="p">(</span><span class="n">RPCException</span><span class="p">),</span>
+            <span class="n">wait</span><span class="o">=</span><span class="n">wait_random_exponential</span><span class="p">(</span><span class="n">multiplier</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="mi">10</span><span class="p">),</span>
+            <span class="n">stop</span><span class="o">=</span><span class="n">stop_after_attempt</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">rpc</span><span class="o">.</span><span class="n">retry</span><span class="p">),</span>
+            <span class="n">before_sleep</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_on_node_exception</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">node_idx</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span><span class="p">:</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">init</span><span class="p">(</span><span class="n">redis_conn</span><span class="o">=</span><span class="n">redis_conn</span><span class="p">)</span>
+            <span class="n">node</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodes</span><span class="p">[</span><span class="n">node_idx</span><span class="p">]</span>
+            <span class="n">rpc_url</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;rpc_url&#39;</span><span class="p">)</span>
+            <span class="n">web3_provider</span> <span class="o">=</span> <span class="n">node</span><span class="p">[</span><span class="s1">&#39;web3_client_async&#39;</span><span class="p">]</span>
+
+            <span class="k">await</span> <span class="n">check_rpc_rate_limit</span><span class="p">(</span>
+                <span class="n">parsed_limits</span><span class="o">=</span><span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;rate_limit&#39;</span><span class="p">,</span> <span class="p">[]),</span>
+                <span class="n">app_id</span><span class="o">=</span><span class="n">rpc_url</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
+                <span class="n">redis_conn</span><span class="o">=</span><span class="n">redis_conn</span><span class="p">,</span>
+                <span class="n">request_payload</span><span class="o">=</span><span class="s1">&#39;get_current_block_number&#39;</span><span class="p">,</span>
+                <span class="n">error_msg</span><span class="o">=</span><span class="p">{</span>
+                    <span class="s1">&#39;msg&#39;</span><span class="p">:</span> <span class="s1">&#39;exhausted_api_key_rate_limit inside get_current_blocknumber&#39;</span><span class="p">,</span>
+                <span class="p">},</span>
+                <span class="n">logger</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="p">,</span>
+                <span class="n">rate_limit_lua_script_shas</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rate_limit_lua_script_shas</span><span class="p">,</span>
+                <span class="n">limit_incr_by</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">cur_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+                <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span>
+                    <span class="n">redis_conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span>
+                        <span class="n">name</span><span class="o">=</span><span class="n">rpc_get_block_number_calls</span><span class="p">,</span>
+                        <span class="n">mapping</span><span class="o">=</span><span class="p">{</span>
+                            <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span>
+                                <span class="s1">&#39;get_current_block_number&#39;</span><span class="p">,</span>
+                            <span class="p">):</span> <span class="n">cur_time</span><span class="p">,</span>
+                        <span class="p">},</span>
+                    <span class="p">),</span>
+                    <span class="n">redis_conn</span><span class="o">.</span><span class="n">zremrangebyscore</span><span class="p">(</span>
+                        <span class="n">name</span><span class="o">=</span><span class="n">rpc_get_block_number_calls</span><span class="p">,</span>
+                        <span class="nb">min</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                        <span class="nb">max</span><span class="o">=</span><span class="n">cur_time</span> <span class="o">-</span> <span class="mi">3600</span><span class="p">,</span>
+                    <span class="p">),</span>
+                <span class="p">)</span>
+                <span class="n">current_block</span> <span class="o">=</span> <span class="k">await</span> <span class="n">web3_provider</span><span class="o">.</span><span class="n">eth</span><span class="o">.</span><span class="n">block_number</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">exc</span> <span class="o">=</span> <span class="n">RPCException</span><span class="p">(</span>
+                    <span class="n">request</span><span class="o">=</span><span class="s1">&#39;get_current_block_number&#39;</span><span class="p">,</span>
+                    <span class="n">response</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                    <span class="n">underlying_exception</span><span class="o">=</span><span class="n">e</span><span class="p">,</span>
+                    <span class="n">extra_info</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;RPC_GET_CURRENT_BLOCKNUMBER ERROR: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="s1">&#39;Error in get_current_block_number, error </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">))</span>
+                <span class="k">raise</span> <span class="n">exc</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">current_block</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="n">f</span><span class="p">(</span><span class="n">node_idx</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="RpcHelper._async_web3_call"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper._async_web3_call">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_async_web3_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">contract_function</span><span class="p">,</span> <span class="n">redis_conn</span><span class="p">,</span> <span class="n">from_address</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Executes a web3 call asynchronously.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            contract_function: The contract function to call.</span>
+<span class="sd">            redis_conn: The Redis connection object.</span>
+<span class="sd">            from_address: The address to send the transaction from.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The result of the web3 call.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nd">@retry</span><span class="p">(</span>
+            <span class="n">reraise</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">retry</span><span class="o">=</span><span class="n">retry_if_exception_type</span><span class="p">(</span><span class="n">RPCException</span><span class="p">),</span>
+            <span class="n">wait</span><span class="o">=</span><span class="n">wait_random_exponential</span><span class="p">(</span><span class="n">multiplier</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="mi">10</span><span class="p">),</span>
+            <span class="n">stop</span><span class="o">=</span><span class="n">stop_after_attempt</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">rpc</span><span class="o">.</span><span class="n">retry</span><span class="p">),</span>
+            <span class="n">before_sleep</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_on_node_exception</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">node_idx</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+
+                <span class="n">node</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodes</span><span class="p">[</span><span class="n">node_idx</span><span class="p">]</span>
+                <span class="n">rpc_url</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;rpc_url&#39;</span><span class="p">)</span>
+
+                <span class="k">await</span> <span class="n">check_rpc_rate_limit</span><span class="p">(</span>
+                    <span class="n">parsed_limits</span><span class="o">=</span><span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;rate_limit&#39;</span><span class="p">,</span> <span class="p">[]),</span>
+                    <span class="n">app_id</span><span class="o">=</span><span class="n">rpc_url</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
+                    <span class="n">redis_conn</span><span class="o">=</span><span class="n">redis_conn</span><span class="p">,</span>
+                    <span class="n">request_payload</span><span class="o">=</span><span class="n">contract_function</span><span class="o">.</span><span class="n">fn_name</span><span class="p">,</span>
+                    <span class="n">error_msg</span><span class="o">=</span><span class="p">{</span>
+                        <span class="s1">&#39;msg&#39;</span><span class="p">:</span> <span class="s1">&#39;exhausted_api_key_rate_limit inside web3_call&#39;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="n">logger</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="p">,</span>
+                    <span class="n">rate_limit_lua_script_shas</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rate_limit_lua_script_shas</span><span class="p">,</span>
+                    <span class="n">limit_incr_by</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                <span class="p">)</span>
+
+                <span class="n">params</span><span class="p">:</span> <span class="n">TxParams</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;gas&#39;</span><span class="p">:</span> <span class="n">Wei</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="s1">&#39;gasPrice&#39;</span><span class="p">:</span> <span class="n">Wei</span><span class="p">(</span><span class="mi">0</span><span class="p">)}</span>
+
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">contract_function</span><span class="o">.</span><span class="n">address</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s1">&#39;Missing address for batch_call in `</span><span class="si">{</span><span class="n">contract_function</span><span class="o">.</span><span class="n">fn_name</span><span class="si">}</span><span class="s1">`&#39;</span><span class="p">,</span>
+                    <span class="p">)</span>
+
+                <span class="n">output_type</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="n">output</span><span class="p">[</span><span class="s1">&#39;type&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">output</span> <span class="ow">in</span> <span class="n">contract_function</span><span class="o">.</span><span class="n">abi</span><span class="p">[</span><span class="s1">&#39;outputs&#39;</span><span class="p">]</span>
+                <span class="p">]</span>
+                <span class="n">payload</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="s1">&#39;to&#39;</span><span class="p">:</span> <span class="n">contract_function</span><span class="o">.</span><span class="n">address</span><span class="p">,</span>
+                    <span class="s1">&#39;data&#39;</span><span class="p">:</span> <span class="n">contract_function</span><span class="o">.</span><span class="n">build_transaction</span><span class="p">(</span><span class="n">params</span><span class="p">)[</span><span class="s1">&#39;data&#39;</span><span class="p">],</span>
+                    <span class="s1">&#39;output_type&#39;</span><span class="p">:</span> <span class="n">output_type</span><span class="p">,</span>
+                    <span class="s1">&#39;fn_name&#39;</span><span class="p">:</span> <span class="n">contract_function</span><span class="o">.</span><span class="n">fn_name</span><span class="p">,</span>  <span class="c1"># For debugging purposes</span>
+                <span class="p">}</span>
+
+                <span class="n">cur_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+                <span class="n">redis_cache_data</span> <span class="o">=</span> <span class="n">payload</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+                <span class="n">redis_cache_data</span><span class="p">[</span><span class="s1">&#39;time&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">cur_time</span>
+                <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span>
+                    <span class="n">redis_conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span>
+                        <span class="n">name</span><span class="o">=</span><span class="n">rpc_web3_calls</span><span class="p">,</span>
+                        <span class="n">mapping</span><span class="o">=</span><span class="p">{</span>
+                            <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">redis_cache_data</span><span class="p">):</span> <span class="n">cur_time</span><span class="p">,</span>
+                        <span class="p">},</span>
+                    <span class="p">),</span>
+                    <span class="n">redis_conn</span><span class="o">.</span><span class="n">zremrangebyscore</span><span class="p">(</span>
+                        <span class="n">name</span><span class="o">=</span><span class="n">rpc_web3_calls</span><span class="p">,</span>
+                        <span class="nb">min</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                        <span class="nb">max</span><span class="o">=</span><span class="n">cur_time</span> <span class="o">-</span> <span class="mi">3600</span><span class="p">,</span>
+                    <span class="p">),</span>
+                <span class="p">)</span>
+
+                <span class="k">if</span> <span class="n">from_address</span><span class="p">:</span>
+                    <span class="n">payload</span><span class="p">[</span><span class="s1">&#39;from&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">from_address</span>
+
+                <span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">node</span><span class="p">[</span><span class="s1">&#39;web3_client_async&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">eth</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span>
+
+                <span class="n">decoded_data</span> <span class="o">=</span> <span class="n">node</span><span class="p">[</span><span class="s1">&#39;web3_client_async&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">codec</span><span class="o">.</span><span class="n">decode_abi</span><span class="p">(</span>
+                    <span class="n">output_type</span><span class="p">,</span> <span class="n">HexBytes</span><span class="p">(</span><span class="n">data</span><span class="p">),</span>
+                <span class="p">)</span>
+
+                <span class="n">normalized_data</span> <span class="o">=</span> <span class="n">map_abi_data</span><span class="p">(</span>
+                    <span class="n">BASE_RETURN_NORMALIZERS</span><span class="p">,</span> <span class="n">output_type</span><span class="p">,</span> <span class="n">decoded_data</span><span class="p">,</span>
+                <span class="p">)</span>
+
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">normalized_data</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">normalized_data</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">normalized_data</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">exc</span> <span class="o">=</span> <span class="n">RPCException</span><span class="p">(</span>
+                    <span class="n">request</span><span class="o">=</span><span class="p">[</span><span class="n">contract_function</span><span class="o">.</span><span class="n">fn_name</span><span class="p">],</span>
+                    <span class="n">response</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                    <span class="n">underlying_exception</span><span class="o">=</span><span class="n">e</span><span class="p">,</span>
+                    <span class="n">extra_info</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;msg&#39;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)},</span>
+                <span class="p">)</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span>
+                    <span class="p">(</span>
+                        <span class="s1">&#39;Error while making web3 batch call&#39;</span>
+                    <span class="p">),</span>
+                    <span class="n">err</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">),</span>
+                <span class="p">)</span>
+                <span class="k">raise</span> <span class="n">exc</span>
+
+        <span class="k">return</span> <span class="k">await</span> <span class="n">f</span><span class="p">(</span><span class="n">node_idx</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="RpcHelper.get_transaction_receipt"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper.get_transaction_receipt">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_transaction_receipt</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tx_hash</span><span class="p">,</span> <span class="n">redis_conn</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Retrieves the transaction receipt for a given transaction hash.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tx_hash (str): The transaction hash for which to retrieve the receipt.</span>
+<span class="sd">            redis_conn: Redis connection object.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The transaction receipt details as a dictionary.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            RPCException: If an error occurs while retrieving the transaction receipt.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="nd">@retry</span><span class="p">(</span>
+            <span class="n">reraise</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">retry</span><span class="o">=</span><span class="n">retry_if_exception_type</span><span class="p">(</span><span class="n">RPCException</span><span class="p">),</span>
+            <span class="n">wait</span><span class="o">=</span><span class="n">wait_random_exponential</span><span class="p">(</span><span class="n">multiplier</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="mi">10</span><span class="p">),</span>
+            <span class="n">stop</span><span class="o">=</span><span class="n">stop_after_attempt</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">rpc</span><span class="o">.</span><span class="n">retry</span><span class="p">),</span>
+            <span class="n">before_sleep</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_on_node_exception</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">node_idx</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span><span class="p">:</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">init</span><span class="p">(</span><span class="n">redis_conn</span><span class="o">=</span><span class="n">redis_conn</span><span class="p">)</span>
+            <span class="n">node</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodes</span><span class="p">[</span><span class="n">node_idx</span><span class="p">]</span>
+            <span class="n">rpc_url</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;rpc_url&#39;</span><span class="p">)</span>
+
+            <span class="n">web3_provider</span> <span class="o">=</span> <span class="n">node</span><span class="p">[</span><span class="s1">&#39;web3_client_async&#39;</span><span class="p">]</span>
+            <span class="n">tx_receipt_query</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s1">&#39;txHash&#39;</span><span class="p">:</span> <span class="n">tx_hash</span><span class="p">,</span>
+            <span class="p">}</span>
+            <span class="k">await</span> <span class="n">check_rpc_rate_limit</span><span class="p">(</span>
+                <span class="n">parsed_limits</span><span class="o">=</span><span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;rate_limit&#39;</span><span class="p">,</span> <span class="p">[]),</span>
+                <span class="n">app_id</span><span class="o">=</span><span class="n">rpc_url</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
+                <span class="n">redis_conn</span><span class="o">=</span><span class="n">redis_conn</span><span class="p">,</span>
+                <span class="n">request_payload</span><span class="o">=</span><span class="n">tx_receipt_query</span><span class="p">,</span>
+                <span class="n">error_msg</span><span class="o">=</span><span class="p">{</span>
+                    <span class="s1">&#39;msg&#39;</span><span class="p">:</span> <span class="s1">&#39;exhausted_api_key_rate_limit inside get_events_logs&#39;</span><span class="p">,</span>
+                <span class="p">},</span>
+                <span class="n">logger</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="p">,</span>
+                <span class="n">rate_limit_lua_script_shas</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rate_limit_lua_script_shas</span><span class="p">,</span>
+                <span class="n">limit_incr_by</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">cur_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+                <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span>
+                    <span class="n">redis_conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span>
+                        <span class="n">name</span><span class="o">=</span><span class="n">rpc_get_transaction_receipt_calls</span><span class="p">,</span>
+                        <span class="n">mapping</span><span class="o">=</span><span class="p">{</span>
+                            <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span>
+                                <span class="n">tx_receipt_query</span><span class="p">,</span>
+                            <span class="p">):</span> <span class="n">cur_time</span><span class="p">,</span>
+                        <span class="p">},</span>
+                    <span class="p">),</span>
+                    <span class="n">redis_conn</span><span class="o">.</span><span class="n">zremrangebyscore</span><span class="p">(</span>
+                        <span class="n">name</span><span class="o">=</span><span class="n">rpc_get_transaction_receipt_calls</span><span class="p">,</span>
+                        <span class="nb">min</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                        <span class="nb">max</span><span class="o">=</span><span class="n">cur_time</span> <span class="o">-</span> <span class="mi">3600</span><span class="p">,</span>
+                    <span class="p">),</span>
+                <span class="p">)</span>
+                <span class="n">tx_receipt_details</span> <span class="o">=</span> <span class="k">await</span> <span class="n">node</span><span class="p">[</span><span class="s1">&#39;web3_client_async&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">eth</span><span class="o">.</span><span class="n">get_transaction_receipt</span><span class="p">(</span>
+                    <span class="n">tx_hash</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">exc</span> <span class="o">=</span> <span class="n">RPCException</span><span class="p">(</span>
+                    <span class="n">request</span><span class="o">=</span><span class="p">{</span>
+                        <span class="s1">&#39;txHash&#39;</span><span class="p">:</span> <span class="n">tx_hash</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="n">response</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                    <span class="n">underlying_exception</span><span class="o">=</span><span class="n">e</span><span class="p">,</span>
+                    <span class="n">extra_info</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;RPC_GET_TRANSACTION_RECEIPT_ERROR: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="s1">&#39;Error in get transaction receipt for tx hash </span><span class="si">{}</span><span class="s1">, error </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">tx_hash</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">))</span>
+                <span class="k">raise</span> <span class="n">exc</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">tx_receipt_details</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="n">f</span><span class="p">(</span><span class="n">node_idx</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="RpcHelper.get_current_block"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper.get_current_block">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_current_block</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">redis_conn</span><span class="p">,</span> <span class="n">node_idx</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns the current block number from the Ethereum node at the specified index.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            redis_conn (redis.Redis): Redis connection object.</span>
+<span class="sd">            node_idx (int): Index of the Ethereum node to use. Defaults to 0.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            int: The current block number.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            ExhaustedApiKeyRateLimitError: If the API key rate limit for the node is exhausted.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">node</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodes</span><span class="p">[</span><span class="n">node_idx</span><span class="p">]</span>
+        <span class="n">rpc_url</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;rpc_url&#39;</span><span class="p">)</span>
+
+        <span class="k">await</span> <span class="n">check_rpc_rate_limit</span><span class="p">(</span>
+            <span class="n">parsed_limits</span><span class="o">=</span><span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;rate_limit&#39;</span><span class="p">,</span> <span class="p">[]),</span>
+            <span class="n">app_id</span><span class="o">=</span><span class="n">rpc_url</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
+            <span class="n">redis_conn</span><span class="o">=</span><span class="n">redis_conn</span><span class="p">,</span>
+            <span class="n">request_payload</span><span class="o">=</span><span class="s1">&#39;get_current_block&#39;</span><span class="p">,</span>
+            <span class="n">error_msg</span><span class="o">=</span><span class="p">{</span>
+                <span class="s1">&#39;msg&#39;</span><span class="p">:</span> <span class="s1">&#39;exhausted_api_key_rate_limit inside web3_call&#39;</span><span class="p">,</span>
+            <span class="p">},</span>
+            <span class="n">logger</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="p">,</span>
+            <span class="n">rate_limit_lua_script_shas</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rate_limit_lua_script_shas</span><span class="p">,</span>
+            <span class="n">limit_incr_by</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">current_block</span> <span class="o">=</span> <span class="n">node</span><span class="p">[</span><span class="s1">&#39;web3_client&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">eth</span><span class="o">.</span><span class="n">block_number</span>
+
+        <span class="n">cur_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+        <span class="n">payload</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;time&#39;</span><span class="p">:</span> <span class="n">cur_time</span><span class="p">,</span> <span class="s1">&#39;fn_name&#39;</span><span class="p">:</span> <span class="s1">&#39;get_current_block&#39;</span><span class="p">}</span>
+        <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span>
+            <span class="n">redis_conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="n">rpc_blocknumber_calls</span><span class="p">,</span>
+                <span class="n">mapping</span><span class="o">=</span><span class="p">{</span>
+                    <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">payload</span><span class="p">):</span> <span class="n">cur_time</span><span class="p">,</span>
+                <span class="p">},</span>
+            <span class="p">),</span>
+            <span class="n">redis_conn</span><span class="o">.</span><span class="n">zremrangebyscore</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="n">rpc_blocknumber_calls</span><span class="p">,</span>
+                <span class="nb">min</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                <span class="nb">max</span><span class="o">=</span><span class="n">cur_time</span> <span class="o">-</span> <span class="mi">3600</span><span class="p">,</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">current_block</span></div>
+
+<div class="viewcode-block" id="RpcHelper.web3_call"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper.web3_call">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">web3_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tasks</span><span class="p">,</span> <span class="n">redis_conn</span><span class="p">,</span> <span class="n">from_address</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calls the given tasks asynchronously using web3 and returns the response.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tasks (list): List of contract functions to call.</span>
+<span class="sd">            redis_conn: Redis connection object.</span>
+<span class="sd">            from_address (str, optional): Address to use as the transaction sender. Defaults to None.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            list: List of responses from the contract function calls.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">init</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">web3_tasks</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_async_web3_call</span><span class="p">(</span>
+                    <span class="n">contract_function</span><span class="o">=</span><span class="n">task</span><span class="p">,</span> <span class="n">redis_conn</span><span class="o">=</span><span class="n">redis_conn</span><span class="p">,</span> <span class="n">from_address</span><span class="o">=</span><span class="n">from_address</span><span class="p">,</span>
+                <span class="p">)</span> <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">tasks</span>
+            <span class="p">]</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="o">*</span><span class="n">web3_tasks</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">response</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">e</span></div>
+
+<div class="viewcode-block" id="RpcHelper._make_rpc_jsonrpc_call"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper._make_rpc_jsonrpc_call">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_make_rpc_jsonrpc_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rpc_query</span><span class="p">,</span> <span class="n">redis_conn</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Makes an RPC JSON-RPC call to a node in the pool.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            rpc_query (dict): The JSON-RPC query to be sent.</span>
+<span class="sd">            redis_conn (Redis): The Redis connection object.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            dict: The JSON-RPC response data.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            RPCException: If there is an error in making the JSON-RPC call.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nd">@retry</span><span class="p">(</span>
+            <span class="n">reraise</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">retry</span><span class="o">=</span><span class="n">retry_if_exception_type</span><span class="p">(</span><span class="n">RPCException</span><span class="p">),</span>
+            <span class="n">wait</span><span class="o">=</span><span class="n">wait_random_exponential</span><span class="p">(</span><span class="n">multiplier</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="mi">10</span><span class="p">),</span>
+            <span class="n">stop</span><span class="o">=</span><span class="n">stop_after_attempt</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">rpc</span><span class="o">.</span><span class="n">retry</span><span class="p">),</span>
+            <span class="n">before_sleep</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_on_node_exception</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">node_idx</span><span class="p">):</span>
+
+            <span class="n">node</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodes</span><span class="p">[</span><span class="n">node_idx</span><span class="p">]</span>
+            <span class="n">rpc_url</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;rpc_url&#39;</span><span class="p">)</span>
+
+            <span class="k">await</span> <span class="n">check_rpc_rate_limit</span><span class="p">(</span>
+                <span class="n">parsed_limits</span><span class="o">=</span><span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;rate_limit&#39;</span><span class="p">,</span> <span class="p">[]),</span>
+                <span class="n">app_id</span><span class="o">=</span><span class="n">rpc_url</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
+                <span class="n">redis_conn</span><span class="o">=</span><span class="n">redis_conn</span><span class="p">,</span>
+                <span class="n">request_payload</span><span class="o">=</span><span class="n">rpc_query</span><span class="p">,</span>
+                <span class="n">error_msg</span><span class="o">=</span><span class="p">{</span>
+                    <span class="s1">&#39;msg&#39;</span><span class="p">:</span> <span class="s1">&#39;exhausted_api_key_rate_limit inside make_rpc_jsonrpc_call&#39;</span><span class="p">,</span>
+                <span class="p">},</span>
+                <span class="n">logger</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="p">,</span>
+                <span class="n">rate_limit_lua_script_shas</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rate_limit_lua_script_shas</span><span class="p">,</span>
+                <span class="n">limit_incr_by</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">cur_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+                <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span>
+                    <span class="n">redis_conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span>
+                        <span class="n">name</span><span class="o">=</span><span class="n">rpc_json_rpc_calls</span><span class="p">,</span>
+                        <span class="n">mapping</span><span class="o">=</span><span class="p">{</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">rpc_query</span><span class="p">):</span> <span class="n">cur_time</span><span class="p">},</span>
+                    <span class="p">),</span>
+                    <span class="n">redis_conn</span><span class="o">.</span><span class="n">zremrangebyscore</span><span class="p">(</span>
+                        <span class="n">name</span><span class="o">=</span><span class="n">rpc_json_rpc_calls</span><span class="p">,</span>
+                        <span class="nb">min</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                        <span class="nb">max</span><span class="o">=</span><span class="n">cur_time</span> <span class="o">-</span> <span class="mi">3600</span><span class="p">,</span>
+                    <span class="p">),</span>
+                <span class="p">)</span>
+                <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="o">=</span><span class="n">rpc_url</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">rpc_query</span><span class="p">)</span>
+                <span class="n">response_data</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">exc</span> <span class="o">=</span> <span class="n">RPCException</span><span class="p">(</span>
+                    <span class="n">request</span><span class="o">=</span><span class="n">rpc_query</span><span class="p">,</span>
+                    <span class="n">response</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                    <span class="n">underlying_exception</span><span class="o">=</span><span class="n">e</span><span class="p">,</span>
+                    <span class="n">extra_info</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;RPC_BATCH_ETH_CALL_ERROR: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span>
+                    <span class="s1">&#39;Error in making jsonrpc call, error </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">),</span>
+                <span class="p">)</span>
+                <span class="k">raise</span> <span class="n">exc</span>
+
+            <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">!=</span> <span class="mi">200</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">RPCException</span><span class="p">(</span>
+                    <span class="n">request</span><span class="o">=</span><span class="n">rpc_query</span><span class="p">,</span>
+                    <span class="n">response</span><span class="o">=</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="p">,</span> <span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="p">),</span>
+                    <span class="n">underlying_exception</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                    <span class="n">extra_info</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;RPC_CALL_ERROR: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+                <span class="p">)</span>
+
+            <span class="n">response_exceptions</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">response_data</span><span class="p">)</span> <span class="ow">is</span> <span class="nb">list</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">response_item</span> <span class="ow">in</span> <span class="n">response_data</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="s1">&#39;error&#39;</span> <span class="ow">in</span> <span class="n">response_item</span><span class="p">:</span>
+                        <span class="n">response_exceptions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                            <span class="n">response_exceptions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">response_item</span><span class="p">[</span><span class="s1">&#39;error&#39;</span><span class="p">]),</span>
+                        <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="s1">&#39;error&#39;</span> <span class="ow">in</span> <span class="n">response_data</span><span class="p">:</span>
+                    <span class="n">response_exceptions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">response_data</span><span class="p">[</span><span class="s1">&#39;error&#39;</span><span class="p">])</span>
+
+            <span class="k">if</span> <span class="n">response_exceptions</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">RPCException</span><span class="p">(</span>
+                    <span class="n">request</span><span class="o">=</span><span class="n">rpc_query</span><span class="p">,</span>
+                    <span class="n">response</span><span class="o">=</span><span class="n">response_data</span><span class="p">,</span>
+                    <span class="n">underlying_exception</span><span class="o">=</span><span class="n">response_exceptions</span><span class="p">,</span>
+                    <span class="n">extra_info</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;RPC_BATCH_ETH_CALL_ERROR: </span><span class="si">{</span><span class="n">response_exceptions</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+                <span class="p">)</span>
+
+            <span class="k">return</span> <span class="n">response_data</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="n">f</span><span class="p">(</span><span class="n">node_idx</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="RpcHelper.batch_eth_get_balance_on_block_range"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper.batch_eth_get_balance_on_block_range">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">batch_eth_get_balance_on_block_range</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">address</span><span class="p">,</span>
+            <span class="n">redis_conn</span><span class="p">,</span>
+            <span class="n">from_block</span><span class="p">,</span>
+            <span class="n">to_block</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Batch retrieves the Ethereum balance of an address for a range of blocks.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            address (str): The Ethereum address to retrieve the balance for.</span>
+<span class="sd">            redis_conn (redis.Redis): The Redis connection object.</span>
+<span class="sd">            from_block (int): The starting block number.</span>
+<span class="sd">            to_block (int): The ending block number.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            list: A list of Ethereum balances for each block in the range. If a balance could not be retrieved for a block,</span>
+<span class="sd">            None is returned in its place.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">init</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">)</span>
+
+        <span class="n">rpc_query</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">request_id</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">from_block</span><span class="p">,</span> <span class="n">to_block</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="n">rpc_query</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s1">&#39;jsonrpc&#39;</span><span class="p">:</span> <span class="s1">&#39;2.0&#39;</span><span class="p">,</span>
+                    <span class="s1">&#39;method&#39;</span><span class="p">:</span> <span class="s1">&#39;eth_getBalance&#39;</span><span class="p">,</span>
+                    <span class="s1">&#39;params&#39;</span><span class="p">:</span> <span class="p">[</span><span class="n">address</span><span class="p">,</span> <span class="nb">hex</span><span class="p">(</span><span class="n">block</span><span class="p">)],</span>
+                    <span class="s1">&#39;id&#39;</span><span class="p">:</span> <span class="n">request_id</span><span class="p">,</span>
+                <span class="p">},</span>
+            <span class="p">)</span>
+            <span class="n">request_id</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">response_data</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_rpc_jsonrpc_call</span><span class="p">(</span><span class="n">rpc_query</span><span class="p">,</span> <span class="n">redis_conn</span><span class="p">)</span>
+
+            <span class="n">rpc_respnse</span> <span class="o">=</span> <span class="p">[]</span>
+
+            <span class="k">for</span> <span class="n">response</span> <span class="ow">in</span> <span class="n">response_data</span><span class="p">:</span>
+                <span class="k">if</span> <span class="s1">&#39;result&#39;</span> <span class="ow">in</span> <span class="n">response</span><span class="p">:</span>
+                    <span class="n">eth_balance</span> <span class="o">=</span> <span class="n">response</span><span class="p">[</span><span class="s1">&#39;result&#39;</span><span class="p">]</span>
+                    <span class="n">rpc_respnse</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">eth_balance</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">rpc_respnse</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+
+            <span class="k">return</span> <span class="n">rpc_respnse</span>
+
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">e</span></div>
+
+<div class="viewcode-block" id="RpcHelper.batch_eth_call_on_block_range"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper.batch_eth_call_on_block_range">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">batch_eth_call_on_block_range</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">abi_dict</span><span class="p">,</span>
+        <span class="n">function_name</span><span class="p">,</span>
+        <span class="n">contract_address</span><span class="p">,</span>
+        <span class="n">redis_conn</span><span class="p">,</span>
+        <span class="n">from_block</span><span class="p">,</span>
+        <span class="n">to_block</span><span class="p">,</span>
+        <span class="n">params</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">List</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">from_address</span><span class="o">=</span><span class="n">Web3</span><span class="o">.</span><span class="n">toChecksumAddress</span><span class="p">(</span><span class="s1">&#39;0x0000000000000000000000000000000000000000&#39;</span><span class="p">),</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Batch executes an Ethereum contract function call on a range of blocks.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            abi_dict (dict): The ABI dictionary of the contract.</span>
+<span class="sd">            function_name (str): The name of the function to call.</span>
+<span class="sd">            contract_address (str): The address of the contract.</span>
+<span class="sd">            redis_conn (redis.Redis): The Redis connection object.</span>
+<span class="sd">            from_block (int): The starting block number.</span>
+<span class="sd">            to_block (int): The ending block number.</span>
+<span class="sd">            params (list, optional): The list of parameters to pass to the function. Defaults to None.</span>
+<span class="sd">            from_address (str, optional): The address to use as the sender of the transaction. Defaults to &#39;0x0000000000000000000000000000000000000000&#39;.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            list: A list of decoded results from the function call.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">init</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">params</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">params</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="n">function_signature</span> <span class="o">=</span> <span class="n">get_encoded_function_signature</span><span class="p">(</span>
+            <span class="n">abi_dict</span><span class="p">,</span> <span class="n">function_name</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">rpc_query</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">request_id</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">from_block</span><span class="p">,</span> <span class="n">to_block</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="n">rpc_query</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s1">&#39;jsonrpc&#39;</span><span class="p">:</span> <span class="s1">&#39;2.0&#39;</span><span class="p">,</span>
+                    <span class="s1">&#39;method&#39;</span><span class="p">:</span> <span class="s1">&#39;eth_call&#39;</span><span class="p">,</span>
+                    <span class="s1">&#39;params&#39;</span><span class="p">:</span> <span class="p">[</span>
+                        <span class="p">{</span>
+                            <span class="s1">&#39;from&#39;</span><span class="p">:</span> <span class="n">from_address</span><span class="p">,</span>
+                            <span class="s1">&#39;to&#39;</span><span class="p">:</span> <span class="n">Web3</span><span class="o">.</span><span class="n">toChecksumAddress</span><span class="p">(</span><span class="n">contract_address</span><span class="p">),</span>
+                            <span class="s1">&#39;data&#39;</span><span class="p">:</span> <span class="n">function_signature</span><span class="p">,</span>
+                        <span class="p">},</span>
+                        <span class="nb">hex</span><span class="p">(</span><span class="n">block</span><span class="p">),</span>
+                    <span class="p">],</span>
+                    <span class="s1">&#39;id&#39;</span><span class="p">:</span> <span class="n">request_id</span><span class="p">,</span>
+                <span class="p">},</span>
+            <span class="p">)</span>
+            <span class="n">request_id</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="n">response_data</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_rpc_jsonrpc_call</span><span class="p">(</span><span class="n">rpc_query</span><span class="p">,</span> <span class="n">redis_conn</span><span class="o">=</span><span class="n">redis_conn</span><span class="p">)</span>
+        <span class="n">rpc_response</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="n">response</span> <span class="o">=</span> <span class="n">response_data</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">response_data</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="k">else</span> <span class="p">[</span><span class="n">response_data</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">response</span><span class="p">:</span>
+            <span class="n">rpc_response</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">eth_abi</span><span class="o">.</span><span class="n">decode_abi</span><span class="p">(</span>
+                    <span class="n">abi_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                        <span class="n">function_name</span><span class="p">,</span>
+                    <span class="p">)[</span><span class="s1">&#39;output&#39;</span><span class="p">],</span>
+                    <span class="n">HexBytes</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s1">&#39;result&#39;</span><span class="p">]),</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">rpc_response</span></div>
+
+<div class="viewcode-block" id="RpcHelper.batch_eth_get_block"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper.batch_eth_get_block">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">batch_eth_get_block</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">from_block</span><span class="p">,</span> <span class="n">to_block</span><span class="p">,</span> <span class="n">redis_conn</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Batch retrieves Ethereum blocks using eth_getBlockByNumber JSON-RPC method.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            from_block (int): The block number to start retrieving from.</span>
+<span class="sd">            to_block (int): The block number to stop retrieving at.</span>
+<span class="sd">            redis_conn (redis.Redis): Redis connection object.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            dict: A dictionary containing the response data from the JSON-RPC call.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">init</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">)</span>
+
+        <span class="n">rpc_query</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="n">request_id</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">from_block</span><span class="p">,</span> <span class="n">to_block</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="n">rpc_query</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s1">&#39;jsonrpc&#39;</span><span class="p">:</span> <span class="s1">&#39;2.0&#39;</span><span class="p">,</span>
+                    <span class="s1">&#39;method&#39;</span><span class="p">:</span> <span class="s1">&#39;eth_getBlockByNumber&#39;</span><span class="p">,</span>
+                    <span class="s1">&#39;params&#39;</span><span class="p">:</span> <span class="p">[</span>
+                        <span class="nb">hex</span><span class="p">(</span><span class="n">block</span><span class="p">),</span>
+                        <span class="kc">False</span><span class="p">,</span>
+                    <span class="p">],</span>
+                    <span class="s1">&#39;id&#39;</span><span class="p">:</span> <span class="n">request_id</span><span class="p">,</span>
+                <span class="p">},</span>
+            <span class="p">)</span>
+            <span class="n">request_id</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="n">response_data</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_rpc_jsonrpc_call</span><span class="p">(</span><span class="n">rpc_query</span><span class="p">,</span> <span class="n">redis_conn</span><span class="o">=</span><span class="n">redis_conn</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">response_data</span></div>
+
+<div class="viewcode-block" id="RpcHelper.get_events_logs"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper.get_events_logs">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_events_logs</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">contract_address</span><span class="p">,</span> <span class="n">to_block</span><span class="p">,</span> <span class="n">from_block</span><span class="p">,</span> <span class="n">topics</span><span class="p">,</span> <span class="n">event_abi</span><span class="p">,</span> <span class="n">redis_conn</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns all events logs for a given contract address, within a specified block range and with specified topics.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            contract_address (str): The address of the contract to get events logs for.</span>
+<span class="sd">            to_block (int): The highest block number to retrieve events logs from.</span>
+<span class="sd">            from_block (int): The lowest block number to retrieve events logs from.</span>
+<span class="sd">            topics (List[str]): A list of topics to filter the events logs by.</span>
+<span class="sd">            event_abi (Dict): The ABI of the event to decode the logs with.</span>
+<span class="sd">            redis_conn (Redis): The Redis connection object to use for rate limiting.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            List[Dict]: A list of dictionaries representing the decoded events logs.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">init</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">)</span>
+
+        <span class="nd">@retry</span><span class="p">(</span>
+            <span class="n">reraise</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">retry</span><span class="o">=</span><span class="n">retry_if_exception_type</span><span class="p">(</span><span class="n">RPCException</span><span class="p">),</span>
+            <span class="n">wait</span><span class="o">=</span><span class="n">wait_random_exponential</span><span class="p">(</span><span class="n">multiplier</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="mi">10</span><span class="p">),</span>
+            <span class="n">stop</span><span class="o">=</span><span class="n">stop_after_attempt</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">rpc</span><span class="o">.</span><span class="n">retry</span><span class="p">),</span>
+            <span class="n">before_sleep</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_on_node_exception</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">node_idx</span><span class="p">):</span>
+            <span class="n">node</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodes</span><span class="p">[</span><span class="n">node_idx</span><span class="p">]</span>
+            <span class="n">rpc_url</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;rpc_url&#39;</span><span class="p">)</span>
+
+            <span class="n">web3_provider</span> <span class="o">=</span> <span class="n">node</span><span class="p">[</span><span class="s1">&#39;web3_client_async&#39;</span><span class="p">]</span>
+
+            <span class="n">event_log_query</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s1">&#39;address&#39;</span><span class="p">:</span> <span class="n">Web3</span><span class="o">.</span><span class="n">toChecksumAddress</span><span class="p">(</span><span class="n">contract_address</span><span class="p">),</span>
+                <span class="s1">&#39;toBlock&#39;</span><span class="p">:</span> <span class="n">to_block</span><span class="p">,</span>
+                <span class="s1">&#39;fromBlock&#39;</span><span class="p">:</span> <span class="n">from_block</span><span class="p">,</span>
+                <span class="s1">&#39;topics&#39;</span><span class="p">:</span> <span class="n">topics</span><span class="p">,</span>
+            <span class="p">}</span>
+
+            <span class="k">await</span> <span class="n">check_rpc_rate_limit</span><span class="p">(</span>
+                <span class="n">parsed_limits</span><span class="o">=</span><span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;rate_limit&#39;</span><span class="p">,</span> <span class="p">[]),</span>
+                <span class="n">app_id</span><span class="o">=</span><span class="n">rpc_url</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
+                <span class="n">redis_conn</span><span class="o">=</span><span class="n">redis_conn</span><span class="p">,</span>
+                <span class="n">request_payload</span><span class="o">=</span><span class="n">event_log_query</span><span class="p">,</span>
+                <span class="n">error_msg</span><span class="o">=</span><span class="p">{</span>
+                    <span class="s1">&#39;msg&#39;</span><span class="p">:</span> <span class="s1">&#39;exhausted_api_key_rate_limit inside get_events_logs&#39;</span><span class="p">,</span>
+                <span class="p">},</span>
+                <span class="n">logger</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="p">,</span>
+                <span class="n">rate_limit_lua_script_shas</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rate_limit_lua_script_shas</span><span class="p">,</span>
+                <span class="n">limit_incr_by</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">cur_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+                <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span>
+                    <span class="n">redis_conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span>
+                        <span class="n">name</span><span class="o">=</span><span class="n">rpc_get_event_logs_calls</span><span class="p">,</span>
+                        <span class="n">mapping</span><span class="o">=</span><span class="p">{</span>
+                            <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span>
+                                <span class="n">event_log_query</span><span class="p">,</span>
+                            <span class="p">):</span> <span class="n">cur_time</span><span class="p">,</span>
+                        <span class="p">},</span>
+                    <span class="p">),</span>
+                    <span class="n">redis_conn</span><span class="o">.</span><span class="n">zremrangebyscore</span><span class="p">(</span>
+                        <span class="n">name</span><span class="o">=</span><span class="n">rpc_get_event_logs_calls</span><span class="p">,</span>
+                        <span class="nb">min</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                        <span class="nb">max</span><span class="o">=</span><span class="n">cur_time</span> <span class="o">-</span> <span class="mi">3600</span><span class="p">,</span>
+                    <span class="p">),</span>
+                <span class="p">)</span>
+
+                <span class="n">event_log</span> <span class="o">=</span> <span class="k">await</span> <span class="n">web3_provider</span><span class="o">.</span><span class="n">eth</span><span class="o">.</span><span class="n">get_logs</span><span class="p">(</span>
+                    <span class="n">event_log_query</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">codec</span><span class="p">:</span> <span class="n">ABICodec</span> <span class="o">=</span> <span class="n">web3_provider</span><span class="o">.</span><span class="n">codec</span>
+                <span class="n">all_events</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="k">for</span> <span class="n">log</span> <span class="ow">in</span> <span class="n">event_log</span><span class="p">:</span>
+                    <span class="n">abi</span> <span class="o">=</span> <span class="n">event_abi</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">log</span><span class="o">.</span><span class="n">topics</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">hex</span><span class="p">(),</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
+                    <span class="n">evt</span> <span class="o">=</span> <span class="n">get_event_data</span><span class="p">(</span><span class="n">codec</span><span class="p">,</span> <span class="n">abi</span><span class="p">,</span> <span class="n">log</span><span class="p">)</span>
+                    <span class="n">all_events</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">evt</span><span class="p">)</span>
+
+                <span class="k">return</span> <span class="n">all_events</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">exc</span> <span class="o">=</span> <span class="n">RPCException</span><span class="p">(</span>
+                    <span class="n">request</span><span class="o">=</span><span class="p">{</span>
+                        <span class="s1">&#39;contract_address&#39;</span><span class="p">:</span> <span class="n">contract_address</span><span class="p">,</span>
+                        <span class="s1">&#39;to_block&#39;</span><span class="p">:</span> <span class="n">to_block</span><span class="p">,</span>
+                        <span class="s1">&#39;from_block&#39;</span><span class="p">:</span> <span class="n">from_block</span><span class="p">,</span>
+                        <span class="s1">&#39;topics&#39;</span><span class="p">:</span> <span class="n">topics</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="n">response</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                    <span class="n">underlying_exception</span><span class="o">=</span><span class="n">e</span><span class="p">,</span>
+                    <span class="n">extra_info</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;RPC_GET_EVENT_LOGS_ERROR: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="s1">&#39;Error in get_events_logs, error </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">))</span>
+                <span class="k">raise</span> <span class="n">exc</span>
+
+        <span class="k">return</span> <span class="k">await</span> <span class="n">f</span><span class="p">(</span><span class="n">node_idx</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span></div></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, Powerloom Inc..</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+</body>
+</html>

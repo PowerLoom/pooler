@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>snapshotter.utils.data_utils &mdash; Powerloom Snapshotter 0.1 documentation</title>
+      <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+
+        <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js?v=e031e9a9"></script>
+        <script src="../../../_static/doctools.js?v=888ff710"></script>
+        <script src="../../../_static/sphinx_highlight.js?v=4825356b"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+</head>
+
+<body class="wy-body-for-nav">
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+
+
+          <a href="../../../index.html">
+
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../snapshotter.html">Powerloom Snapshotter</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Powerloom Snapshotter</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">snapshotter.utils.data_utils</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+
+  <h1>Source code for snapshotter.utils.data_utils</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span>
+
+<span class="kn">import</span> <span class="nn">tenacity</span>
+<span class="kn">from</span> <span class="nn">ipfs_client.dag</span> <span class="kn">import</span> <span class="n">IPFSAsyncClientError</span>
+<span class="kn">from</span> <span class="nn">redis</span> <span class="kn">import</span> <span class="n">asyncio</span> <span class="k">as</span> <span class="n">aioredis</span>
+<span class="kn">from</span> <span class="nn">tenacity</span> <span class="kn">import</span> <span class="n">retry</span>
+<span class="kn">from</span> <span class="nn">tenacity</span> <span class="kn">import</span> <span class="n">retry_if_exception_type</span>
+<span class="kn">from</span> <span class="nn">tenacity</span> <span class="kn">import</span> <span class="n">stop_after_attempt</span>
+<span class="kn">from</span> <span class="nn">tenacity</span> <span class="kn">import</span> <span class="n">wait_random_exponential</span>
+
+<span class="kn">from</span> <span class="nn">snapshotter.settings.config</span> <span class="kn">import</span> <span class="n">settings</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.default_logger</span> <span class="kn">import</span> <span class="n">logger</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.file_utils</span> <span class="kn">import</span> <span class="n">read_json_file</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.file_utils</span> <span class="kn">import</span> <span class="n">write_json_file</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.data_models</span> <span class="kn">import</span> <span class="n">ProjectStatus</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.data_models</span> <span class="kn">import</span> <span class="n">SnapshotterIncorrectSnapshotSubmission</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.data_models</span> <span class="kn">import</span> <span class="n">SnapshotterMissedSnapshotSubmission</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.data_models</span> <span class="kn">import</span> <span class="n">SnapshotterProjectStatus</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.data_models</span> <span class="kn">import</span> <span class="n">SnapshotterReportState</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.data_models</span> <span class="kn">import</span> <span class="n">SnapshotterStatus</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.data_models</span> <span class="kn">import</span> <span class="n">SnapshotterStatusReport</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">project_finalized_data_zset</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">project_first_epoch_hmap</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">project_snapshotter_status_report_key</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">source_chain_block_time_key</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">source_chain_epoch_size_key</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">source_chain_id_key</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.rpc</span> <span class="kn">import</span> <span class="n">get_event_sig_and_abi</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logger</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">module</span><span class="o">=</span><span class="s1">&#39;data_helper&#39;</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="retry_state_callback"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.data_utils.retry_state_callback">[docs]</a><span class="k">def</span> <span class="nf">retry_state_callback</span><span class="p">(</span><span class="n">retry_state</span><span class="p">:</span> <span class="n">tenacity</span><span class="o">.</span><span class="n">RetryCallState</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Callback function to handle retry attempts for IPFS cat operation.</span>
+
+<span class="sd">    Parameters:</span>
+<span class="sd">    retry_state (tenacity.RetryCallState): The current state of the retry call.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">    None</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Encountered IPFS cat exception: </span><span class="si">{</span><span class="n">retry_state</span><span class="o">.</span><span class="n">outcome</span><span class="o">.</span><span class="n">exception</span><span class="p">()</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span></div>
+
+
+<span class="c1"># TODO: warmup cache to reduce RPC calls overhead</span>
+<div class="viewcode-block" id="get_project_finalized_cid"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.data_utils.get_project_finalized_cid">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">get_project_finalized_cid</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span><span class="p">,</span> <span class="n">state_contract_obj</span><span class="p">,</span> <span class="n">rpc_helper</span><span class="p">,</span> <span class="n">epoch_id</span><span class="p">,</span> <span class="n">project_id</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get the CID of the finalized data for a given project and epoch.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        redis_conn (aioredis.Redis): Redis connection object.</span>
+<span class="sd">        state_contract_obj: Contract object for the state contract.</span>
+<span class="sd">        rpc_helper: Helper object for making RPC calls.</span>
+<span class="sd">        epoch_id (int): Epoch ID for which to get the CID.</span>
+<span class="sd">        project_id (str): ID of the project for which to get the CID.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        str: CID of the finalized data for the given project and epoch, or None if not found.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">project_first_epoch</span> <span class="o">=</span> <span class="k">await</span> <span class="n">get_project_first_epoch</span><span class="p">(</span>
+        <span class="n">redis_conn</span><span class="p">,</span> <span class="n">state_contract_obj</span><span class="p">,</span> <span class="n">rpc_helper</span><span class="p">,</span> <span class="n">project_id</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">epoch_id</span> <span class="o">&lt;</span> <span class="n">project_first_epoch</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="c1"># if data is present in finalzied data zset, return it</span>
+    <span class="n">cid_data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">zrangebyscore</span><span class="p">(</span>
+        <span class="n">project_finalized_data_zset</span><span class="p">(</span><span class="n">project_id</span><span class="p">),</span>
+        <span class="n">epoch_id</span><span class="p">,</span>
+        <span class="n">epoch_id</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">cid_data</span><span class="p">:</span>
+        <span class="n">cid</span> <span class="o">=</span> <span class="n">cid_data</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">cid</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="k">await</span> <span class="n">w3_get_and_cache_finalized_cid</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">,</span> <span class="n">state_contract_obj</span><span class="p">,</span> <span class="n">rpc_helper</span><span class="p">,</span> <span class="n">epoch_id</span><span class="p">,</span> <span class="n">project_id</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="s1">&#39;null&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">cid</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">cid</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="w3_get_and_cache_finalized_cid"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.data_utils.w3_get_and_cache_finalized_cid">[docs]</a><span class="nd">@retry</span><span class="p">(</span>
+    <span class="n">reraise</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">retry</span><span class="o">=</span><span class="n">retry_if_exception_type</span><span class="p">(</span><span class="ne">Exception</span><span class="p">),</span>
+    <span class="n">wait</span><span class="o">=</span><span class="n">wait_random_exponential</span><span class="p">(</span><span class="n">multiplier</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="mi">10</span><span class="p">),</span>
+    <span class="n">stop</span><span class="o">=</span><span class="n">stop_after_attempt</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">w3_get_and_cache_finalized_cid</span><span class="p">(</span>
+    <span class="n">redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span><span class="p">,</span>
+    <span class="n">state_contract_obj</span><span class="p">,</span>
+    <span class="n">rpc_helper</span><span class="p">,</span>
+    <span class="n">epoch_id</span><span class="p">,</span>
+    <span class="n">project_id</span><span class="p">,</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    This function retrieves the consensus status and the max snapshot CID for a given project and epoch.</span>
+<span class="sd">    If the consensus status is True, the CID is added to a Redis sorted set with the epoch ID as the score.</span>
+<span class="sd">    If the consensus status is False, a null value is added to the sorted set with the epoch ID as the score.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        redis_conn (aioredis.Redis): Redis connection object</span>
+<span class="sd">        state_contract_obj: Contract object for the state contract</span>
+<span class="sd">        rpc_helper: Helper object for making web3 calls</span>
+<span class="sd">        epoch_id (int): Epoch ID</span>
+<span class="sd">        project_id (int): Project ID</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Tuple[str, int]: The CID and epoch ID if the consensus status is True, or the null value and epoch ID if the consensus status is False.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">tasks</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">state_contract_obj</span><span class="o">.</span><span class="n">functions</span><span class="o">.</span><span class="n">snapshotStatus</span><span class="p">(</span><span class="n">project_id</span><span class="p">,</span> <span class="n">epoch_id</span><span class="p">),</span>
+        <span class="n">state_contract_obj</span><span class="o">.</span><span class="n">functions</span><span class="o">.</span><span class="n">maxSnapshotsCid</span><span class="p">(</span><span class="n">project_id</span><span class="p">,</span> <span class="n">epoch_id</span><span class="p">),</span>
+    <span class="p">]</span>
+
+    <span class="p">[</span><span class="n">consensus_status</span><span class="p">,</span> <span class="n">cid</span><span class="p">]</span> <span class="o">=</span> <span class="k">await</span> <span class="n">rpc_helper</span><span class="o">.</span><span class="n">web3_call</span><span class="p">(</span><span class="n">tasks</span><span class="p">,</span> <span class="n">redis_conn</span><span class="o">=</span><span class="n">redis_conn</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;consensus status for project </span><span class="si">{</span><span class="n">project_id</span><span class="si">}</span><span class="s1"> and epoch </span><span class="si">{</span><span class="n">epoch_id</span><span class="si">}</span><span class="s1"> is </span><span class="si">{</span><span class="n">consensus_status</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">consensus_status</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+        <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span>
+            <span class="n">project_finalized_data_zset</span><span class="p">(</span><span class="n">project_id</span><span class="p">),</span>
+            <span class="p">{</span><span class="n">cid</span><span class="p">:</span> <span class="n">epoch_id</span><span class="p">},</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">cid</span><span class="p">,</span> <span class="n">epoch_id</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Add null to zset</span>
+        <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span>
+            <span class="n">project_finalized_data_zset</span><span class="p">(</span><span class="n">project_id</span><span class="p">),</span>
+            <span class="p">{</span><span class="sa">f</span><span class="s1">&#39;null_</span><span class="si">{</span><span class="n">epoch_id</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">:</span> <span class="n">epoch_id</span><span class="p">},</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s1">&#39;null_</span><span class="si">{</span><span class="n">epoch_id</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">epoch_id</span></div>
+
+
+<span class="c1"># TODO: warmup cache to reduce RPC calls overhead</span>
+<div class="viewcode-block" id="get_project_first_epoch"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.data_utils.get_project_first_epoch">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">get_project_first_epoch</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span><span class="p">,</span> <span class="n">state_contract_obj</span><span class="p">,</span> <span class="n">rpc_helper</span><span class="p">,</span> <span class="n">project_id</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get the first epoch for a given project ID.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        redis_conn (aioredis.Redis): Redis connection object.</span>
+<span class="sd">        state_contract_obj: Contract object for the state contract.</span>
+<span class="sd">        rpc_helper: RPC helper object.</span>
+<span class="sd">        project_id (str): ID of the project.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        int: The first epoch for the given project ID.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">first_epoch_data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">hget</span><span class="p">(</span>
+        <span class="n">project_first_epoch_hmap</span><span class="p">(),</span>
+        <span class="n">project_id</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">first_epoch_data</span><span class="p">:</span>
+        <span class="n">first_epoch</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">first_epoch_data</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">first_epoch</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">tasks</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">state_contract_obj</span><span class="o">.</span><span class="n">functions</span><span class="o">.</span><span class="n">projectFirstEpochId</span><span class="p">(</span><span class="n">project_id</span><span class="p">),</span>
+        <span class="p">]</span>
+
+        <span class="p">[</span><span class="n">first_epoch</span><span class="p">]</span> <span class="o">=</span> <span class="k">await</span> <span class="n">rpc_helper</span><span class="o">.</span><span class="n">web3_call</span><span class="p">(</span><span class="n">tasks</span><span class="p">,</span> <span class="n">redis_conn</span><span class="o">=</span><span class="n">redis_conn</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;first epoch for project </span><span class="si">{</span><span class="n">project_id</span><span class="si">}</span><span class="s1"> is </span><span class="si">{</span><span class="n">first_epoch</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+        <span class="c1"># Don&#39;t cache if it is 0</span>
+        <span class="k">if</span> <span class="n">first_epoch</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="mi">0</span>
+
+        <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">hset</span><span class="p">(</span>
+            <span class="n">project_first_epoch_hmap</span><span class="p">(),</span>
+            <span class="n">project_id</span><span class="p">,</span>
+            <span class="n">first_epoch</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">first_epoch</span></div>
+
+
+<div class="viewcode-block" id="fetch_file_from_ipfs"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.data_utils.fetch_file_from_ipfs">[docs]</a><span class="nd">@retry</span><span class="p">(</span>
+    <span class="n">reraise</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">retry</span><span class="o">=</span><span class="n">retry_if_exception_type</span><span class="p">(</span><span class="n">IPFSAsyncClientError</span><span class="p">),</span>
+    <span class="n">wait</span><span class="o">=</span><span class="n">wait_random_exponential</span><span class="p">(</span><span class="n">multiplier</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="mi">10</span><span class="p">),</span>
+    <span class="n">stop</span><span class="o">=</span><span class="n">stop_after_attempt</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span>
+    <span class="n">before_sleep</span><span class="o">=</span><span class="n">retry_state_callback</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">fetch_file_from_ipfs</span><span class="p">(</span><span class="n">ipfs_reader</span><span class="p">,</span> <span class="n">cid</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Fetches a file from IPFS using the given IPFS reader and CID.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        ipfs_reader: An IPFS reader object.</span>
+<span class="sd">        cid: The CID of the file to fetch.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        The contents of the file as bytes.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="k">await</span> <span class="n">ipfs_reader</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">cid</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="get_submission_data"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.data_utils.get_submission_data">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">get_submission_data</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span><span class="p">,</span> <span class="n">cid</span><span class="p">,</span> <span class="n">ipfs_reader</span><span class="p">,</span> <span class="n">project_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Fetches submission data from cache or IPFS.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        redis_conn (aioredis.Redis): Redis connection object.</span>
+<span class="sd">        cid (str): IPFS content ID.</span>
+<span class="sd">        ipfs_reader (ipfshttpclient.client.Client): IPFS client object.</span>
+<span class="sd">        project_id (str): ID of the project.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: Submission data.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">cid</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="s1">&#39;null&#39;</span> <span class="ow">in</span> <span class="n">cid</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">()</span>
+
+    <span class="n">cached_data_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">ipfs</span><span class="o">.</span><span class="n">local_cache_path</span><span class="p">,</span> <span class="n">project_id</span><span class="p">,</span> <span class="s1">&#39;snapshots&#39;</span><span class="p">)</span>
+    <span class="n">filename</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">cid</span><span class="si">}</span><span class="s1">.json&#39;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">submission_data</span> <span class="o">=</span> <span class="n">read_json_file</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">cached_data_path</span><span class="p">,</span> <span class="n">filename</span><span class="p">))</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="c1"># Fetch from IPFS</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="s1">&#39;Error while reading from cache&#39;</span><span class="p">,</span> <span class="n">error</span><span class="o">=</span><span class="n">e</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Project </span><span class="si">{}</span><span class="s1"> CID </span><span class="si">{}</span><span class="s1">, fetching data from IPFS&#39;</span><span class="p">,</span> <span class="n">project_id</span><span class="p">,</span> <span class="n">cid</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">submission_data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">fetch_file_from_ipfs</span><span class="p">(</span><span class="n">ipfs_reader</span><span class="p">,</span> <span class="n">cid</span><span class="p">)</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s1">&#39;Error while fetching data from IPFS | Project </span><span class="si">{}</span><span class="s1"> | CID </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">project_id</span><span class="p">,</span> <span class="n">cid</span><span class="p">)</span>
+            <span class="n">submission_data</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Cache it</span>
+            <span class="n">write_json_file</span><span class="p">(</span><span class="n">cached_data_path</span><span class="p">,</span> <span class="n">filename</span><span class="p">,</span> <span class="n">submission_data</span><span class="p">)</span>
+            <span class="n">submission_data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">submission_data</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">submission_data</span></div>
+
+
+<div class="viewcode-block" id="get_submission_data_bulk"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.data_utils.get_submission_data_bulk">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">get_submission_data_bulk</span><span class="p">(</span>
+    <span class="n">redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span><span class="p">,</span>
+    <span class="n">cids</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="n">ipfs_reader</span><span class="p">,</span>
+    <span class="n">project_ids</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Retrieves submission data for multiple submissions in bulk.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        redis_conn (aioredis.Redis): Redis connection object.</span>
+<span class="sd">        cids (List[str]): List of submission CIDs.</span>
+<span class="sd">        ipfs_reader: IPFS reader object.</span>
+<span class="sd">        project_ids (List[str]): List of project IDs.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        List[dict]: List of submission data dictionaries.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">batch_size</span> <span class="o">=</span> <span class="mi">10</span>
+    <span class="n">all_snapshot_data</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">cids</span><span class="p">),</span> <span class="n">batch_size</span><span class="p">):</span>
+        <span class="n">batch_cids</span> <span class="o">=</span> <span class="n">cids</span><span class="p">[</span><span class="n">i</span><span class="p">:</span><span class="n">i</span> <span class="o">+</span> <span class="n">batch_size</span><span class="p">]</span>
+        <span class="n">batch_project_ids</span> <span class="o">=</span> <span class="n">project_ids</span><span class="p">[</span><span class="n">i</span><span class="p">:</span><span class="n">i</span> <span class="o">+</span> <span class="n">batch_size</span><span class="p">]</span>
+        <span class="n">batch_snapshot_data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span>
+            <span class="o">*</span><span class="p">[</span>
+                <span class="n">get_submission_data</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">,</span> <span class="n">cid</span><span class="p">,</span> <span class="n">ipfs_reader</span><span class="p">,</span> <span class="n">project_id</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">cid</span><span class="p">,</span> <span class="n">project_id</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">batch_cids</span><span class="p">,</span> <span class="n">batch_project_ids</span><span class="p">)</span>
+            <span class="p">],</span>
+        <span class="p">)</span>
+        <span class="n">all_snapshot_data</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">batch_snapshot_data</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">all_snapshot_data</span></div>
+
+
+<div class="viewcode-block" id="get_project_epoch_snapshot"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.data_utils.get_project_epoch_snapshot">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">get_project_epoch_snapshot</span><span class="p">(</span>
+    <span class="n">redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span><span class="p">,</span> <span class="n">state_contract_obj</span><span class="p">,</span> <span class="n">rpc_helper</span><span class="p">,</span> <span class="n">ipfs_reader</span><span class="p">,</span> <span class="n">epoch_id</span><span class="p">,</span> <span class="n">project_id</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Retrieves the epoch snapshot for a given project.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        redis_conn (aioredis.Redis): Redis connection object.</span>
+<span class="sd">        state_contract_obj: State contract object.</span>
+<span class="sd">        rpc_helper: RPC helper object.</span>
+<span class="sd">        ipfs_reader: IPFS reader object.</span>
+<span class="sd">        epoch_id (int): Epoch ID.</span>
+<span class="sd">        project_id (str): Project ID.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: The epoch snapshot data.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">cid</span> <span class="o">=</span> <span class="k">await</span> <span class="n">get_project_finalized_cid</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">,</span> <span class="n">state_contract_obj</span><span class="p">,</span> <span class="n">rpc_helper</span><span class="p">,</span> <span class="n">epoch_id</span><span class="p">,</span> <span class="n">project_id</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">cid</span><span class="p">:</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">get_submission_data</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">,</span> <span class="n">cid</span><span class="p">,</span> <span class="n">ipfs_reader</span><span class="p">,</span> <span class="n">project_id</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">data</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="get_source_chain_id"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.data_utils.get_source_chain_id">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">get_source_chain_id</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span><span class="p">,</span> <span class="n">state_contract_obj</span><span class="p">,</span> <span class="n">rpc_helper</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Retrieves the source chain ID from Redis cache if available, otherwise fetches it from the state contract and caches it in Redis.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        redis_conn (aioredis.Redis): Redis connection object.</span>
+<span class="sd">        state_contract_obj: State contract object.</span>
+<span class="sd">        rpc_helper: RPC helper object.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        int: The source chain ID.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">source_chain_id_data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+        <span class="n">source_chain_id_key</span><span class="p">(),</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">source_chain_id_data</span><span class="p">:</span>
+        <span class="n">source_chain_id</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">source_chain_id_data</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">source_chain_id</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">tasks</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">state_contract_obj</span><span class="o">.</span><span class="n">functions</span><span class="o">.</span><span class="n">SOURCE_CHAIN_ID</span><span class="p">(),</span>
+        <span class="p">]</span>
+
+        <span class="p">[</span><span class="n">source_chain_id</span><span class="p">]</span> <span class="o">=</span> <span class="k">await</span> <span class="n">rpc_helper</span><span class="o">.</span><span class="n">web3_call</span><span class="p">(</span><span class="n">tasks</span><span class="p">,</span> <span class="n">redis_conn</span><span class="o">=</span><span class="n">redis_conn</span><span class="p">)</span>
+
+        <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+            <span class="n">source_chain_id_key</span><span class="p">(),</span>
+            <span class="n">source_chain_id</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">source_chain_id</span></div>
+
+
+<div class="viewcode-block" id="build_projects_list_from_events"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.data_utils.build_projects_list_from_events">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">build_projects_list_from_events</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span><span class="p">,</span> <span class="n">state_contract_obj</span><span class="p">,</span> <span class="n">rpc_helper</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Builds a list of project IDs from the &#39;ProjectsUpdated&#39; events emitted by the state contract.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        redis_conn (aioredis.Redis): Redis connection object.</span>
+<span class="sd">        state_contract_obj: Contract object of the state contract.</span>
+<span class="sd">        rpc_helper: Helper object for making RPC calls.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        list: List of project IDs.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">EVENT_SIGS</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s1">&#39;ProjectsUpdated&#39;</span><span class="p">:</span> <span class="s1">&#39;ProjectsUpdated(string,bool,uint256)&#39;</span><span class="p">,</span>
+    <span class="p">}</span>
+
+    <span class="n">EVENT_ABI</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s1">&#39;ProjectsUpdated&#39;</span><span class="p">:</span> <span class="n">state_contract_obj</span><span class="o">.</span><span class="n">events</span><span class="o">.</span><span class="n">ProjectsUpdated</span><span class="o">.</span><span class="n">_get_event_abi</span><span class="p">(),</span>
+    <span class="p">}</span>
+
+    <span class="p">[</span><span class="n">start_block</span><span class="p">]</span> <span class="o">=</span> <span class="k">await</span> <span class="n">rpc_helper</span><span class="o">.</span><span class="n">web3_call</span><span class="p">(</span>
+        <span class="p">[</span><span class="n">state_contract_obj</span><span class="o">.</span><span class="n">functions</span><span class="o">.</span><span class="n">DeploymentBlockNumber</span><span class="p">()],</span>
+        <span class="n">redis_conn</span><span class="o">=</span><span class="n">redis_conn</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">current_block</span> <span class="o">=</span> <span class="k">await</span> <span class="n">rpc_helper</span><span class="o">.</span><span class="n">get_current_block_number</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">)</span>
+    <span class="n">event_sig</span><span class="p">,</span> <span class="n">event_abi</span> <span class="o">=</span> <span class="n">get_event_sig_and_abi</span><span class="p">(</span><span class="n">EVENT_SIGS</span><span class="p">,</span> <span class="n">EVENT_ABI</span><span class="p">)</span>
+
+    <span class="c1"># from start_block to current block, get all events in batches of 1000, 10 requests parallelly</span>
+    <span class="n">request_task_batch_size</span> <span class="o">=</span> <span class="mi">10</span>
+    <span class="n">project_updates</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">cumulative_block_range</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">start_block</span><span class="p">,</span> <span class="n">current_block</span><span class="p">,</span> <span class="mi">1000</span> <span class="o">*</span> <span class="n">request_task_batch_size</span><span class="p">):</span>
+        <span class="c1"># split into 10 requests</span>
+        <span class="n">tasks</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">block_range</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span>
+            <span class="n">cumulative_block_range</span><span class="p">,</span>
+            <span class="nb">min</span><span class="p">(</span><span class="n">current_block</span><span class="p">,</span> <span class="n">cumulative_block_range</span> <span class="o">+</span> <span class="mi">1000</span> <span class="o">*</span> <span class="n">request_task_batch_size</span><span class="p">),</span>
+            <span class="mi">1000</span><span class="p">,</span>
+        <span class="p">):</span>
+            <span class="n">tasks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">rpc_helper</span><span class="o">.</span><span class="n">get_events_logs</span><span class="p">(</span>
+                    <span class="o">**</span><span class="p">{</span>
+                        <span class="s1">&#39;contract_address&#39;</span><span class="p">:</span> <span class="n">state_contract_obj</span><span class="o">.</span><span class="n">address</span><span class="p">,</span>
+                        <span class="s1">&#39;to_block&#39;</span><span class="p">:</span> <span class="nb">min</span><span class="p">(</span><span class="n">current_block</span><span class="p">,</span> <span class="n">block_range</span> <span class="o">+</span> <span class="mi">1000</span><span class="p">),</span>
+                        <span class="s1">&#39;from_block&#39;</span><span class="p">:</span> <span class="n">block_range</span><span class="p">,</span>
+                        <span class="s1">&#39;topics&#39;</span><span class="p">:</span> <span class="p">[</span><span class="n">event_sig</span><span class="p">],</span>
+                        <span class="s1">&#39;event_abi&#39;</span><span class="p">:</span> <span class="n">event_abi</span><span class="p">,</span>
+                        <span class="s1">&#39;redis_conn&#39;</span><span class="p">:</span> <span class="n">redis_conn</span><span class="p">,</span>
+                    <span class="p">},</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+
+        <span class="n">block_range_event_logs</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="o">*</span><span class="n">tasks</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">event_logs</span> <span class="ow">in</span> <span class="n">block_range_event_logs</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">event_log</span> <span class="ow">in</span> <span class="n">event_logs</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">event_log</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">allowed</span><span class="p">:</span>
+                    <span class="n">project_updates</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">event_log</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">projectId</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">project_updates</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="n">event_log</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">projectId</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">project_updates</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="get_projects_list"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.data_utils.get_projects_list">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">get_projects_list</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span><span class="p">,</span> <span class="n">state_contract_obj</span><span class="p">,</span> <span class="n">rpc_helper</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Fetches the list of projects from the state contract.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        redis_conn (aioredis.Redis): Redis connection object.</span>
+<span class="sd">        state_contract_obj: Contract object for the state contract.</span>
+<span class="sd">        rpc_helper: RPC helper object.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        List: List of projects.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">tasks</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">state_contract_obj</span><span class="o">.</span><span class="n">functions</span><span class="o">.</span><span class="n">getProjects</span><span class="p">(),</span>
+        <span class="p">]</span>
+
+        <span class="p">[</span><span class="n">projects_list</span><span class="p">]</span> <span class="o">=</span> <span class="k">await</span> <span class="n">rpc_helper</span><span class="o">.</span><span class="n">web3_call</span><span class="p">(</span><span class="n">tasks</span><span class="p">,</span> <span class="n">redis_conn</span><span class="o">=</span><span class="n">redis_conn</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">projects_list</span>
+
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s1">&#39;Error while fetching projects list from contract&#39;</span><span class="p">,</span> <span class="n">error</span><span class="o">=</span><span class="n">e</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">[]</span></div>
+
+
+<div class="viewcode-block" id="get_snapshot_submision_window"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.data_utils.get_snapshot_submision_window">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">get_snapshot_submision_window</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span><span class="p">,</span> <span class="n">state_contract_obj</span><span class="p">,</span> <span class="n">rpc_helper</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get the snapshot submission window from the state contract.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        redis_conn (aioredis.Redis): Redis connection object.</span>
+<span class="sd">        state_contract_obj: State contract object.</span>
+<span class="sd">        rpc_helper: RPC helper object.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        submission_window (int): The snapshot submission window.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">tasks</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">state_contract_obj</span><span class="o">.</span><span class="n">functions</span><span class="o">.</span><span class="n">snapshotSubmissionWindow</span><span class="p">(),</span>
+    <span class="p">]</span>
+
+    <span class="p">[</span><span class="n">submission_window</span><span class="p">]</span> <span class="o">=</span> <span class="k">await</span> <span class="n">rpc_helper</span><span class="o">.</span><span class="n">web3_call</span><span class="p">(</span><span class="n">tasks</span><span class="p">,</span> <span class="n">redis_conn</span><span class="o">=</span><span class="n">redis_conn</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">submission_window</span></div>
+
+
+<div class="viewcode-block" id="get_source_chain_epoch_size"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.data_utils.get_source_chain_epoch_size">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">get_source_chain_epoch_size</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span><span class="p">,</span> <span class="n">state_contract_obj</span><span class="p">,</span> <span class="n">rpc_helper</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    This function retrieves the epoch size of the source chain from the state contract.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        redis_conn (aioredis.Redis): Redis connection object.</span>
+<span class="sd">        state_contract_obj: Contract object for the state contract.</span>
+<span class="sd">        rpc_helper: Helper object for making RPC calls.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        int: The epoch size of the source chain.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">source_chain_epoch_size_data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+        <span class="n">source_chain_epoch_size_key</span><span class="p">(),</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">source_chain_epoch_size_data</span><span class="p">:</span>
+        <span class="n">source_chain_epoch_size</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">source_chain_epoch_size_data</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">source_chain_epoch_size</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">tasks</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">state_contract_obj</span><span class="o">.</span><span class="n">functions</span><span class="o">.</span><span class="n">EPOCH_SIZE</span><span class="p">(),</span>
+        <span class="p">]</span>
+
+        <span class="p">[</span><span class="n">source_chain_epoch_size</span><span class="p">]</span> <span class="o">=</span> <span class="k">await</span> <span class="n">rpc_helper</span><span class="o">.</span><span class="n">web3_call</span><span class="p">(</span><span class="n">tasks</span><span class="p">,</span> <span class="n">redis_conn</span><span class="o">=</span><span class="n">redis_conn</span><span class="p">)</span>
+
+        <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+            <span class="n">source_chain_epoch_size_key</span><span class="p">(),</span>
+            <span class="n">source_chain_epoch_size</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">source_chain_epoch_size</span></div>
+
+
+<div class="viewcode-block" id="get_source_chain_block_time"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.data_utils.get_source_chain_block_time">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">get_source_chain_block_time</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span><span class="p">,</span> <span class="n">state_contract_obj</span><span class="p">,</span> <span class="n">rpc_helper</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get the block time of the source chain.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        redis_conn (aioredis.Redis): Redis connection object.</span>
+<span class="sd">        state_contract_obj: Contract object for the state contract.</span>
+<span class="sd">        rpc_helper: RPC helper object.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        int: Block time of the source chain.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">source_chain_block_time_data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+        <span class="n">source_chain_block_time_key</span><span class="p">(),</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">source_chain_block_time_data</span><span class="p">:</span>
+        <span class="n">source_chain_block_time</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">source_chain_block_time_data</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">source_chain_block_time</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">tasks</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">state_contract_obj</span><span class="o">.</span><span class="n">functions</span><span class="o">.</span><span class="n">SOURCE_CHAIN_BLOCK_TIME</span><span class="p">(),</span>
+        <span class="p">]</span>
+
+        <span class="p">[</span><span class="n">source_chain_block_time</span><span class="p">]</span> <span class="o">=</span> <span class="k">await</span> <span class="n">rpc_helper</span><span class="o">.</span><span class="n">web3_call</span><span class="p">(</span><span class="n">tasks</span><span class="p">,</span> <span class="n">redis_conn</span><span class="o">=</span><span class="n">redis_conn</span><span class="p">)</span>
+        <span class="n">source_chain_block_time</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">source_chain_block_time</span> <span class="o">/</span> <span class="mf">1e4</span><span class="p">)</span>
+
+        <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+            <span class="n">source_chain_block_time_key</span><span class="p">(),</span>
+            <span class="n">source_chain_block_time</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">source_chain_block_time</span></div>
+
+
+<div class="viewcode-block" id="get_tail_epoch_id"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.data_utils.get_tail_epoch_id">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">get_tail_epoch_id</span><span class="p">(</span>
+        <span class="n">redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span><span class="p">,</span>
+        <span class="n">state_contract_obj</span><span class="p">,</span>
+        <span class="n">rpc_helper</span><span class="p">,</span>
+        <span class="n">current_epoch_id</span><span class="p">,</span>
+        <span class="n">time_in_seconds</span><span class="p">,</span>
+        <span class="n">project_id</span><span class="p">,</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Returns the tail epoch_id and a boolean indicating if tail contains the full time window.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        redis_conn (aioredis.Redis): Redis connection object.</span>
+<span class="sd">        state_contract_obj: State contract object.</span>
+<span class="sd">        rpc_helper: RPC helper object.</span>
+<span class="sd">        current_epoch_id (int): Current epoch ID.</span>
+<span class="sd">        time_in_seconds (int): Time in seconds.</span>
+<span class="sd">        project_id (str): Project ID.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Tuple[int, bool]: Tail epoch ID and a boolean indicating if tail contains the full time window.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">source_chain_epoch_size</span> <span class="o">=</span> <span class="k">await</span> <span class="n">get_source_chain_epoch_size</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">,</span> <span class="n">state_contract_obj</span><span class="p">,</span> <span class="n">rpc_helper</span><span class="p">)</span>
+    <span class="n">source_chain_block_time</span> <span class="o">=</span> <span class="k">await</span> <span class="n">get_source_chain_block_time</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">,</span> <span class="n">state_contract_obj</span><span class="p">,</span> <span class="n">rpc_helper</span><span class="p">)</span>
+
+    <span class="c1"># calculate tail epoch_id</span>
+    <span class="n">tail_epoch_id</span> <span class="o">=</span> <span class="n">current_epoch_id</span> <span class="o">-</span> <span class="nb">int</span><span class="p">(</span><span class="n">time_in_seconds</span> <span class="o">/</span> <span class="p">(</span><span class="n">source_chain_epoch_size</span> <span class="o">*</span> <span class="n">source_chain_block_time</span><span class="p">))</span>
+    <span class="n">project_first_epoch</span> <span class="o">=</span> <span class="k">await</span><span class="p">(</span>
+        <span class="n">get_project_first_epoch</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">,</span> <span class="n">state_contract_obj</span><span class="p">,</span> <span class="n">rpc_helper</span><span class="p">,</span> <span class="n">project_id</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">tail_epoch_id</span> <span class="o">&lt;</span> <span class="n">project_first_epoch</span><span class="p">:</span>
+        <span class="n">tail_epoch_id</span> <span class="o">=</span> <span class="n">project_first_epoch</span>
+        <span class="k">return</span> <span class="n">tail_epoch_id</span><span class="p">,</span> <span class="kc">True</span>
+
+    <span class="n">logger</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span>
+        <span class="s1">&#39;project ID </span><span class="si">{}</span><span class="s1"> tail epoch_id: </span><span class="si">{}</span><span class="s1"> against head epoch ID </span><span class="si">{}</span><span class="s1"> &#39;</span><span class="p">,</span>
+        <span class="n">project_id</span><span class="p">,</span> <span class="n">tail_epoch_id</span><span class="p">,</span> <span class="n">current_epoch_id</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">tail_epoch_id</span><span class="p">,</span> <span class="kc">False</span></div>
+
+
+<div class="viewcode-block" id="get_project_epoch_snapshot_bulk"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.data_utils.get_project_epoch_snapshot_bulk">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">get_project_epoch_snapshot_bulk</span><span class="p">(</span>
+        <span class="n">redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span><span class="p">,</span>
+        <span class="n">state_contract_obj</span><span class="p">,</span>
+        <span class="n">rpc_helper</span><span class="p">,</span>
+        <span class="n">ipfs_reader</span><span class="p">,</span>
+        <span class="n">epoch_id_min</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">epoch_id_max</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">project_id</span><span class="p">,</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Fetches the snapshot data for a given project and epoch range.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        redis_conn (aioredis.Redis): Redis connection object.</span>
+<span class="sd">        state_contract_obj: State contract object.</span>
+<span class="sd">        rpc_helper: RPC helper object.</span>
+<span class="sd">        ipfs_reader: IPFS reader object.</span>
+<span class="sd">        epoch_id_min (int): Minimum epoch ID to fetch snapshot data for.</span>
+<span class="sd">        epoch_id_max (int): Maximum epoch ID to fetch snapshot data for.</span>
+<span class="sd">        project_id: ID of the project to fetch snapshot data for.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A list of snapshot data for the given project and epoch range.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">batch_size</span> <span class="o">=</span> <span class="mi">100</span>
+
+    <span class="n">project_first_epoch</span> <span class="o">=</span> <span class="k">await</span> <span class="n">get_project_first_epoch</span><span class="p">(</span>
+        <span class="n">redis_conn</span><span class="p">,</span> <span class="n">state_contract_obj</span><span class="p">,</span> <span class="n">rpc_helper</span><span class="p">,</span> <span class="n">project_id</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">epoch_id_min</span> <span class="o">&lt;</span> <span class="n">project_first_epoch</span><span class="p">:</span>
+        <span class="n">epoch_id_min</span> <span class="o">=</span> <span class="n">project_first_epoch</span>
+
+    <span class="c1"># if data is present in finalzied data zset, return it</span>
+    <span class="n">cid_data_with_epochs</span> <span class="o">=</span> <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">zrangebyscore</span><span class="p">(</span>
+        <span class="n">project_finalized_data_zset</span><span class="p">(</span><span class="n">project_id</span><span class="p">),</span>
+        <span class="n">epoch_id_min</span><span class="p">,</span>
+        <span class="n">epoch_id_max</span><span class="p">,</span>
+        <span class="n">withscores</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">cid_data_with_epochs</span> <span class="o">=</span> <span class="p">[(</span><span class="n">cid</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">epoch_id</span><span class="p">))</span> <span class="k">for</span> <span class="n">cid</span><span class="p">,</span> <span class="n">epoch_id</span> <span class="ow">in</span> <span class="n">cid_data_with_epochs</span><span class="p">]</span>
+
+    <span class="n">all_epochs</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">epoch_id_min</span><span class="p">,</span> <span class="n">epoch_id_max</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))</span>
+
+    <span class="n">missing_epochs</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">all_epochs</span><span class="o">.</span><span class="n">difference</span><span class="p">(</span><span class="nb">set</span><span class="p">([</span><span class="n">epoch_id</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">epoch_id</span> <span class="ow">in</span> <span class="n">cid_data_with_epochs</span><span class="p">])))</span>
+    <span class="k">if</span> <span class="n">missing_epochs</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;found </span><span class="si">{}</span><span class="s1"> missing_epochs, fetching from contract&#39;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">missing_epochs</span><span class="p">))</span>
+
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">missing_epochs</span><span class="p">),</span> <span class="n">batch_size</span><span class="p">):</span>
+
+        <span class="n">tasks</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">get_project_finalized_cid</span><span class="p">(</span>
+                <span class="n">redis_conn</span><span class="p">,</span> <span class="n">state_contract_obj</span><span class="p">,</span> <span class="n">rpc_helper</span><span class="p">,</span> <span class="n">epoch_id</span><span class="p">,</span> <span class="n">project_id</span><span class="p">,</span>
+            <span class="p">)</span> <span class="k">for</span> <span class="n">epoch_id</span> <span class="ow">in</span> <span class="n">missing_epochs</span><span class="p">[</span><span class="n">i</span><span class="p">:</span><span class="n">i</span> <span class="o">+</span> <span class="n">batch_size</span><span class="p">]</span>
+        <span class="p">]</span>
+
+        <span class="n">batch_cid_data_with_epochs</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="o">*</span><span class="n">tasks</span><span class="p">),</span> <span class="n">missing_epochs</span><span class="p">))</span>
+
+        <span class="n">cid_data_with_epochs</span> <span class="o">+=</span> <span class="n">batch_cid_data_with_epochs</span>
+
+    <span class="n">valid_cid_data_with_epochs</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">cid</span><span class="p">,</span> <span class="n">epoch_id</span> <span class="ow">in</span> <span class="n">cid_data_with_epochs</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">cid</span> <span class="ow">and</span> <span class="s1">&#39;null&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">cid</span><span class="p">:</span>
+            <span class="n">valid_cid_data_with_epochs</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">cid</span><span class="p">,</span> <span class="n">epoch_id</span><span class="p">))</span>
+
+    <span class="n">all_snapshot_data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">get_submission_data_bulk</span><span class="p">(</span>
+        <span class="n">redis_conn</span><span class="p">,</span> <span class="p">[</span><span class="n">cid</span> <span class="k">for</span> <span class="n">cid</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">valid_cid_data_with_epochs</span><span class="p">],</span> <span class="n">ipfs_reader</span><span class="p">,</span> <span class="p">[</span>
+            <span class="n">project_id</span><span class="p">,</span>
+        <span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">valid_cid_data_with_epochs</span><span class="p">),</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">all_snapshot_data</span></div>
+
+
+<div class="viewcode-block" id="get_snapshotter_status"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.data_utils.get_snapshotter_status">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">get_snapshotter_status</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Returns the snapshotter status for all projects.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        redis_conn (aioredis.Redis): Redis connection object.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        SnapshotterStatus: Object containing the snapshotter status for all projects.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">status_keys</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="n">all_projects</span> <span class="o">=</span> <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">smembers</span><span class="p">(</span><span class="s1">&#39;storedProjectIds&#39;</span><span class="p">)</span>
+    <span class="n">all_projects</span> <span class="o">=</span> <span class="p">[</span><span class="n">project_id</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span> <span class="k">for</span> <span class="n">project_id</span> <span class="ow">in</span> <span class="n">all_projects</span><span class="p">]</span>
+
+    <span class="k">for</span> <span class="n">project_id</span> <span class="ow">in</span> <span class="n">all_projects</span><span class="p">:</span>
+        <span class="n">status_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;projectID:</span><span class="si">{</span><span class="n">project_id</span><span class="si">}</span><span class="s1">:totalSuccessfulSnapshotCount&#39;</span><span class="p">)</span>
+        <span class="n">status_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;projectID:</span><span class="si">{</span><span class="n">project_id</span><span class="si">}</span><span class="s1">:totalIncorrectSnapshotCount&#39;</span><span class="p">)</span>
+        <span class="n">status_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;projectID:</span><span class="si">{</span><span class="n">project_id</span><span class="si">}</span><span class="s1">:totalMissedSnapshotCount&#39;</span><span class="p">)</span>
+
+    <span class="n">all_projects_status</span> <span class="o">=</span> <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">mget</span><span class="p">(</span><span class="n">status_keys</span><span class="p">)</span>
+
+    <span class="n">total_successful_submissions</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">total_incorrect_submissions</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">total_missed_submissions</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">overall_status</span> <span class="o">=</span> <span class="n">SnapshotterStatus</span><span class="p">(</span><span class="n">projects</span><span class="o">=</span><span class="p">[])</span>
+
+    <span class="c1"># project level data</span>
+    <span class="n">project_index</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">successful_submissions</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">incorrect_submissions</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">missed_submissions</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">all_projects_status</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">count</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="c1"># as each project has three counts viz. successful, incorrect and missed</span>
+        <span class="k">if</span> <span class="n">index</span> <span class="o">%</span> <span class="mi">3</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">successful_submissions</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">count</span><span class="p">)</span>
+            <span class="n">total_successful_submissions</span> <span class="o">+=</span> <span class="nb">int</span><span class="p">(</span><span class="n">count</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">index</span> <span class="o">%</span> <span class="mi">3</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">incorrect_submissions</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">count</span><span class="p">)</span>
+            <span class="n">total_incorrect_submissions</span> <span class="o">+=</span> <span class="nb">int</span><span class="p">(</span><span class="n">count</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">missed_submissions</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">count</span><span class="p">)</span>
+            <span class="n">total_missed_submissions</span> <span class="o">+=</span> <span class="nb">int</span><span class="p">(</span><span class="n">count</span><span class="p">)</span>
+            <span class="n">overall_status</span><span class="o">.</span><span class="n">projects</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">ProjectStatus</span><span class="p">(</span>
+                    <span class="n">projectId</span><span class="o">=</span><span class="n">all_projects</span><span class="p">[</span><span class="n">project_index</span><span class="p">],</span>
+                    <span class="n">successfulSubmissions</span><span class="o">=</span><span class="n">successful_submissions</span><span class="p">,</span>
+                    <span class="n">incorrectSubmissions</span><span class="o">=</span><span class="n">incorrect_submissions</span><span class="p">,</span>
+                    <span class="n">missedSubmissions</span><span class="o">=</span><span class="n">missed_submissions</span><span class="p">,</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+            <span class="n">project_index</span> <span class="o">+=</span> <span class="mi">1</span>
+
+    <span class="n">overall_status</span><span class="o">.</span><span class="n">totalSuccessfulSubmissions</span> <span class="o">=</span> <span class="n">total_successful_submissions</span>
+    <span class="n">overall_status</span><span class="o">.</span><span class="n">totalIncorrectSubmissions</span> <span class="o">=</span> <span class="n">total_incorrect_submissions</span>
+    <span class="n">overall_status</span><span class="o">.</span><span class="n">totalMissedSubmissions</span> <span class="o">=</span> <span class="n">total_missed_submissions</span>
+
+    <span class="k">return</span> <span class="n">overall_status</span></div>
+
+
+<div class="viewcode-block" id="get_snapshotter_project_status"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.data_utils.get_snapshotter_project_status">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">get_snapshotter_project_status</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span><span class="p">,</span> <span class="n">project_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">with_data</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Retrieves the snapshotter project status for a given project ID.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        redis_conn (aioredis.Redis): Redis connection object.</span>
+<span class="sd">        project_id (str): ID of the project to retrieve the status for.</span>
+<span class="sd">        with_data (bool): Whether to include snapshot data in the response.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        SnapshotterProjectStatus: Object containing the project status.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">reports</span> <span class="o">=</span> <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">hgetall</span><span class="p">(</span><span class="n">project_snapshotter_status_report_key</span><span class="p">(</span><span class="n">project_id</span><span class="p">))</span>
+
+    <span class="n">reports</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="nb">int</span><span class="p">(</span><span class="n">k</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)):</span> <span class="n">SnapshotterStatusReport</span><span class="o">.</span><span class="n">parse_raw</span><span class="p">(</span><span class="n">v</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">reports</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+    <span class="p">}</span>
+
+    <span class="n">project_status</span> <span class="o">=</span> <span class="n">SnapshotterProjectStatus</span><span class="p">(</span><span class="n">missedSubmissions</span><span class="o">=</span><span class="p">[],</span> <span class="n">incorrectSubmissions</span><span class="o">=</span><span class="p">[])</span>
+
+    <span class="k">for</span> <span class="n">epoch_id</span><span class="p">,</span> <span class="n">report</span> <span class="ow">in</span> <span class="n">reports</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">report</span><span class="o">.</span><span class="n">state</span> <span class="ow">is</span> <span class="n">SnapshotterReportState</span><span class="o">.</span><span class="n">MISSED_SNAPSHOT</span><span class="p">:</span>
+            <span class="n">project_status</span><span class="o">.</span><span class="n">missedSubmissions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">SnapshotterMissedSnapshotSubmission</span><span class="p">(</span>
+                    <span class="n">epochId</span><span class="o">=</span><span class="n">epoch_id</span><span class="p">,</span>
+                    <span class="n">reason</span><span class="o">=</span><span class="n">report</span><span class="o">.</span><span class="n">reason</span><span class="p">,</span>
+                    <span class="n">finalizedSnapshotCid</span><span class="o">=</span><span class="n">report</span><span class="o">.</span><span class="n">finalizedSnapshotCid</span><span class="p">,</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">report</span><span class="o">.</span><span class="n">state</span> <span class="ow">is</span> <span class="n">SnapshotterReportState</span><span class="o">.</span><span class="n">SUBMITTED_INCORRECT_SNAPSHOT</span><span class="p">:</span>
+            <span class="n">project_status</span><span class="o">.</span><span class="n">incorrectSubmissions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">SnapshotterIncorrectSnapshotSubmission</span><span class="p">(</span>
+                    <span class="n">epochId</span><span class="o">=</span><span class="n">epoch_id</span><span class="p">,</span>
+                    <span class="n">reason</span><span class="o">=</span><span class="n">report</span><span class="o">.</span><span class="n">reason</span><span class="p">,</span>
+                    <span class="n">submittedSnapshotCid</span><span class="o">=</span><span class="n">report</span><span class="o">.</span><span class="n">submittedSnapshotCid</span><span class="p">,</span>
+                    <span class="n">submittedSnapshot</span><span class="o">=</span><span class="n">report</span><span class="o">.</span><span class="n">submittedSnapshot</span> <span class="k">if</span> <span class="n">with_data</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+                    <span class="n">finalizedSnapshotCid</span><span class="o">=</span><span class="n">report</span><span class="o">.</span><span class="n">finalizedSnapshotCid</span><span class="p">,</span>
+                    <span class="n">finalizedSnapshot</span><span class="o">=</span><span class="n">report</span><span class="o">.</span><span class="n">finalizedSnapshot</span> <span class="k">if</span> <span class="n">with_data</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">project_status</span></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, Powerloom Inc..</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+</body>
+</html>

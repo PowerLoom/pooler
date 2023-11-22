@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>snapshotter.utils.redis.redis_conn &mdash; Powerloom Snapshotter 0.1 documentation</title>
+      <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+
+        <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script data-url_root="../../../../" id="documentation_options" src="../../../../_static/documentation_options.js?v=e031e9a9"></script>
+        <script src="../../../../_static/doctools.js?v=888ff710"></script>
+        <script src="../../../../_static/sphinx_highlight.js?v=4825356b"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+</head>
+
+<body class="wy-body-for-nav">
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+
+
+          <a href="../../../../index.html">
+
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../snapshotter.html">Powerloom Snapshotter</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">Powerloom Snapshotter</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">snapshotter.utils.redis.redis_conn</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+
+  <h1>Source code for snapshotter.utils.redis.redis_conn</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">contextlib</span>
+<span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">wraps</span>
+
+<span class="kn">import</span> <span class="nn">redis</span>
+<span class="kn">import</span> <span class="nn">redis.exceptions</span> <span class="k">as</span> <span class="nn">redis_exc</span>
+<span class="kn">import</span> <span class="nn">tenacity</span>
+<span class="kn">from</span> <span class="nn">redis</span> <span class="kn">import</span> <span class="n">asyncio</span> <span class="k">as</span> <span class="n">aioredis</span>
+<span class="kn">from</span> <span class="nn">redis.asyncio.connection</span> <span class="kn">import</span> <span class="n">ConnectionPool</span>
+
+<span class="kn">from</span> <span class="nn">snapshotter.settings.config</span> <span class="kn">import</span> <span class="n">settings</span> <span class="k">as</span> <span class="n">settings_conf</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.default_logger</span> <span class="kn">import</span> <span class="n">logger</span>
+
+<span class="c1"># setup logging</span>
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logger</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">module</span><span class="o">=</span><span class="s1">&#39;Powerloom|RedisConn&#39;</span><span class="p">)</span>
+
+<span class="n">REDIS_CONN_CONF</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;host&#39;</span><span class="p">:</span> <span class="n">settings_conf</span><span class="o">.</span><span class="n">redis</span><span class="o">.</span><span class="n">host</span><span class="p">,</span>
+    <span class="s1">&#39;port&#39;</span><span class="p">:</span> <span class="n">settings_conf</span><span class="o">.</span><span class="n">redis</span><span class="o">.</span><span class="n">port</span><span class="p">,</span>
+    <span class="s1">&#39;password&#39;</span><span class="p">:</span> <span class="n">settings_conf</span><span class="o">.</span><span class="n">redis</span><span class="o">.</span><span class="n">password</span><span class="p">,</span>
+    <span class="s1">&#39;db&#39;</span><span class="p">:</span> <span class="n">settings_conf</span><span class="o">.</span><span class="n">redis</span><span class="o">.</span><span class="n">db</span><span class="p">,</span>
+    <span class="s1">&#39;retry_on_error&#39;</span><span class="p">:</span> <span class="p">[</span><span class="n">redis</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">ReadOnlyError</span><span class="p">],</span>
+<span class="p">}</span>
+
+
+<div class="viewcode-block" id="construct_redis_url"><a class="viewcode-back" href="../../../../snapshotter.utils.redis.html#snapshotter.utils.redis.redis_conn.construct_redis_url">[docs]</a><span class="k">def</span> <span class="nf">construct_redis_url</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Constructs a Redis URL based on the REDIS_CONN_CONF dictionary.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        str: Redis URL constructed from REDIS_CONN_CONF dictionary.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">REDIS_CONN_CONF</span><span class="p">[</span><span class="s1">&#39;password&#39;</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s1">&#39;redis://</span><span class="si">{</span><span class="n">REDIS_CONN_CONF</span><span class="p">[</span><span class="s2">&quot;password&quot;</span><span class="p">]</span><span class="si">}</span><span class="s1">@</span><span class="si">{</span><span class="n">REDIS_CONN_CONF</span><span class="p">[</span><span class="s2">&quot;host&quot;</span><span class="p">]</span><span class="si">}</span><span class="s1">:</span><span class="si">{</span><span class="n">REDIS_CONN_CONF</span><span class="p">[</span><span class="s2">&quot;port&quot;</span><span class="p">]</span><span class="si">}</span><span class="s1">&#39;</span>
+            <span class="sa">f</span><span class="s1">&#39;/</span><span class="si">{</span><span class="n">REDIS_CONN_CONF</span><span class="p">[</span><span class="s2">&quot;db&quot;</span><span class="p">]</span><span class="si">}</span><span class="s1">&#39;</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s1">&#39;redis://</span><span class="si">{</span><span class="n">REDIS_CONN_CONF</span><span class="p">[</span><span class="s2">&quot;host&quot;</span><span class="p">]</span><span class="si">}</span><span class="s1">:</span><span class="si">{</span><span class="n">REDIS_CONN_CONF</span><span class="p">[</span><span class="s2">&quot;port&quot;</span><span class="p">]</span><span class="si">}</span><span class="s1">/</span><span class="si">{</span><span class="n">REDIS_CONN_CONF</span><span class="p">[</span><span class="s2">&quot;db&quot;</span><span class="p">]</span><span class="si">}</span><span class="s1">&#39;</span></div>
+
+<span class="c1"># ref https://github.com/redis/redis-py/issues/936</span>
+
+
+<div class="viewcode-block" id="get_aioredis_pool"><a class="viewcode-back" href="../../../../snapshotter.utils.redis.html#snapshotter.utils.redis.redis_conn.get_aioredis_pool">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">get_aioredis_pool</span><span class="p">(</span><span class="n">pool_size</span><span class="o">=</span><span class="mi">200</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Returns an aioredis Redis connection pool.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        pool_size (int): Maximum number of connections to the Redis server.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        aioredis.Redis: Redis connection pool.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">pool</span> <span class="o">=</span> <span class="n">ConnectionPool</span><span class="o">.</span><span class="n">from_url</span><span class="p">(</span>
+        <span class="n">url</span><span class="o">=</span><span class="n">construct_redis_url</span><span class="p">(),</span>
+        <span class="n">retry_on_error</span><span class="o">=</span><span class="p">[</span><span class="n">redis</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">ReadOnlyError</span><span class="p">],</span>
+        <span class="n">max_connections</span><span class="o">=</span><span class="n">pool_size</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span><span class="p">(</span><span class="n">connection_pool</span><span class="o">=</span><span class="n">pool</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="create_redis_conn"><a class="viewcode-back" href="../../../../snapshotter.utils.redis.html#snapshotter.utils.redis.redis_conn.create_redis_conn">[docs]</a><span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
+<span class="k">def</span> <span class="nf">create_redis_conn</span><span class="p">(</span>
+    <span class="n">connection_pool</span><span class="p">:</span> <span class="n">redis</span><span class="o">.</span><span class="n">BlockingConnectionPool</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">redis</span><span class="o">.</span><span class="n">Redis</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Context manager for creating a Redis connection using a connection pool.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        connection_pool (redis.BlockingConnectionPool): The connection pool to use.</span>
+
+<span class="sd">    Yields:</span>
+<span class="sd">        redis.Redis: A Redis connection object.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        redis_exc.RedisError: If there is an error connecting to Redis.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">redis_conn</span> <span class="o">=</span> <span class="n">redis</span><span class="o">.</span><span class="n">Redis</span><span class="p">(</span><span class="n">connection_pool</span><span class="o">=</span><span class="n">connection_pool</span><span class="p">)</span>
+        <span class="k">yield</span> <span class="n">redis_conn</span>
+    <span class="k">except</span> <span class="n">redis_exc</span><span class="o">.</span><span class="n">RedisError</span><span class="p">:</span>
+        <span class="k">raise</span>
+    <span class="k">except</span> <span class="ne">KeyboardInterrupt</span><span class="p">:</span>
+        <span class="k">pass</span></div>
+
+
+<div class="viewcode-block" id="provide_redis_conn"><a class="viewcode-back" href="../../../../snapshotter.utils.redis.html#snapshotter.utils.redis.redis_conn.provide_redis_conn">[docs]</a><span class="nd">@tenacity</span><span class="o">.</span><span class="n">retry</span><span class="p">(</span>
+    <span class="n">stop</span><span class="o">=</span><span class="n">tenacity</span><span class="o">.</span><span class="n">stop_after_delay</span><span class="p">(</span><span class="mi">60</span><span class="p">),</span>
+    <span class="n">wait</span><span class="o">=</span><span class="n">tenacity</span><span class="o">.</span><span class="n">wait_random_exponential</span><span class="p">(</span><span class="n">multiplier</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="mi">60</span><span class="p">),</span>
+    <span class="n">retry</span><span class="o">=</span><span class="n">tenacity</span><span class="o">.</span><span class="n">retry_if_exception_type</span><span class="p">(</span><span class="n">redis_exc</span><span class="o">.</span><span class="n">RedisError</span><span class="p">),</span>
+    <span class="n">reraise</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">def</span> <span class="nf">provide_redis_conn</span><span class="p">(</span><span class="n">fn</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Decorator function that provides a Redis connection object to the decorated function.</span>
+<span class="sd">    If the decorated function already has a Redis connection object in its arguments or keyword arguments,</span>
+<span class="sd">    it will be used. Otherwise, a new connection object will be created and passed to the function.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="nd">@wraps</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">wrapper</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">arg_conn</span> <span class="o">=</span> <span class="s1">&#39;redis_conn&#39;</span>
+        <span class="n">func_params</span> <span class="o">=</span> <span class="n">fn</span><span class="o">.</span><span class="vm">__code__</span><span class="o">.</span><span class="n">co_varnames</span>
+        <span class="n">conn_in_args</span> <span class="o">=</span> <span class="n">arg_conn</span> <span class="ow">in</span> <span class="n">func_params</span> <span class="ow">and</span> <span class="n">func_params</span><span class="o">.</span><span class="n">index</span><span class="p">(</span>
+            <span class="n">arg_conn</span><span class="p">,</span>
+        <span class="p">)</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
+        <span class="n">conn_in_kwargs</span> <span class="o">=</span> <span class="n">arg_conn</span> <span class="ow">in</span> <span class="n">kwargs</span>
+        <span class="k">if</span> <span class="n">conn_in_args</span> <span class="ow">or</span> <span class="n">conn_in_kwargs</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">fn</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">connection_pool</span> <span class="o">=</span> <span class="n">redis</span><span class="o">.</span><span class="n">BlockingConnectionPool</span><span class="p">(</span><span class="o">**</span><span class="n">REDIS_CONN_CONF</span><span class="p">)</span>
+
+            <span class="k">with</span> <span class="n">create_redis_conn</span><span class="p">(</span><span class="n">connection_pool</span><span class="p">)</span> <span class="k">as</span> <span class="n">redis_obj</span><span class="p">:</span>
+                <span class="n">kwargs</span><span class="p">[</span><span class="n">arg_conn</span><span class="p">]</span> <span class="o">=</span> <span class="n">redis_obj</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                    <span class="s1">&#39;Returning after populating redis connection object&#39;</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">return</span> <span class="n">fn</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">wrapper</span></div>
+
+
+<div class="viewcode-block" id="provide_async_redis_conn"><a class="viewcode-back" href="../../../../snapshotter.utils.redis.html#snapshotter.utils.redis.redis_conn.provide_async_redis_conn">[docs]</a><span class="k">def</span> <span class="nf">provide_async_redis_conn</span><span class="p">(</span><span class="n">fn</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Decorator function that provides an async Redis connection to the decorated function.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        fn: The function to be decorated.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        The decorated function.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="nd">@wraps</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">async_redis_conn_wrapper</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">redis_conn_raw</span> <span class="o">=</span> <span class="k">await</span> <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;request&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">redis_pool</span><span class="o">.</span><span class="n">acquire</span><span class="p">()</span>
+        <span class="n">redis_conn</span> <span class="o">=</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span><span class="p">(</span><span class="n">redis_conn_raw</span><span class="p">)</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;redis_conn&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">redis_conn</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="k">await</span> <span class="n">fn</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;error&#39;</span><span class="p">:</span> <span class="s1">&#39;Internal Server Error&#39;</span><span class="p">}</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;request&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">redis_pool</span><span class="o">.</span><span class="n">release</span><span class="p">(</span><span class="n">redis_conn_raw</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">async_redis_conn_wrapper</span></div>
+
+
+<div class="viewcode-block" id="provide_async_redis_conn_insta"><a class="viewcode-back" href="../../../../snapshotter.utils.redis.html#snapshotter.utils.redis.redis_conn.provide_async_redis_conn_insta">[docs]</a><span class="k">def</span> <span class="nf">provide_async_redis_conn_insta</span><span class="p">(</span><span class="n">fn</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A decorator function that provides an async Redis connection instance to the decorated function.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        fn: The function to be decorated.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        The decorated function with an async Redis connection instance.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="nd">@wraps</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">wrapped</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">arg_conn</span> <span class="o">=</span> <span class="s1">&#39;redis_conn&#39;</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">arg_conn</span><span class="p">):</span>
+            <span class="k">return</span> <span class="k">await</span> <span class="n">fn</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">redis_cluster_mode_conn</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="c1"># try:</span>
+            <span class="c1">#     if settings_conf.redis.cluster_mode:</span>
+            <span class="c1">#         redis_cluster_mode_conn = True</span>
+            <span class="c1"># except:</span>
+            <span class="c1">#     pass</span>
+            <span class="k">if</span> <span class="n">redis_cluster_mode_conn</span><span class="p">:</span>
+                <span class="c1"># connection = await aioredis_cluster.create_redis_cluster(</span>
+                <span class="c1">#     startup_nodes=[(REDIS_CONN_CONF[&#39;host&#39;], REDIS_CONN_CONF[&#39;port&#39;])],</span>
+                <span class="c1">#     password=REDIS_CONN_CONF[&#39;password&#39;],</span>
+                <span class="c1">#     pool_maxsize=1,</span>
+                <span class="c1">#     ssl=REDIS_CONN_CONF[&#39;ssl&#39;]</span>
+                <span class="c1"># )</span>
+                <span class="k">pass</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># logging.debug(&#39;Creating single connection via high level aioredis interface&#39;)</span>
+                <span class="n">connection</span> <span class="o">=</span> <span class="k">await</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span><span class="p">(</span>
+                    <span class="n">host</span><span class="o">=</span><span class="n">REDIS_CONN_CONF</span><span class="p">[</span><span class="s1">&#39;host&#39;</span><span class="p">],</span>
+                    <span class="n">port</span><span class="o">=</span><span class="n">REDIS_CONN_CONF</span><span class="p">[</span><span class="s1">&#39;port&#39;</span><span class="p">],</span>
+                    <span class="n">db</span><span class="o">=</span><span class="n">REDIS_CONN_CONF</span><span class="p">[</span><span class="s1">&#39;db&#39;</span><span class="p">],</span>
+                    <span class="n">password</span><span class="o">=</span><span class="n">REDIS_CONN_CONF</span><span class="p">[</span><span class="s1">&#39;password&#39;</span><span class="p">],</span>
+                    <span class="n">retry_on_error</span><span class="o">=</span><span class="p">[</span><span class="n">redis</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">ReadOnlyError</span><span class="p">],</span>
+                <span class="p">)</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="n">arg_conn</span><span class="p">]</span> <span class="o">=</span> <span class="n">connection</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">return</span> <span class="k">await</span> <span class="n">fn</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                <span class="k">raise</span>
+            <span class="k">finally</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>  <span class="c1"># ignore residual errors</span>
+                    <span class="k">await</span> <span class="n">connection</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+                <span class="k">except</span><span class="p">:</span>
+                    <span class="k">pass</span>
+
+    <span class="k">return</span> <span class="n">wrapped</span></div>
+
+
+<div class="viewcode-block" id="RedisPoolCache"><a class="viewcode-back" href="../../../../snapshotter.utils.redis.html#snapshotter.utils.redis.redis_conn.RedisPoolCache">[docs]</a><span class="k">class</span> <span class="nc">RedisPoolCache</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pool_size</span><span class="o">=</span><span class="mi">2000</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initializes a Redis connection object with the specified connection pool size.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            pool_size (int): The maximum number of connections to keep in the pool.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_aioredis_pool</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pool_size</span> <span class="o">=</span> <span class="n">pool_size</span>
+
+<div class="viewcode-block" id="RedisPoolCache.populate"><a class="viewcode-back" href="../../../../snapshotter.utils.redis.html#snapshotter.utils.redis.redis_conn.RedisPoolCache.populate">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">populate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Populates the Redis connection pool with the specified number of connections.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_aioredis_pool</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_aioredis_pool</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span> <span class="o">=</span> <span class="k">await</span> <span class="n">get_aioredis_pool</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_pool_size</span><span class="p">,</span>
+            <span class="p">)</span></div></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, Powerloom Inc..</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+</body>
+</html>

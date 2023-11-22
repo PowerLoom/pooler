@@ -1,10 +1,15 @@
 snapshotter.auth.helpers package
 ================================
 
+.. automodule:: snapshotter.auth.helpers
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Submodules
 ----------
 
-snapshotter.auth.helpers.data\_models module
+snapshotter.auth.helpers.data\_models
 --------------------------------------------
 
 .. automodule:: snapshotter.auth.helpers.data_models
@@ -12,7 +17,7 @@ snapshotter.auth.helpers.data\_models module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.auth.helpers.helpers module
+snapshotter.auth.helpers.helpers
 ---------------------------------------
 
 .. automodule:: snapshotter.auth.helpers.helpers
@@ -20,7 +25,7 @@ snapshotter.auth.helpers.helpers module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.auth.helpers.redis\_conn module
+snapshotter.auth.helpers.redis\_conn
 -------------------------------------------
 
 .. automodule:: snapshotter.auth.helpers.redis_conn
@@ -28,18 +33,10 @@ snapshotter.auth.helpers.redis\_conn module
    :undoc-members:
    :show-inheritance:
 
-snapshotter.auth.helpers.redis\_keys module
+snapshotter.auth.helpers.redis\_keys
 -------------------------------------------
 
 .. automodule:: snapshotter.auth.helpers.redis_keys
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Module contents
----------------
-
-.. automodule:: snapshotter.auth.helpers
    :members:
    :undoc-members:
    :show-inheritance:

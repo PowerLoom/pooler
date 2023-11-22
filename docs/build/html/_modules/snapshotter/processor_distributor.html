@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>snapshotter.processor_distributor &mdash; Powerloom Snapshotter 0.1 documentation</title>
+      <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+
+        <script src="../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js?v=e031e9a9"></script>
+        <script src="../../_static/doctools.js?v=888ff710"></script>
+        <script src="../../_static/sphinx_highlight.js?v=4825356b"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+</head>
+
+<body class="wy-body-for-nav">
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+
+
+          <a href="../../index.html">
+
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../snapshotter.html">Powerloom Snapshotter</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Powerloom Snapshotter</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">snapshotter.processor_distributor</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+
+  <h1>Source code for snapshotter.processor_distributor</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">importlib</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">multiprocessing</span>
+<span class="kn">import</span> <span class="nn">queue</span>
+<span class="kn">import</span> <span class="nn">resource</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span>
+<span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">partial</span>
+<span class="kn">from</span> <span class="nn">signal</span> <span class="kn">import</span> <span class="n">SIGINT</span>
+<span class="kn">from</span> <span class="nn">signal</span> <span class="kn">import</span> <span class="n">signal</span>
+<span class="kn">from</span> <span class="nn">signal</span> <span class="kn">import</span> <span class="n">SIGQUIT</span>
+<span class="kn">from</span> <span class="nn">signal</span> <span class="kn">import</span> <span class="n">SIGTERM</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Awaitable</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Set</span>
+<span class="kn">from</span> <span class="nn">uuid</span> <span class="kn">import</span> <span class="n">uuid4</span>
+
+<span class="kn">import</span> <span class="nn">uvloop</span>
+<span class="kn">from</span> <span class="nn">aio_pika</span> <span class="kn">import</span> <span class="n">IncomingMessage</span>
+<span class="kn">from</span> <span class="nn">aio_pika</span> <span class="kn">import</span> <span class="n">Message</span>
+<span class="kn">from</span> <span class="nn">aio_pika.pool</span> <span class="kn">import</span> <span class="n">Pool</span>
+<span class="kn">from</span> <span class="nn">eth_utils.address</span> <span class="kn">import</span> <span class="n">to_checksum_address</span>
+<span class="kn">from</span> <span class="nn">eth_utils.crypto</span> <span class="kn">import</span> <span class="n">keccak</span>
+<span class="kn">from</span> <span class="nn">httpx</span> <span class="kn">import</span> <span class="n">AsyncClient</span>
+<span class="kn">from</span> <span class="nn">httpx</span> <span class="kn">import</span> <span class="n">AsyncHTTPTransport</span>
+<span class="kn">from</span> <span class="nn">httpx</span> <span class="kn">import</span> <span class="n">Limits</span>
+<span class="kn">from</span> <span class="nn">httpx</span> <span class="kn">import</span> <span class="n">Timeout</span>
+<span class="kn">from</span> <span class="nn">pydantic</span> <span class="kn">import</span> <span class="n">ValidationError</span>
+<span class="kn">from</span> <span class="nn">redis</span> <span class="kn">import</span> <span class="n">asyncio</span> <span class="k">as</span> <span class="n">aioredis</span>
+<span class="kn">from</span> <span class="nn">web3</span> <span class="kn">import</span> <span class="n">Web3</span>
+
+<span class="kn">from</span> <span class="nn">snapshotter.settings.config</span> <span class="kn">import</span> <span class="n">aggregator_config</span>
+<span class="kn">from</span> <span class="nn">snapshotter.settings.config</span> <span class="kn">import</span> <span class="n">preloaders</span>
+<span class="kn">from</span> <span class="nn">snapshotter.settings.config</span> <span class="kn">import</span> <span class="n">projects_config</span>
+<span class="kn">from</span> <span class="nn">snapshotter.settings.config</span> <span class="kn">import</span> <span class="n">settings</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.callback_helpers</span> <span class="kn">import</span> <span class="n">get_rabbitmq_channel</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.callback_helpers</span> <span class="kn">import</span> <span class="n">get_rabbitmq_robust_connection_async</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.data_utils</span> <span class="kn">import</span> <span class="n">get_projects_list</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.data_utils</span> <span class="kn">import</span> <span class="n">get_snapshot_submision_window</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.data_utils</span> <span class="kn">import</span> <span class="n">get_source_chain_epoch_size</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.data_utils</span> <span class="kn">import</span> <span class="n">get_source_chain_id</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.default_logger</span> <span class="kn">import</span> <span class="n">logger</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.data_models</span> <span class="kn">import</span> <span class="n">SnapshotterStates</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.data_models</span> <span class="kn">import</span> <span class="n">SnapshotterStateUpdate</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.data_models</span> <span class="kn">import</span> <span class="n">SnapshottersUpdatedEvent</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.message_models</span> <span class="kn">import</span> <span class="n">EpochBase</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.message_models</span> <span class="kn">import</span> <span class="n">PayloadCommitFinalizedMessage</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.message_models</span> <span class="kn">import</span> <span class="n">PowerloomCalculateAggregateMessage</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.message_models</span> <span class="kn">import</span> <span class="n">PowerloomProjectsUpdatedMessage</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.message_models</span> <span class="kn">import</span> <span class="n">PowerloomSnapshotFinalizedMessage</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.message_models</span> <span class="kn">import</span> <span class="n">PowerloomSnapshotProcessMessage</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.message_models</span> <span class="kn">import</span> <span class="n">PowerloomSnapshotSubmittedMessage</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.settings_model</span> <span class="kn">import</span> <span class="n">AggregateOn</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_conn</span> <span class="kn">import</span> <span class="n">RedisPoolCache</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">active_status_key</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">epoch_id_epoch_released_key</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">epoch_id_project_to_state_mapping</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">project_finalized_data_zset</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">project_last_finalized_epoch_key</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">snapshot_submission_window_key</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.rpc</span> <span class="kn">import</span> <span class="n">RpcHelper</span>
+<span class="c1"># from snapshotter.utils.data_utils import build_projects_list_from_events</span>
+
+
+<div class="viewcode-block" id="ProcessorDistributor"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.processor_distributor.ProcessorDistributor">[docs]</a><span class="k">class</span> <span class="nc">ProcessorDistributor</span><span class="p">(</span><span class="n">multiprocessing</span><span class="o">.</span><span class="n">Process</span><span class="p">):</span>
+    <span class="n">_aioredis_pool</span><span class="p">:</span> <span class="n">RedisPoolCache</span>
+    <span class="n">_redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initializes a ProcessorDistributor object.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            name (str): The name of the ProcessorDistributor object.</span>
+<span class="sd">            **kwargs: Additional keyword arguments.</span>
+
+<span class="sd">        Attributes:</span>
+<span class="sd">            _unique_id (str): A unique identifier for the ProcessorDistributor object.</span>
+<span class="sd">            _q (queue.Queue): A queue for storing tasks.</span>
+<span class="sd">            _rabbitmq_interactor: An instance of RabbitMQInteractor for interacting with RabbitMQ.</span>
+<span class="sd">            _shutdown_initiated (bool): A flag indicating whether shutdown has been initiated.</span>
+<span class="sd">            _rpc_helper: An instance of RpcHelper for making RPC calls.</span>
+<span class="sd">            _source_chain_id: The ID of the source chain.</span>
+<span class="sd">            _projects_list: A list of projects.</span>
+<span class="sd">            _consume_exchange_name (str): The name of the exchange for consuming messages.</span>
+<span class="sd">            _consume_queue_name (str): The name of the queue for consuming messages.</span>
+<span class="sd">            _initialized (bool): A flag indicating whether the object has been initialized.</span>
+<span class="sd">            _consume_queue_routing_key (str): The routing key for the consume queue.</span>
+<span class="sd">            _callback_exchange_name (str): The name of the exchange for callbacks.</span>
+<span class="sd">            _payload_commit_exchange_name (str): The name of the exchange for payload commits.</span>
+<span class="sd">            _payload_commit_routing_key (str): The routing key for payload commits.</span>
+<span class="sd">            _upcoming_project_changes (defaultdict): A dictionary of upcoming project changes.</span>
+<span class="sd">            _preload_completion_conditions (defaultdict): A dictionary of preloading completion conditions.</span>
+<span class="sd">            _newly_added_projects (set): A set of newly added projects.</span>
+<span class="sd">            _all_preload_tasks (set): A set of all preload tasks.</span>
+<span class="sd">            _project_type_config_mapping (dict): A dictionary mapping project types to project configurations.</span>
+<span class="sd">            _preloader_compute_mapping (dict): A dictionary mapping preloader tasks to compute tasks.</span>
+<span class="sd">            _async_transport (AsyncHTTPTransport): An instance of AsyncHTTPTransport for making HTTP requests.</span>
+<span class="sd">            _client (AsyncClient): An instance of AsyncClient for making HTTP requests.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="nb">super</span><span class="p">(</span><span class="n">ProcessorDistributor</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_unique_id</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s1">-&#39;</span> <span class="o">+</span> <span class="n">keccak</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">uuid4</span><span class="p">()))</span><span class="o">.</span><span class="n">hex</span><span class="p">()[:</span><span class="mi">8</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_q</span> <span class="o">=</span> <span class="n">queue</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rabbitmq_interactor</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown_initiated</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rpc_helper</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_source_chain_id</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_projects_list</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_consume_exchange_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">rabbitmq</span><span class="o">.</span><span class="n">setup</span><span class="o">.</span><span class="n">event_detector</span><span class="o">.</span><span class="n">exchange</span><span class="si">}</span><span class="s1">:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">namespace</span><span class="si">}</span><span class="s1">&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_consume_queue_name</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s1">&#39;powerloom-event-detector:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">namespace</span><span class="si">}</span><span class="s1">:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">instance_id</span><span class="si">}</span><span class="s1">&#39;</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_consume_queue_routing_key</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;powerloom-event-detector:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">namespace</span><span class="si">}</span><span class="s1">:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">instance_id</span><span class="si">}</span><span class="s1">.*&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_callback_exchange_name</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">rabbitmq</span><span class="o">.</span><span class="n">setup</span><span class="o">.</span><span class="n">callbacks</span><span class="o">.</span><span class="n">exchange</span><span class="si">}</span><span class="s1">:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">namespace</span><span class="si">}</span><span class="s1">&#39;</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_payload_commit_exchange_name</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">rabbitmq</span><span class="o">.</span><span class="n">setup</span><span class="o">.</span><span class="n">commit_payload</span><span class="o">.</span><span class="n">exchange</span><span class="si">}</span><span class="s1">:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">namespace</span><span class="si">}</span><span class="s1">&#39;</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_payload_commit_routing_key</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;powerloom-backend-commit-payload:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">namespace</span><span class="si">}</span><span class="s1">:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">instance_id</span><span class="si">}</span><span class="s1">.Finalized&#39;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_upcoming_project_changes</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_preload_completion_conditions</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span>
+            <span class="nb">int</span><span class="p">,</span> <span class="n">Awaitable</span><span class="p">,</span>
+        <span class="p">]</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">dict</span><span class="p">)</span>  <span class="c1"># epoch ID to preloading complete event</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_newly_added_projects</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown_initiated</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_all_preload_tasks</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_project_type_config_mapping</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">project_config</span> <span class="ow">in</span> <span class="n">projects_config</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_project_type_config_mapping</span><span class="p">[</span><span class="n">project_config</span><span class="o">.</span><span class="n">project_type</span><span class="p">]</span> <span class="o">=</span> <span class="n">project_config</span>
+            <span class="k">for</span> <span class="n">proload_task</span> <span class="ow">in</span> <span class="n">project_config</span><span class="o">.</span><span class="n">preload_tasks</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_all_preload_tasks</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">proload_task</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_preloader_compute_mapping</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_async_transport</span> <span class="o">=</span> <span class="n">AsyncHTTPTransport</span><span class="p">(</span>
+            <span class="n">limits</span><span class="o">=</span><span class="n">Limits</span><span class="p">(</span>
+                <span class="n">max_connections</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+                <span class="n">max_keepalive_connections</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
+                <span class="n">keepalive_expiry</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_client</span> <span class="o">=</span> <span class="n">AsyncClient</span><span class="p">(</span>
+            <span class="n">base_url</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">reporting</span><span class="o">.</span><span class="n">service_url</span><span class="p">,</span>
+            <span class="n">timeout</span><span class="o">=</span><span class="n">Timeout</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">),</span>
+            <span class="n">follow_redirects</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">transport</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_async_transport</span><span class="p">,</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="ProcessorDistributor._signal_handler"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.processor_distributor.ProcessorDistributor._signal_handler">[docs]</a>    <span class="k">def</span> <span class="nf">_signal_handler</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">signum</span><span class="p">,</span> <span class="n">frame</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Signal handler method that cancels the core RMQ consumer when a SIGINT, SIGTERM, or SIGQUIT signal is received.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            signum (int): The signal number.</span>
+<span class="sd">            frame (frame): The current stack frame at the time the signal was received.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="n">signum</span> <span class="ow">in</span> <span class="p">[</span><span class="n">SIGINT</span><span class="p">,</span> <span class="n">SIGTERM</span><span class="p">,</span> <span class="n">SIGQUIT</span><span class="p">]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_core_rmq_consumer</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="ProcessorDistributor._init_redis_pool"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.processor_distributor.ProcessorDistributor._init_redis_pool">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_init_redis_pool</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initializes the Redis connection pool and populates it with connections.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_aioredis_pool</span> <span class="o">=</span> <span class="n">RedisPoolCache</span><span class="p">()</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_aioredis_pool</span><span class="o">.</span><span class="n">populate</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_aioredis_pool</span><span class="o">.</span><span class="n">_aioredis_pool</span></div>
+
+<div class="viewcode-block" id="ProcessorDistributor._init_rpc_helper"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.processor_distributor.ProcessorDistributor._init_rpc_helper">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_init_rpc_helper</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initializes the RpcHelper instance if it is not already initialized.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rpc_helper</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_rpc_helper</span> <span class="o">=</span> <span class="n">RpcHelper</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_anchor_rpc_helper</span> <span class="o">=</span> <span class="n">RpcHelper</span><span class="p">(</span><span class="n">rpc_settings</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">anchor_chain_rpc</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="ProcessorDistributor._init_rabbitmq_connection"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.processor_distributor.ProcessorDistributor._init_rabbitmq_connection">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_init_rabbitmq_connection</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initializes the RabbitMQ connection pool and channel pool.</span>
+
+<span class="sd">        The RabbitMQ connection pool is used to manage a pool of connections to the RabbitMQ server,</span>
+<span class="sd">        while the channel pool is used to manage a pool of channels for each connection.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rmq_connection_pool</span> <span class="o">=</span> <span class="n">Pool</span><span class="p">(</span>
+            <span class="n">get_rabbitmq_robust_connection_async</span><span class="p">,</span>
+            <span class="n">max_size</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">loop</span><span class="o">=</span><span class="n">asyncio</span><span class="o">.</span><span class="n">get_event_loop</span><span class="p">(),</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rmq_channel_pool</span> <span class="o">=</span> <span class="n">Pool</span><span class="p">(</span>
+            <span class="n">partial</span><span class="p">(</span><span class="n">get_rabbitmq_channel</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rmq_connection_pool</span><span class="p">),</span> <span class="n">max_size</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+            <span class="n">loop</span><span class="o">=</span><span class="n">asyncio</span><span class="o">.</span><span class="n">get_event_loop</span><span class="p">(),</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="ProcessorDistributor._init_preloader_compute_mapping"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.processor_distributor.ProcessorDistributor._init_preloader_compute_mapping">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_init_preloader_compute_mapping</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initializes the preloader compute mapping by importing the preloader module and class and</span>
+<span class="sd">        adding it to the mapping dictionary.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_preloader_compute_mapping</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="k">for</span> <span class="n">preloader</span> <span class="ow">in</span> <span class="n">preloaders</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">preloader</span><span class="o">.</span><span class="n">task_type</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_preload_tasks</span><span class="p">:</span>
+                <span class="n">preloader_module</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="n">preloader</span><span class="o">.</span><span class="n">module</span><span class="p">)</span>
+                <span class="n">preloader_class</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">preloader_module</span><span class="p">,</span> <span class="n">preloader</span><span class="o">.</span><span class="n">class_name</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_preloader_compute_mapping</span><span class="p">[</span><span class="n">preloader</span><span class="o">.</span><span class="n">task_type</span><span class="p">]</span> <span class="o">=</span> <span class="n">preloader_class</span></div>
+
+<div class="viewcode-block" id="ProcessorDistributor.init_worker"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.processor_distributor.ProcessorDistributor.init_worker">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">init_worker</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initializes the worker by initializing the Redis pool, RPC helper, loading project metadata,</span>
+<span class="sd">        initializing the RabbitMQ connection, and initializing the preloader compute mapping.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_redis_pool</span><span class="p">()</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_rpc_helper</span><span class="p">()</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load_projects_metadata</span><span class="p">()</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_rabbitmq_connection</span><span class="p">()</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_preloader_compute_mapping</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span> <span class="o">=</span> <span class="kc">True</span></div>
+
+<div class="viewcode-block" id="ProcessorDistributor._load_projects_metadata"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.processor_distributor.ProcessorDistributor._load_projects_metadata">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_load_projects_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Loads the metadata for the projects, including the source chain ID, the list of projects, and the submission window</span>
+<span class="sd">        for snapshots. It also updates the project type configuration mapping with the relevant projects.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_projects_list</span><span class="p">:</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">protocol_state</span><span class="o">.</span><span class="n">abi</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">abi_dict</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+            <span class="n">protocol_state_contract</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_anchor_rpc_helper</span><span class="o">.</span><span class="n">get_current_node</span><span class="p">()[</span><span class="s1">&#39;web3_client&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">eth</span><span class="o">.</span><span class="n">contract</span><span class="p">(</span>
+                <span class="n">address</span><span class="o">=</span><span class="n">Web3</span><span class="o">.</span><span class="n">toChecksumAddress</span><span class="p">(</span>
+                    <span class="n">settings</span><span class="o">.</span><span class="n">protocol_state</span><span class="o">.</span><span class="n">address</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="n">abi</span><span class="o">=</span><span class="n">abi_dict</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">await</span> <span class="n">get_source_chain_epoch_size</span><span class="p">(</span>
+                <span class="n">redis_conn</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="p">,</span>
+                <span class="n">rpc_helper</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_anchor_rpc_helper</span><span class="p">,</span>
+                <span class="n">state_contract_obj</span><span class="o">=</span><span class="n">protocol_state_contract</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_source_chain_id</span> <span class="o">=</span> <span class="k">await</span> <span class="n">get_source_chain_id</span><span class="p">(</span>
+                <span class="n">redis_conn</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="p">,</span>
+                <span class="n">rpc_helper</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_anchor_rpc_helper</span><span class="p">,</span>
+                <span class="n">state_contract_obj</span><span class="o">=</span><span class="n">protocol_state_contract</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_projects_list</span> <span class="o">=</span> <span class="k">await</span> <span class="n">get_projects_list</span><span class="p">(</span>
+                <span class="n">redis_conn</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="p">,</span>
+                <span class="n">rpc_helper</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_anchor_rpc_helper</span><span class="p">,</span>
+                <span class="n">state_contract_obj</span><span class="o">=</span><span class="n">protocol_state_contract</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="c1"># TODO: will be used after full project management overhaul</span>
+            <span class="c1"># using project set for now, keeping empty if not present in contract</span>
+
+            <span class="c1"># self._projects_list = await build_projects_list_from_events(</span>
+            <span class="c1">#     redis_conn=self._redis_conn,</span>
+            <span class="c1">#     rpc_helper=self._anchor_rpc_helper,</span>
+            <span class="c1">#     state_contract_obj=protocol_state_contract,</span>
+            <span class="c1"># )</span>
+
+            <span class="c1"># self._logger.info(&#39;Generated project list with {} projects&#39;, self._projects_list)</span>
+
+            <span class="c1"># iterate over project list fetched</span>
+            <span class="k">for</span> <span class="n">project_type</span><span class="p">,</span> <span class="n">project_config</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_project_type_config_mapping</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">project_type</span> <span class="o">=</span> <span class="n">project_config</span><span class="o">.</span><span class="n">project_type</span>
+                <span class="k">if</span> <span class="n">project_config</span><span class="o">.</span><span class="n">projects</span> <span class="o">==</span> <span class="p">[]:</span>
+                    <span class="n">relevant_projects</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="nb">filter</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">project_type</span> <span class="ow">in</span> <span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_projects_list</span><span class="p">))</span>
+                    <span class="n">project_data</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+                    <span class="k">for</span> <span class="n">project</span> <span class="ow">in</span> <span class="n">relevant_projects</span><span class="p">:</span>
+                        <span class="n">data_source</span> <span class="o">=</span> <span class="n">project</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;:&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span>
+                        <span class="n">project_data</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
+                            <span class="n">data_source</span><span class="p">,</span>
+                        <span class="p">)</span>
+                    <span class="n">project_config</span><span class="o">.</span><span class="n">projects</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">project_data</span><span class="p">)</span>
+
+            <span class="n">submission_window</span> <span class="o">=</span> <span class="k">await</span> <span class="n">get_snapshot_submision_window</span><span class="p">(</span>
+                <span class="n">redis_conn</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="p">,</span>
+                <span class="n">rpc_helper</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_anchor_rpc_helper</span><span class="p">,</span>
+                <span class="n">state_contract_obj</span><span class="o">=</span><span class="n">protocol_state_contract</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">submission_window</span><span class="p">:</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                    <span class="n">snapshot_submission_window_key</span><span class="p">,</span>
+                    <span class="n">submission_window</span><span class="p">,</span>
+                <span class="p">)</span></div>
+
+<div class="viewcode-block" id="ProcessorDistributor._preloader_waiter"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.processor_distributor.ProcessorDistributor._preloader_waiter">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_preloader_waiter</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">epoch</span><span class="p">:</span> <span class="n">EpochBase</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Wait for all preloading tasks to complete for the given epoch, and distribute snapshot build tasks if all preloading</span>
+<span class="sd">        dependencies are satisfied.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            epoch: The epoch for which to wait for preloading tasks to complete.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">preloader_types_l</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_preload_completion_conditions</span><span class="p">[</span><span class="n">epoch</span><span class="o">.</span><span class="n">epochId</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="n">conditions</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Awaitable</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_preload_completion_conditions</span><span class="p">[</span><span class="n">epoch</span><span class="o">.</span><span class="n">epochId</span><span class="p">][</span><span class="n">k</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">preloader_types_l</span>
+        <span class="p">]</span>
+        <span class="n">preload_results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span>
+            <span class="o">*</span><span class="n">conditions</span><span class="p">,</span>
+            <span class="n">return_exceptions</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">succesful_preloads</span> <span class="o">=</span> <span class="nb">list</span><span class="p">()</span>
+        <span class="n">failed_preloads</span> <span class="o">=</span> <span class="nb">list</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+            <span class="s1">&#39;Preloading asyncio gather returned with results </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span>
+            <span class="n">preload_results</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">preload_result</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">preload_results</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">preload_result</span><span class="p">,</span> <span class="ne">Exception</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s1">&#39;Preloading failed for epoch </span><span class="si">{</span><span class="n">epoch</span><span class="o">.</span><span class="n">epochId</span><span class="si">}</span><span class="s1"> project type </span><span class="si">{</span><span class="n">preloader_types_l</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">failed_preloads</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">preloader_types_l</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">succesful_preloads</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">preloader_types_l</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                    <span class="s1">&#39;Preloading successful for preloader </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span>
+                    <span class="n">preloader_types_l</span><span class="p">[</span><span class="n">i</span><span class="p">],</span>
+                <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;Final list of successful preloads: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">succesful_preloads</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">project_type</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_project_type_config_mapping</span><span class="p">:</span>
+            <span class="n">project_config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_project_type_config_mapping</span><span class="p">[</span><span class="n">project_type</span><span class="p">]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">project_config</span><span class="o">.</span><span class="n">preload_tasks</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                <span class="s1">&#39;Expected list of successful preloading for project type </span><span class="si">{}</span><span class="s1">: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span>
+                <span class="n">project_type</span><span class="p">,</span>
+                <span class="n">project_config</span><span class="o">.</span><span class="n">preload_tasks</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="nb">all</span><span class="p">([</span><span class="n">t</span> <span class="ow">in</span> <span class="n">succesful_preloads</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">project_config</span><span class="o">.</span><span class="n">preload_tasks</span><span class="p">]):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                    <span class="s1">&#39;Preloading dependency satisfied for project type </span><span class="si">{}</span><span class="s1"> epoch </span><span class="si">{}</span><span class="s1">. Distributing snapshot build tasks...&#39;</span><span class="p">,</span>
+                    <span class="n">project_type</span><span class="p">,</span> <span class="n">epoch</span><span class="o">.</span><span class="n">epochId</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">asyncio</span><span class="o">.</span><span class="n">ensure_future</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">hset</span><span class="p">(</span>
+                        <span class="n">name</span><span class="o">=</span><span class="n">epoch_id_project_to_state_mapping</span><span class="p">(</span><span class="n">epoch</span><span class="o">.</span><span class="n">epochId</span><span class="p">,</span> <span class="n">SnapshotterStates</span><span class="o">.</span><span class="n">PRELOAD</span><span class="o">.</span><span class="n">value</span><span class="p">),</span>
+                        <span class="n">mapping</span><span class="o">=</span><span class="p">{</span>
+                            <span class="n">project_type</span><span class="p">:</span> <span class="n">SnapshotterStateUpdate</span><span class="p">(</span>
+                                <span class="n">status</span><span class="o">=</span><span class="s1">&#39;success&#39;</span><span class="p">,</span> <span class="n">timestamp</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()),</span>
+                            <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">(),</span>
+                        <span class="p">},</span>
+                    <span class="p">),</span>
+                <span class="p">)</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_distribute_callbacks_snapshotting</span><span class="p">(</span><span class="n">project_type</span><span class="p">,</span> <span class="n">epoch</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                    <span class="s1">&#39;Preloading dependency not satisfied for project type </span><span class="si">{}</span><span class="s1"> epoch </span><span class="si">{}</span><span class="s1">. Not distributing snapshot build tasks...&#39;</span><span class="p">,</span>
+                    <span class="n">project_type</span><span class="p">,</span> <span class="n">epoch</span><span class="o">.</span><span class="n">epochId</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">asyncio</span><span class="o">.</span><span class="n">ensure_future</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">hset</span><span class="p">(</span>
+                        <span class="n">name</span><span class="o">=</span><span class="n">epoch_id_project_to_state_mapping</span><span class="p">(</span><span class="n">epoch</span><span class="o">.</span><span class="n">epochId</span><span class="p">,</span> <span class="n">SnapshotterStates</span><span class="o">.</span><span class="n">PRELOAD</span><span class="o">.</span><span class="n">value</span><span class="p">),</span>
+                        <span class="n">mapping</span><span class="o">=</span><span class="p">{</span>
+                            <span class="n">project_type</span><span class="p">:</span> <span class="n">SnapshotterStateUpdate</span><span class="p">(</span>
+                                <span class="n">status</span><span class="o">=</span><span class="s1">&#39;failed&#39;</span><span class="p">,</span> <span class="n">timestamp</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()),</span>
+                            <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">(),</span>
+                        <span class="p">},</span>
+                    <span class="p">),</span>
+                <span class="p">)</span>
+        <span class="c1"># TODO: set separate overall status for failed and successful preloads</span>
+        <span class="k">if</span> <span class="n">epoch</span><span class="o">.</span><span class="n">epochId</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_preload_completion_conditions</span><span class="p">:</span>
+            <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">_preload_completion_conditions</span><span class="p">[</span><span class="n">epoch</span><span class="o">.</span><span class="n">epochId</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="ProcessorDistributor._exec_preloaders"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.processor_distributor.ProcessorDistributor._exec_preloaders">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_exec_preloaders</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">msg_obj</span><span class="p">:</span> <span class="n">EpochBase</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Executes preloading tasks for the given epoch object.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            msg_obj (EpochBase): The epoch object for which preloading tasks need to be executed.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># cleanup previous preloading complete tasks and events</span>
+        <span class="c1"># start all preload tasks</span>
+        <span class="k">for</span> <span class="n">preloader</span> <span class="ow">in</span> <span class="n">preloaders</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">preloader</span><span class="o">.</span><span class="n">task_type</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_preload_tasks</span><span class="p">:</span>
+                <span class="n">preloader_class</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_preloader_compute_mapping</span><span class="p">[</span><span class="n">preloader</span><span class="o">.</span><span class="n">task_type</span><span class="p">]</span>
+                <span class="n">preloader_obj</span> <span class="o">=</span> <span class="n">preloader_class</span><span class="p">()</span>
+                <span class="n">preloader_compute_kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+                    <span class="n">epoch</span><span class="o">=</span><span class="n">msg_obj</span><span class="p">,</span>
+                    <span class="n">redis_conn</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="p">,</span>
+                    <span class="n">rpc_helper</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rpc_helper</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                    <span class="s1">&#39;Starting preloader obj </span><span class="si">{}</span><span class="s1"> for epoch </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span>
+                    <span class="n">preloader</span><span class="o">.</span><span class="n">task_type</span><span class="p">,</span>
+                    <span class="n">msg_obj</span><span class="o">.</span><span class="n">epochId</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">f</span> <span class="o">=</span> <span class="n">preloader_obj</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span><span class="o">**</span><span class="n">preloader_compute_kwargs</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_preload_completion_conditions</span><span class="p">[</span><span class="n">msg_obj</span><span class="o">.</span><span class="n">epochId</span><span class="p">][</span><span class="n">preloader</span><span class="o">.</span><span class="n">task_type</span><span class="p">]</span> <span class="o">=</span> <span class="n">f</span>
+
+        <span class="k">for</span> <span class="n">project_type</span><span class="p">,</span> <span class="n">project_config</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_project_type_config_mapping</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">project_config</span><span class="o">.</span><span class="n">preload_tasks</span><span class="p">:</span>
+                <span class="c1"># release for snapshotting</span>
+                <span class="n">asyncio</span><span class="o">.</span><span class="n">ensure_future</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_distribute_callbacks_snapshotting</span><span class="p">(</span>
+                        <span class="n">project_type</span><span class="p">,</span> <span class="n">msg_obj</span><span class="p">,</span>
+                    <span class="p">),</span>
+                <span class="p">)</span>
+                <span class="k">continue</span>
+
+        <span class="n">asyncio</span><span class="o">.</span><span class="n">ensure_future</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_preloader_waiter</span><span class="p">(</span>
+                <span class="n">epoch</span><span class="o">=</span><span class="n">msg_obj</span><span class="p">,</span>
+            <span class="p">),</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="ProcessorDistributor._epoch_release_processor"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.processor_distributor.ProcessorDistributor._epoch_release_processor">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_epoch_release_processor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">IncomingMessage</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        This method is called when an epoch is released. It enables pending projects for the epoch and executes preloaders.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            message (IncomingMessage): The message containing the epoch information.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">msg_obj</span><span class="p">:</span> <span class="n">EpochBase</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">EpochBase</span><span class="o">.</span><span class="n">parse_raw</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">body</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="n">ValidationError</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                <span class="s1">&#39;Bad message structure of epoch callback&#39;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">return</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                <span class="s1">&#39;Unexpected message format of epoch callback&#39;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_newly_added_projects</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_newly_added_projects</span><span class="o">.</span><span class="n">union</span><span class="p">(</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_enable_pending_projects_for_epoch</span><span class="p">(</span><span class="n">msg_obj</span><span class="o">.</span><span class="n">epochId</span><span class="p">),</span>
+        <span class="p">)</span>
+
+        <span class="n">asyncio</span><span class="o">.</span><span class="n">ensure_future</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_exec_preloaders</span><span class="p">(</span><span class="n">msg_obj</span><span class="o">=</span><span class="n">msg_obj</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="ProcessorDistributor._distribute_callbacks_snapshotting"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.processor_distributor.ProcessorDistributor._distribute_callbacks_snapshotting">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_distribute_callbacks_snapshotting</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">project_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="n">EpochBase</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Distributes callbacks for snapshotting to the appropriate snapshotters based on the project type and epoch.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            project_type (str): The type of project.</span>
+<span class="sd">            epoch (EpochBase): The epoch to snapshot.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># send to snapshotters to get the balances of the addresses</span>
+        <span class="n">queuing_tasks</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rmq_channel_pool</span><span class="o">.</span><span class="n">acquire</span><span class="p">()</span> <span class="k">as</span> <span class="n">ch</span><span class="p">:</span>
+            <span class="c1"># Prepare a message to send</span>
+            <span class="n">exchange</span> <span class="o">=</span> <span class="k">await</span> <span class="n">ch</span><span class="o">.</span><span class="n">get_exchange</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_callback_exchange_name</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="n">project_config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_project_type_config_mapping</span><span class="p">[</span><span class="n">project_type</span><span class="p">]</span>
+
+            <span class="c1"># handling bulk mode projects</span>
+            <span class="k">if</span> <span class="n">project_config</span><span class="o">.</span><span class="n">bulk_mode</span><span class="p">:</span>
+                <span class="n">process_unit</span> <span class="o">=</span> <span class="n">PowerloomSnapshotProcessMessage</span><span class="p">(</span>
+                    <span class="n">begin</span><span class="o">=</span><span class="n">epoch</span><span class="o">.</span><span class="n">begin</span><span class="p">,</span>
+                    <span class="n">end</span><span class="o">=</span><span class="n">epoch</span><span class="o">.</span><span class="n">end</span><span class="p">,</span>
+                    <span class="n">epochId</span><span class="o">=</span><span class="n">epoch</span><span class="o">.</span><span class="n">epochId</span><span class="p">,</span>
+                    <span class="n">bulk_mode</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="p">)</span>
+
+                <span class="n">msg_body</span> <span class="o">=</span> <span class="n">Message</span><span class="p">(</span><span class="n">process_unit</span><span class="o">.</span><span class="n">json</span><span class="p">()</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">))</span>
+                <span class="k">await</span> <span class="n">exchange</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span>
+                    <span class="n">routing_key</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;powerloom-backend-callback:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">namespace</span><span class="si">}</span><span class="s1">&#39;</span>
+                    <span class="sa">f</span><span class="s1">&#39;:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">instance_id</span><span class="si">}</span><span class="s1">:EpochReleased.</span><span class="si">{</span><span class="n">project_type</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+                    <span class="n">message</span><span class="o">=</span><span class="n">msg_body</span><span class="p">,</span>
+                <span class="p">)</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                    <span class="s1">&#39;Sent out message to be processed by worker&#39;</span>
+                    <span class="sa">f</span><span class="s1">&#39; </span><span class="si">{</span><span class="n">project_type</span><span class="si">}</span><span class="s1"> : </span><span class="si">{</span><span class="n">process_unit</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">return</span>
+            <span class="c1"># handling projects with no data sources</span>
+            <span class="k">if</span> <span class="n">project_config</span><span class="o">.</span><span class="n">projects</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">project_id</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">project_type</span><span class="si">}</span><span class="s1">:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">namespace</span><span class="si">}</span><span class="s1">&#39;</span>
+                <span class="k">if</span> <span class="n">project_id</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_newly_added_projects</span><span class="p">:</span>
+                    <span class="n">genesis</span> <span class="o">=</span> <span class="kc">True</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_newly_added_projects</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">project_id</span><span class="o">.</span><span class="n">lower</span><span class="p">())</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">genesis</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="n">process_unit</span> <span class="o">=</span> <span class="n">PowerloomSnapshotProcessMessage</span><span class="p">(</span>
+                    <span class="n">begin</span><span class="o">=</span><span class="n">epoch</span><span class="o">.</span><span class="n">begin</span><span class="p">,</span>
+                    <span class="n">end</span><span class="o">=</span><span class="n">epoch</span><span class="o">.</span><span class="n">end</span><span class="p">,</span>
+                    <span class="n">epochId</span><span class="o">=</span><span class="n">epoch</span><span class="o">.</span><span class="n">epochId</span><span class="p">,</span>
+                    <span class="n">genesis</span><span class="o">=</span><span class="n">genesis</span><span class="p">,</span>
+                <span class="p">)</span>
+
+                <span class="n">msg_body</span> <span class="o">=</span> <span class="n">Message</span><span class="p">(</span><span class="n">process_unit</span><span class="o">.</span><span class="n">json</span><span class="p">()</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">))</span>
+                <span class="k">await</span> <span class="n">exchange</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span>
+                    <span class="n">routing_key</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;powerloom-backend-callback:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">namespace</span><span class="si">}</span><span class="s1">&#39;</span>
+                    <span class="sa">f</span><span class="s1">&#39;:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">instance_id</span><span class="si">}</span><span class="s1">:EpochReleased.</span><span class="si">{</span><span class="n">project_type</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+                    <span class="n">message</span><span class="o">=</span><span class="n">msg_body</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                    <span class="s1">&#39;Sent out message to be processed by worker&#39;</span>
+                    <span class="sa">f</span><span class="s1">&#39; </span><span class="si">{</span><span class="n">project_type</span><span class="si">}</span><span class="s1"> : </span><span class="si">{</span><span class="n">process_unit</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">return</span>
+
+            <span class="c1"># handling projects with data sources</span>
+            <span class="k">for</span> <span class="n">project</span> <span class="ow">in</span> <span class="n">project_config</span><span class="o">.</span><span class="n">projects</span><span class="p">:</span>
+                <span class="n">project_id</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">project_type</span><span class="si">}</span><span class="s1">:</span><span class="si">{</span><span class="n">project</span><span class="si">}</span><span class="s1">:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">namespace</span><span class="si">}</span><span class="s1">&#39;</span>
+
+                <span class="k">if</span> <span class="n">project_id</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_newly_added_projects</span><span class="p">:</span>
+                    <span class="n">genesis</span> <span class="o">=</span> <span class="kc">True</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_newly_added_projects</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">project_id</span><span class="o">.</span><span class="n">lower</span><span class="p">())</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">genesis</span> <span class="o">=</span> <span class="kc">False</span>
+
+                <span class="n">data_sources</span> <span class="o">=</span> <span class="n">project</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;_&#39;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data_sources</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="n">data_source</span> <span class="o">=</span> <span class="n">data_sources</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                    <span class="n">primary_data_source</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">primary_data_source</span><span class="p">,</span> <span class="n">data_source</span> <span class="o">=</span> <span class="n">data_sources</span>
+                <span class="n">process_unit</span> <span class="o">=</span> <span class="n">PowerloomSnapshotProcessMessage</span><span class="p">(</span>
+                    <span class="n">begin</span><span class="o">=</span><span class="n">epoch</span><span class="o">.</span><span class="n">begin</span><span class="p">,</span>
+                    <span class="n">end</span><span class="o">=</span><span class="n">epoch</span><span class="o">.</span><span class="n">end</span><span class="p">,</span>
+                    <span class="n">epochId</span><span class="o">=</span><span class="n">epoch</span><span class="o">.</span><span class="n">epochId</span><span class="p">,</span>
+                    <span class="n">data_source</span><span class="o">=</span><span class="n">data_source</span><span class="p">,</span>
+                    <span class="n">primary_data_source</span><span class="o">=</span><span class="n">primary_data_source</span><span class="p">,</span>
+                    <span class="n">genesis</span><span class="o">=</span><span class="n">genesis</span><span class="p">,</span>
+                <span class="p">)</span>
+
+                <span class="n">msg_body</span> <span class="o">=</span> <span class="n">Message</span><span class="p">(</span><span class="n">process_unit</span><span class="o">.</span><span class="n">json</span><span class="p">()</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">))</span>
+                <span class="n">queuing_tasks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="n">exchange</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span>
+                        <span class="n">routing_key</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;powerloom-backend-callback:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">namespace</span><span class="si">}</span><span class="s1">&#39;</span>
+                        <span class="sa">f</span><span class="s1">&#39;:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">instance_id</span><span class="si">}</span><span class="s1">:EpochReleased.</span><span class="si">{</span><span class="n">project_type</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+                        <span class="n">message</span><span class="o">=</span><span class="n">msg_body</span><span class="p">,</span>
+                    <span class="p">),</span>
+                <span class="p">)</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                    <span class="s1">&#39;Sent out message to be processed by worker&#39;</span>
+                    <span class="sa">f</span><span class="s1">&#39; </span><span class="si">{</span><span class="n">project_type</span><span class="si">}</span><span class="s1"> : </span><span class="si">{</span><span class="n">process_unit</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+                <span class="p">)</span>
+
+            <span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="o">*</span><span class="n">queuing_tasks</span><span class="p">,</span> <span class="n">return_exceptions</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">results</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="ne">Exception</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                    <span class="s1">&#39;Error while sending message to queue. Error - </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span>
+                    <span class="n">result</span><span class="p">,</span>
+                <span class="p">)</span></div>
+
+<div class="viewcode-block" id="ProcessorDistributor._enable_pending_projects_for_epoch"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.processor_distributor.ProcessorDistributor._enable_pending_projects_for_epoch">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_enable_pending_projects_for_epoch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">epoch_id</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Enables pending projects for the given epoch ID and returns a set of project IDs that were allowed.</span>
+
+<span class="sd">        :param epoch_id: The epoch ID for which to enable pending projects.</span>
+<span class="sd">        :type epoch_id: Any</span>
+<span class="sd">        :return: A set of project IDs that were allowed.</span>
+<span class="sd">        :rtype: set</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">pending_project_msgs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">PowerloomProjectsUpdatedMessage</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_upcoming_project_changes</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">epoch_id</span><span class="p">,</span> <span class="p">[])</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">pending_project_msgs</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">msg_obj</span> <span class="ow">in</span> <span class="n">pending_project_msgs</span><span class="p">:</span>
+                <span class="c1"># Update projects list</span>
+                <span class="k">for</span> <span class="n">project_type</span><span class="p">,</span> <span class="n">project_config</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_project_type_config_mapping</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="n">projects_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">project_config</span><span class="o">.</span><span class="n">projects</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">project_type</span> <span class="ow">in</span> <span class="n">msg_obj</span><span class="o">.</span><span class="n">projectId</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="n">project_config</span><span class="o">.</span><span class="n">projects</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                            <span class="k">continue</span>
+                        <span class="n">data_source</span> <span class="o">=</span> <span class="n">msg_obj</span><span class="o">.</span><span class="n">projectId</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;:&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span>
+                        <span class="k">if</span> <span class="n">msg_obj</span><span class="o">.</span><span class="n">allowed</span><span class="p">:</span>
+                            <span class="n">projects_set</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">data_source</span><span class="p">)</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="k">if</span> <span class="n">data_source</span> <span class="ow">in</span> <span class="n">project_config</span><span class="o">.</span><span class="n">projects</span><span class="p">:</span>
+                                <span class="n">projects_set</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="n">data_source</span><span class="p">)</span>
+                    <span class="n">project_config</span><span class="o">.</span><span class="n">projects</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">projects_set</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="nb">set</span><span class="p">([</span><span class="n">msg</span><span class="o">.</span><span class="n">projectId</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="k">for</span> <span class="n">msg</span> <span class="ow">in</span> <span class="n">pending_project_msgs</span> <span class="k">if</span> <span class="n">msg</span><span class="o">.</span><span class="n">allowed</span><span class="p">])</span></div>
+
+<div class="viewcode-block" id="ProcessorDistributor._update_all_projects"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.processor_distributor.ProcessorDistributor._update_all_projects">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_update_all_projects</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">IncomingMessage</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Updates all projects based on the incoming message.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            message (IncomingMessage): The incoming message containing the project updates.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">event_type</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">routing_key</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">event_type</span> <span class="o">==</span> <span class="s1">&#39;ProjectsUpdated&#39;</span><span class="p">:</span>
+            <span class="n">msg_obj</span><span class="p">:</span> <span class="n">PowerloomProjectsUpdatedMessage</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">PowerloomProjectsUpdatedMessage</span><span class="o">.</span><span class="n">parse_raw</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">body</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_upcoming_project_changes</span><span class="p">[</span><span class="n">msg_obj</span><span class="o">.</span><span class="n">enableEpochId</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">msg_obj</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="ProcessorDistributor._cache_and_forward_to_payload_commit_queue"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.processor_distributor.ProcessorDistributor._cache_and_forward_to_payload_commit_queue">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_cache_and_forward_to_payload_commit_queue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">IncomingMessage</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Caches the snapshot data and forwards it to the payload commit queue.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            message (IncomingMessage): The incoming message containing the snapshot data.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">event_type</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">routing_key</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">event_type</span> <span class="o">==</span> <span class="s1">&#39;SnapshotFinalized&#39;</span><span class="p">:</span>
+            <span class="n">msg_obj</span><span class="p">:</span> <span class="n">PowerloomSnapshotFinalizedMessage</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">PowerloomSnapshotFinalizedMessage</span><span class="o">.</span><span class="n">parse_raw</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">body</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="c1"># set project last finalized epoch in redis</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+            <span class="n">project_last_finalized_epoch_key</span><span class="p">(</span><span class="n">msg_obj</span><span class="o">.</span><span class="n">projectId</span><span class="p">),</span>
+            <span class="n">msg_obj</span><span class="o">.</span><span class="n">epochId</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Add to project finalized data zset</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span>
+            <span class="n">project_finalized_data_zset</span><span class="p">(</span><span class="n">project_id</span><span class="o">=</span><span class="n">msg_obj</span><span class="o">.</span><span class="n">projectId</span><span class="p">),</span>
+            <span class="p">{</span><span class="n">msg_obj</span><span class="o">.</span><span class="n">snapshotCid</span><span class="p">:</span> <span class="n">msg_obj</span><span class="o">.</span><span class="n">epochId</span><span class="p">},</span>
+        <span class="p">)</span>
+
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">hset</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">epoch_id_project_to_state_mapping</span><span class="p">(</span><span class="n">msg_obj</span><span class="o">.</span><span class="n">epochId</span><span class="p">,</span> <span class="n">SnapshotterStates</span><span class="o">.</span><span class="n">SNAPSHOT_FINALIZE</span><span class="o">.</span><span class="n">value</span><span class="p">),</span>
+            <span class="n">mapping</span><span class="o">=</span><span class="p">{</span>
+                <span class="n">msg_obj</span><span class="o">.</span><span class="n">projectId</span><span class="p">:</span> <span class="n">SnapshotterStateUpdate</span><span class="p">(</span>
+                    <span class="n">status</span><span class="o">=</span><span class="s1">&#39;success&#39;</span><span class="p">,</span> <span class="n">timestamp</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()),</span> <span class="n">extra</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;snapshot_cid&#39;</span><span class="p">:</span> <span class="n">msg_obj</span><span class="o">.</span><span class="n">snapshotCid</span><span class="p">},</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">(),</span>
+            <span class="p">},</span>
+        <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Payload Commit Message Distribution time - </span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">())</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+        <span class="c1"># If not initialized yet, return</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_source_chain_id</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">process_unit</span> <span class="o">=</span> <span class="n">PayloadCommitFinalizedMessage</span><span class="p">(</span>
+            <span class="n">message</span><span class="o">=</span><span class="n">msg_obj</span><span class="p">,</span>
+            <span class="n">web3Storage</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">sourceChainId</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_source_chain_id</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rmq_channel_pool</span><span class="o">.</span><span class="n">acquire</span><span class="p">()</span> <span class="k">as</span> <span class="n">channel</span><span class="p">:</span>
+            <span class="n">exchange</span> <span class="o">=</span> <span class="k">await</span> <span class="n">channel</span><span class="o">.</span><span class="n">get_exchange</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_payload_commit_exchange_name</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">await</span> <span class="n">exchange</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span>
+                <span class="n">routing_key</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_payload_commit_routing_key</span><span class="p">,</span>
+                <span class="n">message</span><span class="o">=</span><span class="n">Message</span><span class="p">(</span><span class="n">process_unit</span><span class="o">.</span><span class="n">json</span><span class="p">()</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)),</span>
+            <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="s1">&#39;Sent out Event to Payload Commit Queue&#39;</span>
+                <span class="sa">f</span><span class="s1">&#39; </span><span class="si">{</span><span class="n">event_type</span><span class="si">}</span><span class="s1"> : </span><span class="si">{</span><span class="n">process_unit</span><span class="si">}</span><span class="s1">&#39;</span>
+            <span class="p">),</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="ProcessorDistributor._distribute_callbacks_aggregate"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.processor_distributor.ProcessorDistributor._distribute_callbacks_aggregate">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_distribute_callbacks_aggregate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">IncomingMessage</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Distributes the callbacks for aggregation.</span>
+
+<span class="sd">        :param message: IncomingMessage object containing the message to be processed.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">event_type</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">routing_key</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">event_type</span> <span class="o">!=</span> <span class="s1">&#39;SnapshotSubmitted&#39;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Unknown event type </span><span class="si">{</span><span class="n">event_type</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+                <span class="k">return</span>
+
+            <span class="n">process_unit</span><span class="p">:</span> <span class="n">PowerloomSnapshotSubmittedMessage</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">PowerloomSnapshotSubmittedMessage</span><span class="o">.</span><span class="n">parse_raw</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">body</span><span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="k">except</span> <span class="n">ValidationError</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                <span class="s1">&#39;Bad message structure of event callback&#39;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">return</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                <span class="s1">&#39;Unexpected message format of event callback&#39;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Aggregation Task Distribution time - </span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">())</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+        <span class="c1"># go through aggregator config, if it matches then send appropriate message</span>
+        <span class="n">rabbitmq_publish_tasks</span> <span class="o">=</span> <span class="nb">list</span><span class="p">()</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rmq_channel_pool</span><span class="o">.</span><span class="n">acquire</span><span class="p">()</span> <span class="k">as</span> <span class="n">channel</span><span class="p">:</span>
+            <span class="n">exchange</span> <span class="o">=</span> <span class="k">await</span> <span class="n">channel</span><span class="o">.</span><span class="n">get_exchange</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_callback_exchange_name</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">config</span> <span class="ow">in</span> <span class="n">aggregator_config</span><span class="p">:</span>
+                <span class="n">task_type</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">project_type</span>
+                <span class="k">if</span> <span class="n">config</span><span class="o">.</span><span class="n">aggregate_on</span> <span class="o">==</span> <span class="n">AggregateOn</span><span class="o">.</span><span class="n">single_project</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">config</span><span class="o">.</span><span class="n">filters</span><span class="o">.</span><span class="n">projectId</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">process_unit</span><span class="o">.</span><span class="n">projectId</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;projectId mismatch </span><span class="si">{</span><span class="n">process_unit</span><span class="o">.</span><span class="n">projectId</span><span class="si">}</span><span class="s1"> </span><span class="si">{</span><span class="n">config</span><span class="o">.</span><span class="n">filters</span><span class="o">.</span><span class="n">projectId</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+                        <span class="k">continue</span>
+
+                    <span class="n">rabbitmq_publish_tasks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="n">exchange</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span>
+                            <span class="n">routing_key</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;powerloom-backend-callback:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">namespace</span><span class="si">}</span><span class="s1">:&#39;</span>
+                            <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">instance_id</span><span class="si">}</span><span class="s1">:CalculateAggregate.</span><span class="si">{</span><span class="n">task_type</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+                            <span class="n">message</span><span class="o">=</span><span class="n">Message</span><span class="p">(</span><span class="n">process_unit</span><span class="o">.</span><span class="n">json</span><span class="p">()</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)),</span>
+                        <span class="p">),</span>
+                    <span class="p">)</span>
+                <span class="k">elif</span> <span class="n">config</span><span class="o">.</span><span class="n">aggregate_on</span> <span class="o">==</span> <span class="n">AggregateOn</span><span class="o">.</span><span class="n">multi_project</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">process_unit</span><span class="o">.</span><span class="n">projectId</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">config</span><span class="o">.</span><span class="n">projects_to_wait_for</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s1">&#39;projectId not required for </span><span class="si">{</span><span class="n">config</span><span class="o">.</span><span class="n">project_type</span><span class="si">}</span><span class="s1">: </span><span class="si">{</span><span class="n">process_unit</span><span class="o">.</span><span class="n">projectId</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+                        <span class="p">)</span>
+                        <span class="k">continue</span>
+
+                    <span class="c1"># cleanup redis for all previous epochs (5 buffer)</span>
+                    <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">zremrangebyscore</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s1">&#39;powerloom:aggregator:</span><span class="si">{</span><span class="n">config</span><span class="o">.</span><span class="n">project_type</span><span class="si">}</span><span class="s1">:events&#39;</span><span class="p">,</span>
+                        <span class="mi">0</span><span class="p">,</span>
+                        <span class="n">process_unit</span><span class="o">.</span><span class="n">epochId</span> <span class="o">-</span> <span class="mi">5</span><span class="p">,</span>
+                    <span class="p">)</span>
+
+                    <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s1">&#39;powerloom:aggregator:</span><span class="si">{</span><span class="n">config</span><span class="o">.</span><span class="n">project_type</span><span class="si">}</span><span class="s1">:events&#39;</span><span class="p">,</span>
+                        <span class="p">{</span><span class="n">process_unit</span><span class="o">.</span><span class="n">json</span><span class="p">():</span> <span class="n">process_unit</span><span class="o">.</span><span class="n">epochId</span><span class="p">},</span>
+                    <span class="p">)</span>
+
+                    <span class="n">events</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">zrangebyscore</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s1">&#39;powerloom:aggregator:</span><span class="si">{</span><span class="n">config</span><span class="o">.</span><span class="n">project_type</span><span class="si">}</span><span class="s1">:events&#39;</span><span class="p">,</span>
+                        <span class="n">process_unit</span><span class="o">.</span><span class="n">epochId</span><span class="p">,</span>
+                        <span class="n">process_unit</span><span class="o">.</span><span class="n">epochId</span><span class="p">,</span>
+                    <span class="p">)</span>
+
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">events</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;No events found for </span><span class="si">{</span><span class="n">process_unit</span><span class="o">.</span><span class="n">epochId</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+                        <span class="k">continue</span>
+
+                    <span class="n">event_project_ids</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+                    <span class="n">finalized_messages</span> <span class="o">=</span> <span class="nb">list</span><span class="p">()</span>
+
+                    <span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="n">events</span><span class="p">:</span>
+                        <span class="n">event</span> <span class="o">=</span> <span class="n">PowerloomSnapshotSubmittedMessage</span><span class="o">.</span><span class="n">parse_raw</span><span class="p">(</span><span class="n">event</span><span class="p">)</span>
+                        <span class="n">event_project_ids</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">event</span><span class="o">.</span><span class="n">projectId</span><span class="p">)</span>
+                        <span class="n">finalized_messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">event</span><span class="p">)</span>
+
+                    <span class="k">if</span> <span class="n">event_project_ids</span> <span class="o">==</span> <span class="nb">set</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">projects_to_wait_for</span><span class="p">):</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;All projects present for </span><span class="si">{</span><span class="n">process_unit</span><span class="o">.</span><span class="n">epochId</span><span class="si">}</span><span class="s1">, aggregating&#39;</span><span class="p">)</span>
+                        <span class="n">final_msg</span> <span class="o">=</span> <span class="n">PowerloomCalculateAggregateMessage</span><span class="p">(</span>
+                            <span class="n">messages</span><span class="o">=</span><span class="n">finalized_messages</span><span class="p">,</span>
+                            <span class="n">epochId</span><span class="o">=</span><span class="n">process_unit</span><span class="o">.</span><span class="n">epochId</span><span class="p">,</span>
+                            <span class="n">timestamp</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()),</span>
+                        <span class="p">)</span>
+
+                        <span class="n">rabbitmq_publish_tasks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                            <span class="n">exchange</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span>
+                                <span class="n">routing_key</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;powerloom-backend-callback:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">namespace</span><span class="si">}</span><span class="s1">&#39;</span>
+                                <span class="sa">f</span><span class="s1">&#39;:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">instance_id</span><span class="si">}</span><span class="s1">:CalculateAggregate.</span><span class="si">{</span><span class="n">task_type</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+                                <span class="n">message</span><span class="o">=</span><span class="n">Message</span><span class="p">(</span><span class="n">final_msg</span><span class="o">.</span><span class="n">json</span><span class="p">()</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)),</span>
+                            <span class="p">),</span>
+                        <span class="p">)</span>
+
+                        <span class="c1"># Cleanup redis for current epoch</span>
+
+                        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">zremrangebyscore</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s1">&#39;powerloom:aggregator:</span><span class="si">{</span><span class="n">config</span><span class="o">.</span><span class="n">project_type</span><span class="si">}</span><span class="s1">:events&#39;</span><span class="p">,</span>
+                            <span class="n">process_unit</span><span class="o">.</span><span class="n">epochId</span><span class="p">,</span>
+                            <span class="n">process_unit</span><span class="o">.</span><span class="n">epochId</span><span class="p">,</span>
+                        <span class="p">)</span>
+
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s1">&#39;Not all projects present for </span><span class="si">{</span><span class="n">process_unit</span><span class="o">.</span><span class="n">epochId</span><span class="si">}</span><span class="s1">,&#39;</span>
+                            <span class="sa">f</span><span class="s1">&#39; </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">projects_to_wait_for</span><span class="p">))</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="nb">len</span><span class="p">(</span><span class="n">event_project_ids</span><span class="p">)</span><span class="si">}</span><span class="s1"> missing&#39;</span><span class="p">,</span>
+                        <span class="p">)</span>
+        <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="o">*</span><span class="n">rabbitmq_publish_tasks</span><span class="p">,</span> <span class="n">return_exceptions</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="ProcessorDistributor._cleanup_older_epoch_status"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.processor_distributor.ProcessorDistributor._cleanup_older_epoch_status">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_cleanup_older_epoch_status</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">epoch_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Deletes the epoch status keys for the epoch that is 30 epochs older than the given epoch_id.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">tasks</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">epoch_id_epoch_released_key</span><span class="p">(</span><span class="n">epoch_id</span> <span class="o">-</span> <span class="mi">30</span><span class="p">))]</span>
+        <span class="n">delete_keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">state</span> <span class="ow">in</span> <span class="n">SnapshotterStates</span><span class="p">:</span>
+            <span class="n">k</span> <span class="o">=</span> <span class="n">epoch_id_project_to_state_mapping</span><span class="p">(</span><span class="n">epoch_id</span> <span class="o">-</span> <span class="mi">30</span><span class="p">,</span> <span class="n">state</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
+            <span class="n">delete_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">delete_keys</span><span class="p">:</span>
+            <span class="n">tasks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="o">*</span><span class="n">delete_keys</span><span class="p">))</span>
+        <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="o">*</span><span class="n">tasks</span><span class="p">,</span> <span class="n">return_exceptions</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="ProcessorDistributor._on_rabbitmq_message"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.processor_distributor.ProcessorDistributor._on_rabbitmq_message">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_on_rabbitmq_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">IncomingMessage</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Callback function to handle incoming RabbitMQ messages.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            message (IncomingMessage): The incoming RabbitMQ message.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">await</span> <span class="n">message</span><span class="o">.</span><span class="n">ack</span><span class="p">()</span>
+
+        <span class="n">message_type</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">routing_key</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="s1">&#39;Got message to process and distribute: </span><span class="si">{}</span><span class="s1">&#39;</span>
+            <span class="p">),</span>
+            <span class="n">message</span><span class="o">.</span><span class="n">body</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">message_type</span> <span class="o">==</span> <span class="s1">&#39;EpochReleased&#39;</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">_</span><span class="p">:</span> <span class="n">EpochBase</span> <span class="o">=</span> <span class="n">EpochBase</span><span class="o">.</span><span class="n">parse_raw</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">body</span><span class="p">)</span>
+            <span class="k">except</span><span class="p">:</span>
+                <span class="k">pass</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                    <span class="n">epoch_id_epoch_released_key</span><span class="p">(</span><span class="n">_</span><span class="o">.</span><span class="n">epochId</span><span class="p">),</span>
+                    <span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()),</span>
+                <span class="p">)</span>
+                <span class="n">asyncio</span><span class="o">.</span><span class="n">ensure_future</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_cleanup_older_epoch_status</span><span class="p">(</span><span class="n">_</span><span class="o">.</span><span class="n">epochId</span><span class="p">))</span>
+
+            <span class="n">_</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">active_status_key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">_</span><span class="p">:</span>
+                <span class="n">active_status</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">_</span><span class="p">))</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">active_status</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s1">&#39;System is not active, ignoring released Epoch&#39;</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_epoch_release_processor</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+
+        <span class="k">elif</span> <span class="n">message_type</span> <span class="o">==</span> <span class="s1">&#39;SnapshotSubmitted&#39;</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_distribute_callbacks_aggregate</span><span class="p">(</span>
+                <span class="n">message</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="k">elif</span> <span class="n">message_type</span> <span class="o">==</span> <span class="s1">&#39;SnapshotFinalized&#39;</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache_and_forward_to_payload_commit_queue</span><span class="p">(</span>
+                <span class="n">message</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">message_type</span> <span class="o">==</span> <span class="s1">&#39;ProjectsUpdated&#39;</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_update_all_projects</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">message_type</span> <span class="o">==</span> <span class="s1">&#39;allSnapshottersUpdated&#39;</span><span class="p">:</span>
+            <span class="n">msg_cast</span> <span class="o">=</span> <span class="n">SnapshottersUpdatedEvent</span><span class="o">.</span><span class="n">parse_raw</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">body</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">msg_cast</span><span class="o">.</span><span class="n">snapshotterAddress</span> <span class="o">==</span> <span class="n">to_checksum_address</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">instance_id</span><span class="p">):</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="p">:</span>
+                    <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                        <span class="n">active_status_key</span><span class="p">,</span>
+                        <span class="nb">int</span><span class="p">(</span><span class="n">msg_cast</span><span class="o">.</span><span class="n">allowed</span><span class="p">),</span>
+                    <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                <span class="p">(</span>
+                    <span class="s1">&#39;Unknown routing key for callback distribution: </span><span class="si">{}</span><span class="s1">&#39;</span>
+                <span class="p">),</span>
+                <span class="n">message</span><span class="o">.</span><span class="n">routing_key</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="ProcessorDistributor._rabbitmq_consumer"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.processor_distributor.ProcessorDistributor._rabbitmq_consumer">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_rabbitmq_consumer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">loop</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Consume messages from a RabbitMQ queue.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            loop: The event loop to use for the consumer.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rmq_channel_pool</span><span class="o">.</span><span class="n">acquire</span><span class="p">()</span> <span class="k">as</span> <span class="n">channel</span><span class="p">:</span>
+            <span class="k">await</span> <span class="n">channel</span><span class="o">.</span><span class="n">set_qos</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+            <span class="n">exchange</span> <span class="o">=</span> <span class="k">await</span> <span class="n">channel</span><span class="o">.</span><span class="n">get_exchange</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_consume_exchange_name</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">q_obj</span> <span class="o">=</span> <span class="k">await</span> <span class="n">channel</span><span class="o">.</span><span class="n">get_queue</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_consume_queue_name</span><span class="p">,</span>
+                <span class="n">ensure</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s1">&#39;Consuming queue </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_consume_queue_name</span><span class="si">}</span><span class="s1"> with routing key </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_consume_queue_routing_key</span><span class="si">}</span><span class="s1">...&#39;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">await</span> <span class="n">q_obj</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">exchange</span><span class="p">,</span> <span class="n">routing_key</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_consume_queue_routing_key</span><span class="p">)</span>
+            <span class="k">await</span> <span class="n">q_obj</span><span class="o">.</span><span class="n">consume</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_on_rabbitmq_message</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="ProcessorDistributor.run"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.processor_distributor.ProcessorDistributor.run">[docs]</a>    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Runs the ProcessorDistributor by setting resource limits, registering signal handlers,</span>
+<span class="sd">        initializing the worker, starting the RabbitMQ consumer, and running the event loop.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span> <span class="o">=</span> <span class="n">logger</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span>
+            <span class="n">module</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;Powerloom|Callbacks|ProcessDistributor:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">namespace</span><span class="si">}</span><span class="s1">-</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">instance_id</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">soft</span><span class="p">,</span> <span class="n">hard</span> <span class="o">=</span> <span class="n">resource</span><span class="o">.</span><span class="n">getrlimit</span><span class="p">(</span><span class="n">resource</span><span class="o">.</span><span class="n">RLIMIT_NOFILE</span><span class="p">)</span>
+        <span class="n">resource</span><span class="o">.</span><span class="n">setrlimit</span><span class="p">(</span>
+            <span class="n">resource</span><span class="o">.</span><span class="n">RLIMIT_NOFILE</span><span class="p">,</span>
+            <span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">rlimit</span><span class="o">.</span><span class="n">file_descriptors</span><span class="p">,</span> <span class="n">hard</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">signame</span> <span class="ow">in</span> <span class="p">[</span><span class="n">SIGINT</span><span class="p">,</span> <span class="n">SIGTERM</span><span class="p">,</span> <span class="n">SIGQUIT</span><span class="p">]:</span>
+            <span class="n">signal</span><span class="p">(</span><span class="n">signame</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_signal_handler</span><span class="p">)</span>
+        <span class="n">asyncio</span><span class="o">.</span><span class="n">set_event_loop_policy</span><span class="p">(</span><span class="n">uvloop</span><span class="o">.</span><span class="n">EventLoopPolicy</span><span class="p">())</span>
+        <span class="n">ev_loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_event_loop</span><span class="p">()</span>
+        <span class="n">ev_loop</span><span class="o">.</span><span class="n">run_until_complete</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">init_worker</span><span class="p">())</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;Starting RabbitMQ consumer on queue </span><span class="si">{}</span><span class="s1"> for Processor Distributor&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_consume_queue_name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_core_rmq_consumer</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">ensure_future</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_rabbitmq_consumer</span><span class="p">(</span><span class="n">ev_loop</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">ev_loop</span><span class="o">.</span><span class="n">run_forever</span><span class="p">()</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="n">ev_loop</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, Powerloom Inc..</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>snapshotter.auth.helpers.helpers &mdash; Powerloom Snapshotter 0.1 documentation</title>
+      <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+
+        <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script data-url_root="../../../../" id="documentation_options" src="../../../../_static/documentation_options.js?v=e031e9a9"></script>
+        <script src="../../../../_static/doctools.js?v=888ff710"></script>
+        <script src="../../../../_static/sphinx_highlight.js?v=4825356b"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+</head>
+
+<body class="wy-body-for-nav">
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+
+
+          <a href="../../../../index.html">
+
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../snapshotter.html">Powerloom Snapshotter</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">Powerloom Snapshotter</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">snapshotter.auth.helpers.helpers</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+
+  <h1>Source code for snapshotter.auth.helpers.helpers</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span>
+<span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">timedelta</span>
+
+<span class="kn">from</span> <span class="nn">async_limits</span> <span class="kn">import</span> <span class="n">parse_many</span>
+<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">Depends</span>
+<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">Request</span>
+<span class="kn">from</span> <span class="nn">fastapi.responses</span> <span class="kn">import</span> <span class="n">JSONResponse</span>
+<span class="kn">from</span> <span class="nn">redis</span> <span class="kn">import</span> <span class="n">asyncio</span> <span class="k">as</span> <span class="n">aioredis</span>
+
+<span class="kn">from</span> <span class="nn">snapshotter.auth.helpers.data_models</span> <span class="kn">import</span> <span class="n">AppOwnerModel</span>
+<span class="kn">from</span> <span class="nn">snapshotter.auth.helpers.data_models</span> <span class="kn">import</span> <span class="n">AuthCheck</span>
+<span class="kn">from</span> <span class="nn">snapshotter.auth.helpers.data_models</span> <span class="kn">import</span> <span class="n">RateLimitAuthCheck</span>
+<span class="kn">from</span> <span class="nn">snapshotter.auth.helpers.data_models</span> <span class="kn">import</span> <span class="n">UserStatusEnum</span>
+<span class="kn">from</span> <span class="nn">snapshotter.auth.helpers.redis_keys</span> <span class="kn">import</span> <span class="n">api_key_to_owner_key</span>
+<span class="kn">from</span> <span class="nn">snapshotter.auth.helpers.redis_keys</span> <span class="kn">import</span> <span class="n">user_active_api_keys_set</span>
+<span class="kn">from</span> <span class="nn">snapshotter.auth.helpers.redis_keys</span> <span class="kn">import</span> <span class="n">user_details_htable</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.rate_limiter</span> <span class="kn">import</span> <span class="n">generic_rate_limiter</span>
+
+
+<div class="viewcode-block" id="incr_success_calls_count"><a class="viewcode-back" href="../../../../snapshotter.auth.helpers.html#snapshotter.auth.helpers.helpers.incr_success_calls_count">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">incr_success_calls_count</span><span class="p">(</span>
+    <span class="n">auth_redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span><span class="p">,</span>
+    <span class="n">rate_limit_auth_dep</span><span class="p">:</span> <span class="n">RateLimitAuthCheck</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="c1"># on success</span>
+    <span class="k">await</span> <span class="n">auth_redis_conn</span><span class="o">.</span><span class="n">hincrby</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="n">user_details_htable</span><span class="p">(</span><span class="n">rate_limit_auth_dep</span><span class="o">.</span><span class="n">owner</span><span class="o">.</span><span class="n">email</span><span class="p">),</span>
+        <span class="n">key</span><span class="o">=</span><span class="s1">&#39;callsCount&#39;</span><span class="p">,</span>
+        <span class="n">amount</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="incr_throttled_calls_count"><a class="viewcode-back" href="../../../../snapshotter.auth.helpers.html#snapshotter.auth.helpers.helpers.incr_throttled_calls_count">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">incr_throttled_calls_count</span><span class="p">(</span>
+    <span class="n">auth_redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span><span class="p">,</span>
+    <span class="n">rate_limit_auth_dep</span><span class="p">:</span> <span class="n">RateLimitAuthCheck</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="c1"># on throttle</span>
+    <span class="k">await</span> <span class="n">auth_redis_conn</span><span class="o">.</span><span class="n">hincrby</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="n">user_details_htable</span><span class="p">(</span><span class="n">rate_limit_auth_dep</span><span class="o">.</span><span class="n">owner</span><span class="o">.</span><span class="n">email</span><span class="p">),</span>
+        <span class="n">key</span><span class="o">=</span><span class="s1">&#39;throttledCount&#39;</span><span class="p">,</span>
+        <span class="n">amount</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="inject_rate_limit_fail_response"><a class="viewcode-back" href="../../../../snapshotter.auth.helpers.html#snapshotter.auth.helpers.helpers.inject_rate_limit_fail_response">[docs]</a><span class="k">def</span> <span class="nf">inject_rate_limit_fail_response</span><span class="p">(</span>
+    <span class="n">rate_limit_auth_check_dependency</span><span class="p">:</span> <span class="n">RateLimitAuthCheck</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">JSONResponse</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">rate_limit_auth_check_dependency</span><span class="o">.</span><span class="n">authorized</span><span class="p">:</span>
+        <span class="n">response_body</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;error&#39;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s1">&#39;details&#39;</span><span class="p">:</span> <span class="p">(</span>
+                    <span class="s1">&#39;Rate limit exceeded:&#39;</span>
+                    <span class="sa">f</span><span class="s1">&#39; </span><span class="si">{</span><span class="n">rate_limit_auth_check_dependency</span><span class="o">.</span><span class="n">violated_limit</span><span class="si">}</span><span class="s1">. Check&#39;</span>
+                    <span class="s1">&#39; response body and headers for more details on backoff.&#39;</span>
+                <span class="p">),</span>
+                <span class="s1">&#39;data&#39;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s1">&#39;rate_violated&#39;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span>
+                        <span class="n">rate_limit_auth_check_dependency</span><span class="o">.</span><span class="n">violated_limit</span><span class="p">,</span>
+                    <span class="p">),</span>
+                    <span class="s1">&#39;retry_after&#39;</span><span class="p">:</span> <span class="n">rate_limit_auth_check_dependency</span><span class="o">.</span><span class="n">retry_after</span><span class="p">,</span>
+                    <span class="s1">&#39;violating_domain&#39;</span><span class="p">:</span> <span class="n">rate_limit_auth_check_dependency</span><span class="o">.</span><span class="n">current_limit</span><span class="p">,</span>
+                <span class="p">},</span>
+            <span class="p">},</span>
+        <span class="p">}</span>
+        <span class="n">response_headers</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;Retry-After&#39;</span><span class="p">:</span> <span class="p">(</span>
+                <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span> <span class="o">+</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">rate_limit_auth_check_dependency</span><span class="o">.</span><span class="n">retry_after</span><span class="p">)</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">isoformat</span><span class="p">(),</span>
+        <span class="p">}</span>
+        <span class="n">response_status</span> <span class="o">=</span> <span class="mi">429</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">response_headers</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="n">response_body</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;error&#39;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s1">&#39;details&#39;</span><span class="p">:</span> <span class="n">rate_limit_auth_check_dependency</span><span class="o">.</span><span class="n">reason</span><span class="p">,</span>
+            <span class="p">},</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="s1">&#39;cache error&#39;</span> <span class="ow">in</span> <span class="n">rate_limit_auth_check_dependency</span><span class="o">.</span><span class="n">reason</span><span class="p">:</span>
+            <span class="n">response_status</span> <span class="o">=</span> <span class="mi">500</span>
+        <span class="k">elif</span> <span class="p">(</span>
+            <span class="s1">&#39;no API key&#39;</span> <span class="ow">in</span> <span class="n">rate_limit_auth_check_dependency</span><span class="o">.</span><span class="n">reason</span> <span class="ow">or</span>
+            <span class="s1">&#39;bad API key&#39;</span> <span class="ow">in</span> <span class="n">rate_limit_auth_check_dependency</span><span class="o">.</span><span class="n">reason</span>
+        <span class="p">):</span>
+            <span class="n">response_status</span> <span class="o">=</span> <span class="mi">401</span>
+        <span class="k">else</span><span class="p">:</span>  <span class="c1"># usual auth issues like bad API key</span>
+            <span class="n">response_status</span> <span class="o">=</span> <span class="mi">200</span>
+    <span class="k">return</span> <span class="n">JSONResponse</span><span class="p">(</span>
+        <span class="n">content</span><span class="o">=</span><span class="n">response_body</span><span class="p">,</span>
+        <span class="n">status_code</span><span class="o">=</span><span class="n">response_status</span><span class="p">,</span>
+        <span class="n">headers</span><span class="o">=</span><span class="n">response_headers</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+<span class="c1"># TODO: cacheize for better performance</span>
+<div class="viewcode-block" id="check_user_details"><a class="viewcode-back" href="../../../../snapshotter.auth.helpers.html#snapshotter.auth.helpers.helpers.check_user_details">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">check_user_details</span><span class="p">(</span>
+    <span class="n">api_key</span><span class="p">,</span>
+    <span class="n">redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="n">owner_email</span> <span class="o">=</span> <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">api_key_to_owner_key</span><span class="p">(</span><span class="n">api_key</span><span class="p">))</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">owner_email</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">AuthCheck</span><span class="p">(</span>
+            <span class="n">authorized</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">api_key</span><span class="o">=</span><span class="n">api_key</span><span class="p">,</span>
+            <span class="n">reason</span><span class="o">=</span><span class="s1">&#39;bad API key&#39;</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">owner_email</span> <span class="o">=</span> <span class="n">owner_email</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span>
+        <span class="n">owner_details_b</span> <span class="o">=</span> <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">hgetall</span><span class="p">(</span>
+            <span class="n">user_details_htable</span><span class="p">(</span><span class="n">owner_email</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="n">owner_details_dec</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">k</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">):</span> <span class="n">v</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">owner_details_b</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="p">}</span>
+        <span class="n">owner_details</span> <span class="o">=</span> <span class="n">AppOwnerModel</span><span class="p">(</span><span class="o">**</span><span class="n">owner_details_dec</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">AuthCheck</span><span class="p">(</span>
+            <span class="n">authorized</span><span class="o">=</span><span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">sismember</span><span class="p">(</span>
+                <span class="n">user_active_api_keys_set</span><span class="p">(</span><span class="n">owner_email</span><span class="p">),</span>
+                <span class="n">api_key</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">api_key</span><span class="o">=</span><span class="n">api_key</span><span class="p">,</span>
+            <span class="n">owner</span><span class="o">=</span><span class="n">owner_details</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="auth_check"><a class="viewcode-back" href="../../../../snapshotter.auth.helpers.html#snapshotter.auth.helpers.helpers.auth_check">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">auth_check</span><span class="p">(</span>
+    <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AuthCheck</span><span class="p">:</span>
+    <span class="n">core_settings</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">core_settings</span><span class="o">.</span><span class="n">core_api</span>
+    <span class="n">auth_redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">auth_aioredis_pool</span>
+    <span class="n">expected_header_key_for_auth</span> <span class="o">=</span> <span class="n">core_settings</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">header_key</span>
+    <span class="n">api_key_in_header</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="n">expected_header_key_for_auth</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">expected_header_key_for_auth</span> <span class="ow">in</span> <span class="n">request</span><span class="o">.</span><span class="n">headers</span>
+        <span class="k">else</span> <span class="kc">None</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">api_key_in_header</span><span class="p">:</span>
+        <span class="c1"># public access. create owner based on IP address</span>
+        <span class="k">if</span> <span class="s1">&#39;CF-Connecting-IP&#39;</span> <span class="ow">in</span> <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">:</span>
+            <span class="n">user_ip</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s1">&#39;CF-Connecting-IP&#39;</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="s1">&#39;X-Forwarded-For&#39;</span> <span class="ow">in</span> <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">:</span>
+            <span class="n">proxy_data</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s1">&#39;X-Forwarded-For&#39;</span><span class="p">]</span>
+            <span class="n">ip_list</span> <span class="o">=</span> <span class="n">proxy_data</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;,&#39;</span><span class="p">)</span>
+            <span class="n">user_ip</span> <span class="o">=</span> <span class="n">ip_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>  <span class="c1"># first address in list is User IP</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">user_ip</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">host</span>  <span class="c1"># For local development</span>
+        <span class="n">ip_user_dets_b</span> <span class="o">=</span> <span class="k">await</span> <span class="n">auth_redis_conn</span><span class="o">.</span><span class="n">hgetall</span><span class="p">(</span>
+            <span class="n">user_details_htable</span><span class="p">(</span><span class="n">user_ip</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">ip_user_dets_b</span><span class="p">:</span>
+            <span class="n">public_owner</span> <span class="o">=</span> <span class="n">AppOwnerModel</span><span class="p">(</span>
+                <span class="n">email</span><span class="o">=</span><span class="n">user_ip</span><span class="p">,</span>
+                <span class="n">rate_limit</span><span class="o">=</span><span class="n">core_settings</span><span class="o">.</span><span class="n">public_rate_limit</span><span class="p">,</span>
+                <span class="n">active</span><span class="o">=</span><span class="n">UserStatusEnum</span><span class="o">.</span><span class="n">active</span><span class="p">,</span>
+                <span class="n">callsCount</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                <span class="n">throttledCount</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                <span class="n">next_reset_at</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">())</span> <span class="o">+</span> <span class="mi">86400</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">await</span> <span class="n">auth_redis_conn</span><span class="o">.</span><span class="n">hset</span><span class="p">(</span>
+                <span class="n">user_details_htable</span><span class="p">(</span><span class="n">user_ip</span><span class="p">),</span>
+                <span class="n">mapping</span><span class="o">=</span><span class="n">public_owner</span><span class="o">.</span><span class="n">dict</span><span class="p">(),</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">ip_owner_details</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">k</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">):</span> <span class="n">v</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">ip_user_dets_b</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="p">}</span>
+            <span class="n">public_owner</span> <span class="o">=</span> <span class="n">AppOwnerModel</span><span class="p">(</span><span class="o">**</span><span class="n">ip_owner_details</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">AuthCheck</span><span class="p">(</span>
+            <span class="n">authorized</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">owner</span><span class="o">=</span><span class="n">public_owner</span><span class="p">,</span>
+            <span class="n">api_key</span><span class="o">=</span><span class="s1">&#39;dummy&#39;</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="n">check_user_details</span><span class="p">(</span><span class="n">api_key_in_header</span><span class="p">,</span> <span class="n">auth_redis_conn</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="rate_limit_auth_check"><a class="viewcode-back" href="../../../../snapshotter.auth.helpers.html#snapshotter.auth.helpers.helpers.rate_limit_auth_check">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">rate_limit_auth_check</span><span class="p">(</span>
+    <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span>
+    <span class="n">auth_check</span><span class="p">:</span> <span class="n">AuthCheck</span> <span class="o">=</span> <span class="n">Depends</span><span class="p">(</span><span class="n">auth_check</span><span class="p">),</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RateLimitAuthCheck</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">auth_check</span><span class="o">.</span><span class="n">authorized</span><span class="p">:</span>
+        <span class="n">auth_redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">auth_aioredis_pool</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">passed</span><span class="p">,</span> <span class="n">retry_after</span><span class="p">,</span> <span class="n">violated_limit</span> <span class="o">=</span> <span class="k">await</span> <span class="n">generic_rate_limiter</span><span class="p">(</span>
+                <span class="n">parsed_limits</span><span class="o">=</span><span class="n">parse_many</span><span class="p">(</span><span class="n">auth_check</span><span class="o">.</span><span class="n">owner</span><span class="o">.</span><span class="n">rate_limit</span><span class="p">),</span>
+                <span class="n">key_bits</span><span class="o">=</span><span class="p">[</span>
+                    <span class="c1"># using instance_id instead of chain_id because we just need a unique identifier</span>
+                    <span class="c1"># for shared auth redis(don&#39;t really need chain id)</span>
+                    <span class="nb">str</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">core_settings</span><span class="o">.</span><span class="n">instance_id</span><span class="p">),</span>
+                    <span class="n">auth_check</span><span class="o">.</span><span class="n">owner</span><span class="o">.</span><span class="n">email</span><span class="p">,</span>
+                <span class="p">],</span>
+                <span class="n">redis_conn</span><span class="o">=</span><span class="n">auth_redis_conn</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="n">auth_check</span><span class="o">.</span><span class="n">authorized</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="n">auth_check</span><span class="o">.</span><span class="n">reason</span> <span class="o">=</span> <span class="s1">&#39;internal cache error&#39;</span>
+            <span class="k">return</span> <span class="n">RateLimitAuthCheck</span><span class="p">(</span>
+                <span class="o">**</span><span class="n">auth_check</span><span class="o">.</span><span class="n">dict</span><span class="p">(),</span>
+                <span class="n">rate_limit_passed</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">retry_after</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                <span class="n">violated_limit</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span>
+                <span class="n">current_limit</span><span class="o">=</span><span class="n">auth_check</span><span class="o">.</span><span class="n">owner</span><span class="o">.</span><span class="n">rate_limit</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">ret</span> <span class="o">=</span> <span class="n">RateLimitAuthCheck</span><span class="p">(</span>
+                <span class="o">**</span><span class="n">auth_check</span><span class="o">.</span><span class="n">dict</span><span class="p">(),</span>
+                <span class="n">rate_limit_passed</span><span class="o">=</span><span class="n">passed</span><span class="p">,</span>
+                <span class="n">retry_after</span><span class="o">=</span><span class="n">retry_after</span><span class="p">,</span>
+                <span class="n">violated_limit</span><span class="o">=</span><span class="n">violated_limit</span><span class="p">,</span>
+                <span class="n">current_limit</span><span class="o">=</span><span class="n">auth_check</span><span class="o">.</span><span class="n">owner</span><span class="o">.</span><span class="n">rate_limit</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">passed</span><span class="p">:</span>
+                <span class="k">await</span> <span class="n">incr_throttled_calls_count</span><span class="p">(</span><span class="n">auth_redis_conn</span><span class="p">,</span> <span class="n">ret</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">ret</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">auth_check</span><span class="o">.</span><span class="n">owner</span><span class="o">.</span><span class="n">next_reset_at</span> <span class="o">&lt;=</span> <span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()):</span>
+                <span class="n">owner_updated_obj</span> <span class="o">=</span> <span class="n">auth_check</span><span class="o">.</span><span class="n">owner</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">deep</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="n">owner_updated_obj</span><span class="o">.</span><span class="n">callsCount</span> <span class="o">=</span> <span class="mi">0</span>
+                <span class="n">owner_updated_obj</span><span class="o">.</span><span class="n">throttledCount</span> <span class="o">=</span> <span class="mi">0</span>
+                <span class="n">owner_updated_obj</span><span class="o">.</span><span class="n">next_reset_at</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">())</span> <span class="o">+</span> <span class="mi">86400</span>
+                <span class="k">await</span> <span class="n">auth_redis_conn</span><span class="o">.</span><span class="n">hset</span><span class="p">(</span>
+                    <span class="n">name</span><span class="o">=</span><span class="n">user_details_htable</span><span class="p">(</span><span class="n">owner_updated_obj</span><span class="o">.</span><span class="n">email</span><span class="p">),</span>
+                    <span class="n">mapping</span><span class="o">=</span><span class="n">owner_updated_obj</span><span class="o">.</span><span class="n">dict</span><span class="p">(),</span>
+                <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">RateLimitAuthCheck</span><span class="p">(</span>
+            <span class="o">**</span><span class="n">auth_check</span><span class="o">.</span><span class="n">dict</span><span class="p">(),</span>
+            <span class="n">rate_limit_passed</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">retry_after</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="n">violated_limit</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span>
+            <span class="n">current_limit</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span>
+        <span class="p">)</span></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, Powerloom Inc..</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+</body>
+</html>

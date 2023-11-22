@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>snapshotter.utils.aggregation_worker &mdash; Powerloom Snapshotter 0.1 documentation</title>
+      <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+
+        <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js?v=e031e9a9"></script>
+        <script src="../../../_static/doctools.js?v=888ff710"></script>
+        <script src="../../../_static/sphinx_highlight.js?v=4825356b"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+</head>
+
+<body class="wy-body-for-nav">
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+
+
+          <a href="../../../index.html">
+
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../snapshotter.html">Powerloom Snapshotter</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Powerloom Snapshotter</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">snapshotter.utils.aggregation_worker</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+
+  <h1>Source code for snapshotter.utils.aggregation_worker</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">hashlib</span>
+<span class="kn">import</span> <span class="nn">importlib</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Union</span>
+
+<span class="kn">from</span> <span class="nn">aio_pika</span> <span class="kn">import</span> <span class="n">IncomingMessage</span>
+<span class="kn">from</span> <span class="nn">ipfs_client.main</span> <span class="kn">import</span> <span class="n">AsyncIPFSClient</span>
+<span class="kn">from</span> <span class="nn">ipfs_client.main</span> <span class="kn">import</span> <span class="n">AsyncIPFSClientSingleton</span>
+<span class="kn">from</span> <span class="nn">pydantic</span> <span class="kn">import</span> <span class="n">ValidationError</span>
+
+<span class="kn">from</span> <span class="nn">snapshotter.settings.config</span> <span class="kn">import</span> <span class="n">aggregator_config</span>
+<span class="kn">from</span> <span class="nn">snapshotter.settings.config</span> <span class="kn">import</span> <span class="n">projects_config</span>
+<span class="kn">from</span> <span class="nn">snapshotter.settings.config</span> <span class="kn">import</span> <span class="n">settings</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.callback_helpers</span> <span class="kn">import</span> <span class="n">send_failure_notifications_async</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.generic_worker</span> <span class="kn">import</span> <span class="n">GenericAsyncWorker</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.data_models</span> <span class="kn">import</span> <span class="n">SnapshotterIssue</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.data_models</span> <span class="kn">import</span> <span class="n">SnapshotterReportState</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.data_models</span> <span class="kn">import</span> <span class="n">SnapshotterStates</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.data_models</span> <span class="kn">import</span> <span class="n">SnapshotterStateUpdate</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.message_models</span> <span class="kn">import</span> <span class="n">PowerloomCalculateAggregateMessage</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.message_models</span> <span class="kn">import</span> <span class="n">PowerloomSnapshotSubmittedMessage</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.settings_model</span> <span class="kn">import</span> <span class="n">AggregateOn</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.rate_limiter</span> <span class="kn">import</span> <span class="n">load_rate_limiter_scripts</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">epoch_id_project_to_state_mapping</span>
+
+
+<div class="viewcode-block" id="AggregationAsyncWorker"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.aggregation_worker.AggregationAsyncWorker">[docs]</a><span class="k">class</span> <span class="nc">AggregationAsyncWorker</span><span class="p">(</span><span class="n">GenericAsyncWorker</span><span class="p">):</span>
+    <span class="n">_ipfs_singleton</span><span class="p">:</span> <span class="n">AsyncIPFSClientSingleton</span>
+    <span class="n">_ipfs_writer_client</span><span class="p">:</span> <span class="n">AsyncIPFSClient</span>
+    <span class="n">_ipfs_reader_client</span><span class="p">:</span> <span class="n">AsyncIPFSClient</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initializes an instance of AggregationAsyncWorker.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            name (str): The name of the worker.</span>
+<span class="sd">            **kwargs: Additional keyword arguments to be passed to the parent class constructor.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_q</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;powerloom-backend-cb-aggregate:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">namespace</span><span class="si">}</span><span class="s1">:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">instance_id</span><span class="si">}</span><span class="s1">&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rmq_routing</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;powerloom-backend-callback:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">namespace</span><span class="si">}</span><span class="s1">&#39;</span>
+        <span class="sa">f</span><span class="s1">&#39;:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">instance_id</span><span class="si">}</span><span class="s1">:CalculateAggregate.*&#39;</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">AggregationAsyncWorker</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_project_calculation_mapping</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_single_project_types</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_multi_project_types</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_task_types</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+
+        <span class="k">for</span> <span class="n">config</span> <span class="ow">in</span> <span class="n">aggregator_config</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">config</span><span class="o">.</span><span class="n">aggregate_on</span> <span class="o">==</span> <span class="n">AggregateOn</span><span class="o">.</span><span class="n">single_project</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_single_project_types</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">project_type</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">config</span><span class="o">.</span><span class="n">aggregate_on</span> <span class="o">==</span> <span class="n">AggregateOn</span><span class="o">.</span><span class="n">multi_project</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_multi_project_types</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">project_type</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_task_types</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">project_type</span><span class="p">)</span>
+
+<div class="viewcode-block" id="AggregationAsyncWorker._gen_single_type_project_id"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.aggregation_worker.AggregationAsyncWorker._gen_single_type_project_id">[docs]</a>    <span class="k">def</span> <span class="nf">_gen_single_type_project_id</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task_type</span><span class="p">,</span> <span class="n">epoch</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Generates a project ID for a single task type and epoch.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            task_type (str): The task type.</span>
+<span class="sd">            epoch (Epoch): The epoch object.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            str: The generated project ID.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">data_source</span> <span class="o">=</span> <span class="n">epoch</span><span class="o">.</span><span class="n">projectId</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;:&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span>
+        <span class="n">project_id</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">task_type</span><span class="si">}</span><span class="s1">:</span><span class="si">{</span><span class="n">data_source</span><span class="si">}</span><span class="s1">:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">namespace</span><span class="si">}</span><span class="s1">&#39;</span>
+        <span class="k">return</span> <span class="n">project_id</span></div>
+
+<div class="viewcode-block" id="AggregationAsyncWorker._gen_multiple_type_project_id"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.aggregation_worker.AggregationAsyncWorker._gen_multiple_type_project_id">[docs]</a>    <span class="k">def</span> <span class="nf">_gen_multiple_type_project_id</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task_type</span><span class="p">,</span> <span class="n">epoch</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Generates a unique project ID based on the task type and epoch messages.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            task_type (str): The type of task.</span>
+<span class="sd">            epoch (Epoch): The epoch object containing messages.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            str: The generated project ID.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">underlying_project_ids</span> <span class="o">=</span> <span class="p">[</span><span class="n">project</span><span class="o">.</span><span class="n">projectId</span> <span class="k">for</span> <span class="n">project</span> <span class="ow">in</span> <span class="n">epoch</span><span class="o">.</span><span class="n">messages</span><span class="p">]</span>
+        <span class="n">unique_project_id</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">underlying_project_ids</span><span class="p">))</span>
+
+        <span class="n">project_hash</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha3_256</span><span class="p">(</span><span class="n">unique_project_id</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
+
+        <span class="n">project_id</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">task_type</span><span class="si">}</span><span class="s1">:</span><span class="si">{</span><span class="n">project_hash</span><span class="si">}</span><span class="s1">:</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">namespace</span><span class="si">}</span><span class="s1">&#39;</span>
+        <span class="k">return</span> <span class="n">project_id</span></div>
+
+<div class="viewcode-block" id="AggregationAsyncWorker._gen_project_id"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.aggregation_worker.AggregationAsyncWorker._gen_project_id">[docs]</a>    <span class="k">def</span> <span class="nf">_gen_project_id</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task_type</span><span class="p">,</span> <span class="n">epoch</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Generates a project ID based on the given task type and epoch.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            task_type (str): The type of task.</span>
+<span class="sd">            epoch (int): The epoch number.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            str: The generated project ID.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If the task type is unknown.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">task_type</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_single_project_types</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gen_single_type_project_id</span><span class="p">(</span><span class="n">task_type</span><span class="p">,</span> <span class="n">epoch</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">task_type</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_multi_project_types</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gen_multiple_type_project_id</span><span class="p">(</span><span class="n">task_type</span><span class="p">,</span> <span class="n">epoch</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Unknown project type </span><span class="si">{</span><span class="n">task_type</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AggregationAsyncWorker._processor_task"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.aggregation_worker.AggregationAsyncWorker._processor_task">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_processor_task</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">msg_obj</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">PowerloomSnapshotSubmittedMessage</span><span class="p">,</span> <span class="n">PowerloomCalculateAggregateMessage</span><span class="p">],</span>
+        <span class="n">task_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Process the given message object and task type.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            msg_obj (Union[PowerloomSnapshotSubmittedMessage, PowerloomCalculateAggregateMessage]):</span>
+<span class="sd">                The message object to be processed.</span>
+<span class="sd">            task_type (str): The type of task to be performed.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+            <span class="s1">&#39;Processing callback: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">msg_obj</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">task_type</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_project_calculation_mapping</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                <span class="p">(</span>
+                    <span class="s1">&#39;No project calculation mapping found for task type&#39;</span>
+                    <span class="sa">f</span><span class="s1">&#39; </span><span class="si">{</span><span class="n">task_type</span><span class="si">}</span><span class="s1">. Skipping...&#39;</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="n">project_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gen_project_id</span><span class="p">(</span><span class="n">task_type</span><span class="p">,</span> <span class="n">msg_obj</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rate_limiting_lua_scripts</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_rate_limiting_lua_scripts</span> <span class="o">=</span> <span class="k">await</span> <span class="n">load_rate_limiter_scripts</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                <span class="s1">&#39;Got epoch to process for </span><span class="si">{}</span><span class="s1">: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span>
+                <span class="n">task_type</span><span class="p">,</span> <span class="n">msg_obj</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="n">task_processor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_project_calculation_mapping</span><span class="p">[</span><span class="n">task_type</span><span class="p">]</span>
+
+            <span class="n">snapshot</span> <span class="o">=</span> <span class="k">await</span> <span class="n">task_processor</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span>
+                <span class="n">msg_obj</span><span class="o">=</span><span class="n">msg_obj</span><span class="p">,</span>
+                <span class="n">redis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="p">,</span>
+                <span class="n">rpc_helper</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rpc_helper</span><span class="p">,</span>
+                <span class="n">anchor_rpc_helper</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_anchor_rpc_helper</span><span class="p">,</span>
+                <span class="n">ipfs_reader</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_ipfs_reader_client</span><span class="p">,</span>
+                <span class="n">protocol_state_contract</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">protocol_state_contract</span><span class="p">,</span>
+                <span class="n">project_id</span><span class="o">=</span><span class="n">project_id</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">task_processor</span><span class="o">.</span><span class="n">transformation_lambdas</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">each_lambda</span> <span class="ow">in</span> <span class="n">task_processor</span><span class="o">.</span><span class="n">transformation_lambdas</span><span class="p">:</span>
+                    <span class="n">snapshot</span> <span class="o">=</span> <span class="n">each_lambda</span><span class="p">(</span><span class="n">snapshot</span><span class="p">,</span> <span class="n">msg_obj</span><span class="p">)</span>
+
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                <span class="s1">&#39;Exception processing callback for epoch: </span><span class="si">{}</span><span class="s1">, Error: </span><span class="si">{}</span><span class="s1">,&#39;</span>
+                <span class="s1">&#39;sending failure notifications&#39;</span><span class="p">,</span> <span class="n">msg_obj</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">notification_message</span> <span class="o">=</span> <span class="n">SnapshotterIssue</span><span class="p">(</span>
+                <span class="n">instanceID</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">instance_id</span><span class="p">,</span>
+                <span class="n">issueType</span><span class="o">=</span><span class="n">SnapshotterReportState</span><span class="o">.</span><span class="n">MISSED_SNAPSHOT</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+                <span class="n">projectID</span><span class="o">=</span><span class="n">project_id</span><span class="p">,</span>
+                <span class="n">epochId</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">msg_obj</span><span class="o">.</span><span class="n">epochId</span><span class="p">),</span>
+                <span class="n">timeOfReporting</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()),</span>
+                <span class="n">extra</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s1">&#39;issueDetails&#39;</span><span class="p">:</span> <span class="sa">f</span><span class="s1">&#39;Error : </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">}),</span>
+            <span class="p">)</span>
+            <span class="k">await</span> <span class="n">send_failure_notifications_async</span><span class="p">(</span>
+                <span class="n">client</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="p">,</span> <span class="n">message</span><span class="o">=</span><span class="n">notification_message</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">hset</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="n">epoch_id_project_to_state_mapping</span><span class="p">(</span>
+                    <span class="n">epoch_id</span><span class="o">=</span><span class="n">msg_obj</span><span class="o">.</span><span class="n">epochId</span><span class="p">,</span> <span class="n">state_id</span><span class="o">=</span><span class="n">SnapshotterStates</span><span class="o">.</span><span class="n">SNAPSHOT_BUILD</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="n">mapping</span><span class="o">=</span><span class="p">{</span>
+                    <span class="n">project_id</span><span class="p">:</span> <span class="n">SnapshotterStateUpdate</span><span class="p">(</span>
+                        <span class="n">status</span><span class="o">=</span><span class="s1">&#39;failed&#39;</span><span class="p">,</span> <span class="n">error</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">),</span> <span class="n">timestamp</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()),</span>
+                    <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">(),</span>
+                <span class="p">},</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">snapshot</span><span class="p">:</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">hset</span><span class="p">(</span>
+                    <span class="n">name</span><span class="o">=</span><span class="n">epoch_id_project_to_state_mapping</span><span class="p">(</span>
+                        <span class="n">epoch_id</span><span class="o">=</span><span class="n">msg_obj</span><span class="o">.</span><span class="n">epochId</span><span class="p">,</span> <span class="n">state_id</span><span class="o">=</span><span class="n">SnapshotterStates</span><span class="o">.</span><span class="n">SNAPSHOT_BUILD</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+                    <span class="p">),</span>
+                    <span class="n">mapping</span><span class="o">=</span><span class="p">{</span>
+                        <span class="n">project_id</span><span class="p">:</span> <span class="n">SnapshotterStateUpdate</span><span class="p">(</span>
+                            <span class="n">status</span><span class="o">=</span><span class="s1">&#39;failed&#39;</span><span class="p">,</span> <span class="n">timestamp</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()),</span> <span class="n">error</span><span class="o">=</span><span class="s1">&#39;Empty snapshot&#39;</span><span class="p">,</span>
+                        <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">(),</span>
+                    <span class="p">},</span>
+                <span class="p">)</span>
+                <span class="n">notification_message</span> <span class="o">=</span> <span class="n">SnapshotterIssue</span><span class="p">(</span>
+                    <span class="n">instanceID</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">instance_id</span><span class="p">,</span>
+                    <span class="n">issueType</span><span class="o">=</span><span class="n">SnapshotterReportState</span><span class="o">.</span><span class="n">MISSED_SNAPSHOT</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+                    <span class="n">projectID</span><span class="o">=</span><span class="n">project_id</span><span class="p">,</span>
+                    <span class="n">epochId</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">msg_obj</span><span class="o">.</span><span class="n">epochId</span><span class="p">),</span>
+                    <span class="n">timeOfReporting</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()),</span>
+                    <span class="n">extra</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s1">&#39;issueDetails&#39;</span><span class="p">:</span> <span class="s1">&#39;Error : Empty snapshot&#39;</span><span class="p">}),</span>
+                <span class="p">)</span>
+                <span class="k">await</span> <span class="n">send_failure_notifications_async</span><span class="p">(</span>
+                    <span class="n">client</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="p">,</span> <span class="n">message</span><span class="o">=</span><span class="n">notification_message</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">hset</span><span class="p">(</span>
+                    <span class="n">name</span><span class="o">=</span><span class="n">epoch_id_project_to_state_mapping</span><span class="p">(</span>
+                        <span class="n">epoch_id</span><span class="o">=</span><span class="n">msg_obj</span><span class="o">.</span><span class="n">epochId</span><span class="p">,</span> <span class="n">state_id</span><span class="o">=</span><span class="n">SnapshotterStates</span><span class="o">.</span><span class="n">SNAPSHOT_BUILD</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+                    <span class="p">),</span>
+                    <span class="n">mapping</span><span class="o">=</span><span class="p">{</span>
+                        <span class="n">project_id</span><span class="p">:</span> <span class="n">SnapshotterStateUpdate</span><span class="p">(</span>
+                            <span class="n">status</span><span class="o">=</span><span class="s1">&#39;success&#39;</span><span class="p">,</span> <span class="n">timestamp</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()),</span>
+                        <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">(),</span>
+                    <span class="p">},</span>
+                <span class="p">)</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_commit_payload</span><span class="p">(</span>
+                    <span class="n">task_type</span><span class="o">=</span><span class="n">task_type</span><span class="p">,</span>
+                    <span class="n">project_id</span><span class="o">=</span><span class="n">project_id</span><span class="p">,</span>
+                    <span class="n">epoch</span><span class="o">=</span><span class="n">msg_obj</span><span class="p">,</span>
+                    <span class="n">snapshot</span><span class="o">=</span><span class="n">snapshot</span><span class="p">,</span>
+                    <span class="n">storage_flag</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">web3storage</span><span class="o">.</span><span class="n">upload_aggregates</span><span class="p">,</span>
+                    <span class="n">_ipfs_writer_client</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_ipfs_writer_client</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                <span class="s1">&#39;Updated epoch processing status in aggregation worker for project </span><span class="si">{}</span><span class="s1"> for transition </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span>
+                <span class="n">project_id</span><span class="p">,</span> <span class="n">SnapshotterStates</span><span class="o">.</span><span class="n">SNAPSHOT_BUILD</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="AggregationAsyncWorker._on_rabbitmq_message"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.aggregation_worker.AggregationAsyncWorker._on_rabbitmq_message">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_on_rabbitmq_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">IncomingMessage</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Callback function to handle incoming RabbitMQ messages.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            message (IncomingMessage): The incoming RabbitMQ message.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">task_type</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">routing_key</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">task_type</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_task_types</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="k">await</span> <span class="n">message</span><span class="o">.</span><span class="n">ack</span><span class="p">()</span>
+
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_worker</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;task type: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">task_type</span><span class="p">)</span>
+        <span class="c1"># TODO: Update based on new single project based design</span>
+        <span class="k">if</span> <span class="n">task_type</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_single_project_types</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">msg_obj</span><span class="p">:</span> <span class="n">PowerloomSnapshotSubmittedMessage</span> <span class="o">=</span> <span class="n">PowerloomSnapshotSubmittedMessage</span><span class="o">.</span><span class="n">parse_raw</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">body</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">ValidationError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                    <span class="p">(</span>
+                        <span class="s1">&#39;Bad message structure of callback processor. Error: </span><span class="si">{}</span><span class="s1">&#39;</span>
+                    <span class="p">),</span>
+                    <span class="n">e</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">return</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                    <span class="p">(</span>
+                        <span class="s1">&#39;Unexpected message structure of callback in processor. Error: </span><span class="si">{}</span><span class="s1">&#39;</span>
+                    <span class="p">),</span>
+                    <span class="n">e</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">return</span>
+        <span class="k">elif</span> <span class="n">task_type</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_multi_project_types</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">msg_obj</span><span class="p">:</span> <span class="n">PowerloomCalculateAggregateMessage</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">PowerloomCalculateAggregateMessage</span><span class="o">.</span><span class="n">parse_raw</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">body</span><span class="p">)</span>
+                <span class="p">)</span>
+            <span class="k">except</span> <span class="n">ValidationError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                    <span class="p">(</span>
+                        <span class="s1">&#39;Bad message structure of callback processor. Error: </span><span class="si">{}</span><span class="s1">&#39;</span>
+                    <span class="p">),</span>
+                    <span class="n">e</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">return</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                    <span class="p">(</span>
+                        <span class="s1">&#39;Unexpected message structure of callback in processor. Error: </span><span class="si">{}</span><span class="s1">&#39;</span>
+                    <span class="p">),</span>
+                    <span class="n">e</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">return</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                <span class="s1">&#39;Unknown task type </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">task_type</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">return</span>
+        <span class="n">asyncio</span><span class="o">.</span><span class="n">ensure_future</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_processor_task</span><span class="p">(</span><span class="n">msg_obj</span><span class="o">=</span><span class="n">msg_obj</span><span class="p">,</span> <span class="n">task_type</span><span class="o">=</span><span class="n">task_type</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="AggregationAsyncWorker._init_project_calculation_mapping"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.aggregation_worker.AggregationAsyncWorker._init_project_calculation_mapping">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_init_project_calculation_mapping</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initializes the project calculation mapping by importing the processor module and class for each project type</span>
+<span class="sd">        specified in the aggregator and projects configuration. Raises an exception if a duplicate project type is found.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_project_calculation_mapping</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_project_calculation_mapping</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">project_config</span> <span class="ow">in</span> <span class="n">aggregator_config</span><span class="p">:</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="n">project_config</span><span class="o">.</span><span class="n">project_type</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_project_calculation_mapping</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s1">&#39;Duplicate project type found&#39;</span><span class="p">)</span>
+            <span class="n">module</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="n">project_config</span><span class="o">.</span><span class="n">processor</span><span class="o">.</span><span class="n">module</span><span class="p">)</span>
+            <span class="n">class_</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">project_config</span><span class="o">.</span><span class="n">processor</span><span class="o">.</span><span class="n">class_name</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_project_calculation_mapping</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">class_</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">project_config</span> <span class="ow">in</span> <span class="n">projects_config</span><span class="p">:</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="n">project_config</span><span class="o">.</span><span class="n">project_type</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_project_calculation_mapping</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s1">&#39;Duplicate project type found&#39;</span><span class="p">)</span>
+            <span class="n">module</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="n">project_config</span><span class="o">.</span><span class="n">processor</span><span class="o">.</span><span class="n">module</span><span class="p">)</span>
+            <span class="n">class_</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">project_config</span><span class="o">.</span><span class="n">processor</span><span class="o">.</span><span class="n">class_name</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_project_calculation_mapping</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">class_</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="AggregationAsyncWorker._init_ipfs_client"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.aggregation_worker.AggregationAsyncWorker._init_ipfs_client">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_init_ipfs_client</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initializes the IPFS client and sets the write and read clients for the class.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ipfs_singleton</span> <span class="o">=</span> <span class="n">AsyncIPFSClientSingleton</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">ipfs</span><span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ipfs_singleton</span><span class="o">.</span><span class="n">init_sessions</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ipfs_writer_client</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ipfs_singleton</span><span class="o">.</span><span class="n">_ipfs_write_client</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ipfs_reader_client</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ipfs_singleton</span><span class="o">.</span><span class="n">_ipfs_read_client</span></div>
+
+<div class="viewcode-block" id="AggregationAsyncWorker.init_worker"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.aggregation_worker.AggregationAsyncWorker.init_worker">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">init_worker</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initializes the worker by initializing project calculation mapping, IPFS client, and other necessary components.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialized</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_project_calculation_mapping</span><span class="p">()</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_ipfs_client</span><span class="p">()</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">init</span><span class="p">()</span></div></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, Powerloom Inc..</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+</body>
+</html>

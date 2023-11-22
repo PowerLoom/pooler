@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>snapshotter.auth.server_entry &mdash; Powerloom Snapshotter 0.1 documentation</title>
+      <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+
+        <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js?v=e031e9a9"></script>
+        <script src="../../../_static/doctools.js?v=888ff710"></script>
+        <script src="../../../_static/sphinx_highlight.js?v=4825356b"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+</head>
+
+<body class="wy-body-for-nav">
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+
+
+          <a href="../../../index.html">
+
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../snapshotter.html">Powerloom Snapshotter</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Powerloom Snapshotter</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">snapshotter.auth.server_entry</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+
+  <h1>Source code for snapshotter.auth.server_entry</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">time</span>
+
+<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">FastAPI</span>
+<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">Request</span>
+<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">Response</span>
+<span class="kn">from</span> <span class="nn">fastapi.middleware.cors</span> <span class="kn">import</span> <span class="n">CORSMiddleware</span>
+<span class="kn">from</span> <span class="nn">redis</span> <span class="kn">import</span> <span class="n">asyncio</span> <span class="k">as</span> <span class="n">aioredis</span>
+
+<span class="kn">from</span> <span class="nn">snapshotter.auth.helpers.data_models</span> <span class="kn">import</span> <span class="n">AddApiKeyRequest</span>
+<span class="kn">from</span> <span class="nn">snapshotter.auth.helpers.data_models</span> <span class="kn">import</span> <span class="n">AppOwnerModel</span>
+<span class="kn">from</span> <span class="nn">snapshotter.auth.helpers.data_models</span> <span class="kn">import</span> <span class="n">UserAllDetailsResponse</span>
+<span class="kn">from</span> <span class="nn">snapshotter.auth.helpers.redis_conn</span> <span class="kn">import</span> <span class="n">RedisPoolCache</span>
+<span class="kn">from</span> <span class="nn">snapshotter.auth.helpers.redis_keys</span> <span class="kn">import</span> <span class="n">all_users_set</span>
+<span class="kn">from</span> <span class="nn">snapshotter.auth.helpers.redis_keys</span> <span class="kn">import</span> <span class="n">api_key_to_owner_key</span>
+<span class="kn">from</span> <span class="nn">snapshotter.auth.helpers.redis_keys</span> <span class="kn">import</span> <span class="n">user_active_api_keys_set</span>
+<span class="kn">from</span> <span class="nn">snapshotter.auth.helpers.redis_keys</span> <span class="kn">import</span> <span class="n">user_details_htable</span>
+<span class="kn">from</span> <span class="nn">snapshotter.auth.helpers.redis_keys</span> <span class="kn">import</span> <span class="n">user_revoked_api_keys_set</span>
+<span class="kn">from</span> <span class="nn">snapshotter.settings.config</span> <span class="kn">import</span> <span class="n">settings</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.default_logger</span> <span class="kn">import</span> <span class="n">logger</span>
+
+<span class="c1"># setup logging</span>
+<span class="n">api_logger</span> <span class="o">=</span> <span class="n">logger</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">module</span><span class="o">=</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="c1"># setup CORS origins stuff</span>
+<span class="n">origins</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;*&#39;</span><span class="p">]</span>
+<span class="n">app</span> <span class="o">=</span> <span class="n">FastAPI</span><span class="p">()</span>
+<span class="n">app</span><span class="o">.</span><span class="n">add_middleware</span><span class="p">(</span>
+    <span class="n">CORSMiddleware</span><span class="p">,</span>
+    <span class="n">allow_origins</span><span class="o">=</span><span class="n">origins</span><span class="p">,</span>
+    <span class="n">allow_credentials</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">allow_methods</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;*&#39;</span><span class="p">],</span>
+    <span class="n">allow_headers</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;*&#39;</span><span class="p">],</span>
+<span class="p">)</span>
+
+
+<div class="viewcode-block" id="startup_boilerplate"><a class="viewcode-back" href="../../../snapshotter.auth.html#snapshotter.auth.server_entry.startup_boilerplate">[docs]</a><span class="nd">@app</span><span class="o">.</span><span class="n">on_event</span><span class="p">(</span><span class="s1">&#39;startup&#39;</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">startup_boilerplate</span><span class="p">():</span>
+    <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">aioredis_pool</span> <span class="o">=</span> <span class="n">RedisPoolCache</span><span class="p">(</span><span class="n">pool_size</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+    <span class="k">await</span> <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">aioredis_pool</span><span class="o">.</span><span class="n">populate</span><span class="p">()</span>
+    <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">redis_pool</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">aioredis_pool</span><span class="o">.</span><span class="n">_aioredis_pool</span>
+    <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">core_settings</span> <span class="o">=</span> <span class="n">settings</span></div>
+
+
+<div class="viewcode-block" id="create_update_user"><a class="viewcode-back" href="../../../snapshotter.auth.html#snapshotter.auth.server_entry.create_update_user">[docs]</a><span class="nd">@app</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="s1">&#39;/user&#39;</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">create_update_user</span><span class="p">(</span>
+    <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span>
+    <span class="n">user_cu_request</span><span class="p">:</span> <span class="n">AppOwnerModel</span><span class="p">,</span>
+    <span class="n">response</span><span class="p">:</span> <span class="n">Response</span><span class="p">,</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    can be used for both creating a new entity or updating an entity&#39;s information in the redis htable</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">redis_pool</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span>
+            <span class="n">all_users_set</span><span class="p">(),</span>
+            <span class="n">user_cu_request</span><span class="o">.</span><span class="n">email</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">sismember</span><span class="p">(</span>
+            <span class="n">all_users_set</span><span class="p">(),</span>
+            <span class="n">user_cu_request</span><span class="o">.</span><span class="n">email</span><span class="p">,</span>
+        <span class="p">):</span>
+            <span class="n">user_cu_request</span><span class="o">.</span><span class="n">next_reset_at</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">())</span> <span class="o">+</span> <span class="mi">86400</span>
+        <span class="n">user_details</span> <span class="o">=</span> <span class="n">user_cu_request</span><span class="o">.</span><span class="n">dict</span><span class="p">()</span>
+        <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">hset</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">user_details_htable</span><span class="p">(</span><span class="n">user_cu_request</span><span class="o">.</span><span class="n">email</span><span class="p">),</span>
+            <span class="n">mapping</span><span class="o">=</span><span class="n">user_details</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">api_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;success&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">}</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;success&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="add_api_key"><a class="viewcode-back" href="../../../snapshotter.auth.html#snapshotter.auth.server_entry.add_api_key">[docs]</a><span class="nd">@app</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="s1">&#39;/user/</span><span class="si">{email}</span><span class="s1">/api_key&#39;</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">add_api_key</span><span class="p">(</span>
+    <span class="n">api_key_request</span><span class="p">:</span> <span class="n">AddApiKeyRequest</span><span class="p">,</span>
+    <span class="n">email</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span>
+    <span class="n">response</span><span class="p">:</span> <span class="n">Response</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="n">redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">redis_pool</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">sismember</span><span class="p">(</span><span class="n">all_users_set</span><span class="p">(),</span> <span class="n">email</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;success&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s1">&#39;error&#39;</span><span class="p">:</span> <span class="s1">&#39;User does not exists&#39;</span><span class="p">}</span>
+
+    <span class="k">async</span> <span class="k">with</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="n">transaction</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="k">as</span> <span class="n">p</span><span class="p">:</span>
+        <span class="k">await</span> <span class="n">p</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span>
+            <span class="n">user_active_api_keys_set</span><span class="p">(</span><span class="n">email</span><span class="p">),</span>
+            <span class="n">api_key_request</span><span class="o">.</span><span class="n">api_key</span><span class="p">,</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">api_key_to_owner_key</span><span class="p">(</span><span class="n">api_key_request</span><span class="o">.</span><span class="n">api_key</span><span class="p">),</span> <span class="n">email</span><span class="p">)</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;success&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="revoke_api_key"><a class="viewcode-back" href="../../../snapshotter.auth.html#snapshotter.auth.server_entry.revoke_api_key">[docs]</a><span class="nd">@app</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s1">&#39;/user/</span><span class="si">{email}</span><span class="s1">/api_key&#39;</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">revoke_api_key</span><span class="p">(</span>
+    <span class="n">api_key_request</span><span class="p">:</span> <span class="n">AddApiKeyRequest</span><span class="p">,</span>
+    <span class="n">email</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span>
+    <span class="n">response</span><span class="p">:</span> <span class="n">Response</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="n">redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">redis_pool</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">sismember</span><span class="p">(</span><span class="n">all_users_set</span><span class="p">(),</span> <span class="n">email</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;success&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s1">&#39;error&#39;</span><span class="p">:</span> <span class="s1">&#39;User does not exists&#39;</span><span class="p">}</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">sismember</span><span class="p">(</span>
+        <span class="n">user_active_api_keys_set</span><span class="p">(</span><span class="n">email</span><span class="p">),</span>
+        <span class="n">api_key_request</span><span class="o">.</span><span class="n">api_key</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;success&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s1">&#39;error&#39;</span><span class="p">:</span> <span class="s1">&#39;API key not active&#39;</span><span class="p">}</span>
+    <span class="k">elif</span> <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">sismember</span><span class="p">(</span>
+        <span class="n">user_revoked_api_keys_set</span><span class="p">(</span><span class="n">email</span><span class="p">),</span>
+        <span class="n">api_key_request</span><span class="o">.</span><span class="n">api_key</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;success&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s1">&#39;error&#39;</span><span class="p">:</span> <span class="s1">&#39;API key already revoked&#39;</span><span class="p">}</span>
+    <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">smove</span><span class="p">(</span>
+        <span class="n">user_active_api_keys_set</span><span class="p">(</span><span class="n">email</span><span class="p">),</span>
+        <span class="n">user_revoked_api_keys_set</span><span class="p">(</span><span class="n">email</span><span class="p">),</span>
+        <span class="n">api_key_request</span><span class="o">.</span><span class="n">api_key</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;success&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="get_user_details"><a class="viewcode-back" href="../../../snapshotter.auth.html#snapshotter.auth.server_entry.get_user_details">[docs]</a><span class="nd">@app</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;/user/</span><span class="si">{email}</span><span class="s1">&#39;</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">get_user_details</span><span class="p">(</span>
+    <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span>
+    <span class="n">response</span><span class="p">:</span> <span class="n">Response</span><span class="p">,</span>
+    <span class="n">email</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="n">redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">redis_pool</span>
+
+    <span class="n">all_details</span> <span class="o">=</span> <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">hgetall</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">user_details_htable</span><span class="p">(</span><span class="n">email</span><span class="p">))</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">all_details</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;success&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s1">&#39;error&#39;</span><span class="p">:</span> <span class="s1">&#39;User does not exists&#39;</span><span class="p">}</span>
+
+    <span class="n">active_api_keys</span> <span class="o">=</span> <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">smembers</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="n">user_active_api_keys_set</span><span class="p">(</span><span class="n">email</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">revoked_api_keys</span> <span class="o">=</span> <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">smembers</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="n">user_revoked_api_keys_set</span><span class="p">(</span><span class="n">email</span><span class="p">),</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s1">&#39;success&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s1">&#39;data&#39;</span><span class="p">:</span> <span class="n">UserAllDetailsResponse</span><span class="p">(</span>
+            <span class="o">**</span><span class="p">{</span><span class="n">k</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">):</span> <span class="n">v</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">all_details</span><span class="o">.</span><span class="n">items</span><span class="p">()},</span>
+            <span class="n">active_api_keys</span><span class="o">=</span><span class="p">[</span><span class="n">x</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">active_api_keys</span><span class="p">],</span>
+            <span class="n">revoked_api_keys</span><span class="o">=</span><span class="p">[</span><span class="n">x</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">revoked_api_keys</span><span class="p">],</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">dict</span><span class="p">(),</span>
+    <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="get_all_users"><a class="viewcode-back" href="../../../snapshotter.auth.html#snapshotter.auth.server_entry.get_all_users">[docs]</a><span class="nd">@app</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;/users&#39;</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">get_all_users</span><span class="p">(</span>
+    <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span>
+    <span class="n">response</span><span class="p">:</span> <span class="n">Response</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="n">redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">redis_pool</span>
+    <span class="n">all_users</span> <span class="o">=</span> <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">smembers</span><span class="p">(</span><span class="n">all_users_set</span><span class="p">())</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s1">&#39;success&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s1">&#39;data&#39;</span><span class="p">:</span> <span class="p">[</span><span class="n">x</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">all_users</span><span class="p">],</span>
+    <span class="p">}</span></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, Powerloom Inc..</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+</body>
+</html>

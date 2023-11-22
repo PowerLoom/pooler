@@ -1,6 +1,11 @@
 snapshotter.utils.preloaders.tx\_receipts package
 =================================================
 
+.. automodule:: snapshotter.utils.preloaders.tx_receipts
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Subpackages
 -----------
 
@@ -12,18 +17,10 @@ Subpackages
 Submodules
 ----------
 
-snapshotter.utils.preloaders.tx\_receipts.preloader module
+snapshotter.utils.preloaders.tx\_receipts.preloader
 ----------------------------------------------------------
 
 .. automodule:: snapshotter.utils.preloaders.tx_receipts.preloader
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Module contents
----------------
-
-.. automodule:: snapshotter.utils.preloaders.tx_receipts
    :members:
    :undoc-members:
    :show-inheritance:

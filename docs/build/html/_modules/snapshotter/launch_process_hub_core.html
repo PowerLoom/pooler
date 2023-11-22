@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>snapshotter.launch_process_hub_core &mdash; Powerloom Snapshotter 0.1 documentation</title>
+      <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+
+        <script src="../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js?v=e031e9a9"></script>
+        <script src="../../_static/doctools.js?v=888ff710"></script>
+        <script src="../../_static/sphinx_highlight.js?v=4825356b"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+</head>
+
+<body class="wy-body-for-nav">
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+
+
+          <a href="../../index.html">
+
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../snapshotter.html">Powerloom Snapshotter</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Powerloom Snapshotter</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">snapshotter.launch_process_hub_core</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+
+  <h1>Source code for snapshotter.launch_process_hub_core</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">signal</span>
+
+<span class="kn">from</span> <span class="nn">snapshotter.init_rabbitmq</span> <span class="kn">import</span> <span class="n">init_exchanges_queues</span>
+<span class="kn">from</span> <span class="nn">snapshotter.process_hub_core</span> <span class="kn">import</span> <span class="n">ProcessHubCore</span>
+<span class="kn">from</span> <span class="nn">snapshotter.settings.config</span> <span class="kn">import</span> <span class="n">settings</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.default_logger</span> <span class="kn">import</span> <span class="n">logger</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.exceptions</span> <span class="kn">import</span> <span class="n">GenericExitOnSignal</span>
+
+
+<div class="viewcode-block" id="generic_exit_handler"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.launch_process_hub_core.generic_exit_handler">[docs]</a><span class="k">def</span> <span class="nf">generic_exit_handler</span><span class="p">(</span><span class="n">signum</span><span class="p">,</span> <span class="n">frame</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A signal handler function that raises a GenericExitOnSignal exception.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        signum (int): The signal number.</span>
+<span class="sd">        frame (frame): The current stack frame at the time the signal was received.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">raise</span> <span class="n">GenericExitOnSignal</span></div>
+
+
+<div class="viewcode-block" id="main"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.launch_process_hub_core.main">[docs]</a><span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Launches the ProcessHubCore and waits for it to join. Handles SIGINT, SIGTERM, and SIGQUIT signals.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">signame</span> <span class="ow">in</span> <span class="p">[</span><span class="n">signal</span><span class="o">.</span><span class="n">SIGINT</span><span class="p">,</span> <span class="n">signal</span><span class="o">.</span><span class="n">SIGTERM</span><span class="p">,</span> <span class="n">signal</span><span class="o">.</span><span class="n">SIGQUIT</span><span class="p">]:</span>
+        <span class="n">signal</span><span class="o">.</span><span class="n">signal</span><span class="p">(</span><span class="n">signame</span><span class="p">,</span> <span class="n">generic_exit_handler</span><span class="p">)</span>
+
+    <span class="c1"># setup logging</span>
+    <span class="c1"># Using bind to pass extra parameters to the logger, will show up in the {extra} field</span>
+    <span class="n">launcher_logger</span> <span class="o">=</span> <span class="n">logger</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span>
+        <span class="n">module</span><span class="o">=</span><span class="s1">&#39;Powerloom|SnapshotterProcessHub|Core|Launcher&#39;</span><span class="p">,</span>
+        <span class="n">namespace</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
+        <span class="n">instance_id</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">instance_id</span><span class="p">[:</span><span class="mi">5</span><span class="p">],</span>
+    <span class="p">)</span>
+
+    <span class="n">init_exchanges_queues</span><span class="p">()</span>
+    <span class="n">p_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;Powerloom|SnapshotterProcessHub|Core-</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">instance_id</span><span class="p">[:</span><span class="mi">5</span><span class="p">]</span><span class="si">}</span><span class="s1">&#39;</span>
+    <span class="n">core</span> <span class="o">=</span> <span class="n">ProcessHubCore</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">p_name</span><span class="p">)</span>
+    <span class="n">core</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+    <span class="n">launcher_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;Launched </span><span class="si">{}</span><span class="s1"> with PID </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">p_name</span><span class="p">,</span> <span class="n">core</span><span class="o">.</span><span class="n">pid</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">launcher_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+            <span class="s1">&#39;</span><span class="si">{}</span><span class="s1"> Launcher still waiting on core to join...&#39;</span><span class="p">,</span>
+            <span class="n">p_name</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">core</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+    <span class="k">except</span> <span class="n">GenericExitOnSignal</span><span class="p">:</span>
+        <span class="n">launcher_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="s1">&#39;</span><span class="si">{}</span><span class="s1"> Launcher received SIGTERM. Will attempt to join with&#39;</span>
+                <span class="s1">&#39; ProcessHubCore process...&#39;</span>
+            <span class="p">),</span>
+            <span class="n">p_name</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">launcher_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                <span class="s1">&#39;</span><span class="si">{}</span><span class="s1"> Launcher still waiting on core to join...&#39;</span><span class="p">,</span>
+                <span class="n">p_name</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">core</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">launcher_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="p">(</span><span class="s1">&#39;</span><span class="si">{}</span><span class="s1"> Launcher caught exception still waiting on core to&#39;</span> <span class="s1">&#39; join... </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">),</span>
+                <span class="n">p_name</span><span class="p">,</span>
+                <span class="n">e</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="n">launcher_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+            <span class="s1">&#39;</span><span class="si">{}</span><span class="s1"> Launcher found alive status of core: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span>
+            <span class="n">p_name</span><span class="p">,</span>
+            <span class="n">core</span><span class="o">.</span><span class="n">is_alive</span><span class="p">(),</span>
+        <span class="p">)</span></div>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">()</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, Powerloom Inc..</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>snapshotter.utils.rabbitmq_helpers &mdash; Powerloom Snapshotter 0.1 documentation</title>
+      <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+
+        <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js?v=e031e9a9"></script>
+        <script src="../../../_static/doctools.js?v=888ff710"></script>
+        <script src="../../../_static/sphinx_highlight.js?v=4825356b"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+</head>
+
+<body class="wy-body-for-nav">
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+
+
+          <a href="../../../index.html">
+
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../snapshotter.html">Powerloom Snapshotter</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Powerloom Snapshotter</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">snapshotter.utils.rabbitmq_helpers</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+
+  <h1>Source code for snapshotter.utils.rabbitmq_helpers</h1><div class="highlight"><pre>
+<span></span><span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1"># pylint: disable=C0111,C0103,R0205</span>
+<span class="kn">import</span> <span class="nn">functools</span>
+<span class="kn">import</span> <span class="nn">queue</span>
+<span class="kn">import</span> <span class="nn">uuid</span>
+<span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">wraps</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Union</span>
+
+<span class="kn">import</span> <span class="nn">pika.channel</span>
+<span class="kn">import</span> <span class="nn">pika.exceptions</span>
+<span class="kn">from</span> <span class="nn">tenacity</span> <span class="kn">import</span> <span class="n">RetryCallState</span>
+<span class="kn">from</span> <span class="nn">tenacity</span> <span class="kn">import</span> <span class="n">Retrying</span>
+<span class="kn">from</span> <span class="nn">tenacity</span> <span class="kn">import</span> <span class="n">wait_random_exponential</span>
+
+<span class="kn">from</span> <span class="nn">snapshotter.settings.config</span> <span class="kn">import</span> <span class="n">settings</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.default_logger</span> <span class="kn">import</span> <span class="n">logger</span>
+
+<span class="c1"># setup logging</span>
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logger</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">module</span><span class="o">=</span><span class="s1">&#39;Powerloom|RabbitmqHelpers&#39;</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="log_retry_callback"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.log_retry_callback">[docs]</a><span class="k">def</span> <span class="nf">log_retry_callback</span><span class="p">(</span><span class="n">retry_state</span><span class="p">:</span> <span class="n">RetryCallState</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Logs the attempt number of the retry state and returns True if the exception is an AMQPError and the attempt number is less than 5.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        retry_state (RetryCallState): The retry state object.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        bool: True if the exception is an AMQPError and the attempt number is less than 5, False otherwise.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span>
+        <span class="s1">&#39;In rabbitmq reconnection helper decorator. attempt number: &#39;</span><span class="p">,</span>
+        <span class="n">retry_state</span><span class="o">.</span><span class="n">attempt_number</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="nb">isinstance</span><span class="p">(</span><span class="n">retry_state</span><span class="o">.</span><span class="n">outcome</span><span class="o">.</span><span class="n">exception</span><span class="p">(),</span> <span class="n">pika</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">AMQPError</span><span class="p">)</span> <span class="ow">and</span>
+        <span class="n">retry_state</span><span class="o">.</span><span class="n">attempt_number</span> <span class="o">&lt;</span> <span class="mi">5</span>
+    <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="resume_on_rabbitmq_fail"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.resume_on_rabbitmq_fail">[docs]</a><span class="k">def</span> <span class="nf">resume_on_rabbitmq_fail</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Decorator function that retries the wrapped function in case of RabbitMQ failure.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        fn: The function to be wrapped.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        The wrapped function.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="nd">@wraps</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">wrapper</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">Retrying</span><span class="p">(</span>
+            <span class="n">reraise</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">wait</span><span class="o">=</span><span class="n">wait_random_exponential</span><span class="p">(</span><span class="n">multiplier</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="mi">60</span><span class="p">),</span>
+            <span class="n">retry</span><span class="o">=</span><span class="n">log_retry_callback</span><span class="p">,</span>
+        <span class="p">):</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="n">ret</span> <span class="o">=</span> <span class="n">fn</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">ret</span>
+
+    <span class="k">return</span> <span class="n">wrapper</span></div>
+
+
+<span class="c1"># Adapted from:</span>
+<span class="c1"># https://github.com/pika/pika/blob/12dcdf15d0932c388790e0fa990810bfd21b1a32/examples/asynchronous_publisher_example.py</span>
+<span class="c1"># https://github.com/pika/pika/blob/12dcdf15d0932c388790e0fa990810bfd21b1a32/examples/asynchronous_consumer_example.py</span>
+<div class="viewcode-block" id="RabbitmqSelectLoopInteractor"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqSelectLoopInteractor">[docs]</a><span class="k">class</span> <span class="nc">RabbitmqSelectLoopInteractor</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;This is an example publisher/consumer that will handle unexpected interactions</span>
+<span class="sd">    with RabbitMQ such as channel and connection closures.</span>
+
+<span class="sd">    If RabbitMQ closes the connection, it will reopen it. You should</span>
+<span class="sd">    look at the output, as there are limited reasons why the connection may</span>
+<span class="sd">    be closed, which usually are tied to permission related issues or</span>
+<span class="sd">    socket timeouts.</span>
+
+<span class="sd">    It uses delivery confirmations and illustrates one way to keep track of</span>
+<span class="sd">    messages that have been sent and if they&#39;ve been confirmed by RabbitMQ.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c1"># interval at which the select loop polls to push out new notifications</span>
+    <span class="n">PUBLISH_INTERVAL</span> <span class="o">=</span> <span class="mf">0.1</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">consume_queue_name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">consume_callback</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">consumer_worker_name</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Setup the example publisher object, passing in the URL we will use</span>
+<span class="sd">        to connect to RabbitMQ.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="n">pika</span><span class="o">.</span><span class="n">channel</span><span class="o">.</span><span class="n">Channel</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">should_reconnect</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span> <span class="o">=</span> <span class="n">consumer_worker_name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">was_consuming</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_tag</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">queued_messages</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_acked</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_nacked</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_message_number</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_closing</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stopping</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_exchange</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_routing_key</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_consuming</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_consume_queue</span> <span class="o">=</span> <span class="n">consume_queue_name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_consume_callback</span> <span class="o">=</span> <span class="n">consume_callback</span>
+        <span class="c1"># In production, experiment with higher prefetch values</span>
+        <span class="c1"># for higher consumer throughput</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_prefetch_count</span> <span class="o">=</span> <span class="mi">1</span>
+
+<div class="viewcode-block" id="RabbitmqSelectLoopInteractor.connect"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqSelectLoopInteractor.connect">[docs]</a>    <span class="k">def</span> <span class="nf">connect</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This method connects to RabbitMQ, returning the connection handle.</span>
+<span class="sd">        When the connection is established, the on_connection_open method</span>
+<span class="sd">        will be invoked by pika.</span>
+
+<span class="sd">        :rtype: pika.SelectConnection</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ select loop interactor: Creating RabbitMQ select&#39;</span>
+                <span class="s1">&#39; ioloop connection to </span><span class="si">{}</span><span class="s1">&#39;</span>
+            <span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+            <span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">rabbitmq</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">settings</span><span class="o">.</span><span class="n">rabbitmq</span><span class="o">.</span><span class="n">port</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">pika</span><span class="o">.</span><span class="n">SelectConnection</span><span class="p">(</span>
+            <span class="n">parameters</span><span class="o">=</span><span class="n">pika</span><span class="o">.</span><span class="n">ConnectionParameters</span><span class="p">(</span>
+                <span class="n">host</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">rabbitmq</span><span class="o">.</span><span class="n">host</span><span class="p">,</span>
+                <span class="n">port</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">rabbitmq</span><span class="o">.</span><span class="n">port</span><span class="p">,</span>
+                <span class="n">virtual_host</span><span class="o">=</span><span class="s1">&#39;/&#39;</span><span class="p">,</span>
+                <span class="n">credentials</span><span class="o">=</span><span class="n">pika</span><span class="o">.</span><span class="n">PlainCredentials</span><span class="p">(</span>
+                    <span class="n">username</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">rabbitmq</span><span class="o">.</span><span class="n">user</span><span class="p">,</span>
+                    <span class="n">password</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">rabbitmq</span><span class="o">.</span><span class="n">password</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="n">heartbeat</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">on_open_callback</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">on_connection_open</span><span class="p">,</span>
+            <span class="n">on_open_error_callback</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">on_connection_open_error</span><span class="p">,</span>
+            <span class="n">on_close_callback</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">on_connection_closed</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="RabbitmqSelectLoopInteractor.on_connection_open"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqSelectLoopInteractor.on_connection_open">[docs]</a>    <span class="k">def</span> <span class="nf">on_connection_open</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_unused_connection</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This method is called by pika once the connection to RabbitMQ has</span>
+<span class="sd">        been established. It passes the handle to the connection object in</span>
+<span class="sd">        case we need it, but in this case, we&#39;ll just mark it unused.</span>
+
+<span class="sd">        :param pika.SelectConnection _unused_connection: The connection</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ select loop interactor: Connection opened&#39;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">open_channel</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="RabbitmqSelectLoopInteractor.on_connection_open_error"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqSelectLoopInteractor.on_connection_open_error">[docs]</a>    <span class="k">def</span> <span class="nf">on_connection_open_error</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_unused_connection</span><span class="p">,</span> <span class="n">err</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This method is called by pika if the connection to RabbitMQ</span>
+<span class="sd">        can&#39;t be established.</span>
+
+<span class="sd">        :param pika.SelectConnection _unused_connection: The connection</span>
+<span class="sd">        :param Exception err: The error</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ select loop interactor: Connection open failed,&#39;</span>
+                <span class="s1">&#39; reopening in 5 seconds: </span><span class="si">{}</span><span class="s1">&#39;</span>
+            <span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+            <span class="n">err</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">ioloop</span><span class="o">.</span><span class="n">call_later</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">ioloop</span><span class="o">.</span><span class="n">stop</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="RabbitmqSelectLoopInteractor.on_connection_closed"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqSelectLoopInteractor.on_connection_closed">[docs]</a>    <span class="k">def</span> <span class="nf">on_connection_closed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_unused_connection</span><span class="p">,</span> <span class="n">reason</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This method is invoked by pika when the connection to RabbitMQ is</span>
+<span class="sd">        closed unexpectedly. Since it is unexpected, we will reconnect to</span>
+<span class="sd">        RabbitMQ if it disconnects.</span>
+
+<span class="sd">        :param pika.connection.Connection connection: The closed connection obj</span>
+<span class="sd">        :param Exception reason: exception representing reason for loss of</span>
+<span class="sd">            connection.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stopping</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">ioloop</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span><span class="s1">&#39;200&#39;</span> <span class="ow">and</span> <span class="s1">&#39;Normal shutdown&#39;</span> <span class="ow">in</span> <span class="n">reason</span><span class="o">.</span><span class="fm">__repr__</span><span class="p">())</span> <span class="ow">or</span> <span class="p">(</span>
+                <span class="s1">&#39;SelfExitException&#39;</span> <span class="ow">in</span> <span class="n">reason</span><span class="o">.</span><span class="fm">__repr__</span><span class="p">()</span>
+            <span class="p">):</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="p">(</span><span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ select loop interactor: Connection&#39;</span> <span class="s1">&#39; closed: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+                    <span class="n">reason</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="p">(</span>
+                        <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ select loop interactor: Connection&#39;</span>
+                        <span class="s1">&#39; closed, reopening in 5 seconds: </span><span class="si">{}</span><span class="s1">&#39;</span>
+                    <span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+                    <span class="n">reason</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">ioloop</span><span class="o">.</span><span class="n">call_later</span><span class="p">(</span>
+                    <span class="mi">5</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">ioloop</span><span class="o">.</span><span class="n">stop</span><span class="p">,</span>
+                <span class="p">)</span></div>
+
+<div class="viewcode-block" id="RabbitmqSelectLoopInteractor.open_channel"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqSelectLoopInteractor.open_channel">[docs]</a>    <span class="k">def</span> <span class="nf">open_channel</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This method will open a new channel with RabbitMQ by issuing the</span>
+<span class="sd">        Channel.Open RPC command. When RabbitMQ confirms the channel is open</span>
+<span class="sd">        by sending the Channel.OpenOK RPC reply, the on_channel_open method</span>
+<span class="sd">        will be invoked.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ select loop interactor: Creating a new channel&#39;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">channel</span><span class="p">(</span><span class="n">on_open_callback</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">on_channel_open</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="RabbitmqSelectLoopInteractor.on_channel_open"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqSelectLoopInteractor.on_channel_open">[docs]</a>    <span class="k">def</span> <span class="nf">on_channel_open</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">channel</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This method is invoked by pika when the channel has been opened.</span>
+<span class="sd">        The channel object is passed in so we can make use of it.</span>
+
+<span class="sd">        Since the channel is now open, we&#39;ll declare the exchange to use.</span>
+
+<span class="sd">        :param pika.channel.Channel channel: The channel object</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ select loop interactor: Channel opened&#39;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span> <span class="o">=</span> <span class="n">channel</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_on_channel_close_callback</span><span class="p">()</span>
+        <span class="c1"># self.setup_exchange(self.exchange)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">start_publishing</span><span class="p">()</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_consume_queue</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_consume_callback</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">start_consuming</span><span class="p">(</span>
+                    <span class="n">queue_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_consume_queue</span><span class="p">,</span>
+                    <span class="n">consume_cb</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_consume_callback</span><span class="p">,</span>
+                    <span class="n">auto_ack</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                <span class="p">(</span>
+                    <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ select loop interactor: Failed&#39;</span>
+                    <span class="s1">&#39; on_channel_open hook with error_msg: </span><span class="si">{}</span><span class="s1">&#39;</span>
+                <span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+                <span class="nb">str</span><span class="p">(</span><span class="n">err</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="c1"># must be raised back to caller to be handled there</span>
+            <span class="k">raise</span> <span class="n">err</span></div>
+
+<div class="viewcode-block" id="RabbitmqSelectLoopInteractor.add_on_channel_close_callback"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqSelectLoopInteractor.add_on_channel_close_callback">[docs]</a>    <span class="k">def</span> <span class="nf">add_on_channel_close_callback</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This method tells pika to call the on_channel_closed method if</span>
+<span class="sd">        RabbitMQ unexpectedly closes the channel.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="p">(</span><span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ select loop interactor: Adding channel close&#39;</span> <span class="s1">&#39; callback&#39;</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="o">.</span><span class="n">add_on_close_callback</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">on_channel_closed</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="RabbitmqSelectLoopInteractor.on_channel_closed"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqSelectLoopInteractor.on_channel_closed">[docs]</a>    <span class="k">def</span> <span class="nf">on_channel_closed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">reason</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Invoked by pika when RabbitMQ unexpectedly closes the channel.</span>
+<span class="sd">        Channels are usually closed if you attempt to do something that</span>
+<span class="sd">        violates the protocol, such as re-declare an exchange or queue with</span>
+<span class="sd">        different parameters. In this case, we&#39;ll close the connection</span>
+<span class="sd">        to shutdown the object.</span>
+
+<span class="sd">        :param pika.channel.Channel channel: The closed channel</span>
+<span class="sd">        :param Exception reason: why the channel was closed</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+            <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ select loop interactor: Channel </span><span class="si">{}</span><span class="s1"> was closed: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+            <span class="n">channel</span><span class="p">,</span>
+            <span class="n">reason</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">pika</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">ConnectionWrongStateError</span><span class="p">)</span> <span class="ow">and</span>
+                <span class="s1">&#39;Illegal close&#39;</span> <span class="ow">in</span> <span class="n">e</span><span class="o">.</span><span class="fm">__repr__</span><span class="p">()</span> <span class="ow">and</span>
+                <span class="s1">&#39;connection state=CLOSED&#39;</span> <span class="ow">in</span> <span class="n">e</span><span class="o">.</span><span class="fm">__repr__</span><span class="p">()</span>
+            <span class="p">):</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                    <span class="p">(</span>
+                        <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ select loop interactor: Tried closing&#39;</span>
+                        <span class="s1">&#39; connection that was already closed on channel close&#39;</span>
+                        <span class="s1">&#39; callback. Exception: </span><span class="si">{}</span><span class="s1">. Will close ioloop now.&#39;</span>
+                    <span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+                    <span class="n">e</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                    <span class="p">(</span>
+                        <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ select loop interactor: Exception closing&#39;</span>
+                        <span class="s1">&#39; connection on channel close callback: </span><span class="si">{}</span><span class="s1">. Will close&#39;</span>
+                        <span class="s1">&#39; ioloop now.&#39;</span>
+                    <span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+                    <span class="n">e</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">ioloop</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="RabbitmqSelectLoopInteractor.start_publishing"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqSelectLoopInteractor.start_publishing">[docs]</a>    <span class="k">def</span> <span class="nf">start_publishing</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This method will enable delivery confirmations and schedule the</span>
+<span class="sd">        first message to be sent to RabbitMQ</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ select loop interactor: Issuing consumer related&#39;</span>
+                <span class="s1">&#39; RPC commands&#39;</span>
+            <span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="c1"># self.enable_delivery_confirmations()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">schedule_next_message</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="RabbitmqSelectLoopInteractor.enable_delivery_confirmations"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqSelectLoopInteractor.enable_delivery_confirmations">[docs]</a>    <span class="k">def</span> <span class="nf">enable_delivery_confirmations</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Send the Confirm.Select RPC method to RabbitMQ to enable delivery</span>
+<span class="sd">        confirmations on the channel. The only way to turn this off is to close</span>
+<span class="sd">        the channel and create a new one.</span>
+
+<span class="sd">        When the message is confirmed from RabbitMQ, the</span>
+<span class="sd">        on_delivery_confirmation method will be invoked passing in a Basic.Ack</span>
+<span class="sd">        or Basic.Nack method from RabbitMQ that will indicate which messages it</span>
+<span class="sd">        is confirming or rejecting.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ select loop interactor: Issuing Confirm.Select&#39;</span>
+                <span class="s1">&#39; RPC command&#39;</span>
+            <span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="o">.</span><span class="n">confirm_delivery</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">on_delivery_confirmation</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="RabbitmqSelectLoopInteractor.on_delivery_confirmation"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqSelectLoopInteractor.on_delivery_confirmation">[docs]</a>    <span class="k">def</span> <span class="nf">on_delivery_confirmation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">method_frame</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Invoked by pika when RabbitMQ responds to a Basic.Publish RPC</span>
+<span class="sd">        command, passing in either a Basic.Ack or Basic.Nack frame with</span>
+<span class="sd">        the delivery tag of the message that was published. The delivery tag</span>
+<span class="sd">        is an integer counter indicating the message number that was sent</span>
+<span class="sd">        on the channel via Basic.Publish. Here we&#39;re just doing house keeping</span>
+<span class="sd">        to keep track of stats and remove message numbers that we expect</span>
+<span class="sd">        a delivery confirmation of from the list used to keep track of messages</span>
+<span class="sd">        that are pending confirmation.</span>
+
+<span class="sd">        :param pika.frame.Method method_frame: Basic.Ack or Basic.Nack frame</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">confirmation_type</span> <span class="o">=</span> <span class="n">method_frame</span><span class="o">.</span><span class="n">method</span><span class="o">.</span><span class="n">NAME</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ select loop interactor: Received </span><span class="si">{}</span><span class="s1"> for delivery&#39;</span>
+                <span class="s1">&#39; tag: </span><span class="si">{}</span><span class="s1">&#39;</span>
+            <span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+            <span class="n">confirmation_type</span><span class="p">,</span>
+            <span class="n">method_frame</span><span class="o">.</span><span class="n">method</span><span class="o">.</span><span class="n">delivery_tag</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">confirmation_type</span> <span class="o">==</span> <span class="s1">&#39;ack&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_acked</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">elif</span> <span class="n">confirmation_type</span> <span class="o">==</span> <span class="s1">&#39;nack&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_nacked</span> <span class="o">+=</span> <span class="mi">1</span></div>
+
+<div class="viewcode-block" id="RabbitmqSelectLoopInteractor.enqueue_msg_delivery"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqSelectLoopInteractor.enqueue_msg_delivery">[docs]</a>    <span class="k">def</span> <span class="nf">enqueue_msg_delivery</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exchange</span><span class="p">,</span> <span class="n">routing_key</span><span class="p">,</span> <span class="n">msg_body</span><span class="p">):</span>
+        <span class="c1"># NOTE: if used in a multi threaded/multi processing context, this will introduce a race condition given that</span>
+        <span class="c1">#       publish_message() may try to read the queued messages map while it is being concurrently updated by</span>
+        <span class="c1">#       another process/thread</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">queued_messages</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())]</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">msg_body</span><span class="p">,</span>
+            <span class="n">exchange</span><span class="p">,</span>
+            <span class="n">routing_key</span><span class="p">,</span>
+        <span class="p">]</span></div>
+
+<div class="viewcode-block" id="RabbitmqSelectLoopInteractor.schedule_next_message"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqSelectLoopInteractor.schedule_next_message">[docs]</a>    <span class="k">def</span> <span class="nf">schedule_next_message</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;If we are not closing our connection to RabbitMQ, schedule another</span>
+<span class="sd">        message to be delivered in PUBLISH_INTERVAL seconds.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># logger.info(&#39;Scheduling next message for %0.1f seconds&#39;,</span>
+        <span class="c1">#             self.PUBLISH_INTERVAL)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">ioloop</span><span class="o">.</span><span class="n">call_later</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">PUBLISH_INTERVAL</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">publish_message</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="RabbitmqSelectLoopInteractor.publish_message"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqSelectLoopInteractor.publish_message">[docs]</a>    <span class="k">def</span> <span class="nf">publish_message</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;If the class is not stopping, publish a message to RabbitMQ,</span>
+<span class="sd">        appending a list of deliveries with the message number that was sent.</span>
+<span class="sd">        This list will be used to check for delivery confirmations in the</span>
+<span class="sd">        on_delivery_confirmations method.</span>
+
+<span class="sd">        Once the message has been sent, schedule another message to be sent.</span>
+<span class="sd">        The main reason I put scheduling in was just so you can get a good idea</span>
+<span class="sd">        of how the process is flowing by slowing down and speeding up the</span>
+<span class="sd">        delivery intervals by changing the PUBLISH_INTERVAL constant in the</span>
+<span class="sd">        class.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="o">.</span><span class="n">is_open</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="c1"># check for queued messages</span>
+        <span class="n">pushed_outputs</span> <span class="o">=</span> <span class="nb">list</span><span class="p">()</span>
+        <span class="c1"># logger.debug(&#39;queued msgs: {}&#39;, self.queued_messages)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">unique_id</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">queued_messages</span><span class="p">:</span>
+                <span class="n">msg_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">queued_messages</span><span class="p">[</span><span class="n">unique_id</span><span class="p">]</span>
+                <span class="n">msg</span><span class="p">,</span> <span class="n">exchange</span><span class="p">,</span> <span class="n">routing_key</span> <span class="o">=</span> <span class="n">msg_info</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                    <span class="p">(</span>
+                        <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ select loop interactor: Got queued&#39;</span>
+                        <span class="s1">&#39; message body to send to exchange </span><span class="si">{}</span><span class="s1"> via routing key&#39;</span>
+                        <span class="s1">&#39; </span><span class="si">{}</span><span class="s1">: </span><span class="si">{}</span><span class="s1">&#39;</span>
+                    <span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+                    <span class="n">exchange</span><span class="p">,</span>
+                    <span class="n">routing_key</span><span class="p">,</span>
+                    <span class="n">msg</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">properties</span> <span class="o">=</span> <span class="n">pika</span><span class="o">.</span><span class="n">BasicProperties</span><span class="p">(</span>
+                    <span class="n">delivery_mode</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                    <span class="n">content_type</span><span class="o">=</span><span class="s1">&#39;text/plain&#39;</span><span class="p">,</span>
+                    <span class="n">content_encoding</span><span class="o">=</span><span class="s1">&#39;utf-8&#39;</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="o">.</span><span class="n">basic_publish</span><span class="p">(</span>
+                    <span class="n">exchange</span><span class="o">=</span><span class="n">exchange</span><span class="p">,</span>
+                    <span class="n">routing_key</span><span class="o">=</span><span class="n">routing_key</span><span class="p">,</span>
+                    <span class="n">body</span><span class="o">=</span><span class="n">msg</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">),</span>
+                    <span class="n">properties</span><span class="o">=</span><span class="n">properties</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_message_number</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                    <span class="p">(</span>
+                        <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ select loop interactor: Published message&#39;</span>
+                        <span class="s1">&#39; # </span><span class="si">{}</span><span class="s1"> to exchange </span><span class="si">{}</span><span class="s1"> via routing key </span><span class="si">{}</span><span class="s1">: </span><span class="si">{}</span><span class="s1">&#39;</span>
+                    <span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_message_number</span><span class="p">,</span>
+                    <span class="n">exchange</span><span class="p">,</span>
+                    <span class="n">routing_key</span><span class="p">,</span>
+                    <span class="n">msg</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">pushed_outputs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">unique_id</span><span class="p">)</span>
+            <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">queued_messages</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">unique_id</span><span class="p">)</span> <span class="k">for</span> <span class="n">unique_id</span> <span class="ow">in</span> <span class="n">pushed_outputs</span><span class="p">]</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                <span class="p">(</span>
+                    <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ select loop interactor: Error while&#39;</span>
+                    <span class="s1">&#39; publishing message to rabbitmq error_msg: </span><span class="si">{}</span><span class="s1">, exchange:&#39;</span>
+                    <span class="s1">&#39; </span><span class="si">{}</span><span class="s1">, routing_key: </span><span class="si">{}</span><span class="s1">, msg: </span><span class="si">{}</span><span class="s1">&#39;</span>
+                <span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+                <span class="nb">str</span><span class="p">(</span><span class="n">err</span><span class="p">),</span>
+                <span class="n">exchange</span><span class="p">,</span>
+                <span class="n">routing_key</span><span class="p">,</span>
+                <span class="n">msg</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">schedule_next_message</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="RabbitmqSelectLoopInteractor.run"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqSelectLoopInteractor.run">[docs]</a>    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the example code by connecting and then starting the IOLoop.&quot;&quot;&quot;</span>
+        <span class="n">attempt</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stopping</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="p">(</span>
+                    <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ interactor select ioloop runner starting |&#39;</span>
+                    <span class="s1">&#39; Attempt # </span><span class="si">{}</span><span class="s1">&#39;</span>
+                <span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+                <span class="n">attempt</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_acked</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_nacked</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_message_number</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">ioloop</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="p">(</span>
+                    <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ interactor select ioloop exited in runner&#39;</span>
+                    <span class="s1">&#39; loop | Attempt # </span><span class="si">{}</span><span class="s1">&#39;</span>
+                <span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+                <span class="n">attempt</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">attempt</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ interactor select ioloop stopped&#39;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="RabbitmqSelectLoopInteractor.close_channel"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqSelectLoopInteractor.close_channel">[docs]</a>    <span class="k">def</span> <span class="nf">close_channel</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Invoke this command to close the channel with RabbitMQ by sending</span>
+<span class="sd">        the Channel.Close RPC command.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ select loop interactor: Closing the channel&#39;</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="RabbitmqSelectLoopInteractor.close_connection"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqSelectLoopInteractor.close_connection">[docs]</a>    <span class="k">def</span> <span class="nf">close_connection</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This method closes the connection to RabbitMQ.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ select loop interactor: Closing connection&#39;</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="RabbitmqSelectLoopInteractor.start_consuming"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqSelectLoopInteractor.start_consuming">[docs]</a>    <span class="k">def</span> <span class="nf">start_consuming</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">queue_name</span><span class="p">,</span> <span class="n">consume_cb</span><span class="p">,</span> <span class="n">auto_ack</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This method sets up the consumer by first calling</span>
+<span class="sd">        add_on_cancel_callback so that the object is notified if RabbitMQ</span>
+<span class="sd">        cancels the consumer. It then issues the Basic.Consume RPC command</span>
+<span class="sd">        which returns the consumer tag that is used to uniquely identify the</span>
+<span class="sd">        consumer with RabbitMQ. We keep the value to use it when we want to</span>
+<span class="sd">        cancel consuming. The on_message method is passed in as a callback pika</span>
+<span class="sd">        will invoke when a message is fully received.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ select loop interactor: Issuing consumer related&#39;</span>
+                <span class="s1">&#39; RPC commands&#39;</span>
+            <span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_on_cancel_callback</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_tag</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="o">.</span><span class="n">basic_consume</span><span class="p">(</span>
+            <span class="n">queue</span><span class="o">=</span><span class="n">queue_name</span><span class="p">,</span>
+            <span class="n">on_message_callback</span><span class="o">=</span><span class="n">consume_cb</span><span class="p">,</span>
+            <span class="n">auto_ack</span><span class="o">=</span><span class="n">auto_ack</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">was_consuming</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_consuming</span> <span class="o">=</span> <span class="kc">True</span></div>
+        <span class="c1"># self._channel.start_consuming()</span>
+
+<div class="viewcode-block" id="RabbitmqSelectLoopInteractor.add_on_cancel_callback"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqSelectLoopInteractor.add_on_cancel_callback">[docs]</a>    <span class="k">def</span> <span class="nf">add_on_cancel_callback</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Add a callback that will be invoked if RabbitMQ cancels the consumer</span>
+<span class="sd">        for some reason. If RabbitMQ does cancel the consumer,</span>
+<span class="sd">        on_consumer_cancelled will be invoked by pika.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ select loop interactor: Adding consumer&#39;</span>
+                <span class="s1">&#39; cancellation callback&#39;</span>
+            <span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="o">.</span><span class="n">add_on_cancel_callback</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">on_consumer_cancelled</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="RabbitmqSelectLoopInteractor.on_consumer_cancelled"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqSelectLoopInteractor.on_consumer_cancelled">[docs]</a>    <span class="k">def</span> <span class="nf">on_consumer_cancelled</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">method_frame</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Invoked by pika when RabbitMQ sends a Basic.Cancel for a consumer</span>
+<span class="sd">        receiving messages.</span>
+<span class="sd">        :param pika.frame.Method method_frame: The Basic.Cancel frame</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: Consumer was cancelled remotely, shutting down: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+            <span class="n">method_frame</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="RabbitmqSelectLoopInteractor.stop_consuming"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqSelectLoopInteractor.stop_consuming">[docs]</a>    <span class="k">def</span> <span class="nf">stop_consuming</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Tell RabbitMQ that you would like to stop consuming by sending the</span>
+<span class="sd">        Basic.Cancel RPC command.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="p">(</span>
+                    <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ select loop interactor: Sending a&#39;</span>
+                    <span class="s1">&#39; Basic.Cancel RPC command to RabbitMQ&#39;</span>
+                <span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">cb</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">on_cancelok</span><span class="p">,</span>
+                <span class="n">userdata</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_consumer_tag</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="o">.</span><span class="n">basic_cancel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_consumer_tag</span><span class="p">,</span> <span class="n">cb</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="RabbitmqSelectLoopInteractor.on_cancelok"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqSelectLoopInteractor.on_cancelok">[docs]</a>    <span class="k">def</span> <span class="nf">on_cancelok</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_unused_frame</span><span class="p">,</span> <span class="n">userdata</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This method is invoked by pika when RabbitMQ acknowledges the</span>
+<span class="sd">        cancellation of a consumer. At this point we will close the channel.</span>
+<span class="sd">        This will invoke the on_channel_closed method once the channel has been</span>
+<span class="sd">        closed, which will in-turn close the connection.</span>
+<span class="sd">        :param pika.frame.Method _unused_frame: The Basic.CancelOk frame</span>
+<span class="sd">        :param str|unicode userdata: Extra user data (consumer tag)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_consuming</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ select loop interactor: RabbitMQ acknowledged the&#39;</span>
+                <span class="s1">&#39; cancellation of the consumer: </span><span class="si">{}</span><span class="s1">&#39;</span>
+            <span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+            <span class="n">userdata</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">close_channel</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="RabbitmqSelectLoopInteractor.stop"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqSelectLoopInteractor.stop">[docs]</a>    <span class="k">def</span> <span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Cleanly shutdown the connection to RabbitMQ by stopping the consumer with RabbitMQ.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_closing</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_closing</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_stopping</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ select loop interactor: Stopping&#39;</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_consuming</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">stop_consuming</span><span class="p">()</span>
+                <span class="c1"># self._connection.ioloop.start()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">ioloop</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: RabbitMQ select loop interactor: Stopped&#39;</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span><span class="p">,</span>
+            <span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor">[docs]</a><span class="k">class</span> <span class="nc">RabbitmqThreadedSelectLoopInteractor</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;This is an example publisher/consumer that will handle unexpected interactions</span>
+<span class="sd">    with RabbitMQ such as channel and connection closures.</span>
+
+<span class="sd">    If RabbitMQ closes the connection, it will reopen it. You should</span>
+<span class="sd">    look at the output, as there are limited reasons why the connection may</span>
+<span class="sd">    be closed, which usually are tied to permission related issues or</span>
+<span class="sd">    socket timeouts.</span>
+
+<span class="sd">    It uses delivery confirmations and illustrates one way to keep track of</span>
+<span class="sd">    messages that have been sent and if they&#39;ve been confirmed by RabbitMQ.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c1"># interval at which the select loop polls to push out new notifications</span>
+    <span class="n">PUBLISH_INTERVAL</span> <span class="o">=</span> <span class="mf">0.01</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">publish_queue</span><span class="p">:</span> <span class="n">queue</span><span class="o">.</span><span class="n">Queue</span><span class="p">,</span>
+        <span class="n">consume_queue_name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">consume_callback</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">consumer_worker_name</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Setup the example publisher object, passing in the URL we will use</span>
+<span class="sd">        to connect to RabbitMQ.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="n">pika</span><span class="o">.</span><span class="n">channel</span><span class="o">.</span><span class="n">Channel</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">should_reconnect</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_worker_name</span> <span class="o">=</span> <span class="n">consumer_worker_name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">was_consuming</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_tag</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">queued_messages</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_deliveries</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_acked</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_nacked</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_message_number</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_closing</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stopping</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_exchange</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_routing_key</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_consuming</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_consume_queue</span> <span class="o">=</span> <span class="n">consume_queue_name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_consume_callback</span> <span class="o">=</span> <span class="n">consume_callback</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_publish_queue</span> <span class="o">=</span> <span class="n">publish_queue</span>
+
+        <span class="c1"># In production, experiment with higher prefetch values</span>
+        <span class="c1"># for higher consumer throughput</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_prefetch_count</span> <span class="o">=</span> <span class="mi">1</span>
+
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.connect"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.connect">[docs]</a>    <span class="k">def</span> <span class="nf">connect</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This method connects to RabbitMQ, returning the connection handle.</span>
+<span class="sd">        When the connection is established, the on_connection_open method</span>
+<span class="sd">        will be invoked by pika.</span>
+
+<span class="sd">        :rtype: pika.SelectConnection</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s1">&#39;Creating RabbitMQ threaded select ioloop connection to </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span>
+            <span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">rabbitmq</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">settings</span><span class="o">.</span><span class="n">rabbitmq</span><span class="o">.</span><span class="n">port</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">pika</span><span class="o">.</span><span class="n">SelectConnection</span><span class="p">(</span>
+            <span class="n">parameters</span><span class="o">=</span><span class="n">pika</span><span class="o">.</span><span class="n">ConnectionParameters</span><span class="p">(</span>
+                <span class="n">host</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">rabbitmq</span><span class="o">.</span><span class="n">host</span><span class="p">,</span>
+                <span class="n">port</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">rabbitmq</span><span class="o">.</span><span class="n">port</span><span class="p">,</span>
+                <span class="n">virtual_host</span><span class="o">=</span><span class="s1">&#39;/&#39;</span><span class="p">,</span>
+                <span class="n">credentials</span><span class="o">=</span><span class="n">pika</span><span class="o">.</span><span class="n">PlainCredentials</span><span class="p">(</span>
+                    <span class="n">username</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">rabbitmq</span><span class="o">.</span><span class="n">user</span><span class="p">,</span>
+                    <span class="n">password</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">rabbitmq</span><span class="o">.</span><span class="n">password</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="n">heartbeat</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">on_open_callback</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">on_connection_open</span><span class="p">,</span>
+            <span class="n">on_open_error_callback</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">on_connection_open_error</span><span class="p">,</span>
+            <span class="n">on_close_callback</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">on_connection_closed</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.on_connection_open"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.on_connection_open">[docs]</a>    <span class="k">def</span> <span class="nf">on_connection_open</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_unused_connection</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This method is called by pika once the connection to RabbitMQ has</span>
+<span class="sd">        been established. It passes the handle to the connection object in</span>
+<span class="sd">        case we need it, but in this case, we&#39;ll just mark it unused.</span>
+
+<span class="sd">        :param pika.SelectConnection _unused_connection: The connection</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s1">&#39;RabbitMQ threaded select loop interactor: Connection opened&#39;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">open_channel</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.on_connection_open_error"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.on_connection_open_error">[docs]</a>    <span class="k">def</span> <span class="nf">on_connection_open_error</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_unused_connection</span><span class="p">,</span> <span class="n">err</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This method is called by pika if the connection to RabbitMQ</span>
+<span class="sd">        can&#39;t be established.</span>
+
+<span class="sd">        :param pika.SelectConnection _unused_connection: The connection</span>
+<span class="sd">        :param Exception err: The error</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="s1">&#39;RabbitMQ threaded select loop interactor: Connection open&#39;</span>
+                <span class="s1">&#39; failed, reopening in 5 seconds: </span><span class="si">{}</span><span class="s1">&#39;</span>
+            <span class="p">),</span>
+            <span class="n">err</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">ioloop</span><span class="o">.</span><span class="n">call_later</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">ioloop</span><span class="o">.</span><span class="n">stop</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.on_connection_closed"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.on_connection_closed">[docs]</a>    <span class="k">def</span> <span class="nf">on_connection_closed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_unused_connection</span><span class="p">,</span> <span class="n">reason</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This method is invoked by pika when the connection to RabbitMQ is</span>
+<span class="sd">        closed unexpectedly. Since it is unexpected, we will reconnect to</span>
+<span class="sd">        RabbitMQ if it disconnects.</span>
+
+<span class="sd">        :param pika.connection.Connection connection: The closed connection obj</span>
+<span class="sd">        :param Exception reason: exception representing reason for loss of</span>
+<span class="sd">            connection.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stopping</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">ioloop</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span><span class="s1">&#39;200&#39;</span> <span class="ow">and</span> <span class="s1">&#39;Normal shutdown&#39;</span> <span class="ow">in</span> <span class="n">reason</span><span class="o">.</span><span class="fm">__repr__</span><span class="p">())</span> <span class="ow">or</span> <span class="p">(</span>
+                <span class="s1">&#39;SelfExitException&#39;</span> <span class="ow">in</span> <span class="n">reason</span><span class="o">.</span><span class="fm">__repr__</span><span class="p">()</span>
+            <span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="s1">&#39;RabbitMQ select loop interactor: Connection closed: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span>
+                    <span class="n">reason</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="p">(</span>
+                        <span class="s1">&#39;RabbitMQ select loop interactor: Connection closed,&#39;</span>
+                        <span class="s1">&#39; reopening in 5 seconds: </span><span class="si">{}</span><span class="s1">&#39;</span>
+                    <span class="p">),</span>
+                    <span class="n">reason</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">ioloop</span><span class="o">.</span><span class="n">call_later</span><span class="p">(</span>
+                    <span class="mi">5</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">ioloop</span><span class="o">.</span><span class="n">stop</span><span class="p">,</span>
+                <span class="p">)</span></div>
+
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.open_channel"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.open_channel">[docs]</a>    <span class="k">def</span> <span class="nf">open_channel</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This method will open a new channel with RabbitMQ by issuing the</span>
+<span class="sd">        Channel.Open RPC command. When RabbitMQ confirms the channel is open</span>
+<span class="sd">        by sending the Channel.OpenOK RPC reply, the on_channel_open method</span>
+<span class="sd">        will be invoked.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s1">&#39;RabbitMQ threaded select loop interactor: Creating a new channel&#39;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">channel</span><span class="p">(</span><span class="n">on_open_callback</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">on_channel_open</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.on_channel_open"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.on_channel_open">[docs]</a>    <span class="k">def</span> <span class="nf">on_channel_open</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">channel</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This method is invoked by pika when the channel has been opened.</span>
+<span class="sd">        The channel object is passed in so we can make use of it.</span>
+
+<span class="sd">        Since the channel is now open, we&#39;ll declare the exchange to use.</span>
+
+<span class="sd">        :param pika.channel.Channel channel: The channel object</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s1">&#39;RabbitMQ threaded select loop interactor: Channel opened&#39;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span> <span class="o">=</span> <span class="n">channel</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_on_channel_close_callback</span><span class="p">()</span>
+        <span class="c1"># self.setup_exchange(self.exchange)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">start_publishing</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_consume_queue</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_consume_callback</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">start_consuming</span><span class="p">(</span>
+                <span class="n">queue_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_consume_queue</span><span class="p">,</span>
+                <span class="n">consume_cb</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_consume_callback</span><span class="p">,</span>
+                <span class="n">auto_ack</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="p">)</span></div>
+
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.add_on_channel_close_callback"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.add_on_channel_close_callback">[docs]</a>    <span class="k">def</span> <span class="nf">add_on_channel_close_callback</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This method tells pika to call the on_channel_closed method if</span>
+<span class="sd">        RabbitMQ unexpectedly closes the channel.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="s1">&#39;RabbitMQ threaded select loop interactor: Adding channel close&#39;</span>
+                <span class="s1">&#39; callback&#39;</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="o">.</span><span class="n">add_on_close_callback</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">on_channel_closed</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.on_channel_closed"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.on_channel_closed">[docs]</a>    <span class="k">def</span> <span class="nf">on_channel_closed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">reason</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Invoked by pika when RabbitMQ unexpectedly closes the channel.</span>
+<span class="sd">        Channels are usually closed if you attempt to do something that</span>
+<span class="sd">        violates the protocol, such as re-declare an exchange or queue with</span>
+<span class="sd">        different parameters. In this case, we&#39;ll close the connection</span>
+<span class="sd">        to shutdown the object.</span>
+
+<span class="sd">        :param pika.channel.Channel channel: The closed channel</span>
+<span class="sd">        :param Exception reason: why the channel was closed</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+            <span class="p">(</span><span class="s1">&#39;RabbitMQ threaded select loop interactor: Channel </span><span class="si">{}</span><span class="s1"> was&#39;</span> <span class="s1">&#39; closed: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">),</span>
+            <span class="n">channel</span><span class="p">,</span>
+            <span class="n">reason</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">pika</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">ConnectionWrongStateError</span><span class="p">)</span> <span class="ow">and</span>
+                <span class="s1">&#39;Illegal close&#39;</span> <span class="ow">in</span> <span class="n">e</span><span class="o">.</span><span class="fm">__repr__</span><span class="p">()</span> <span class="ow">and</span>
+                <span class="s1">&#39;connection state=CLOSED&#39;</span> <span class="ow">in</span> <span class="n">e</span><span class="o">.</span><span class="fm">__repr__</span><span class="p">()</span>
+            <span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                    <span class="p">(</span>
+                        <span class="s1">&#39;RabbitMQ threaded select loop interactor: Tried&#39;</span>
+                        <span class="s1">&#39; closing connection that was already closed on channel&#39;</span>
+                        <span class="s1">&#39; close callback. Exception: </span><span class="si">{}</span><span class="s1">. Will close ioloop now.&#39;</span>
+                    <span class="p">),</span>
+                    <span class="n">e</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                    <span class="p">(</span>
+                        <span class="s1">&#39;RabbitMQ threaded select loop interactor: Exception&#39;</span>
+                        <span class="s1">&#39; closing connection on channel close callback: </span><span class="si">{}</span><span class="s1">.&#39;</span>
+                        <span class="s1">&#39; Will close ioloop now.&#39;</span>
+                    <span class="p">),</span>
+                    <span class="n">e</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="c1"># because on_connection_closed callback would not be reached</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">ioloop</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span></div>
+
+    <span class="c1"># # # BEGIN - TODO: chain these calls and callbacks to rabbitmq initialization process to definitively init the sys</span>
+    <span class="c1">#                   low prioritu</span>
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.setup_exchange"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.setup_exchange">[docs]</a>    <span class="k">def</span> <span class="nf">setup_exchange</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exchange_name</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Setup the exchange on RabbitMQ by invoking the Exchange.Declare RPC</span>
+<span class="sd">        command. When it is complete, the on_exchange_declareok method will</span>
+<span class="sd">        be invoked by pika.</span>
+
+<span class="sd">        :param str|unicode exchange_name: The name of the exchange to declare</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Declaring exchange </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">exchange_name</span><span class="p">)</span>
+        <span class="c1"># Note: using functools.partial is not required, it is demonstrating</span>
+        <span class="c1"># how arbitrary data can be passed to the callback when it is called</span>
+        <span class="n">cb</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">on_exchange_declareok</span><span class="p">,</span>
+            <span class="n">userdata</span><span class="o">=</span><span class="n">exchange_name</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="o">.</span><span class="n">exchange_declare</span><span class="p">(</span>
+            <span class="n">exchange</span><span class="o">=</span><span class="n">exchange_name</span><span class="p">,</span>
+            <span class="n">exchange_type</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">exchange_TYPE</span><span class="p">,</span>
+            <span class="n">callback</span><span class="o">=</span><span class="n">cb</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.on_exchange_declareok"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.on_exchange_declareok">[docs]</a>    <span class="k">def</span> <span class="nf">on_exchange_declareok</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_unused_frame</span><span class="p">,</span> <span class="n">userdata</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Invoked by pika when RabbitMQ has finished the Exchange.Declare RPC</span>
+<span class="sd">        command.</span>
+
+<span class="sd">        :param pika.Frame.Method unused_frame: Exchange.DeclareOk response frame</span>
+<span class="sd">        :param str|unicode userdata: Extra user data (exchange name)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Exchange declared: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">userdata</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">setup_queue</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">QUEUE</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.setup_queue"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.setup_queue">[docs]</a>    <span class="k">def</span> <span class="nf">setup_queue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">queue_name</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Setup the queue on RabbitMQ by invoking the Queue.Declare RPC</span>
+<span class="sd">        command. When it is complete, the on_queue_declareok method will</span>
+<span class="sd">        be invoked by pika.</span>
+
+<span class="sd">        :param str|unicode queue_name: The name of the queue to declare.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Declaring queue </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">queue_name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="o">.</span><span class="n">queue_declare</span><span class="p">(</span>
+            <span class="n">queue</span><span class="o">=</span><span class="n">queue_name</span><span class="p">,</span>
+            <span class="n">callback</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">on_queue_declareok</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.on_queue_declareok"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.on_queue_declareok">[docs]</a>    <span class="k">def</span> <span class="nf">on_queue_declareok</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_unused_frame</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Method invoked by pika when the Queue.Declare RPC call made in</span>
+<span class="sd">        setup_queue has completed. In this method we will bind the queue</span>
+<span class="sd">        and exchange together with the routing key by issuing the Queue.Bind</span>
+<span class="sd">        RPC command. When this command is complete, the on_bindok method will</span>
+<span class="sd">        be invoked by pika.</span>
+
+<span class="sd">        :param pika.frame.Method method_frame: The Queue.DeclareOk frame</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s1">&#39;Binding </span><span class="si">{}</span><span class="s1"> to </span><span class="si">{}</span><span class="s1"> with </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">exchange</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">QUEUE</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">ROUTING_KEY</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="o">.</span><span class="n">queue_bind</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">QUEUE</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">exchange</span><span class="p">,</span>
+            <span class="n">routing_key</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">ROUTING_KEY</span><span class="p">,</span>
+            <span class="n">callback</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">on_bindok</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.on_bindok"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.on_bindok">[docs]</a>    <span class="k">def</span> <span class="nf">on_bindok</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_unused_frame</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This method is invoked by pika when it receives the Queue.BindOk</span>
+<span class="sd">        response from RabbitMQ. Since we know we&#39;re now setup and bound, it&#39;s</span>
+<span class="sd">        time to start publishing.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Queue bound&#39;</span><span class="p">)</span>
+        <span class="c1"># self.start_publishing()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">enable_delivery_confirmations</span><span class="p">()</span></div>
+
+    <span class="c1"># # # END - TODO: chain these calls and callbacks to rabbitmq initialization process to definitively init the sys</span>
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.start_publishing"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.start_publishing">[docs]</a>    <span class="k">def</span> <span class="nf">start_publishing</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This method will enable delivery confirmations and schedule the</span>
+<span class="sd">        first message to be sent to RabbitMQ</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="s1">&#39;RabbitMQ threaded select loop interactor: Issuing consumer&#39;</span>
+                <span class="s1">&#39; related RPC commands&#39;</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">enable_delivery_confirmations</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">schedule_next_message</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.enable_delivery_confirmations"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.enable_delivery_confirmations">[docs]</a>    <span class="k">def</span> <span class="nf">enable_delivery_confirmations</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Send the Confirm.Select RPC method to RabbitMQ to enable delivery</span>
+<span class="sd">        confirmations on the channel. The only way to turn this off is to close</span>
+<span class="sd">        the channel and create a new one.</span>
+
+<span class="sd">        When the message is confirmed from RabbitMQ, the</span>
+<span class="sd">        on_delivery_confirmation method will be invoked passing in a Basic.Ack</span>
+<span class="sd">        or Basic.Nack method from RabbitMQ that will indicate which messages it</span>
+<span class="sd">        is confirming or rejecting.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="s1">&#39;RabbitMQ threaded select loop interactor: Issuing&#39;</span>
+                <span class="s1">&#39; Confirm.Select RPC command&#39;</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="o">.</span><span class="n">confirm_delivery</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">on_delivery_confirmation</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.on_delivery_confirmation"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.on_delivery_confirmation">[docs]</a>    <span class="k">def</span> <span class="nf">on_delivery_confirmation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">method_frame</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Invoked by pika when RabbitMQ responds to a Basic.Publish RPC</span>
+<span class="sd">        command, passing in either a Basic.Ack or Basic.Nack frame with</span>
+<span class="sd">        the delivery tag of the message that was published. The delivery tag</span>
+<span class="sd">        is an integer counter indicating the message number that was sent</span>
+<span class="sd">        on the channel via Basic.Publish. Here we&#39;re just doing house keeping</span>
+<span class="sd">        to keep track of stats and remove message numbers that we expect</span>
+<span class="sd">        a delivery confirmation of from the list used to keep track of messages</span>
+<span class="sd">        that are pending confirmation.</span>
+
+<span class="sd">        :param pika.frame.Method method_frame: Basic.Ack or Basic.Nack frame</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">confirmation_type</span> <span class="o">=</span> <span class="n">method_frame</span><span class="o">.</span><span class="n">method</span><span class="o">.</span><span class="n">NAME</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="s1">&#39;RabbitMQ threaded select loop interactor: Received </span><span class="si">{}</span><span class="s1"> for&#39;</span>
+                <span class="s1">&#39; delivery tag: </span><span class="si">{}</span><span class="s1">&#39;</span>
+            <span class="p">),</span>
+            <span class="n">confirmation_type</span><span class="p">,</span>
+            <span class="n">method_frame</span><span class="o">.</span><span class="n">method</span><span class="o">.</span><span class="n">delivery_tag</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">confirmation_type</span> <span class="o">==</span> <span class="s1">&#39;ack&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_acked</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">elif</span> <span class="n">confirmation_type</span> <span class="o">==</span> <span class="s1">&#39;nack&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_nacked</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_deliveries</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">method_frame</span><span class="o">.</span><span class="n">method</span><span class="o">.</span><span class="n">delivery_tag</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="s1">&#39;RabbitMQ threaded select loop interactor: Published </span><span class="si">{}</span><span class="s1">&#39;</span>
+                <span class="s1">&#39; messages, </span><span class="si">{}</span><span class="s1"> have yet to be confirmed, </span><span class="si">{}</span><span class="s1"> were acked and </span><span class="si">{}</span><span class="s1">&#39;</span>
+                <span class="s1">&#39; were nacked&#39;</span>
+            <span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_message_number</span><span class="p">,</span>
+            <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_deliveries</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_acked</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_nacked</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.schedule_next_message"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.schedule_next_message">[docs]</a>    <span class="k">def</span> <span class="nf">schedule_next_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">interval</span><span class="o">=</span><span class="n">PUBLISH_INTERVAL</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;If we are not closing our connection to RabbitMQ, schedule another</span>
+<span class="sd">        message to be delivered in PUBLISH_INTERVAL seconds.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># self._logger.info(&#39;Scheduling next message for %0.1f seconds&#39;,</span>
+        <span class="c1">#             self.PUBLISH_INTERVAL)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">ioloop</span><span class="o">.</span><span class="n">call_later</span><span class="p">(</span><span class="n">interval</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">publish_message</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.publish_message"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.publish_message">[docs]</a>    <span class="k">def</span> <span class="nf">publish_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">flush</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;If the class is not stopping, publish a message to RabbitMQ,</span>
+<span class="sd">        appending a list of deliveries with the message number that was sent.</span>
+<span class="sd">        This list will be used to check for delivery confirmations in the</span>
+<span class="sd">        on_delivery_confirmations method.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="o">.</span><span class="n">is_open</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                <span class="p">(</span>
+                    <span class="s1">&#39;RabbitMQ threaded select loop interactor: Not proceeding&#39;</span>
+                    <span class="s1">&#39; with publish queue checks&#39;</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+            <span class="k">return</span>
+        <span class="c1"># check for queued messages</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">new_msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_publish_queue</span><span class="o">.</span><span class="n">get_nowait</span><span class="p">()</span>
+            <span class="k">except</span> <span class="n">queue</span><span class="o">.</span><span class="n">Empty</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">flush</span><span class="p">:</span>
+                    <span class="k">return</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">msg</span><span class="p">,</span> <span class="n">exchange</span><span class="p">,</span> <span class="n">routing_key</span> <span class="o">=</span> <span class="n">new_msg</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                    <span class="p">(</span>
+                        <span class="s1">&#39;RabbitMQ threaded select loop interactor: Got queued&#39;</span>
+                        <span class="s1">&#39; message body to send to exchange </span><span class="si">{}</span><span class="s1"> via routing key&#39;</span>
+                        <span class="s1">&#39; </span><span class="si">{}</span><span class="s1">: </span><span class="si">{}</span><span class="s1">&#39;</span>
+                    <span class="p">),</span>
+                    <span class="n">exchange</span><span class="p">,</span>
+                    <span class="n">routing_key</span><span class="p">,</span>
+                    <span class="n">msg</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">properties</span> <span class="o">=</span> <span class="n">pika</span><span class="o">.</span><span class="n">BasicProperties</span><span class="p">(</span>
+                    <span class="n">delivery_mode</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                    <span class="n">content_type</span><span class="o">=</span><span class="s1">&#39;text/plain&#39;</span><span class="p">,</span>
+                    <span class="n">content_encoding</span><span class="o">=</span><span class="s1">&#39;utf-8&#39;</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="o">.</span><span class="n">basic_publish</span><span class="p">(</span>
+                    <span class="n">exchange</span><span class="o">=</span><span class="n">exchange</span><span class="p">,</span>
+                    <span class="n">routing_key</span><span class="o">=</span><span class="n">routing_key</span><span class="p">,</span>
+                    <span class="n">body</span><span class="o">=</span><span class="n">msg</span><span class="p">,</span>  <span class="c1"># encoded already</span>
+                    <span class="n">properties</span><span class="o">=</span><span class="n">properties</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_message_number</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_deliveries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_message_number</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                    <span class="p">(</span>
+                        <span class="s1">&#39;RabbitMQ threaded select loop interactor: Published&#39;</span>
+                        <span class="s1">&#39; message # </span><span class="si">{}</span><span class="s1"> to exchange </span><span class="si">{}</span><span class="s1"> via routing key </span><span class="si">{}</span><span class="s1">: </span><span class="si">{}</span><span class="s1">&#39;</span>
+                    <span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_message_number</span><span class="p">,</span>
+                    <span class="n">exchange</span><span class="p">,</span>
+                    <span class="n">routing_key</span><span class="p">,</span>
+                    <span class="n">msg</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_publish_queue</span><span class="o">.</span><span class="n">task_done</span><span class="p">()</span>
+            <span class="k">finally</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">flush</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">schedule_next_message</span><span class="p">()</span>
+                    <span class="k">break</span></div>
+
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.run"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.run">[docs]</a>    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span> <span class="o">=</span> <span class="n">logger</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">module</span><span class="o">=</span><span class="s1">&#39;Powerloom|RabbitmqHelpers&#39;</span><span class="p">)</span>
+
+        <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stopping</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_deliveries</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_acked</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_nacked</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_message_number</span> <span class="o">=</span> <span class="mi">0</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">ioloop</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>  <span class="c1"># blocking</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;RabbitMQ threaded select loop interactor: Stopped&#39;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.close_channel"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.close_channel">[docs]</a>    <span class="k">def</span> <span class="nf">close_channel</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Invoke this command to close the channel with RabbitMQ by sending</span>
+<span class="sd">        the Channel.Close RPC command.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="s1">&#39;RabbitMQ threaded select loop interactor: Closing the channel&#39;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.close_connection"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.close_connection">[docs]</a>    <span class="k">def</span> <span class="nf">close_connection</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This method closes the connection to RabbitMQ.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="s1">&#39;RabbitMQ threaded select loop interactor: Closing connection&#39;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.start_consuming"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.start_consuming">[docs]</a>    <span class="k">def</span> <span class="nf">start_consuming</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">queue_name</span><span class="p">,</span> <span class="n">consume_cb</span><span class="p">,</span> <span class="n">auto_ack</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This method sets up the consumer by first calling</span>
+<span class="sd">        add_on_cancel_callback so that the object is notified if RabbitMQ</span>
+<span class="sd">        cancels the consumer. It then issues the Basic.Consume RPC command</span>
+<span class="sd">        which returns the consumer tag that is used to uniquely identify the</span>
+<span class="sd">        consumer with RabbitMQ. We keep the value to use it when we want to</span>
+<span class="sd">        cancel consuming. The on_message method is passed in as a callback pika</span>
+<span class="sd">        will invoke when a message is fully received.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="s1">&#39;RabbitMQ threaded select loop interactor: Issuing consumer&#39;</span>
+                <span class="s1">&#39; related RPC commands&#39;</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_on_cancel_callback</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_consumer_tag</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="o">.</span><span class="n">basic_consume</span><span class="p">(</span>
+            <span class="n">queue</span><span class="o">=</span><span class="n">queue_name</span><span class="p">,</span>
+            <span class="n">on_message_callback</span><span class="o">=</span><span class="n">consume_cb</span><span class="p">,</span>
+            <span class="n">auto_ack</span><span class="o">=</span><span class="n">auto_ack</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">was_consuming</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_consuming</span> <span class="o">=</span> <span class="kc">True</span></div>
+        <span class="c1"># self._channel.start_consuming()</span>
+
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.add_on_cancel_callback"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.add_on_cancel_callback">[docs]</a>    <span class="k">def</span> <span class="nf">add_on_cancel_callback</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Add a callback that will be invoked if RabbitMQ cancels the consumer</span>
+<span class="sd">        for some reason. If RabbitMQ does cancel the consumer,</span>
+<span class="sd">        on_consumer_cancelled will be invoked by pika.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="s1">&#39;RabbitMQ threaded select loop interactor: Adding consumer&#39;</span>
+                <span class="s1">&#39; cancellation callback&#39;</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="o">.</span><span class="n">add_on_cancel_callback</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">on_consumer_cancelled</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.on_consumer_cancelled"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.on_consumer_cancelled">[docs]</a>    <span class="k">def</span> <span class="nf">on_consumer_cancelled</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">method_frame</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Invoked by pika when RabbitMQ sends a Basic.Cancel for a consumer</span>
+<span class="sd">        receiving messages.</span>
+<span class="sd">        :param pika.frame.Method method_frame: The Basic.Cancel frame</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="s1">&#39;RabbitMQ threaded select loop interactor: Consumer was&#39;</span>
+                <span class="s1">&#39; cancelled remotely, shutting down: </span><span class="si">{}</span><span class="s1">&#39;</span>
+            <span class="p">),</span>
+            <span class="n">method_frame</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.send_basic_cancel"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.send_basic_cancel">[docs]</a>    <span class="k">def</span> <span class="nf">send_basic_cancel</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Tell RabbitMQ that you would like to stop consuming by sending the</span>
+<span class="sd">        Basic.Cancel RPC command. Not to be sent when you are not consuming.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="p">(</span>
+                    <span class="s1">&#39;RabbitMQ threaded select loop interactor: Sending a&#39;</span>
+                    <span class="s1">&#39; Basic.Cancel RPC command to RabbitMQ&#39;</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+            <span class="n">cb</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">on_cancelok</span><span class="p">,</span>
+                <span class="n">userdata</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_consumer_tag</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="o">.</span><span class="n">basic_cancel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_consumer_tag</span><span class="p">,</span> <span class="n">cb</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.on_cancelok"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.on_cancelok">[docs]</a>    <span class="k">def</span> <span class="nf">on_cancelok</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_unused_frame</span><span class="p">,</span> <span class="n">userdata</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This method is invoked by pika when RabbitMQ acknowledges the</span>
+<span class="sd">        cancellation of a consumer. At this point we will close the channel.</span>
+<span class="sd">        This will invoke the on_channel_closed method once the channel has been</span>
+<span class="sd">        closed, which will in-turn close the connection.</span>
+<span class="sd">        :param pika.frame.Method _unused_frame: The Basic.CancelOk frame</span>
+<span class="sd">        :param str|unicode userdata: Extra user data (consumer tag)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_consuming</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="s1">&#39;RabbitMQ threaded select loop interactor: RabbitMQ&#39;</span>
+                <span class="s1">&#39; acknowledged the cancellation of the consumer: </span><span class="si">{}</span><span class="s1">&#39;</span>
+            <span class="p">),</span>
+            <span class="n">userdata</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">close_channel</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="RabbitmqThreadedSelectLoopInteractor.stop"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.RabbitmqThreadedSelectLoopInteractor.stop">[docs]</a>    <span class="k">def</span> <span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Cleanly shutdown the connection to RabbitMQ by stopping the consumer with RabbitMQ.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_closing</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_closing</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_stopping</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="c1"># try flushing out all queued messages</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="p">(</span>
+                    <span class="s1">&#39;RabbitMQ threaded select loop interactor: attempting to&#39;</span>
+                    <span class="s1">&#39; send out queued messages before stopping ioloop and&#39;</span>
+                    <span class="s1">&#39; disconnecting&#39;</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">publish_message</span><span class="p">(</span><span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">except</span><span class="p">:</span>
+                <span class="k">pass</span>
+            <span class="c1"># if consuming flag was set internally, the clean way to exit for a consumer is to bfirst send basic</span>
+            <span class="c1"># self.send_basic_cancel()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">close_channel</span><span class="p">()</span></div></div>
+
+
+<div class="viewcode-block" id="main"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rabbitmq_helpers.main">[docs]</a><span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+    <span class="c1"># Connect to localhost:5672 as guest with the password guest and virtual host &quot;/&quot; (%2F)</span>
+    <span class="n">example</span> <span class="o">=</span> <span class="n">RabbitmqSelectLoopInteractor</span><span class="p">(</span>
+        <span class="s1">&#39;amqp://guest:guest@localhost:5672/</span><span class="si">%2F</span><span class="s1">?connection_attempts=3&amp;heartbeat=3600&#39;</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">example</span><span class="o">.</span><span class="n">run</span><span class="p">()</span></div>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">()</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, Powerloom Inc..</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+</body>
+</html>

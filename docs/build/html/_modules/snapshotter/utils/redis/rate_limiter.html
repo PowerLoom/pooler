@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>snapshotter.utils.redis.rate_limiter &mdash; Powerloom Snapshotter 0.1 documentation</title>
+      <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+
+        <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script data-url_root="../../../../" id="documentation_options" src="../../../../_static/documentation_options.js?v=e031e9a9"></script>
+        <script src="../../../../_static/doctools.js?v=888ff710"></script>
+        <script src="../../../../_static/sphinx_highlight.js?v=4825356b"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+</head>
+
+<body class="wy-body-for-nav">
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+
+
+          <a href="../../../../index.html">
+
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../snapshotter.html">Powerloom Snapshotter</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">Powerloom Snapshotter</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">snapshotter.utils.redis.rate_limiter</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+
+  <h1>Source code for snapshotter.utils.redis.rate_limiter</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span>
+
+<span class="kn">import</span> <span class="nn">redis.exceptions</span>
+<span class="kn">from</span> <span class="nn">async_limits</span> <span class="kn">import</span> <span class="n">RateLimitItem</span>
+<span class="kn">from</span> <span class="nn">async_limits.storage</span> <span class="kn">import</span> <span class="n">AsyncRedisStorage</span>
+<span class="kn">from</span> <span class="nn">async_limits.strategies</span> <span class="kn">import</span> <span class="n">AsyncFixedWindowRateLimiter</span>
+<span class="kn">from</span> <span class="nn">redis</span> <span class="kn">import</span> <span class="n">asyncio</span> <span class="k">as</span> <span class="n">aioredis</span>
+
+<span class="kn">from</span> <span class="nn">snapshotter.utils.exceptions</span> <span class="kn">import</span> <span class="n">RPCException</span>
+
+<span class="c1"># Initialize rate limits when program starts</span>
+<span class="n">LUA_SCRIPT_SHAS</span> <span class="o">=</span> <span class="kc">None</span>
+
+<span class="c1"># # # RATE LIMITER LUA SCRIPTS</span>
+<span class="n">SCRIPT_CLEAR_KEYS</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">        local keys = redis.call(&#39;keys&#39;, KEYS[1])</span>
+<span class="s2">        local res = 0</span>
+<span class="s2">        for i=1,#keys,5000 do</span>
+<span class="s2">            res = res + redis.call(</span>
+<span class="s2">                &#39;del&#39;, unpack(keys, i, math.min(i+4999, #keys))</span>
+<span class="s2">            )</span>
+<span class="s2">        end</span>
+<span class="s2">        return res</span>
+<span class="s2">        &quot;&quot;&quot;</span>
+
+<span class="n">SCRIPT_INCR_EXPIRE</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">        local current</span>
+<span class="s2">        current = redis.call(&quot;incrby&quot;,KEYS[1],ARGV[2])</span>
+<span class="s2">        if tonumber(current) == tonumber(ARGV[2]) then</span>
+<span class="s2">            redis.call(&quot;expire&quot;,KEYS[1],ARGV[1])</span>
+<span class="s2">        end</span>
+<span class="s2">        return current</span>
+<span class="s2">    &quot;&quot;&quot;</span>
+
+<span class="c1"># args = [value, expiry]</span>
+<span class="n">SCRIPT_SET_EXPIRE</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">    local keyttl = redis.call(&#39;TTL&#39;, KEYS[1])</span>
+<span class="s2">    local current</span>
+<span class="s2">    current = redis.call(&#39;SET&#39;, KEYS[1], ARGV[1])</span>
+<span class="s2">    if keyttl == -2 then</span>
+<span class="s2">        redis.call(&#39;EXPIRE&#39;, KEYS[1], ARGV[2])</span>
+<span class="s2">    elseif keyttl ~= -1 then</span>
+<span class="s2">        redis.call(&#39;EXPIRE&#39;, KEYS[1], keyttl)</span>
+<span class="s2">    end</span>
+<span class="s2">    return current</span>
+<span class="s2">&quot;&quot;&quot;</span>
+
+
+<span class="c1"># # # END RATE LIMITER LUA SCRIPTS</span>
+
+
+<span class="c1"># needs to be run only once</span>
+<div class="viewcode-block" id="load_rate_limiter_scripts"><a class="viewcode-back" href="../../../../snapshotter.utils.redis.html#snapshotter.utils.redis.rate_limiter.load_rate_limiter_scripts">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">load_rate_limiter_scripts</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Load rate limiter scripts into Redis and return their SHA hashes.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        redis_conn (aioredis.Redis): Redis connection object.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: A dictionary containing the SHA hashes of the loaded scripts.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">script_clear_keys_sha</span> <span class="o">=</span> <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">script_load</span><span class="p">(</span><span class="n">SCRIPT_CLEAR_KEYS</span><span class="p">)</span>
+    <span class="n">script_incr_expire</span> <span class="o">=</span> <span class="k">await</span> <span class="n">redis_conn</span><span class="o">.</span><span class="n">script_load</span><span class="p">(</span><span class="n">SCRIPT_INCR_EXPIRE</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s1">&#39;script_incr_expire&#39;</span><span class="p">:</span> <span class="n">script_incr_expire</span><span class="p">,</span>
+        <span class="s1">&#39;script_clear_keys&#39;</span><span class="p">:</span> <span class="n">script_clear_keys_sha</span><span class="p">,</span>
+    <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="generic_rate_limiter"><a class="viewcode-back" href="../../../../snapshotter.utils.redis.html#snapshotter.utils.redis.rate_limiter.generic_rate_limiter">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">generic_rate_limiter</span><span class="p">(</span>
+    <span class="n">parsed_limits</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">RateLimitItem</span><span class="p">],</span>
+    <span class="n">key_bits</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
+    <span class="n">redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span><span class="p">,</span>
+    <span class="n">rate_limit_lua_script_shas</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">limit_incr_by</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A generic rate limiter that uses Redis as a storage backend.</span>
+
+<span class="sd">    :param parsed_limits: A list of RateLimitItem objects that define the rate limits.</span>
+<span class="sd">    :param key_bits: A list of key bits to be used as part of the Redis key.</span>
+<span class="sd">    :param redis_conn: An instance of aioredis.Redis that is used to connect to Redis.</span>
+<span class="sd">    :param rate_limit_lua_script_shas: A dictionary containing the SHA hashes of the Lua scripts used by the rate limiter.</span>
+<span class="sd">    :param limit_incr_by: The amount by which to increment the rate limit counter.</span>
+<span class="sd">    :return: A tuple containing a boolean indicating whether the rate limit check passed, the retry-after time in seconds,</span>
+<span class="sd">             and a string representation of the rate limit that was checked.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">rate_limit_lua_script_shas</span><span class="p">:</span>
+        <span class="n">rate_limit_lua_script_shas</span> <span class="o">=</span> <span class="k">await</span> <span class="n">load_rate_limiter_scripts</span><span class="p">(</span><span class="n">redis_conn</span><span class="p">)</span>
+    <span class="n">redis_storage</span> <span class="o">=</span> <span class="n">AsyncRedisStorage</span><span class="p">(</span><span class="n">rate_limit_lua_script_shas</span><span class="p">,</span> <span class="n">redis_conn</span><span class="p">)</span>
+    <span class="n">custom_limiter</span> <span class="o">=</span> <span class="n">AsyncFixedWindowRateLimiter</span><span class="p">(</span><span class="n">redis_storage</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">each_lim</span> <span class="ow">in</span> <span class="n">parsed_limits</span><span class="p">:</span>
+        <span class="c1"># window_stats = custom_limiter.get_window_stats(each_lim, key_bits)</span>
+        <span class="c1"># local_app_cacher_logger.debug(window_stats)</span>
+        <span class="c1"># rest_logger.debug(&#39;Limit {} expiry: {}&#39;, each_lim, each_lim.get_expiry())</span>
+        <span class="c1"># async limits rate limit check</span>
+        <span class="c1"># if rate limit checks out then we call</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="k">await</span> <span class="n">custom_limiter</span><span class="o">.</span><span class="n">hit</span><span class="p">(</span><span class="n">each_lim</span><span class="p">,</span> <span class="n">limit_incr_by</span><span class="p">,</span> <span class="o">*</span><span class="p">[</span><span class="n">key_bits</span><span class="p">])</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
+                <span class="n">window_stats</span> <span class="o">=</span> <span class="k">await</span> <span class="n">custom_limiter</span><span class="o">.</span><span class="n">get_window_stats</span><span class="p">(</span>
+                    <span class="n">each_lim</span><span class="p">,</span>
+                    <span class="n">key_bits</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">reset_in</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">+</span> <span class="n">window_stats</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="c1"># if you need information on back offs</span>
+                <span class="n">retry_after</span> <span class="o">=</span> <span class="n">reset_in</span> <span class="o">-</span> <span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">())</span>
+                <span class="k">return</span> <span class="kc">False</span><span class="p">,</span> <span class="n">retry_after</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">each_lim</span><span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span>
+            <span class="n">redis</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">ConnectionError</span><span class="p">,</span>
+            <span class="n">redis</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">TimeoutError</span><span class="p">,</span>
+            <span class="n">redis</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">ResponseError</span><span class="p">,</span>
+        <span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span> <span class="kn">from</span> <span class="nn">exc</span>
+    <span class="k">return</span> <span class="kc">True</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;&#39;</span></div>
+
+
+<div class="viewcode-block" id="check_rpc_rate_limit"><a class="viewcode-back" href="../../../../snapshotter.utils.redis.html#snapshotter.utils.redis.rate_limiter.check_rpc_rate_limit">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">check_rpc_rate_limit</span><span class="p">(</span>
+    <span class="n">parsed_limits</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
+    <span class="n">app_id</span><span class="p">,</span>
+    <span class="n">redis_conn</span><span class="p">:</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">Redis</span><span class="p">,</span>
+    <span class="n">request_payload</span><span class="p">,</span>
+    <span class="n">error_msg</span><span class="p">,</span>
+    <span class="n">logger</span><span class="p">,</span>
+    <span class="n">rate_limit_lua_script_shas</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">limit_incr_by</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Check if the RPC rate limit has been exceeded for the given app_id and request_payload.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        parsed_limits (list): List of parsed rate limit configurations.</span>
+<span class="sd">        app_id (str): The ID of the app making the request.</span>
+<span class="sd">        redis_conn (aioredis.Redis): The Redis connection object.</span>
+<span class="sd">        request_payload (dict): The payload of the request.</span>
+<span class="sd">        error_msg (str): The error message to include in the RPCException if the rate limit is exceeded.</span>
+<span class="sd">        logger (Logger): The logger object.</span>
+<span class="sd">        rate_limit_lua_script_shas (dict, optional): A dictionary of Lua script SHA1 hashes for rate limiting.</span>
+<span class="sd">        limit_incr_by (int, optional): The amount to increment the rate limit by.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        bool: True if the rate limit has not been exceeded, False otherwise.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        RPCException: If the rate limit has been exceeded.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">key_bits</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">app_id</span><span class="p">,</span>
+        <span class="s1">&#39;eth_call&#39;</span><span class="p">,</span>
+    <span class="p">]</span>  <span class="c1"># TODO: add unique elements that can identify a request</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">can_request</span><span class="p">,</span> <span class="n">retry_after</span><span class="p">,</span> <span class="n">violated_limit</span> <span class="o">=</span> <span class="k">await</span> <span class="n">generic_rate_limiter</span><span class="p">(</span>
+            <span class="n">parsed_limits</span><span class="p">,</span>
+            <span class="n">key_bits</span><span class="p">,</span>
+            <span class="n">redis_conn</span><span class="p">,</span>
+            <span class="n">rate_limit_lua_script_shas</span><span class="p">,</span>
+            <span class="n">limit_incr_by</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="s1">&#39;Caught exception on rate limiter operations: </span><span class="si">{}</span><span class="s1"> | Bypassing&#39;</span>
+                <span class="s1">&#39; rate limit check &#39;</span>
+            <span class="p">),</span>
+            <span class="n">exc</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">raise</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">can_request</span><span class="p">:</span>
+        <span class="n">exc</span> <span class="o">=</span> <span class="n">RPCException</span><span class="p">(</span>
+            <span class="n">request</span><span class="o">=</span><span class="n">request_payload</span><span class="p">,</span>
+            <span class="n">response</span><span class="o">=</span><span class="p">{},</span>
+            <span class="n">underlying_exception</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">extra_info</span><span class="o">=</span><span class="n">error_msg</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="s1">&#39;Rate limit hit, raising exception </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">))</span>
+        <span class="k">raise</span> <span class="n">exc</span>
+    <span class="k">return</span> <span class="n">can_request</span></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, Powerloom Inc..</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+</body>
+</html>

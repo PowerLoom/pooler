@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>snapshotter.utils.models.data_models &mdash; Powerloom Snapshotter 0.1 documentation</title>
+      <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+
+        <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script data-url_root="../../../../" id="documentation_options" src="../../../../_static/documentation_options.js?v=e031e9a9"></script>
+        <script src="../../../../_static/doctools.js?v=888ff710"></script>
+        <script src="../../../../_static/sphinx_highlight.js?v=4825356b"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+</head>
+
+<body class="wy-body-for-nav">
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+
+
+          <a href="../../../../index.html">
+
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../snapshotter.html">Powerloom Snapshotter</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">Powerloom Snapshotter</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">snapshotter.utils.models.data_models</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+
+  <h1>Source code for snapshotter.utils.models.data_models</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">Enum</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Optional</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Union</span>
+
+<span class="kn">from</span> <span class="nn">pydantic</span> <span class="kn">import</span> <span class="n">BaseModel</span>
+
+<span class="kn">from</span> <span class="nn">snapshotter.utils.callback_helpers</span> <span class="kn">import</span> <span class="n">GenericPreloader</span>
+
+
+<div class="viewcode-block" id="ProcessorWorkerDetails"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.ProcessorWorkerDetails">[docs]</a><span class="k">class</span> <span class="nc">ProcessorWorkerDetails</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">unique_name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">pid</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="PreloaderAsyncFutureDetails"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.PreloaderAsyncFutureDetails">[docs]</a><span class="k">class</span> <span class="nc">PreloaderAsyncFutureDetails</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">obj</span><span class="p">:</span> <span class="n">GenericPreloader</span>
+    <span class="n">future</span><span class="p">:</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Task</span>
+
+<div class="viewcode-block" id="PreloaderAsyncFutureDetails.Config"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.PreloaderAsyncFutureDetails.Config">[docs]</a>    <span class="k">class</span> <span class="nc">Config</span><span class="p">:</span>
+        <span class="n">arbitrary_types_allowed</span> <span class="o">=</span> <span class="kc">True</span></div></div>
+
+
+<div class="viewcode-block" id="SnapshotterReportState"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.SnapshotterReportState">[docs]</a><span class="k">class</span> <span class="nc">SnapshotterReportState</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">MISSED_SNAPSHOT</span> <span class="o">=</span> <span class="s1">&#39;MISSED_SNAPSHOT&#39;</span>
+    <span class="n">SUBMITTED_INCORRECT_SNAPSHOT</span> <span class="o">=</span> <span class="s1">&#39;SUBMITTED_INCORRECT_SNAPSHOT&#39;</span>
+    <span class="n">SHUTDOWN_INITIATED</span> <span class="o">=</span> <span class="s1">&#39;SHUTDOWN_INITIATED&#39;</span>
+    <span class="n">CRASHED_CHILD_WORKER</span> <span class="o">=</span> <span class="s1">&#39;CRASHED_CHILD_WORKER&#39;</span>
+    <span class="n">UNHEALTHY_EPOCH_PROCESSING</span> <span class="o">=</span> <span class="s1">&#39;UNHEALTHY_EPOCH_PROCESSING&#39;</span></div>
+
+
+<div class="viewcode-block" id="SnapshotterStates"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.SnapshotterStates">[docs]</a><span class="k">class</span> <span class="nc">SnapshotterStates</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">PRELOAD</span> <span class="o">=</span> <span class="s1">&#39;PRELOAD&#39;</span>
+    <span class="n">SNAPSHOT_BUILD</span> <span class="o">=</span> <span class="s1">&#39;SNAPSHOT_BUILD&#39;</span>
+    <span class="n">SNAPSHOT_SUBMIT_PAYLOAD_COMMIT</span> <span class="o">=</span> <span class="s1">&#39;SNAPSHOT_SUBMIT_PAYLOAD_COMMIT&#39;</span>
+    <span class="n">RELAYER_SEND</span> <span class="o">=</span> <span class="s1">&#39;RELAYER_SEND&#39;</span>
+    <span class="n">SNAPSHOT_FINALIZE</span> <span class="o">=</span> <span class="s1">&#39;SNAPSHOT_FINALIZE&#39;</span></div>
+
+
+<div class="viewcode-block" id="SnapshotterStateUpdate"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.SnapshotterStateUpdate">[docs]</a><span class="k">class</span> <span class="nc">SnapshotterStateUpdate</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">status</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">error</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">extra</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">timestamp</span><span class="p">:</span> <span class="nb">int</span></div>
+
+
+<div class="viewcode-block" id="SnapshotterEpochProcessingReportItem"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.SnapshotterEpochProcessingReportItem">[docs]</a><span class="k">class</span> <span class="nc">SnapshotterEpochProcessingReportItem</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">epochId</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">epochEnd</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="c1"># map transition like EPOCH_RELEASED to its status</span>
+    <span class="n">transitionStatus</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="n">SnapshotterStateUpdate</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">SnapshotterStateUpdate</span><span class="p">]]]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="SnapshotterIssue"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.SnapshotterIssue">[docs]</a><span class="k">class</span> <span class="nc">SnapshotterIssue</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">instanceID</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">issueType</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">projectID</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">epochId</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">timeOfReporting</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">extra</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span></div>
+
+
+<div class="viewcode-block" id="DelegateTaskProcessorIssue"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.DelegateTaskProcessorIssue">[docs]</a><span class="k">class</span> <span class="nc">DelegateTaskProcessorIssue</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">instanceID</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">issueType</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">epochId</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">timeOfReporting</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">extra</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span></div>
+
+
+<div class="viewcode-block" id="TimeoutConfig"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.TimeoutConfig">[docs]</a><span class="k">class</span> <span class="nc">TimeoutConfig</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">basic</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">archival</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">connection_init</span><span class="p">:</span> <span class="nb">int</span></div>
+
+
+<div class="viewcode-block" id="RLimitConfig"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.RLimitConfig">[docs]</a><span class="k">class</span> <span class="nc">RLimitConfig</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">file_descriptors</span><span class="p">:</span> <span class="nb">int</span></div>
+
+
+<span class="c1"># Event detector related models</span>
+<div class="viewcode-block" id="EventBase"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.EventBase">[docs]</a><span class="k">class</span> <span class="nc">EventBase</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">timestamp</span><span class="p">:</span> <span class="nb">int</span></div>
+
+
+<div class="viewcode-block" id="EpochReleasedEvent"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.EpochReleasedEvent">[docs]</a><span class="k">class</span> <span class="nc">EpochReleasedEvent</span><span class="p">(</span><span class="n">EventBase</span><span class="p">):</span>
+    <span class="n">epochId</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">begin</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">end</span><span class="p">:</span> <span class="nb">int</span></div>
+
+
+<div class="viewcode-block" id="SnapshotFinalizedEvent"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.SnapshotFinalizedEvent">[docs]</a><span class="k">class</span> <span class="nc">SnapshotFinalizedEvent</span><span class="p">(</span><span class="n">EventBase</span><span class="p">):</span>
+    <span class="n">epochId</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">epochEnd</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">projectId</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">snapshotCid</span><span class="p">:</span> <span class="nb">str</span></div>
+
+
+<div class="viewcode-block" id="ProjectsUpdatedEvent"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.ProjectsUpdatedEvent">[docs]</a><span class="k">class</span> <span class="nc">ProjectsUpdatedEvent</span><span class="p">(</span><span class="n">EventBase</span><span class="p">):</span>
+    <span class="n">projectId</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">allowed</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">enableEpochId</span><span class="p">:</span> <span class="nb">int</span></div>
+
+
+<div class="viewcode-block" id="SnapshottersUpdatedEvent"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.SnapshottersUpdatedEvent">[docs]</a><span class="k">class</span> <span class="nc">SnapshottersUpdatedEvent</span><span class="p">(</span><span class="n">EventBase</span><span class="p">):</span>
+    <span class="n">snapshotterAddress</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">allowed</span><span class="p">:</span> <span class="nb">bool</span></div>
+
+
+<div class="viewcode-block" id="SnapshotSubmittedEvent"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.SnapshotSubmittedEvent">[docs]</a><span class="k">class</span> <span class="nc">SnapshotSubmittedEvent</span><span class="p">(</span><span class="n">EventBase</span><span class="p">):</span>
+    <span class="n">snapshotCid</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">epochId</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">projectId</span><span class="p">:</span> <span class="nb">str</span></div>
+
+
+<div class="viewcode-block" id="ProjectSpecificState"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.ProjectSpecificState">[docs]</a><span class="k">class</span> <span class="nc">ProjectSpecificState</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">first_epoch_id</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">finalized_cids</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span>  <span class="c1"># mapping of epoch ID to snapshot CID</span></div>
+
+
+<div class="viewcode-block" id="ProtocolState"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.ProtocolState">[docs]</a><span class="k">class</span> <span class="nc">ProtocolState</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">project_specific_states</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ProjectSpecificState</span><span class="p">]</span>  <span class="c1"># project ID -&gt; project specific state</span>
+    <span class="n">synced_till_epoch_id</span><span class="p">:</span> <span class="nb">int</span></div>
+
+
+<div class="viewcode-block" id="ProjectStatus"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.ProjectStatus">[docs]</a><span class="k">class</span> <span class="nc">ProjectStatus</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">projectId</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">successfulSubmissions</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">incorrectSubmissions</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">missedSubmissions</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span></div>
+
+
+<div class="viewcode-block" id="SnapshotterPing"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.SnapshotterPing">[docs]</a><span class="k">class</span> <span class="nc">SnapshotterPing</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">instanceID</span><span class="p">:</span> <span class="nb">str</span></div>
+
+
+<div class="viewcode-block" id="SnapshotterStatus"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.SnapshotterStatus">[docs]</a><span class="k">class</span> <span class="nc">SnapshotterStatus</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">totalSuccessfulSubmissions</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">totalIncorrectSubmissions</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">totalMissedSubmissions</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">projects</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">ProjectStatus</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="SnapshotterMissedSubmission"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.SnapshotterMissedSubmission">[docs]</a><span class="k">class</span> <span class="nc">SnapshotterMissedSubmission</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">epochId</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span></div>
+
+
+<div class="viewcode-block" id="SnapshotterIncorrectSubmission"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.SnapshotterIncorrectSubmission">[docs]</a><span class="k">class</span> <span class="nc">SnapshotterIncorrectSubmission</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">epochId</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">incorrectCid</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">payloadDump</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span></div>
+
+
+<div class="viewcode-block" id="SnapshotterStatusReport"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.SnapshotterStatusReport">[docs]</a><span class="k">class</span> <span class="nc">SnapshotterStatusReport</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">submittedSnapshotCid</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">submittedSnapshot</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">finalizedSnapshotCid</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">finalizedSnapshot</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">state</span><span class="p">:</span> <span class="n">SnapshotterReportState</span>
+    <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span></div>
+
+
+<div class="viewcode-block" id="SnapshotterMissedSnapshotSubmission"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.SnapshotterMissedSnapshotSubmission">[docs]</a><span class="k">class</span> <span class="nc">SnapshotterMissedSnapshotSubmission</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">epochId</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">finalizedSnapshotCid</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span></div>
+
+
+<div class="viewcode-block" id="SnapshotterIncorrectSnapshotSubmission"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.SnapshotterIncorrectSnapshotSubmission">[docs]</a><span class="k">class</span> <span class="nc">SnapshotterIncorrectSnapshotSubmission</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">epochId</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">submittedSnapshotCid</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">submittedSnapshot</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span>
+    <span class="n">finalizedSnapshotCid</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">finalizedSnapshot</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span>
+    <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span></div>
+
+
+<div class="viewcode-block" id="SnapshotterProjectStatus"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.SnapshotterProjectStatus">[docs]</a><span class="k">class</span> <span class="nc">SnapshotterProjectStatus</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">missedSubmissions</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">SnapshotterMissedSnapshotSubmission</span><span class="p">]</span>
+    <span class="n">incorrectSubmissions</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">SnapshotterIncorrectSnapshotSubmission</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="UnfinalizedSnapshot"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.UnfinalizedSnapshot">[docs]</a><span class="k">class</span> <span class="nc">UnfinalizedSnapshot</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">snapshotCid</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">snapshot</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="TaskStatusRequest"><a class="viewcode-back" href="../../../../snapshotter.utils.models.html#snapshotter.utils.models.data_models.TaskStatusRequest">[docs]</a><span class="k">class</span> <span class="nc">TaskStatusRequest</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">task_type</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">wallet_address</span><span class="p">:</span> <span class="nb">str</span></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, Powerloom Inc..</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+</body>
+</html>

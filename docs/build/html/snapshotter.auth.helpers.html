@@ -1,373 +1,261 @@
-<!doctype html>
-<html class="no-js" lang="en" data-content_root="">
-  <head><meta charset="utf-8"/>
-    <meta name="viewport" content="width=device-width,initial-scale=1"/>
-    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="snapshotter.auth.settings package" href="snapshotter.auth.settings.html" /><link rel="prev" title="snapshotter.auth package" href="snapshotter.auth.html" />
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
-    <!-- Generated with Sphinx 7.1.2 and Furo 2023.09.10 -->
-        <title>snapshotter.auth.helpers package - Powerloom Snapshotter 0.1 documentation</title>
-      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=a746c00c" />
-    <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=135e06be" />
-    <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=eafc0fe6" />
-    <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=36a5483c" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>snapshotter.auth.helpers package &mdash; Powerloom Snapshotter 0.1 documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
 
+        <script src="_static/jquery.js?v=5d32c60e"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js?v=e031e9a9"></script>
+        <script src="_static/doctools.js?v=888ff710"></script>
+        <script src="_static/sphinx_highlight.js?v=4825356b"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="snapshotter.auth.settings package" href="snapshotter.auth.settings.html" />
+    <link rel="prev" title="snapshotter.auth package" href="snapshotter.auth.html" />
+</head>
 
-
-
-<style>
-  body {
-    --color-code-background: #f8f8f8;
-  --color-code-foreground: black;
-
-  }
-  @media not print {
-    body[data-theme="dark"] {
-      --color-code-background: #202020;
-  --color-code-foreground: #d0d0d0;
-
-    }
-    @media (prefers-color-scheme: dark) {
-      body:not([data-theme="light"]) {
-        --color-code-background: #202020;
-  --color-code-foreground: #d0d0d0;
-
-      }
-    }
-  }
-</style></head>
-  <body>
-
-    <script>
-      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
-    </script>
-
-
-<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
-  <symbol id="svg-toc" viewBox="0 0 24 24">
-    <title>Contents</title>
-    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
-      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
-    </svg>
-  </symbol>
-  <symbol id="svg-menu" viewBox="0 0 24 24">
-    <title>Menu</title>
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
-      <line x1="3" y1="12" x2="21" y2="12"></line>
-      <line x1="3" y1="6" x2="21" y2="6"></line>
-      <line x1="3" y1="18" x2="21" y2="18"></line>
-    </svg>
-  </symbol>
-  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
-    <title>Expand</title>
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
-      <polyline points="9 18 15 12 9 6"></polyline>
-    </svg>
-  </symbol>
-  <symbol id="svg-sun" viewBox="0 0 24 24">
-    <title>Light mode</title>
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
-      <circle cx="12" cy="12" r="5"></circle>
-      <line x1="12" y1="1" x2="12" y2="3"></line>
-      <line x1="12" y1="21" x2="12" y2="23"></line>
-      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-      <line x1="1" y1="12" x2="3" y2="12"></line>
-      <line x1="21" y1="12" x2="23" y2="12"></line>
-      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-    </svg>
-  </symbol>
-  <symbol id="svg-moon" viewBox="0 0 24 24">
-    <title>Dark mode</title>
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
-      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
-    </svg>
-  </symbol>
-  <symbol id="svg-sun-half" viewBox="0 0 24 24">
-    <title>Auto light/dark mode</title>
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-shadow">
-      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M13 12h5" />
-      <path d="M13 15h4" />
-      <path d="M13 18h1" />
-      <path d="M13 9h4" />
-      <path d="M13 6h1" />
-    </svg>
-  </symbol>
-</svg>
-
-<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation">
-<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc">
-<label class="overlay sidebar-overlay" for="__navigation">
-  <div class="visually-hidden">Hide navigation sidebar</div>
-</label>
-<label class="overlay toc-overlay" for="__toc">
-  <div class="visually-hidden">Hide table of contents sidebar</div>
-</label>
+<body class="wy-body-for-nav">
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
 
 
 
-<div class="page">
-  <header class="mobile-header">
-    <div class="header-left">
-      <label class="nav-overlay-icon" for="__navigation">
-        <div class="visually-hidden">Toggle site navigation sidebar</div>
-        <i class="icon"><svg><use href="#svg-menu"></use></svg></i>
-      </label>
-    </div>
-    <div class="header-center">
-      <a href="index.html"><div class="brand">Powerloom Snapshotter 0.1 documentation</div></a>
-    </div>
-    <div class="header-right">
-      <div class="theme-toggle-container theme-toggle-header">
-        <button class="theme-toggle">
-          <div class="visually-hidden">Toggle Light / Dark / Auto color theme</div>
-          <svg class="theme-icon-when-auto"><use href="#svg-sun-half"></use></svg>
-          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
-          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
-        </button>
-      </div>
-      <label class="toc-overlay-icon toc-header-icon" for="__toc">
-        <div class="visually-hidden">Toggle table of contents sidebar</div>
-        <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
-      </label>
-    </div>
-  </header>
-  <aside class="sidebar-drawer">
-    <div class="sidebar-container">
+          <a href="index.html">
 
-      <div class="sidebar-sticky"><a class="sidebar-brand" href="index.html">
-
-
-  <span class="sidebar-brand-text">Powerloom Snapshotter 0.1 documentation</span>
-
-</a><form class="sidebar-search-container" method="get" action="search.html" role="search">
-  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
-  <input type="hidden" name="check_keywords" value="yes">
-  <input type="hidden" name="area" value="default">
-</form>
-<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
-  <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul class="current">
-<li class="toctree-l1 current has-children"><a class="reference internal" href="snapshotter.html">Powerloom Snapshotter</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><div class="visually-hidden">Toggle navigation of Powerloom Snapshotter</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul class="current">
-<li class="toctree-l2 current has-children"><a class="reference internal" href="snapshotter.auth.html">snapshotter.auth package</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><div class="visually-hidden">Toggle navigation of snapshotter.auth package</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul class="current">
-<li class="toctree-l3 current current-page"><a class="current reference internal" href="#">snapshotter.auth.helpers package</a></li>
-<li class="toctree-l3"><a class="reference internal" href="snapshotter.auth.settings.html">snapshotter.auth.settings package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="snapshotter.html">Powerloom Snapshotter</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="snapshotter.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="snapshotter.auth.html">snapshotter.auth package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="snapshotter.auth.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l5 current"><a class="current reference internal" href="#">snapshotter.auth.helpers package</a></li>
+<li class="toctree-l5"><a class="reference internal" href="snapshotter.auth.settings.html">snapshotter.auth.settings package</a></li>
 </ul>
 </li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="snapshotter.utils.html">snapshotter.utils package</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><div class="visually-hidden">Toggle navigation of snapshotter.utils package</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
-<li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.models.html">snapshotter.utils.models package</a></li>
-<li class="toctree-l3 has-children"><a class="reference internal" href="snapshotter.utils.preloaders.html">snapshotter.utils.preloaders package</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><div class="visually-hidden">Toggle navigation of snapshotter.utils.preloaders package</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
-<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.preloaders.block_details.html">snapshotter.utils.preloaders.block_details package</a></li>
-<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.preloaders.eth_price.html">snapshotter.utils.preloaders.eth_price package</a></li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="snapshotter.utils.preloaders.tx_receipts.html">snapshotter.utils.preloaders.tx_receipts package</a><input class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" role="switch" type="checkbox"/><label for="toctree-checkbox-5"><div class="visually-hidden">Toggle navigation of snapshotter.utils.preloaders.tx_receipts package</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
-<li class="toctree-l5"><a class="reference internal" href="snapshotter.utils.preloaders.tx_receipts.delegated_worker.html">snapshotter.utils.preloaders.tx_receipts.delegated_worker package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.html#submodules">Submodules</a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.auth.html#module-snapshotter.auth.server_entry">snapshotter.auth.server_entry</a></li>
 </ul>
 </li>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.html">snapshotter.utils package</a></li>
 </ul>
 </li>
-<li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.redis.html">snapshotter.utils.redis package</a></li>
-</ul>
-</li>
+<li class="toctree-l2"><a class="reference internal" href="snapshotter.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="snapshotter.html#module-snapshotter.core_api">snapshotter.core_api</a></li>
+<li class="toctree-l2"><a class="reference internal" href="snapshotter.html#module-snapshotter.gunicorn_core_launcher">snapshotter.gunicorn_core_launcher</a></li>
+<li class="toctree-l2"><a class="reference internal" href="snapshotter.html#module-snapshotter.init_rabbitmq">snapshotter.init_rabbitmq</a></li>
+<li class="toctree-l2"><a class="reference internal" href="snapshotter.html#module-snapshotter.launch_process_hub_core">snapshotter.launch_process_hub_core</a></li>
+<li class="toctree-l2"><a class="reference internal" href="snapshotter.html#module-snapshotter.process_hub_core">snapshotter.process_hub_core</a></li>
+<li class="toctree-l2"><a class="reference internal" href="snapshotter.html#module-snapshotter.processhub_cmd">snapshotter.processhub_cmd</a></li>
+<li class="toctree-l2"><a class="reference internal" href="snapshotter.html#module-snapshotter.processor_distributor">snapshotter.processor_distributor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="snapshotter.html#module-snapshotter.protocol_state_loader_exporter">snapshotter.protocol_state_loader_exporter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="snapshotter.html#module-snapshotter.snapshotter_id_ping">snapshotter.snapshotter_id_ping</a></li>
+<li class="toctree-l2"><a class="reference internal" href="snapshotter.html#module-snapshotter.system_event_detector">snapshotter.system_event_detector</a></li>
+<li class="toctree-l2"><a class="reference internal" href="snapshotter.html#module-snapshotter.worker_process_report">snapshotter.worker_process_report</a></li>
 </ul>
 </li>
 </ul>
 
-</div>
-</div>
-
-      </div>
-
-    </div>
-  </aside>
-  <div class="main">
-    <div class="content">
-      <div class="article-container">
-        <a href="#" class="back-to-top muted-link">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
-          </svg>
-          <span>Back to top</span>
-        </a>
-        <div class="content-icon-container">
-
-<div class="theme-toggle-container theme-toggle-content">
-            <button class="theme-toggle">
-              <div class="visually-hidden">Toggle Light / Dark / Auto color theme</div>
-              <svg class="theme-icon-when-auto"><use href="#svg-sun-half"></use></svg>
-              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
-              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
-            </button>
-          </div>
-          <label class="toc-overlay-icon toc-content-icon" for="__toc">
-            <div class="visually-hidden">Toggle table of contents sidebar</div>
-            <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
-          </label>
         </div>
-        <article role="main">
-          <section id="snapshotter-auth-helpers-package">
-<h1>snapshotter.auth.helpers package<a class="headerlink" href="#snapshotter-auth-helpers-package" title="Permalink to this heading">#</a></h1>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Powerloom Snapshotter</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="snapshotter.html">Powerloom Snapshotter</a></li>
+          <li class="breadcrumb-item"><a href="snapshotter.auth.html">snapshotter.auth package</a></li>
+      <li class="breadcrumb-item active">snapshotter.auth.helpers package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/snapshotter.auth.helpers.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+
+  <section id="module-snapshotter.auth.helpers">
+<span id="snapshotter-auth-helpers-package"></span><h1>snapshotter.auth.helpers package<a class="headerlink" href="#module-snapshotter.auth.helpers" title="Permalink to this heading"></a></h1>
 <section id="submodules">
-<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this heading">#</a></h2>
+<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this heading"></a></h2>
 </section>
 <section id="module-snapshotter.auth.helpers.data_models">
-<span id="snapshotter-auth-helpers-data-models-module"></span><h2>snapshotter.auth.helpers.data_models module<a class="headerlink" href="#module-snapshotter.auth.helpers.data_models" title="Permalink to this heading">#</a></h2>
+<span id="snapshotter-auth-helpers-data-models"></span><h2>snapshotter.auth.helpers.data_models<a class="headerlink" href="#module-snapshotter.auth.helpers.data_models" title="Permalink to this heading"></a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.AddApiKeyRequest">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.data_models.</span></span><span class="sig-name descname"><span class="pre">AddApiKeyRequest</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">api_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AddApiKeyRequest" title="Permalink to this definition">#</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.data_models.</span></span><span class="sig-name descname"><span class="pre">AddApiKeyRequest</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">api_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/auth/helpers/data_models.html#AddApiKeyRequest"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AddApiKeyRequest" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModel</span></code></p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.AddApiKeyRequest._abc_impl">
-<span class="sig-name descname"><span class="pre">_abc_impl</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">&lt;_abc._abc_data</span> <span class="pre">object&gt;</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AddApiKeyRequest._abc_impl" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">_abc_impl</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">&lt;_abc._abc_data</span> <span class="pre">object&gt;</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AddApiKeyRequest._abc_impl" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.AddApiKeyRequest.api_key">
-<span class="sig-name descname"><span class="pre">api_key</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AddApiKeyRequest.api_key" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">api_key</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AddApiKeyRequest.api_key" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.AppOwnerModel">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.data_models.</span></span><span class="sig-name descname"><span class="pre">AppOwnerModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">email</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rate_limit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">active</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#snapshotter.auth.helpers.data_models.UserStatusEnum" title="snapshotter.auth.helpers.data_models.UserStatusEnum"><span class="pre">UserStatusEnum</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">callsCount</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">throttledCount</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">next_reset_at</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AppOwnerModel" title="Permalink to this definition">#</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.data_models.</span></span><span class="sig-name descname"><span class="pre">AppOwnerModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">email</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rate_limit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">active</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#snapshotter.auth.helpers.data_models.UserStatusEnum" title="snapshotter.auth.helpers.data_models.UserStatusEnum"><span class="pre">UserStatusEnum</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">callsCount</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">throttledCount</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">next_reset_at</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/auth/helpers/data_models.html#AppOwnerModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AppOwnerModel" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModel</span></code></p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.AppOwnerModel._abc_impl">
-<span class="sig-name descname"><span class="pre">_abc_impl</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">&lt;_abc._abc_data</span> <span class="pre">object&gt;</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AppOwnerModel._abc_impl" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">_abc_impl</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">&lt;_abc._abc_data</span> <span class="pre">object&gt;</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AppOwnerModel._abc_impl" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.AppOwnerModel.active">
-<span class="sig-name descname"><span class="pre">active</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#snapshotter.auth.helpers.data_models.UserStatusEnum" title="snapshotter.auth.helpers.data_models.UserStatusEnum"><span class="pre">UserStatusEnum</span></a></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AppOwnerModel.active" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">active</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#snapshotter.auth.helpers.data_models.UserStatusEnum" title="snapshotter.auth.helpers.data_models.UserStatusEnum"><span class="pre">UserStatusEnum</span></a></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AppOwnerModel.active" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.AppOwnerModel.callsCount">
-<span class="sig-name descname"><span class="pre">callsCount</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AppOwnerModel.callsCount" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">callsCount</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AppOwnerModel.callsCount" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.AppOwnerModel.email">
-<span class="sig-name descname"><span class="pre">email</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AppOwnerModel.email" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">email</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AppOwnerModel.email" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.AppOwnerModel.next_reset_at">
-<span class="sig-name descname"><span class="pre">next_reset_at</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AppOwnerModel.next_reset_at" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">next_reset_at</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AppOwnerModel.next_reset_at" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.AppOwnerModel.rate_limit">
-<span class="sig-name descname"><span class="pre">rate_limit</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AppOwnerModel.rate_limit" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">rate_limit</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AppOwnerModel.rate_limit" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.AppOwnerModel.throttledCount">
-<span class="sig-name descname"><span class="pre">throttledCount</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AppOwnerModel.throttledCount" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">throttledCount</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AppOwnerModel.throttledCount" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.AuthCheck">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.data_models.</span></span><span class="sig-name descname"><span class="pre">AuthCheck</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">authorized</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">api_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reason</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">owner</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AppOwnerModel" title="snapshotter.auth.helpers.data_models.AppOwnerModel"><span class="pre">AppOwnerModel</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AuthCheck" title="Permalink to this definition">#</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.data_models.</span></span><span class="sig-name descname"><span class="pre">AuthCheck</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">authorized</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">api_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reason</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">owner</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AppOwnerModel" title="snapshotter.auth.helpers.data_models.AppOwnerModel"><span class="pre">AppOwnerModel</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/auth/helpers/data_models.html#AuthCheck"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AuthCheck" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModel</span></code></p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.AuthCheck._abc_impl">
-<span class="sig-name descname"><span class="pre">_abc_impl</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">&lt;_abc._abc_data</span> <span class="pre">object&gt;</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AuthCheck._abc_impl" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">_abc_impl</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">&lt;_abc._abc_data</span> <span class="pre">object&gt;</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AuthCheck._abc_impl" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.AuthCheck.api_key">
-<span class="sig-name descname"><span class="pre">api_key</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AuthCheck.api_key" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">api_key</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AuthCheck.api_key" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.AuthCheck.authorized">
-<span class="sig-name descname"><span class="pre">authorized</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AuthCheck.authorized" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">authorized</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AuthCheck.authorized" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.AuthCheck.owner">
-<span class="sig-name descname"><span class="pre">owner</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AppOwnerModel" title="snapshotter.auth.helpers.data_models.AppOwnerModel"><span class="pre">AppOwnerModel</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AuthCheck.owner" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">owner</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AppOwnerModel" title="snapshotter.auth.helpers.data_models.AppOwnerModel"><span class="pre">AppOwnerModel</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AuthCheck.owner" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.AuthCheck.reason">
-<span class="sig-name descname"><span class="pre">reason</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AuthCheck.reason" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">reason</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.AuthCheck.reason" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.RateLimitAuthCheck">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.data_models.</span></span><span class="sig-name descname"><span class="pre">RateLimitAuthCheck</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">authorized</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">api_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reason</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">owner</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AppOwnerModel" title="snapshotter.auth.helpers.data_models.AppOwnerModel"><span class="pre">AppOwnerModel</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rate_limit_passed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">retry_after</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">violated_limit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_limit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.auth.helpers.data_models.RateLimitAuthCheck" title="Permalink to this definition">#</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.data_models.</span></span><span class="sig-name descname"><span class="pre">RateLimitAuthCheck</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">authorized</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">api_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reason</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">owner</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AppOwnerModel" title="snapshotter.auth.helpers.data_models.AppOwnerModel"><span class="pre">AppOwnerModel</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rate_limit_passed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">retry_after</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">violated_limit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_limit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/auth/helpers/data_models.html#RateLimitAuthCheck"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.auth.helpers.data_models.RateLimitAuthCheck" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <a class="reference internal" href="#snapshotter.auth.helpers.data_models.AuthCheck" title="snapshotter.auth.helpers.data_models.AuthCheck"><code class="xref py py-class docutils literal notranslate"><span class="pre">AuthCheck</span></code></a></p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.RateLimitAuthCheck._abc_impl">
-<span class="sig-name descname"><span class="pre">_abc_impl</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">&lt;_abc._abc_data</span> <span class="pre">object&gt;</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.RateLimitAuthCheck._abc_impl" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">_abc_impl</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">&lt;_abc._abc_data</span> <span class="pre">object&gt;</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.RateLimitAuthCheck._abc_impl" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.RateLimitAuthCheck.current_limit">
-<span class="sig-name descname"><span class="pre">current_limit</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.RateLimitAuthCheck.current_limit" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">current_limit</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.RateLimitAuthCheck.current_limit" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.RateLimitAuthCheck.rate_limit_passed">
-<span class="sig-name descname"><span class="pre">rate_limit_passed</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.RateLimitAuthCheck.rate_limit_passed" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">rate_limit_passed</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.RateLimitAuthCheck.rate_limit_passed" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.RateLimitAuthCheck.retry_after">
-<span class="sig-name descname"><span class="pre">retry_after</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.RateLimitAuthCheck.retry_after" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">retry_after</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.RateLimitAuthCheck.retry_after" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.RateLimitAuthCheck.violated_limit">
-<span class="sig-name descname"><span class="pre">violated_limit</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.RateLimitAuthCheck.violated_limit" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">violated_limit</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.RateLimitAuthCheck.violated_limit" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.UserAllDetailsResponse">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.data_models.</span></span><span class="sig-name descname"><span class="pre">UserAllDetailsResponse</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">email</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rate_limit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">active</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#snapshotter.auth.helpers.data_models.UserStatusEnum" title="snapshotter.auth.helpers.data_models.UserStatusEnum"><span class="pre">UserStatusEnum</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">callsCount</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">throttledCount</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">next_reset_at</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">active_api_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">revoked_api_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.auth.helpers.data_models.UserAllDetailsResponse" title="Permalink to this definition">#</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.data_models.</span></span><span class="sig-name descname"><span class="pre">UserAllDetailsResponse</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">email</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rate_limit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">active</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#snapshotter.auth.helpers.data_models.UserStatusEnum" title="snapshotter.auth.helpers.data_models.UserStatusEnum"><span class="pre">UserStatusEnum</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">callsCount</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">throttledCount</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">next_reset_at</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">active_api_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">revoked_api_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/auth/helpers/data_models.html#UserAllDetailsResponse"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.auth.helpers.data_models.UserAllDetailsResponse" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <a class="reference internal" href="#snapshotter.auth.helpers.data_models.AppOwnerModel" title="snapshotter.auth.helpers.data_models.AppOwnerModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">AppOwnerModel</span></code></a></p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.UserAllDetailsResponse._abc_impl">
-<span class="sig-name descname"><span class="pre">_abc_impl</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">&lt;_abc._abc_data</span> <span class="pre">object&gt;</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.UserAllDetailsResponse._abc_impl" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">_abc_impl</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">&lt;_abc._abc_data</span> <span class="pre">object&gt;</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.UserAllDetailsResponse._abc_impl" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.UserAllDetailsResponse.active_api_keys">
-<span class="sig-name descname"><span class="pre">active_api_keys</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.UserAllDetailsResponse.active_api_keys" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">active_api_keys</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.UserAllDetailsResponse.active_api_keys" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.UserAllDetailsResponse.revoked_api_keys">
-<span class="sig-name descname"><span class="pre">revoked_api_keys</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.UserAllDetailsResponse.revoked_api_keys" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">revoked_api_keys</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.UserAllDetailsResponse.revoked_api_keys" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.UserStatusEnum">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.data_models.</span></span><span class="sig-name descname"><span class="pre">UserStatusEnum</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.auth.helpers.data_models.UserStatusEnum" title="Permalink to this definition">#</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.data_models.</span></span><span class="sig-name descname"><span class="pre">UserStatusEnum</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/auth/helpers/data_models.html#UserStatusEnum"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.auth.helpers.data_models.UserStatusEnum" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">Enum</span></code></p>
 <p>An enumeration.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.UserStatusEnum._generate_next_value_">
-<span class="sig-name descname"><span class="pre">_generate_next_value_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">start</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">count</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">last_values</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.auth.helpers.data_models.UserStatusEnum._generate_next_value_" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">_generate_next_value_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">start</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">count</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">last_values</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.auth.helpers.data_models.UserStatusEnum._generate_next_value_" title="Permalink to this definition"></a></dt>
 <dd><p>Generate the next value when not given.</p>
 <p>name: the name of the member
 start: the initial start value or None
@@ -377,276 +265,154 @@ last_value: the last value assigned or None</p>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.UserStatusEnum._member_map_">
-<span class="sig-name descname"><span class="pre">_member_map_</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'active':</span> <span class="pre">UserStatusEnum.active,</span> <span class="pre">'inactive':</span> <span class="pre">UserStatusEnum.inactive}</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.UserStatusEnum._member_map_" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">_member_map_</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'active':</span> <span class="pre">UserStatusEnum.active,</span> <span class="pre">'inactive':</span> <span class="pre">UserStatusEnum.inactive}</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.UserStatusEnum._member_map_" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.UserStatusEnum._member_names_">
-<span class="sig-name descname"><span class="pre">_member_names_</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['active',</span> <span class="pre">'inactive']</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.UserStatusEnum._member_names_" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">_member_names_</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['active',</span> <span class="pre">'inactive']</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.UserStatusEnum._member_names_" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.UserStatusEnum._member_type_">
-<span class="sig-name descname"><span class="pre">_member_type_</span></span><a class="headerlink" href="#snapshotter.auth.helpers.data_models.UserStatusEnum._member_type_" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">_member_type_</span></span><a class="headerlink" href="#snapshotter.auth.helpers.data_models.UserStatusEnum._member_type_" title="Permalink to this definition"></a></dt>
 <dd><p>alias of <code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></p>
 </dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.UserStatusEnum._value2member_map_">
-<span class="sig-name descname"><span class="pre">_value2member_map_</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'active':</span> <span class="pre">UserStatusEnum.active,</span> <span class="pre">'inactive':</span> <span class="pre">UserStatusEnum.inactive}</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.UserStatusEnum._value2member_map_" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">_value2member_map_</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'active':</span> <span class="pre">UserStatusEnum.active,</span> <span class="pre">'inactive':</span> <span class="pre">UserStatusEnum.inactive}</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.UserStatusEnum._value2member_map_" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.UserStatusEnum.active">
-<span class="sig-name descname"><span class="pre">active</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'active'</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.UserStatusEnum.active" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">active</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'active'</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.UserStatusEnum.active" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.data_models.UserStatusEnum.inactive">
-<span class="sig-name descname"><span class="pre">inactive</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'inactive'</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.UserStatusEnum.inactive" title="Permalink to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">inactive</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'inactive'</span></em><a class="headerlink" href="#snapshotter.auth.helpers.data_models.UserStatusEnum.inactive" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 </section>
 <section id="module-snapshotter.auth.helpers.helpers">
-<span id="snapshotter-auth-helpers-helpers-module"></span><h2>snapshotter.auth.helpers.helpers module<a class="headerlink" href="#module-snapshotter.auth.helpers.helpers" title="Permalink to this heading">#</a></h2>
+<span id="snapshotter-auth-helpers-helpers"></span><h2>snapshotter.auth.helpers.helpers<a class="headerlink" href="#module-snapshotter.auth.helpers.helpers" title="Permalink to this heading"></a></h2>
 <dl class="py function">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.helpers.auth_check">
-<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.helpers.</span></span><span class="sig-name descname"><span class="pre">auth_check</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Request</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AuthCheck" title="snapshotter.auth.helpers.data_models.AuthCheck"><span class="pre">AuthCheck</span></a></span></span><a class="headerlink" href="#snapshotter.auth.helpers.helpers.auth_check" title="Permalink to this definition">#</a></dt>
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.helpers.</span></span><span class="sig-name descname"><span class="pre">auth_check</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Request</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AuthCheck" title="snapshotter.auth.helpers.data_models.AuthCheck"><span class="pre">AuthCheck</span></a></span></span><a class="reference internal" href="_modules/snapshotter/auth/helpers/helpers.html#auth_check"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.auth.helpers.helpers.auth_check" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.helpers.check_user_details">
-<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.helpers.</span></span><span class="sig-name descname"><span class="pre">check_user_details</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">api_key</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">redis_conn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Redis</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.auth.helpers.helpers.check_user_details" title="Permalink to this definition">#</a></dt>
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.helpers.</span></span><span class="sig-name descname"><span class="pre">check_user_details</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">api_key</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">redis_conn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Redis</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/auth/helpers/helpers.html#check_user_details"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.auth.helpers.helpers.check_user_details" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.helpers.incr_success_calls_count">
-<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.helpers.</span></span><span class="sig-name descname"><span class="pre">incr_success_calls_count</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">auth_redis_conn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Redis</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rate_limit_auth_dep</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#snapshotter.auth.helpers.data_models.RateLimitAuthCheck" title="snapshotter.auth.helpers.data_models.RateLimitAuthCheck"><span class="pre">RateLimitAuthCheck</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.auth.helpers.helpers.incr_success_calls_count" title="Permalink to this definition">#</a></dt>
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.helpers.</span></span><span class="sig-name descname"><span class="pre">incr_success_calls_count</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">auth_redis_conn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Redis</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rate_limit_auth_dep</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#snapshotter.auth.helpers.data_models.RateLimitAuthCheck" title="snapshotter.auth.helpers.data_models.RateLimitAuthCheck"><span class="pre">RateLimitAuthCheck</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/auth/helpers/helpers.html#incr_success_calls_count"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.auth.helpers.helpers.incr_success_calls_count" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.helpers.incr_throttled_calls_count">
-<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.helpers.</span></span><span class="sig-name descname"><span class="pre">incr_throttled_calls_count</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">auth_redis_conn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Redis</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rate_limit_auth_dep</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#snapshotter.auth.helpers.data_models.RateLimitAuthCheck" title="snapshotter.auth.helpers.data_models.RateLimitAuthCheck"><span class="pre">RateLimitAuthCheck</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.auth.helpers.helpers.incr_throttled_calls_count" title="Permalink to this definition">#</a></dt>
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.helpers.</span></span><span class="sig-name descname"><span class="pre">incr_throttled_calls_count</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">auth_redis_conn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Redis</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rate_limit_auth_dep</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#snapshotter.auth.helpers.data_models.RateLimitAuthCheck" title="snapshotter.auth.helpers.data_models.RateLimitAuthCheck"><span class="pre">RateLimitAuthCheck</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/auth/helpers/helpers.html#incr_throttled_calls_count"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.auth.helpers.helpers.incr_throttled_calls_count" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.helpers.inject_rate_limit_fail_response">
-<span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.helpers.</span></span><span class="sig-name descname"><span class="pre">inject_rate_limit_fail_response</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rate_limit_auth_check_dependency</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#snapshotter.auth.helpers.data_models.RateLimitAuthCheck" title="snapshotter.auth.helpers.data_models.RateLimitAuthCheck"><span class="pre">RateLimitAuthCheck</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">JSONResponse</span></span></span><a class="headerlink" href="#snapshotter.auth.helpers.helpers.inject_rate_limit_fail_response" title="Permalink to this definition">#</a></dt>
+<span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.helpers.</span></span><span class="sig-name descname"><span class="pre">inject_rate_limit_fail_response</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rate_limit_auth_check_dependency</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#snapshotter.auth.helpers.data_models.RateLimitAuthCheck" title="snapshotter.auth.helpers.data_models.RateLimitAuthCheck"><span class="pre">RateLimitAuthCheck</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">JSONResponse</span></span></span><a class="reference internal" href="_modules/snapshotter/auth/helpers/helpers.html#inject_rate_limit_fail_response"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.auth.helpers.helpers.inject_rate_limit_fail_response" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.helpers.rate_limit_auth_check">
-<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.helpers.</span></span><span class="sig-name descname"><span class="pre">rate_limit_auth_check</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Request</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">auth_check</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AuthCheck" title="snapshotter.auth.helpers.data_models.AuthCheck"><span class="pre">AuthCheck</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">Depends(auth_check)</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#snapshotter.auth.helpers.data_models.RateLimitAuthCheck" title="snapshotter.auth.helpers.data_models.RateLimitAuthCheck"><span class="pre">RateLimitAuthCheck</span></a></span></span><a class="headerlink" href="#snapshotter.auth.helpers.helpers.rate_limit_auth_check" title="Permalink to this definition">#</a></dt>
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.helpers.</span></span><span class="sig-name descname"><span class="pre">rate_limit_auth_check</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Request</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">auth_check</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AuthCheck" title="snapshotter.auth.helpers.data_models.AuthCheck"><span class="pre">AuthCheck</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">Depends(auth_check)</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#snapshotter.auth.helpers.data_models.RateLimitAuthCheck" title="snapshotter.auth.helpers.data_models.RateLimitAuthCheck"><span class="pre">RateLimitAuthCheck</span></a></span></span><a class="reference internal" href="_modules/snapshotter/auth/helpers/helpers.html#rate_limit_auth_check"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.auth.helpers.helpers.rate_limit_auth_check" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 </section>
 <section id="module-snapshotter.auth.helpers.redis_conn">
-<span id="snapshotter-auth-helpers-redis-conn-module"></span><h2>snapshotter.auth.helpers.redis_conn module<a class="headerlink" href="#module-snapshotter.auth.helpers.redis_conn" title="Permalink to this heading">#</a></h2>
+<span id="snapshotter-auth-helpers-redis-conn"></span><h2>snapshotter.auth.helpers.redis_conn<a class="headerlink" href="#module-snapshotter.auth.helpers.redis_conn" title="Permalink to this heading"></a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.redis_conn.RedisPoolCache">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.redis_conn.</span></span><span class="sig-name descname"><span class="pre">RedisPoolCache</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pool_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">500</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.auth.helpers.redis_conn.RedisPoolCache" title="Permalink to this definition">#</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.redis_conn.</span></span><span class="sig-name descname"><span class="pre">RedisPoolCache</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pool_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">500</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/auth/helpers/redis_conn.html#RedisPoolCache"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.auth.helpers.redis_conn.RedisPoolCache" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <dl class="py method">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.redis_conn.RedisPoolCache.populate">
-<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">populate</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.auth.helpers.redis_conn.RedisPoolCache.populate" title="Permalink to this definition">#</a></dt>
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">populate</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/auth/helpers/redis_conn.html#RedisPoolCache.populate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.auth.helpers.redis_conn.RedisPoolCache.populate" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.redis_conn.construct_redis_url">
-<span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.redis_conn.</span></span><span class="sig-name descname"><span class="pre">construct_redis_url</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.auth.helpers.redis_conn.construct_redis_url" title="Permalink to this definition">#</a></dt>
+<span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.redis_conn.</span></span><span class="sig-name descname"><span class="pre">construct_redis_url</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/auth/helpers/redis_conn.html#construct_redis_url"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.auth.helpers.redis_conn.construct_redis_url" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.redis_conn.get_aioredis_pool">
-<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.redis_conn.</span></span><span class="sig-name descname"><span class="pre">get_aioredis_pool</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pool_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">200</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#snapshotter.auth.helpers.redis_conn.get_aioredis_pool" title="Permalink to this definition">#</a></dt>
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.redis_conn.</span></span><span class="sig-name descname"><span class="pre">get_aioredis_pool</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pool_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">200</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/auth/helpers/redis_conn.html#get_aioredis_pool"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.auth.helpers.redis_conn.get_aioredis_pool" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 </section>
 <section id="module-snapshotter.auth.helpers.redis_keys">
-<span id="snapshotter-auth-helpers-redis-keys-module"></span><h2>snapshotter.auth.helpers.redis_keys module<a class="headerlink" href="#module-snapshotter.auth.helpers.redis_keys" title="Permalink to this heading">#</a></h2>
+<span id="snapshotter-auth-helpers-redis-keys"></span><h2>snapshotter.auth.helpers.redis_keys<a class="headerlink" href="#module-snapshotter.auth.helpers.redis_keys" title="Permalink to this heading"></a></h2>
 <dl class="py function">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.redis_keys.all_users_set">
-<span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.redis_keys.</span></span><span class="sig-name descname"><span class="pre">all_users_set</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#snapshotter.auth.helpers.redis_keys.all_users_set" title="Permalink to this definition">#</a></dt>
+<span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.redis_keys.</span></span><span class="sig-name descname"><span class="pre">all_users_set</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="reference internal" href="_modules/snapshotter/auth/helpers/redis_keys.html#all_users_set"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.auth.helpers.redis_keys.all_users_set" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.redis_keys.api_key_to_owner_key">
-<span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.redis_keys.</span></span><span class="sig-name descname"><span class="pre">api_key_to_owner_key</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">api_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#snapshotter.auth.helpers.redis_keys.api_key_to_owner_key" title="Permalink to this definition">#</a></dt>
+<span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.redis_keys.</span></span><span class="sig-name descname"><span class="pre">api_key_to_owner_key</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">api_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="reference internal" href="_modules/snapshotter/auth/helpers/redis_keys.html#api_key_to_owner_key"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.auth.helpers.redis_keys.api_key_to_owner_key" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.redis_keys.user_active_api_keys_set">
-<span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.redis_keys.</span></span><span class="sig-name descname"><span class="pre">user_active_api_keys_set</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">email</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#snapshotter.auth.helpers.redis_keys.user_active_api_keys_set" title="Permalink to this definition">#</a></dt>
+<span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.redis_keys.</span></span><span class="sig-name descname"><span class="pre">user_active_api_keys_set</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">email</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="reference internal" href="_modules/snapshotter/auth/helpers/redis_keys.html#user_active_api_keys_set"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.auth.helpers.redis_keys.user_active_api_keys_set" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.redis_keys.user_details_htable">
-<span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.redis_keys.</span></span><span class="sig-name descname"><span class="pre">user_details_htable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">email</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#snapshotter.auth.helpers.redis_keys.user_details_htable" title="Permalink to this definition">#</a></dt>
+<span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.redis_keys.</span></span><span class="sig-name descname"><span class="pre">user_details_htable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">email</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="reference internal" href="_modules/snapshotter/auth/helpers/redis_keys.html#user_details_htable"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.auth.helpers.redis_keys.user_details_htable" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="snapshotter.auth.helpers.redis_keys.user_revoked_api_keys_set">
-<span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.redis_keys.</span></span><span class="sig-name descname"><span class="pre">user_revoked_api_keys_set</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">email</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#snapshotter.auth.helpers.redis_keys.user_revoked_api_keys_set" title="Permalink to this definition">#</a></dt>
+<span class="sig-prename descclassname"><span class="pre">snapshotter.auth.helpers.redis_keys.</span></span><span class="sig-name descname"><span class="pre">user_revoked_api_keys_set</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">email</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="reference internal" href="_modules/snapshotter/auth/helpers/redis_keys.html#user_revoked_api_keys_set"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.auth.helpers.redis_keys.user_revoked_api_keys_set" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 </section>
-<section id="module-snapshotter.auth.helpers">
-<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-snapshotter.auth.helpers" title="Permalink to this heading">#</a></h2>
-</section>
 </section>
 
-        </article>
-      </div>
-      <footer>
 
-        <div class="related-pages">
-          <a class="next-page" href="snapshotter.auth.settings.html">
-              <div class="page-info">
-                <div class="context">
-                  <span>Next</span>
-                </div>
-                <div class="title">snapshotter.auth.settings package</div>
-              </div>
-              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
-            </a>
-          <a class="prev-page" href="snapshotter.auth.html">
-              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
-              <div class="page-info">
-                <div class="context">
-                  <span>Previous</span>
-                </div>
-
-                <div class="title">snapshotter.auth package</div>
-
-              </div>
-            </a>
-        </div>
-        <div class="bottom-of-page">
-          <div class="left-details">
-            <div class="copyright">
-                Copyright &#169; 2023, Powerloom Inc.
-            </div>
-            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
-
-            <a href="https://github.com/pradyunsg/furo">Furo</a>
-
+           </div>
           </div>
-          <div class="right-details">
-
-          </div>
-        </div>
-
-      </footer>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="snapshotter.auth.html" class="btn btn-neutral float-left" title="snapshotter.auth package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="snapshotter.auth.settings.html" class="btn btn-neutral float-right" title="snapshotter.auth.settings package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
-    <aside class="toc-drawer">
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, Powerloom Inc..</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
 
 
-      <div class="toc-sticky toc-scroll">
-        <div class="toc-title-container">
-          <span class="toc-title">
-            On this page
-          </span>
-        </div>
-        <div class="toc-tree-container">
-          <div class="toc-tree">
-            <ul>
-<li><a class="reference internal" href="#">snapshotter.auth.helpers package</a><ul>
-<li><a class="reference internal" href="#submodules">Submodules</a></li>
-<li><a class="reference internal" href="#module-snapshotter.auth.helpers.data_models">snapshotter.auth.helpers.data_models module</a><ul>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AddApiKeyRequest"><code class="docutils literal notranslate"><span class="pre">AddApiKeyRequest</span></code></a><ul>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AddApiKeyRequest._abc_impl"><code class="docutils literal notranslate"><span class="pre">AddApiKeyRequest._abc_impl</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AddApiKeyRequest.api_key"><code class="docutils literal notranslate"><span class="pre">AddApiKeyRequest.api_key</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AppOwnerModel"><code class="docutils literal notranslate"><span class="pre">AppOwnerModel</span></code></a><ul>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AppOwnerModel._abc_impl"><code class="docutils literal notranslate"><span class="pre">AppOwnerModel._abc_impl</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AppOwnerModel.active"><code class="docutils literal notranslate"><span class="pre">AppOwnerModel.active</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AppOwnerModel.callsCount"><code class="docutils literal notranslate"><span class="pre">AppOwnerModel.callsCount</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AppOwnerModel.email"><code class="docutils literal notranslate"><span class="pre">AppOwnerModel.email</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AppOwnerModel.next_reset_at"><code class="docutils literal notranslate"><span class="pre">AppOwnerModel.next_reset_at</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AppOwnerModel.rate_limit"><code class="docutils literal notranslate"><span class="pre">AppOwnerModel.rate_limit</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AppOwnerModel.throttledCount"><code class="docutils literal notranslate"><span class="pre">AppOwnerModel.throttledCount</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AuthCheck"><code class="docutils literal notranslate"><span class="pre">AuthCheck</span></code></a><ul>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AuthCheck._abc_impl"><code class="docutils literal notranslate"><span class="pre">AuthCheck._abc_impl</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AuthCheck.api_key"><code class="docutils literal notranslate"><span class="pre">AuthCheck.api_key</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AuthCheck.authorized"><code class="docutils literal notranslate"><span class="pre">AuthCheck.authorized</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AuthCheck.owner"><code class="docutils literal notranslate"><span class="pre">AuthCheck.owner</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.AuthCheck.reason"><code class="docutils literal notranslate"><span class="pre">AuthCheck.reason</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.RateLimitAuthCheck"><code class="docutils literal notranslate"><span class="pre">RateLimitAuthCheck</span></code></a><ul>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.RateLimitAuthCheck._abc_impl"><code class="docutils literal notranslate"><span class="pre">RateLimitAuthCheck._abc_impl</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.RateLimitAuthCheck.current_limit"><code class="docutils literal notranslate"><span class="pre">RateLimitAuthCheck.current_limit</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.RateLimitAuthCheck.rate_limit_passed"><code class="docutils literal notranslate"><span class="pre">RateLimitAuthCheck.rate_limit_passed</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.RateLimitAuthCheck.retry_after"><code class="docutils literal notranslate"><span class="pre">RateLimitAuthCheck.retry_after</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.RateLimitAuthCheck.violated_limit"><code class="docutils literal notranslate"><span class="pre">RateLimitAuthCheck.violated_limit</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.UserAllDetailsResponse"><code class="docutils literal notranslate"><span class="pre">UserAllDetailsResponse</span></code></a><ul>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.UserAllDetailsResponse._abc_impl"><code class="docutils literal notranslate"><span class="pre">UserAllDetailsResponse._abc_impl</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.UserAllDetailsResponse.active_api_keys"><code class="docutils literal notranslate"><span class="pre">UserAllDetailsResponse.active_api_keys</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.UserAllDetailsResponse.revoked_api_keys"><code class="docutils literal notranslate"><span class="pre">UserAllDetailsResponse.revoked_api_keys</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.UserStatusEnum"><code class="docutils literal notranslate"><span class="pre">UserStatusEnum</span></code></a><ul>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.UserStatusEnum._generate_next_value_"><code class="docutils literal notranslate"><span class="pre">UserStatusEnum._generate_next_value_()</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.UserStatusEnum._member_map_"><code class="docutils literal notranslate"><span class="pre">UserStatusEnum._member_map_</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.UserStatusEnum._member_names_"><code class="docutils literal notranslate"><span class="pre">UserStatusEnum._member_names_</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.UserStatusEnum._member_type_"><code class="docutils literal notranslate"><span class="pre">UserStatusEnum._member_type_</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.UserStatusEnum._value2member_map_"><code class="docutils literal notranslate"><span class="pre">UserStatusEnum._value2member_map_</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.UserStatusEnum.active"><code class="docutils literal notranslate"><span class="pre">UserStatusEnum.active</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.data_models.UserStatusEnum.inactive"><code class="docutils literal notranslate"><span class="pre">UserStatusEnum.inactive</span></code></a></li>
-</ul>
-</li>
-</ul>
-</li>
-<li><a class="reference internal" href="#module-snapshotter.auth.helpers.helpers">snapshotter.auth.helpers.helpers module</a><ul>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.helpers.auth_check"><code class="docutils literal notranslate"><span class="pre">auth_check()</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.helpers.check_user_details"><code class="docutils literal notranslate"><span class="pre">check_user_details()</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.helpers.incr_success_calls_count"><code class="docutils literal notranslate"><span class="pre">incr_success_calls_count()</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.helpers.incr_throttled_calls_count"><code class="docutils literal notranslate"><span class="pre">incr_throttled_calls_count()</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.helpers.inject_rate_limit_fail_response"><code class="docutils literal notranslate"><span class="pre">inject_rate_limit_fail_response()</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.helpers.rate_limit_auth_check"><code class="docutils literal notranslate"><span class="pre">rate_limit_auth_check()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#module-snapshotter.auth.helpers.redis_conn">snapshotter.auth.helpers.redis_conn module</a><ul>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.redis_conn.RedisPoolCache"><code class="docutils literal notranslate"><span class="pre">RedisPoolCache</span></code></a><ul>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.redis_conn.RedisPoolCache.populate"><code class="docutils literal notranslate"><span class="pre">RedisPoolCache.populate()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.redis_conn.construct_redis_url"><code class="docutils literal notranslate"><span class="pre">construct_redis_url()</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.redis_conn.get_aioredis_pool"><code class="docutils literal notranslate"><span class="pre">get_aioredis_pool()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#module-snapshotter.auth.helpers.redis_keys">snapshotter.auth.helpers.redis_keys module</a><ul>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.redis_keys.all_users_set"><code class="docutils literal notranslate"><span class="pre">all_users_set()</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.redis_keys.api_key_to_owner_key"><code class="docutils literal notranslate"><span class="pre">api_key_to_owner_key()</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.redis_keys.user_active_api_keys_set"><code class="docutils literal notranslate"><span class="pre">user_active_api_keys_set()</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.redis_keys.user_details_htable"><code class="docutils literal notranslate"><span class="pre">user_details_htable()</span></code></a></li>
-<li><a class="reference internal" href="#snapshotter.auth.helpers.redis_keys.user_revoked_api_keys_set"><code class="docutils literal notranslate"><span class="pre">user_revoked_api_keys_set()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#module-snapshotter.auth.helpers">Module contents</a></li>
-</ul>
-</li>
-</ul>
-
-          </div>
+</footer>
         </div>
       </div>
-
-
-    </aside>
+    </section>
   </div>
-</div><script data-url_root="./" id="documentation_options" src="_static/documentation_options.js?v=e031e9a9"></script>
-    <script src="_static/doctools.js?v=888ff710"></script>
-    <script src="_static/sphinx_highlight.js?v=4825356b"></script>
-    <script src="_static/scripts/furo.js?v=32e29ea5"></script>
-    </body>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+</body>
 </html>

@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>snapshotter.utils.helper_functions &mdash; Powerloom Snapshotter 0.1 documentation</title>
+      <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+
+        <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js?v=e031e9a9"></script>
+        <script src="../../../_static/doctools.js?v=888ff710"></script>
+        <script src="../../../_static/sphinx_highlight.js?v=4825356b"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+</head>
+
+<body class="wy-body-for-nav">
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+
+
+          <a href="../../../index.html">
+
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../snapshotter.html">Powerloom Snapshotter</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Powerloom Snapshotter</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">snapshotter.utils.helper_functions</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+
+  <h1>Source code for snapshotter.utils.helper_functions</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">wraps</span>
+
+<span class="kn">import</span> <span class="nn">psutil</span>
+<span class="kn">import</span> <span class="nn">web3.datastructures</span>
+
+<span class="kn">from</span> <span class="nn">snapshotter.settings.config</span> <span class="kn">import</span> <span class="n">settings</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.default_logger</span> <span class="kn">import</span> <span class="n">logger</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.models.message_models</span> <span class="kn">import</span> <span class="n">EpochBase</span>
+
+<span class="c1"># setup logging</span>
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logger</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">module</span><span class="o">=</span><span class="s1">&#39;Powerloom|HelperFunctions&#39;</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="cleanup_proc_hub_children"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.helper_functions.cleanup_proc_hub_children">[docs]</a><span class="k">def</span> <span class="nf">cleanup_proc_hub_children</span><span class="p">(</span><span class="n">fn</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A decorator that wraps a function and handles cleanup of any child processes</span>
+<span class="sd">    spawned by the function in case of an exception.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        fn (function): The function to be wrapped.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        function: The wrapped function.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="nd">@wraps</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">wrapper</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">fn</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Finished running process hub core...&#39;</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                <span class="s1">&#39;Received an exception on process hub core run(): </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span>
+                <span class="n">e</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="c1"># logger.error(&#39;Initiating kill children....&#39;)</span>
+            <span class="c1"># # silently kill all children</span>
+            <span class="c1"># procs = psutil.Process().children()</span>
+            <span class="c1"># for p in procs:</span>
+            <span class="c1">#     p.terminate()</span>
+            <span class="c1"># gone, alive = psutil.wait_procs(procs, timeout=3)</span>
+            <span class="c1"># for p in alive:</span>
+            <span class="c1">#     logger.error(f&#39;killing process: {p.name()}&#39;)</span>
+            <span class="c1">#     p.kill()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_kill_all_children</span><span class="p">()</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s1">&#39;Finished waiting for all children...now can exit.&#39;</span><span class="p">)</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s1">&#39;Finished waiting for all children...now can exit.&#39;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_reporter_thread</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+            <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="c1"># sys.exit(0)</span>
+    <span class="k">return</span> <span class="n">wrapper</span></div>
+
+
+<div class="viewcode-block" id="acquire_threading_semaphore"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.helper_functions.acquire_threading_semaphore">[docs]</a><span class="k">def</span> <span class="nf">acquire_threading_semaphore</span><span class="p">(</span><span class="n">fn</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A decorator function that acquires a threading semaphore before executing the decorated function and releases it after execution.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        fn (function): The function to be decorated.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        function: The decorated function.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="nd">@wraps</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">semaphore_wrapper</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">semaphore</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;semaphore&#39;</span><span class="p">]</span>
+
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;Acquiring threading semaphore&#39;</span><span class="p">)</span>
+        <span class="n">semaphore</span><span class="o">.</span><span class="n">acquire</span><span class="p">()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">resp</span> <span class="o">=</span> <span class="n">fn</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">raise</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="n">semaphore</span><span class="o">.</span><span class="n">release</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">resp</span>
+
+    <span class="k">return</span> <span class="n">semaphore_wrapper</span></div>
+
+
+<div class="viewcode-block" id="preloading_entry_exit_logger"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.helper_functions.preloading_entry_exit_logger">[docs]</a><span class="k">def</span> <span class="nf">preloading_entry_exit_logger</span><span class="p">(</span><span class="n">fn</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Decorator function to log entry and exit of preloading worker functions.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        fn (Callable): The function to be decorated.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Callable: The decorated function.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="nd">@wraps</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">wrapper</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">epoch</span><span class="p">:</span> <span class="n">EpochBase</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;epoch&#39;</span><span class="p">]</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">await</span> <span class="n">fn</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Finished running preloader </span><span class="si">{}</span><span class="s1">...&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">CancelledError</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s1">&#39;Cancelled preloader worker </span><span class="si">{}</span><span class="s1"> for epoch </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">epoch</span><span class="o">.</span><span class="n">epochId</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">CancelledError</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">logs</span><span class="o">.</span><span class="n">trace_enabled</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                <span class="s1">&#39;Exception while running preloader worker </span><span class="si">{}</span><span class="s1"> for epoch </span><span class="si">{}</span><span class="s1">, Error: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+                <span class="n">epoch</span><span class="o">.</span><span class="n">epochId</span><span class="p">,</span>
+                <span class="n">e</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">raise</span> <span class="n">e</span>
+    <span class="k">return</span> <span class="n">wrapper</span></div>
+
+
+<div class="viewcode-block" id="as_completed_async"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.helper_functions.as_completed_async">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">as_completed_async</span><span class="p">(</span><span class="n">futures</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A coroutine that iterates over given futures and yields their results as they complete.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        futures (List[asyncio.Future]): A list of asyncio.Future objects.</span>
+
+<span class="sd">    Yields:</span>
+<span class="sd">        The result of each completed future as it completes.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_event_loop</span><span class="p">()</span>
+    <span class="n">wrappers</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">fut</span> <span class="ow">in</span> <span class="n">futures</span><span class="p">:</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fut</span><span class="p">,</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Future</span><span class="p">)</span>  <span class="c1"># we need Future or Task</span>
+        <span class="c1"># Wrap the future in one that completes when the original does,</span>
+        <span class="c1"># and whose result is the original future object.</span>
+        <span class="n">wrapper</span> <span class="o">=</span> <span class="n">loop</span><span class="o">.</span><span class="n">create_future</span><span class="p">()</span>
+        <span class="n">fut</span><span class="o">.</span><span class="n">add_done_callback</span><span class="p">(</span><span class="n">wrapper</span><span class="o">.</span><span class="n">set_result</span><span class="p">)</span>
+        <span class="n">wrappers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">wrapper</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">next_completed</span> <span class="ow">in</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">as_completed</span><span class="p">(</span><span class="n">wrappers</span><span class="p">):</span>
+        <span class="c1"># awaiting next_completed will dereference the wrapper and get</span>
+        <span class="c1"># the original future (which we know has completed), so we can</span>
+        <span class="c1"># just yield that</span>
+        <span class="k">yield</span> <span class="k">await</span> <span class="n">next_completed</span></div>
+
+
+<div class="viewcode-block" id="attribute_dict_to_dict"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.helper_functions.attribute_dict_to_dict">[docs]</a><span class="k">def</span> <span class="nf">attribute_dict_to_dict</span><span class="p">(</span><span class="n">dictToParse</span><span class="p">:</span> <span class="n">web3</span><span class="o">.</span><span class="n">datastructures</span><span class="o">.</span><span class="n">AttributeDict</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Converts an AttributeDict object to a regular dictionary object.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        dictToParse (web3.datastructures.AttributeDict): The AttributeDict object to be converted.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: The converted dictionary object.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># convert any &#39;AttributeDict&#39; type found to &#39;dict&#39;</span>
+    <span class="n">parsedDict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">dictToParse</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">parsedDict</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="s1">&#39;list&#39;</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">val</span><span class="p">)):</span>
+            <span class="n">parsedDict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">_parse_value</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">val</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">parsedDict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">_parse_value</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">parsedDict</span></div>
+
+
+<div class="viewcode-block" id="_parse_value"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.helper_functions._parse_value">[docs]</a><span class="k">def</span> <span class="nf">_parse_value</span><span class="p">(</span><span class="n">val</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Parses the given value and returns a string representation of it.</span>
+<span class="sd">    If the value is a nested dictionary, it is converted to a regular dictionary.</span>
+<span class="sd">    If the value is of type &#39;HexBytes&#39;, it is converted to a string.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        val: The value to be parsed.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A string representation of the given value.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># check for nested dict structures to iterate through</span>
+    <span class="k">if</span> <span class="s1">&#39;dict&#39;</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">val</span><span class="p">))</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span>
+        <span class="k">return</span> <span class="n">attribute_dict_to_dict</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
+    <span class="c1"># convert &#39;HexBytes&#39; type to &#39;str&#39;</span>
+    <span class="k">elif</span> <span class="s1">&#39;HexBytes&#39;</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">val</span><span class="p">)):</span>
+        <span class="k">return</span> <span class="n">val</span><span class="o">.</span><span class="n">hex</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">val</span></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, Powerloom Inc..</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+</body>
+</html>
