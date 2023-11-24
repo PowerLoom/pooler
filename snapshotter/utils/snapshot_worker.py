@@ -138,7 +138,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                     epoch_id=msg_obj.epochId,
                     state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
                 ),
-                time=self._source_chain_block_time * self._epoch_size * 10,
+                time=int(self._source_chain_block_time * self._epoch_size * 10),
                 nx=True,
             )
             await p.execute()
@@ -249,7 +249,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                         epoch_id=msg_obj.epochId,
                         state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
                     ),
-                    time=self._source_chain_block_time * self._epoch_size * 10,
+                    time=int(self._source_chain_block_time * self._epoch_size * 10),
                     nx=True,
                 )
                 await p.execute()
