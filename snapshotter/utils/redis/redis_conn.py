@@ -1,14 +1,17 @@
 import contextlib
-from functools import wraps
-
+from datetime import datetime
 import redis
 import redis.exceptions as redis_exc
 import tenacity
+from functools import wraps
+from pydoc import cli
+from snapshotter.settings.config import settings
 from redis import asyncio as aioredis
 from redis.asyncio.connection import ConnectionPool
-
 from snapshotter.settings.config import settings as settings_conf
+from snapshotter.utils.callback_helpers import send_failure_notifications_async, send_failure_notifications_sync
 from snapshotter.utils.default_logger import logger
+from snapshotter.utils.models.data_models import SnapshotterIssue, SnapshotterReportState
 
 # setup logging
 logger = logger.bind(module='Powerloom|RedisConn')
@@ -88,6 +91,49 @@ def provide_redis_conn(fn):
                 return fn(*args, **kwargs)
 
     return wrapper
+
+
+def provide_redis_conn_repsawning_thread(fn):
+    @wraps(fn)
+    def wrapper(self, *args, **kwargs):
+        arg_conn = 'redis_conn'
+        func_params = fn.__code__.co_varnames
+        conn_in_args = arg_conn in func_params and func_params.index(
+            arg_conn,
+        ) < len(args)
+        conn_in_kwargs = arg_conn in kwargs
+        if conn_in_args or conn_in_kwargs:
+            return fn(*args, **kwargs)
+        else:
+            connection_pool = redis.BlockingConnectionPool(**REDIS_CONN_CONF)
+            while True:
+                try:
+                    with create_redis_conn(connection_pool) as redis_obj:
+                        kwargs[arg_conn] = redis_obj
+                        logger.debug(
+                            'Returning after populating redis connection object',
+                        )
+                        _ = fn(self, *args, **kwargs)
+                except Exception as e:
+                    logger.opt(exception=True).error(e)
+                    send_failure_notifications_sync(
+                        client=self._httpx_client,
+                        message=SnapshotterIssue(
+                            instanceID=settings.instance_id,
+                            issueType=SnapshotterReportState.CRASHED_REPORTER_THREAD.value,
+                            projectID='',
+                            epochId='',
+                            timeOfReporting=datetime.now().isoformat(),
+                            extra=str(e),
+                        ),
+                    )
+                    continue
+                # if no exception was caught and the thread returns normally, it is the sign of a shutdown event being set
+                else:
+                    return _
+
+    return wrapper
+
 
 
 def provide_async_redis_conn(fn):

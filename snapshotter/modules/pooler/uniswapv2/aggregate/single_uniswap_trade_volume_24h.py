@@ -23,7 +23,6 @@ class AggreagateTradeVolumeProcessor(GenericProcessorAggregate):
 
     def __init__(self) -> None:
         self.transformation_lambdas = []
-        self._logger = logger.bind(module='AggregateTradeVolumeProcessor24h')
 
     def _add_aggregate_snapshot(
         self,
@@ -122,6 +121,7 @@ class AggreagateTradeVolumeProcessor(GenericProcessorAggregate):
         project_id: str,
 
     ):
+        self._logger = logger.bind(module='AggregateTradeVolumeProcessor24h')
         self._logger.info(f'Building trade volume aggregate snapshot for {msg_obj}')
 
         # aggregate project first epoch

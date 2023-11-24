@@ -2,7 +2,7 @@ import asyncio
 
 from redis import asyncio as aioredis
 from web3 import Web3
-
+from snapshotter.settings.config import settings
 from ..redis_keys import uniswap_pair_contract_tokens_addresses
 from ..redis_keys import uniswap_pair_contract_tokens_data
 from ..redis_keys import uniswap_tokens_pair_map
@@ -234,7 +234,7 @@ async def get_pair_metadata(
         }
     except Exception as err:
         # this will be retried in next cycle
-        helper_logger.opt(exception=True).error(
+        helper_logger.opt(exception=settings.logs.trace_enabled).error(
             (
                 f'RPC error while fetcing metadata for pair {pair_address},'
                 f' error_msg:{err}'

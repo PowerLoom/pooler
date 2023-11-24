@@ -36,6 +36,7 @@ from snapshotter.utils.models.settings_model import RPCConfigBase
 from snapshotter.utils.redis.rate_limiter import check_rpc_rate_limit
 from snapshotter.utils.redis.rate_limiter import load_rate_limiter_scripts
 from snapshotter.utils.redis.redis_keys import rpc_blocknumber_calls
+from snapshotter.utils.redis.redis_keys import rpc_get_block_number_calls
 from snapshotter.utils.redis.redis_keys import rpc_get_event_logs_calls
 from snapshotter.utils.redis.redis_keys import rpc_get_transaction_receipt_calls
 from snapshotter.utils.redis.redis_keys import rpc_json_rpc_calls
@@ -179,8 +180,7 @@ class RpcHelper(object):
                     },
                 )
             except Exception as exc:
-
-                self._logger.opt(exception=True).error(
+                self._logger.opt(exception=settings.logs.trace_enabled).error(
                     (
                         'Error while initialising one of the web3 providers,'
                         f' err_msg: {exc}'
@@ -209,6 +209,64 @@ class RpcHelper(object):
             retry_state.fn, self._nodes[exc_idx], exc_idx, self._nodes[next_node_idx],
             next_node_idx, retry_state.outcome.exception(),
         )
+
+    async def get_current_block_number(self, redis_conn):
+        @retry(
+            reraise=True,
+            retry=retry_if_exception_type(RPCException),
+            wait=wait_random_exponential(multiplier=1, max=10),
+            stop=stop_after_attempt(settings.rpc.retry),
+            before_sleep=self._on_node_exception,
+        )
+        async def f(node_idx):
+            if not self._initialized:
+                await self.init(redis_conn=redis_conn)
+            node = self._nodes[node_idx]
+            rpc_url = node.get('rpc_url')
+            web3_provider = node['web3_client_async']
+
+            await check_rpc_rate_limit(
+                parsed_limits=node.get('rate_limit', []),
+                app_id=rpc_url.split('/')[-1],
+                redis_conn=redis_conn,
+                request_payload='get_current_block_number',
+                error_msg={
+                    'msg': 'exhausted_api_key_rate_limit inside get_current_blocknumber',
+                },
+                logger=self._logger,
+                rate_limit_lua_script_shas=self._rate_limit_lua_script_shas,
+                limit_incr_by=1,
+            )
+            try:
+                cur_time = time.time()
+                await asyncio.gather(
+                    redis_conn.zadd(
+                        name=rpc_get_block_number_calls,
+                        mapping={
+                            json.dumps(
+                                'get_current_block_number',
+                            ): cur_time,
+                        },
+                    ),
+                    redis_conn.zremrangebyscore(
+                        name=rpc_get_block_number_calls,
+                        min=0,
+                        max=cur_time - 3600,
+                    ),
+                )
+                current_block = await web3_provider.eth.block_number
+            except Exception as e:
+                exc = RPCException(
+                    request='get_current_block_number',
+                    response=None,
+                    underlying_exception=e,
+                    extra_info=f'RPC_GET_CURRENT_BLOCKNUMBER ERROR: {str(e)}',
+                )
+                self._logger.trace('Error in get_current_block_number, error {}', str(exc))
+                raise exc
+            else:
+                return current_block
+        return await f(node_idx=0)
 
     async def _async_web3_call(self, contract_function, redis_conn, from_address=None):
         """Make async web3 call"""
@@ -297,8 +355,7 @@ class RpcHelper(object):
                     underlying_exception=e,
                     extra_info={'msg': str(e)},
                 )
-
-                self._logger.opt(lazy=True).trace(
+                self._logger.opt(exception=settings.logs.trace_enabled).error(
                     (
                         'Error while making web3 batch call'
                     ),
@@ -317,7 +374,7 @@ class RpcHelper(object):
             before_sleep=self._on_node_exception,
         )
         async def f(node_idx):
-            if self._node_count == 0:
+            if not self._initialized:
                 await self.init(redis_conn=redis_conn)
             node = self._nodes[node_idx]
             rpc_url = node.get('rpc_url')
@@ -687,7 +744,7 @@ class RpcHelper(object):
                 },
                 logger=self._logger,
                 rate_limit_lua_script_shas=self._rate_limit_lua_script_shas,
-                limit_incr_by=to_block - from_block + 1,
+                limit_incr_by=1,
             )
             try:
                 cur_time = time.time()

@@ -1,6 +1,5 @@
 import asyncio
 from functools import wraps
-from math import floor
 
 from snapshotter.utils.default_logger import logger
 

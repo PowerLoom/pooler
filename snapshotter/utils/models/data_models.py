@@ -29,6 +29,7 @@ class SnapshotterReportState(Enum):
     SUBMITTED_INCORRECT_SNAPSHOT = 'SUBMITTED_INCORRECT_SNAPSHOT'
     SHUTDOWN_INITIATED = 'SHUTDOWN_INITIATED'
     CRASHED_CHILD_WORKER = 'CRASHED_CHILD_WORKER'
+    CRASHED_REPORTER_THREAD = 'CRASHED_REPORTER_THREAD'
     UNHEALTHY_EPOCH_PROCESSING = 'UNHEALTHY_EPOCH_PROCESSING'
 
 
@@ -188,3 +189,8 @@ class SnapshotterProjectStatus(BaseModel):
 class UnfinalizedSnapshot(BaseModel):
     snapshotCid: str
     snapshot: Dict[str, Any]
+
+
+class TaskStatusRequest(BaseModel):
+    task_type: str
+    wallet_address: str

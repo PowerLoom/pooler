@@ -1,10 +1,10 @@
 import json
-import subprocess
-import redis
+
 import psutil
-import os
-from snapshotter.utils.redis.redis_conn import REDIS_CONN_CONF
+import redis
+
 from snapshotter.settings.config import settings
+from snapshotter.utils.redis.redis_conn import REDIS_CONN_CONF
 
 
 def process_up(pid):
@@ -29,7 +29,7 @@ def main():
     connection_pool = redis.BlockingConnectionPool(**REDIS_CONN_CONF)
     redis_conn = redis.Redis(connection_pool=connection_pool)
     map_raw = redis_conn.hgetall(
-        name=f'powerloom:snapshotter:{settings.namespace}:{settings.instance_id}:Processes'
+        name=f'powerloom:snapshotter:{settings.namespace}:{settings.instance_id}:Processes',
     )
     event_det_pid = map_raw[b'SystemEventDetector']
     print('\n' + '=' * 20 + 'System Event Detector' + '=' * 20)
