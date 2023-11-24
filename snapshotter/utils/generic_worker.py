@@ -30,7 +30,7 @@ from tenacity import retry
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
 from web3 import Web3
-
+from eth_utils.address import to_checksum_address
 from snapshotter.settings.config import settings
 from snapshotter.utils.callback_helpers import get_rabbitmq_channel
 from snapshotter.utils.callback_helpers import get_rabbitmq_robust_connection_async
@@ -52,6 +52,7 @@ from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import submitted_unfinalized_snapshot_cids
 from snapshotter.utils.rpc import RpcHelper
+from web3 import Web3
 
 
 def web3_storage_retry_state_callback(retry_state: tenacity.RetryCallState):
@@ -357,7 +358,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._rpc_helper = RpcHelper(rpc_settings=settings.rpc)
         self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
 
-        self.protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
+        self._protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
             address=Web3.toChecksumAddress(
                 self.protocol_state_contract_address,
             ),
@@ -393,11 +394,43 @@ class GenericAsyncWorker(multiprocessing.Process):
             headers={'Authorization': 'Bearer ' + settings.web3storage.api_token},
         )
 
+
+    async def _init_protocol_meta(self):
+        # TODO: combine these into a single call
+        try:
+            source_block_time = await self._anchor_rpc_helper.web3_call(
+                [self._protocol_state_contract.functions.SOURCE_CHAIN_BLOCK_TIME()],
+                redis_conn=self._redis_conn,
+            )
+            # source_block_time = self._protocol_state_contract.functions.SOURCE_CHAIN_BLOCK_TIME().call()
+        except Exception as e:
+            self._logger.exception(
+                'Exception in querying protocol state for source chain block time: {}',
+                e,
+            )
+        else:
+            source_block_time = source_block_time[0]
+            self._source_chain_block_time = source_block_time / 10 ** 4
+            self._logger.debug('Set source chain block time to {}', self._source_chain_block_time)
+        try:
+            epoch_size =await self._anchor_rpc_helper.web3_call(
+                [self._protocol_state_contract.functions.EPOCH_SIZE().call()],
+                redis_conn=self._redis_conn,
+            )
+        except Exception as e:
+            self._logger.exception(
+                'Exception in querying protocol state for epoch size: {}',
+                e,
+            )
+        else:
+            self._epoch_size = epoch_size[0]
+            self._logger.debug('Set epoch size to {}', self._epoch_size)
     async def init(self):
         if not self._initialized:
             await self._init_redis_pool()
             await self._init_httpx_client()
             await self._init_rpc_helper()
+            await self._init_protocol_meta()
         self._initialized = True
 
     def run(self) -> None:
