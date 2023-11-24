@@ -111,7 +111,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 rpc_helper=self._rpc_helper,
                 anchor_rpc_helper=self._anchor_rpc_helper,
                 ipfs_reader=self._ipfs_reader_client,
-                protocol_state_contract=self.protocol_state_contract,
+                protocol_state_contract=self._protocol_state_contract,
                 project_id=project_id,
             )
 
