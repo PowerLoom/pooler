@@ -174,6 +174,7 @@ class ProjectConfig(BaseModel):
     projects: Optional[List[str]] = None
     processor: ProcessorConfig
     preload_tasks: List[str]
+    bulk_mode: Optional[bool] = False
 
 
 class ProjectsConfig(BaseModel):

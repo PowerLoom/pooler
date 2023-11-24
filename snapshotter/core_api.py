@@ -1,5 +1,4 @@
 import json
-from threading import currentThread
 from typing import List
 
 from fastapi import Depends
@@ -31,13 +30,14 @@ from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.models.data_models import SnapshotterEpochProcessingReportItem
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
+from snapshotter.utils.models.data_models import TaskStatusRequest
 from snapshotter.utils.redis.rate_limiter import load_rate_limiter_scripts
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
+from snapshotter.utils.redis.redis_keys import active_status_key
 from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import epoch_process_report_cached_key
 from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_key
-from snapshotter.utils.redis.redis_keys import active_status_key
 from snapshotter.utils.rpc import RpcHelper
 
 
@@ -543,7 +543,7 @@ async def get_snapshotter_epoch_processing_status(
         }
     current_epoch_id = current_epoch['epochId']
     if request.app.state.epoch_size == 0:
-        [epoch_size, ] = await request.app.state.anchor_rpc_helper.web3_call(
+        [epoch_size] = await request.app.state.anchor_rpc_helper.web3_call(
             [request.app.state.protocol_state_contract.functions.EPOCH_SIZE()],
             redis_conn=request.app.state.redis_pool,
         )
@@ -594,3 +594,83 @@ async def get_snapshotter_epoch_processing_status(
         ex=60,
     )
     return paginate(epoch_processing_final_report)
+
+
+@app.post('/task_status')
+async def get_task_status_post(
+    request: Request,
+    response: Response,
+    task_status_request: TaskStatusRequest,
+    rate_limit_auth_dep: RateLimitAuthCheck = Depends(
+        rate_limit_auth_check,
+    ),
+):
+    """
+    This endpoint is used to fetch task status for a given task_type and wallet_address.
+    """
+
+    if not (
+        rate_limit_auth_dep.rate_limit_passed and
+        rate_limit_auth_dep.authorized and
+        rate_limit_auth_dep.owner.active == UserStatusEnum.active
+    ):
+        return inject_rate_limit_fail_response(rate_limit_auth_dep)
+
+    # check wallet address is valid EVM address
+    try:
+        Web3.toChecksumAddress(task_status_request.wallet_address)
+    except:
+        response.status_code = 400
+        return {
+            'status': 'error',
+            'message': f'Invalid wallet address: {task_status_request.wallet_address}',
+        }
+
+    project_id = f'{task_status_request.task_type}:{task_status_request.wallet_address.lower()}:{settings.namespace}'
+    try:
+
+        # check redis first, if doesn't exist, fetch from contract
+        last_finalized_epoch = await request.app.state.redis_pool.get(
+            project_last_finalized_epoch_key(project_id),
+        )
+
+        if last_finalized_epoch is None:
+
+            [last_finalized_epoch] = await request.app.state.anchor_rpc_helper.web3_call(
+                [request.app.state.protocol_state_contract.functions.lastFinalizedSnapshot(project_id)],
+                redis_conn=request.app.state.redis_pool,
+            )
+            # cache it in redis
+            if last_finalized_epoch != 0:
+                await request.app.state.redis_pool.set(
+                    project_last_finalized_epoch_key(project_id),
+                    last_finalized_epoch,
+                )
+        else:
+            last_finalized_epoch = int(last_finalized_epoch.decode('utf-8'))
+
+    except Exception as e:
+        rest_logger.exception(
+            'Exception in get_current_epoch',
+            e=e,
+        )
+        response.status_code = 500
+        return {
+            'status': 'error',
+            'message': f'Unable to get last_finalized_epoch, error: {e}',
+        }
+    else:
+
+        auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
+        await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
+
+        if last_finalized_epoch > 0:
+            return {
+                'completed': True,
+                'message': f'Task {task_status_request.task_type} for wallet {task_status_request.wallet_address} was completed in epoch {last_finalized_epoch}',
+            }
+        else:
+            return {
+                'completed': False,
+                'message': f'Task {task_status_request.task_type} for wallet {task_status_request.wallet_address} is not completed yet',
+            }

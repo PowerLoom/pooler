@@ -47,6 +47,7 @@ class PowerloomSnapshotProcessMessage(EpochBase):
     data_source: Optional[str] = None
     primary_data_source: Optional[str] = None
     genesis: Optional[bool] = False
+    bulk_mode: Optional[bool] = False
 
 
 class PowerloomSnapshotFinalizedMessage(BaseModel):

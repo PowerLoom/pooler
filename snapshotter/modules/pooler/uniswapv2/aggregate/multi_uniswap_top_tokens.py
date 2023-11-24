@@ -20,7 +20,6 @@ class AggreagateTopTokensProcessor(GenericProcessorAggregate):
 
     def __init__(self) -> None:
         self.transformation_lambdas = []
-        self._logger = logger.bind(module='AggregateTopTokensProcessor')
 
     async def compute(
         self,
@@ -33,6 +32,7 @@ class AggreagateTopTokensProcessor(GenericProcessorAggregate):
         project_id: str,
 
     ):
+        self._logger = logger.bind(module='AggregateTopTokensProcessor')
 
         self._logger.info(f'Calculating top tokens data for {msg_obj}')
         epoch_id = msg_obj.epochId

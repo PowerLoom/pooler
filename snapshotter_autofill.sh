@@ -42,14 +42,20 @@ if [ "$POWERLOOM_REPORTING_URL" ]; then
     echo "Found SLACK_REPORTING_URL ${POWERLOOM_REPORTING_URL}";
 fi
 
+if [ "$WEB3_STORAGE_TOKEN" ]; then
+    echo "Found WEB3_STORAGE_TOKEN ${WEB3_STORAGE_TOKEN}";
+fi
+
+if [ "$NAMESPACE" ]; then
+    echo "Found NAMESPACE ${NAMESPACE}";
+fi
 
 cp config/projects.example.json config/projects.json
 cp config/aggregator.example.json config/aggregator.json
 cp config/auth_settings.example.json config/auth_settings.json
 cp config/settings.example.json config/settings.json
 
-export namespace=UNISWAPV2
-
+export namespace="${NAMESPACE:-UNISWAPV2}"
 export ipfs_url="${IPFS_URL:-/dns/ipfs/tcp/5001}"
 export ipfs_api_key="${IPFS_API_KEY:-}"
 export ipfs_api_secret="${IPFS_API_SECRET:-}"
@@ -83,6 +89,7 @@ sed -i'.backup' "s#https://rpc-url#$SOURCE_RPC_URL#" config/settings.json
 
 sed -i'.backup' "s#https://prost-rpc-url#$PROST_RPC_URL#" config/settings.json
 
+sed -i'.backup' "s#web3-storage-token#$web3_storage_token#" config/settings.json
 sed -i'.backup' "s#ipfs-writer-url#$ipfs_url#" config/settings.json
 sed -i'.backup' "s#ipfs-writer-key#$ipfs_api_key#" config/settings.json
 sed -i'.backup' "s#ipfs-writer-secret#$ipfs_api_secret#" config/settings.json

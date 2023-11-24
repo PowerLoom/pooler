@@ -86,16 +86,11 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
         self._running_callback_tasks: Dict[str, asyncio.Task] = dict()
         super(GenericAsyncWorker, self).__init__(name=name, **kwargs)
-        self._logger = logger.bind(module=self.name)
         self.protocol_state_contract = None
-        self._qos = 20
+        self._qos = 1
 
         self._rate_limiting_lua_scripts = None
 
-        self.protocol_state_contract_abi = read_json_file(
-            settings.protocol_state.abi,
-            self._logger,
-        )
         self.protocol_state_contract_address = settings.protocol_state.address
         self._commit_payload_exchange = (
             f'{settings.rabbitmq.setup.commit_payload.exchange}:{settings.namespace}'
@@ -143,7 +138,7 @@ class GenericAsyncWorker(multiprocessing.Process):
 
     async def _commit_payload(
             self,
-            type_: str,
+            task_type: str,
             _ipfs_writer_client: AsyncIPFSClient,
             project_id: str,
             epoch: Union[
@@ -232,7 +227,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                 pass
             # send to relayer dispatch queue
             await self._send_payload_commit_service_queue(
-                type_=type_,
+                task_type=task_type,
                 project_id=project_id,
                 epoch=epoch,
                 snapshot_cid=snapshot_cid,
@@ -265,7 +260,7 @@ class GenericAsyncWorker(multiprocessing.Process):
 
     async def _send_payload_commit_service_queue(
         self,
-        type_: str,
+        task_type: str,
         project_id: str,
         epoch: Union[
             PowerloomSnapshotProcessMessage,
@@ -357,14 +352,15 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._rpc_helper = RpcHelper(rpc_settings=settings.rpc)
         self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
 
-        self.protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
+        self._protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
             address=Web3.toChecksumAddress(
                 self.protocol_state_contract_address,
             ),
-            abi=self.protocol_state_contract_abi,
+            abi=read_json_file(
+                settings.protocol_state.abi,
+                self._logger,
+            ),
         )
-        # cleaning up ABI
-        self.protocol_state_contract_abi = None
 
     async def _init_httpx_client(self):
         self._async_transport = AsyncHTTPTransport(
@@ -393,14 +389,47 @@ class GenericAsyncWorker(multiprocessing.Process):
             headers={'Authorization': 'Bearer ' + settings.web3storage.api_token},
         )
 
+    async def _init_protocol_meta(self):
+        # TODO: combine these into a single call
+        try:
+            source_block_time = await self._anchor_rpc_helper.web3_call(
+                [self._protocol_state_contract.functions.SOURCE_CHAIN_BLOCK_TIME()],
+                redis_conn=self._redis_conn,
+            )
+            # source_block_time = self._protocol_state_contract.functions.SOURCE_CHAIN_BLOCK_TIME().call()
+        except Exception as e:
+            self._logger.exception(
+                'Exception in querying protocol state for source chain block time: {}',
+                e,
+            )
+        else:
+            source_block_time = source_block_time[0]
+            self._source_chain_block_time = source_block_time / 10 ** 4
+            self._logger.debug('Set source chain block time to {}', self._source_chain_block_time)
+        try:
+            epoch_size = await self._anchor_rpc_helper.web3_call(
+                [self._protocol_state_contract.functions.EPOCH_SIZE()],
+                redis_conn=self._redis_conn,
+            )
+        except Exception as e:
+            self._logger.exception(
+                'Exception in querying protocol state for epoch size: {}',
+                e,
+            )
+        else:
+            self._epoch_size = epoch_size[0]
+            self._logger.debug('Set epoch size to {}', self._epoch_size)
+
     async def init(self):
         if not self._initialized:
             await self._init_redis_pool()
             await self._init_httpx_client()
             await self._init_rpc_helper()
+            await self._init_protocol_meta()
         self._initialized = True
 
     def run(self) -> None:
+        self._logger = logger.bind(module=self.name)
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         resource.setrlimit(
             resource.RLIMIT_NOFILE,
