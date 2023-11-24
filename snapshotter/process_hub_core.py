@@ -45,8 +45,9 @@ from snapshotter.utils.models.message_models import ProcessHubCommand
 from snapshotter.utils.rabbitmq_helpers import RabbitmqSelectLoopInteractor
 from snapshotter.utils.redis.redis_conn import provide_redis_conn
 from snapshotter.utils.redis.redis_conn import REDIS_CONN_CONF
-from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key, process_hub_core_start_timestamp
+from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
+from snapshotter.utils.redis.redis_keys import process_hub_core_start_timestamp
 from snapshotter.utils.rpc import RpcHelper
 from snapshotter.utils.snapshot_worker import SnapshotAsyncWorker
 

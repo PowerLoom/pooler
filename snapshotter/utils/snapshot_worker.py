@@ -19,7 +19,8 @@ from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
 from snapshotter.utils.redis.rate_limiter import load_rate_limiter_scripts
-from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping, epoch_id_to_state_specific_project_count
+from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
+from snapshotter.utils.redis.redis_keys import epoch_id_to_state_specific_project_count
 from snapshotter.utils.redis.redis_keys import snapshot_submission_window_key
 from snapshotter.utils.redis.redis_keys import submitted_base_snapshots_key
 
@@ -128,15 +129,17 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             )
             p.incr(
                 amount=1,
-                name=epoch_id_to_state_specific_project_count(epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value),
+                name=epoch_id_to_state_specific_project_count(
+                    epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
+                ),
             )
             p.expire(
                 name=epoch_id_to_state_specific_project_count(
                     epoch_id=msg_obj.epochId,
-                    state_id=SnapshotterStates.SNAPSHOT_BUILD.value
+                    state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
                 ),
                 time=self._source_chain_block_time * self._epoch_size * 10,
-                nx=True
+                nx=True,
             )
             await p.execute()
             await self._commit_payload(
@@ -237,15 +240,17 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 )
                 p.incr(
                     amount=len(snapshots),
-                    name=epoch_id_to_state_specific_project_count(epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value)
+                    name=epoch_id_to_state_specific_project_count(
+                        epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
+                    ),
                 )
                 p.expire(
                     name=epoch_id_to_state_specific_project_count(
                         epoch_id=msg_obj.epochId,
-                        state_id=SnapshotterStates.SNAPSHOT_BUILD.value
+                        state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
                     ),
                     time=self._source_chain_block_time * self._epoch_size * 10,
-                    nx=True
+                    nx=True,
                 )
                 await p.execute()
                 await self._commit_payload(
@@ -256,7 +261,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                     snapshot=snapshot,
                     storage_flag=settings.web3storage.upload_snapshots,
                 )
-                
 
     async def _processor_task(self, msg_obj: PowerloomSnapshotProcessMessage, task_type: str):
         """Function used to process the received message object."""

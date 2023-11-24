@@ -1,5 +1,4 @@
 import asyncio
-from datetime import datetime
 import importlib
 import json
 import multiprocessing
@@ -7,6 +6,7 @@ import queue
 import resource
 import time
 from collections import defaultdict
+from datetime import datetime
 from functools import partial
 from signal import SIGINT
 from signal import signal
@@ -15,6 +15,7 @@ from signal import SIGTERM
 from typing import Awaitable
 from typing import Dict
 from typing import List
+from typing import Mapping
 from typing import Set
 from uuid import uuid4
 
@@ -36,35 +37,40 @@ from snapshotter.settings.config import aggregator_config
 from snapshotter.settings.config import preloaders
 from snapshotter.settings.config import projects_config
 from snapshotter.settings.config import settings
-from snapshotter.utils.callback_helpers import get_rabbitmq_channel, send_failure_notifications_async
+from snapshotter.utils.callback_helpers import get_rabbitmq_channel
 from snapshotter.utils.callback_helpers import get_rabbitmq_robust_connection_async
+from snapshotter.utils.callback_helpers import send_failure_notifications_async
 from snapshotter.utils.data_utils import get_projects_list
 from snapshotter.utils.data_utils import get_snapshot_submision_window
 from snapshotter.utils.data_utils import get_source_chain_epoch_size
 from snapshotter.utils.data_utils import get_source_chain_id
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.file_utils import read_json_file
-from snapshotter.utils.models.data_models import SnapshotterEpochProcessingReportItem, SnapshotterIssue, SnapshotterReportState, SnapshotterStates
+from snapshotter.utils.models.data_models import SnapshotterEpochProcessingReportItem
+from snapshotter.utils.models.data_models import SnapshotterIssue
+from snapshotter.utils.models.data_models import SnapshotterReportState
+from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.data_models import SnapshottersUpdatedEvent
-from snapshotter.utils.models.message_models import EpochBase, ProcessHubCommand
+from snapshotter.utils.models.message_models import EpochBase
 from snapshotter.utils.models.message_models import PayloadCommitFinalizedMessage
 from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
 from snapshotter.utils.models.message_models import PowerloomProjectsUpdatedMessage
 from snapshotter.utils.models.message_models import PowerloomSnapshotFinalizedMessage
 from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
 from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessage
+from snapshotter.utils.models.message_models import ProcessHubCommand
 from snapshotter.utils.models.settings_model import AggregateOn
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
-from snapshotter.utils.redis.redis_keys import active_status_key, epoch_id_to_state_specific_project_count, process_hub_core_start_timestamp
+from snapshotter.utils.redis.redis_keys import active_status_key
 from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
+from snapshotter.utils.redis.redis_keys import epoch_id_to_state_specific_project_count
+from snapshotter.utils.redis.redis_keys import process_hub_core_start_timestamp
 from snapshotter.utils.redis.redis_keys import project_finalized_data_zset
 from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_key
 from snapshotter.utils.redis.redis_keys import snapshot_submission_window_key
 from snapshotter.utils.rpc import RpcHelper
-from collections import defaultdict
-from typing import Awaitable, Dict, Mapping
 # from snapshotter.utils.data_utils import build_projects_list_from_events
 
 
@@ -104,7 +110,9 @@ class ProcessorDistributor(multiprocessing.Process):
         )
 
         self._upcoming_project_changes = defaultdict(list)
-        self._preload_completion_conditions: Dict[int, Awaitable] = defaultdict(dict)  # epoch ID to preloading complete event
+        self._preload_completion_conditions: Dict[int, Awaitable] = defaultdict(
+            dict,
+        )  # epoch ID to preloading complete event
 
         self._newly_added_projects = set()
         self._shutdown_initiated = False
@@ -163,7 +171,7 @@ class ProcessorDistributor(multiprocessing.Process):
         async with self._rmq_channel_pool.acquire() as channel:
             await channel.set_qos(10)
             exchange = await channel.get_exchange(
-                name=f'{settings.rabbitmq.setup.core.exchange}:{settings.namespace}'
+                name=f'{settings.rabbitmq.setup.core.exchange}:{settings.namespace}',
             )
             await exchange.publish(
                 routing_key=f'processhub-commands:{settings.namespace}:{settings.instance_id}',
@@ -292,7 +300,7 @@ class ProcessorDistributor(multiprocessing.Process):
                 return
             self._last_epoch_processing_health_check = int(time.time())
             self._logger.debug(
-                'Continuing with epoch processing health check since 4 or more epochs have passed since process start'
+                'Continuing with epoch processing health check since 4 or more epochs have passed since process start',
             )
             # check for epoch processing status
             epoch_health = dict()
@@ -374,11 +382,13 @@ class ProcessorDistributor(multiprocessing.Process):
                         extra=json.dumps(
                             {
                                 'epoch_health': epoch_health,
-                            }
+                            },
                         ),
-                    )
+                    ),
                 )
-                self._logger.info('Sending respawn command for all process hub core children because epochs were found unhealthy: {}', epoch_health)
+                self._logger.info(
+                    'Sending respawn command for all process hub core children because epochs were found unhealthy: {}', epoch_health,
+                )
                 await self._send_proc_hub_respawn()
 
     async def _preloader_waiter(
@@ -934,7 +944,7 @@ class ProcessorDistributor(multiprocessing.Process):
             signal(signame, self._signal_handler)
         asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
         self._anchor_rpc_helper = RpcHelper(
-            rpc_settings=settings.anchor_chain_rpc
+            rpc_settings=settings.anchor_chain_rpc,
         )
         self._anchor_rpc_helper._load_web3_providers_and_rate_limits()
         protocol_abi = read_json_file(settings.protocol_state.abi, self._logger)
