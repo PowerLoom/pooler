@@ -18,7 +18,6 @@ from aio_pika import IncomingMessage
 from aio_pika import Message
 from aio_pika.pool import Pool
 from eth_utils import keccak
-from eth_utils.address import to_checksum_address
 from httpx import AsyncClient
 from httpx import AsyncHTTPTransport
 from httpx import Limits

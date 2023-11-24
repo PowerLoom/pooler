@@ -15,7 +15,6 @@ from signal import SIGTERM
 from typing import Awaitable
 from typing import Dict
 from typing import List
-from typing import Mapping
 from typing import Set
 from uuid import uuid4
 
