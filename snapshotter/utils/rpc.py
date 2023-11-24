@@ -6,9 +6,6 @@ from typing import Union
 
 import eth_abi
 import tenacity
-from aiohttp import ClientSession
-from aiohttp import ClientTimeout
-from aiohttp import TCPConnector
 from async_limits import parse_many as limit_parse_many
 from eth_abi.codec import ABICodec
 from eth_utils import keccak
@@ -92,8 +89,6 @@ def get_event_sig_and_abi(event_signatures, event_abis):
 
 
 class RpcHelper(object):
-    _aiohttp_tcp_connector: TCPConnector
-    _web3_aiohttp_client: ClientSession
 
     def __init__(self, rpc_settings: RPCConfigBase = settings.rpc, archive_mode=False):
         self._archive_mode = archive_mode
@@ -108,8 +103,6 @@ class RpcHelper(object):
         self._client = None
         self._async_transport = None
         self._rate_limit_lua_script_shas = None
-        self._aiohttp_tcp_connector = None
-        self._web3_aiohttp_client = None
 
     async def _load_rate_limit_shas(self, redis_conn):
         if self._rate_limit_lua_script_shas is not None:
@@ -132,16 +125,6 @@ class RpcHelper(object):
             timeout=Timeout(timeout=5.0),
             follow_redirects=False,
             transport=self._async_transport,
-        )
-        if self._aiohttp_tcp_connector is not None:
-            return
-        self._aiohttp_tcp_connector = TCPConnector(
-            keepalive_timeout=self._rpc_settings.connection_limits.keepalive_expiry,
-            limit=1000,
-        )
-        self._web3_aiohttp_client = ClientSession(
-            connector=self._aiohttp_tcp_connector,
-            timeout=ClientTimeout(total=self._rpc_settings.request_time_out),
         )
 
     async def _load_async_web3_providers(self):
