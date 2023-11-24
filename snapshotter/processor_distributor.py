@@ -121,7 +121,7 @@ class ProcessorDistributor(multiprocessing.Process):
             self._project_type_config_mapping[project_config.project_type] = project_config
             for proload_task in project_config.preload_tasks:
                 self._all_preload_tasks.add(proload_task)
-
+        self._last_epoch_processing_health_check = 0
         self._preloader_compute_mapping = dict()
 
     def _signal_handler(self, signum, frame):

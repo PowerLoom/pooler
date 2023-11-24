@@ -86,7 +86,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
         self._running_callback_tasks: Dict[str, asyncio.Task] = dict()
         super(GenericAsyncWorker, self).__init__(name=name, **kwargs)
-        self.protocol_state_contract = None
+        self._protocol_state_contract = None
         self._qos = 1
 
         self._rate_limiting_lua_scripts = None
@@ -273,7 +273,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             source_chain_details = await get_source_chain_id(
                 redis_conn=self._redis_conn,
                 rpc_helper=self._anchor_rpc_helper,
-                state_contract_obj=self.protocol_state_contract,
+                state_contract_obj=self._protocol_state_contract,
             )
         except Exception as e:
             self._logger.opt(exception=True).error(
