@@ -260,7 +260,7 @@ class ProcessorDistributor(multiprocessing.Process):
                     submission_window,
                 )
 
-    async def _get_proc_hub_start_time(self):
+    async def _get_proc_hub_start_time(self) -> int:
         _ = await self._redis_conn.get(process_hub_core_start_timestamp())
         if _:
             return int(_)
@@ -277,19 +277,9 @@ class ProcessorDistributor(multiprocessing.Process):
         if start_time == 0:
             self._logger.info('Skipping epoch processing health check because proc hub start time is not set')
             return
-        if int(time.time()) - self._last_epoch_processing_health_check >= 60:
-            if self._source_chain_block_time != 0 and self._epoch_size != 0:
-                if int(time.time()) - start_time <= 4 * self._source_chain_block_time * self._epoch_size:
-                    # self._logger.info(
-                    #     'Skipping epoch processing health check because '
-                    #     'not enough time has passed for 4 epochs to consider health check since process start | '
-                    #     'Start time: {} | Currentime: {} | Source chain block time: {}',
-                    #     datetime.fromtimestamp(self._start_time).isoformat(),
-                    #     datetime.now().isoformat(),
-                    #     self._source_chain_block_time,
-                    # )
-                    return
-            else:
+        if (self._last_epoch_processing_health_check != 0 and int(time.time()) - self._last_epoch_processing_health_check > 4 * self._source_chain_block_time * self._epoch_size) or \
+                (self._last_epoch_processing_health_check == 0 and start_time != 0 and int(time.time()) - start_time > 4 * self._source_chain_block_time * self._epoch_size):
+            if not (self._source_chain_block_time != 0 and self._epoch_size != 0):
                 self._logger.info(
                     'Skipping epoch processing health check because source chain block time or epoch size is not known | '
                     'Source chain block time: {} | Epoch size: {}',

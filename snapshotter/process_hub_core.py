@@ -37,7 +37,7 @@ from snapshotter.utils.models.data_models import SnapshotterPing
 from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.message_models import ProcessHubCommand
 from snapshotter.utils.rabbitmq_helpers import RabbitmqSelectLoopInteractor
-from snapshotter.utils.redis.redis_conn import provide_redis_conn
+from snapshotter.utils.redis.redis_conn import provide_async_redis_conn, provide_redis_conn, provide_redis_conn_repsawning_thread
 from snapshotter.utils.redis.redis_conn import REDIS_CONN_CONF
 from snapshotter.utils.redis.redis_keys import process_hub_core_start_timestamp
 from snapshotter.utils.rpc import RpcHelper
@@ -129,9 +129,9 @@ class ProcessHubCore(Process):
                 self._logger.debug('Process ID {} joined...', pid)
                 break
 
-    @provide_redis_conn
+    @provide_redis_conn_repsawning_thread
     def internal_state_reporter(self, redis_conn: redis.Redis = None):
-        while not self._thread_shutdown_event.wait(timeout=2):
+        while not self._thread_shutdown_event.wait(timeout=1):
             proc_id_map = dict()
             for k, v in self._spawned_processes_map.items():
                 if v:
