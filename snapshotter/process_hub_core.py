@@ -6,7 +6,6 @@ import time
 import uuid
 from datetime import datetime
 from multiprocessing import Process
-from re import S
 from signal import SIGCHLD
 from signal import SIGINT
 from signal import signal
@@ -21,7 +20,6 @@ import httpx
 import psutil
 import pydantic
 import redis
-from distutils import core
 from eth_utils.address import to_checksum_address
 
 from snapshotter.processor_distributor import ProcessorDistributor
@@ -35,18 +33,14 @@ from snapshotter.utils.exceptions import SelfExitException
 from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.helper_functions import cleanup_proc_hub_children
 from snapshotter.utils.models.data_models import ProcessorWorkerDetails
-from snapshotter.utils.models.data_models import SnapshotterEpochProcessingReportItem
 from snapshotter.utils.models.data_models import SnapshotterIssue
 from snapshotter.utils.models.data_models import SnapshotterPing
 from snapshotter.utils.models.data_models import SnapshotterReportState
-from snapshotter.utils.models.data_models import SnapshotterStates
-from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.message_models import ProcessHubCommand
 from snapshotter.utils.rabbitmq_helpers import RabbitmqSelectLoopInteractor
 from snapshotter.utils.redis.redis_conn import provide_redis_conn
 from snapshotter.utils.redis.redis_conn import REDIS_CONN_CONF
-from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
-from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
+from snapshotter.utils.redis.redis_keys import process_hub_core_start_timestamp
 from snapshotter.utils.rpc import RpcHelper
 from snapshotter.utils.snapshot_worker import SnapshotAsyncWorker
 
@@ -84,9 +78,6 @@ class ProcessHubCore(Process):
             ),
         )
         self._last_reporting_service_ping = 0
-        self._last_epoch_processing_health_check = 0
-        self._start_time = 0
-        self._last_respawn_time = 0
         self._source_chain_block_time = 0
         self._epoch_size = 0
         self._thread_shutdown_event = threading.Event()
@@ -139,49 +130,42 @@ class ProcessHubCore(Process):
                 self._logger.debug('Process ID {} joined...', pid)
                 break
 
-    @provide_redis_conn_repsawning_thread
+    @provide_redis_conn
     def internal_state_reporter(self, redis_conn: redis.Redis = None):
         while not self._thread_shutdown_event.wait(timeout=2):
-            if self._last_respawn_time == 0 or (self._last_respawn_time != 0 and int(time.time()) - self._last_respawn_time >= 30):
-                # allow time for callback workers to fully respawn before writing process table update
-                proc_id_map = dict()
-                for k, v in self._spawned_processes_map.items():
-                    if v:
-                        proc_id_map[k] = v
-                    else:
-                        proc_id_map[k] = -1
-                proc_id_map['callback_workers'] = dict()
+            proc_id_map = dict()
+            for k, v in self._spawned_processes_map.items():
+                if v:
+                    proc_id_map[k] = v
+                else:
+                    proc_id_map[k] = -1
+            proc_id_map['callback_workers'] = dict()
+            for (
+                k,
+                unique_worker_entries,
+            ) in self._spawned_cb_processes_map.items():
+                proc_id_map['callback_workers'][k] = dict()
                 for (
-                    k,
-                    unique_worker_entries,
-                ) in self._spawned_cb_processes_map.items():
-                    proc_id_map['callback_workers'][k] = dict()
-                    for (
-                        worker_unique_id,
-                        worker_process_details,
-                    ) in unique_worker_entries.items():
-                        if worker_process_details is not None:
-                            proc_id_map['callback_workers'][k][worker_unique_id] = {
-                                'pid': worker_process_details.pid,
-                                'id': worker_process_details.unique_name,
-                            }
-                        else:
-                            proc_id_map['callback_workers'][k][worker_unique_id] = {
-                                'pid': 'null',
-                                'id': '',
-                            }
-                proc_id_map['callback_workers'] = json.dumps(
-                    proc_id_map['callback_workers'],
-                )
-                try:
-                    redis_conn.hset(
-                        name=f'powerloom:snapshotter:{settings.namespace}:{settings.instance_id}:Processes',
-                        mapping=proc_id_map,
-                    )
-                except Exception as e:
-                    self._logger.opt(exception=True).error(
-                        'Error while updating process map in redis: {}', e,
-                    )
+                    worker_unique_id,
+                    worker_process_details,
+                ) in unique_worker_entries.items():
+                    if worker_process_details is not None:
+                        proc_id_map['callback_workers'][k][worker_unique_id] = {
+                            'pid': worker_process_details.pid,
+                            'id': worker_process_details.unique_name,
+                        }
+                    else:
+                        proc_id_map['callback_workers'][k][worker_unique_id] = {
+                            'pid': 'null',
+                            'id': '',
+                        }
+            proc_id_map['callback_workers'] = json.dumps(
+                proc_id_map['callback_workers'],
+            )
+            redis_conn.hset(
+                name=f'powerloom:snapshotter:{settings.namespace}:{settings.instance_id}:Processes',
+                mapping=proc_id_map,
+            )
             if settings.reporting.service_url and int(time.time()) - self._last_reporting_service_ping >= 30:
                 self._last_reporting_service_ping = int(time.time())
                 try:
@@ -196,144 +180,11 @@ class ProcessHubCore(Process):
                         self._logger.error(
                             'Error while pinging reporting service: {}', e,
                         )
-            if (self._last_epoch_processing_health_check != 0 and int(time.time()) - self._last_epoch_processing_health_check > 4 * self._source_chain_block_time * self._epoch_size) or \
-                    (self._last_epoch_processing_health_check == 0 and self._start_time != 0 and int(time.time()) - self._start_time > 4 * self._source_chain_block_time * self._epoch_size):
-                # self._logger.info(
-                #     'Skipping epoch processing health check because '
-                #     'not enough time has passed for 4 epochs to consider health check since last health check or start time | '
-                #     'Start time: {} | Currentime: {} | Source chain block time: {}',
-                #     datetime.fromtimestamp(self._start_time).isoformat(),
-                #     datetime.now().isoformat(),
-                #     self._source_chain_block_time,
-                # )
-                if not (self._source_chain_block_time != 0 and self._epoch_size != 0):
-                    self._logger.info(
-                        'Skipping epoch processing health check because source chain block time or epoch size is not known | '
-                        'Source chain block time: {} | Epoch size: {}',
-                        self._source_chain_block_time,
-                        self._epoch_size,
-                    )
-                    continue
-                self._last_epoch_processing_health_check = int(time.time())
-                self._logger.debug(
-                    'Continuing with epoch processing health check since 4 or more epochs have passed since process start',
-                )
-                # check for epoch processing status
-                try:
-                    current_epoch_data = self._protocol_state_contract.functions.currentEpoch().call()
-                    current_epoch = {
-                        'begin': current_epoch_data[0],
-                        'end': current_epoch_data[1],
-                        'epochId': current_epoch_data[2],
-                    }
-
-                except Exception as e:
-                    self._logger.exception(
-                        'Exception in get_current_epoch',
-                        e=e,
-                    )
-                    continue
-                current_epoch_id = current_epoch['epochId']
-                epoch_health = dict()
-                # check from previous epoch processing status until 2 further epochs
-                for epoch_id in range(current_epoch_id - 1, current_epoch_id - 3 - 1, -1):
-                    epoch_specific_report = SnapshotterEpochProcessingReportItem.construct()
-                    success_percentage = 0
-                    divisor = 1
-                    epoch_specific_report.epochId = epoch_id
-                    for state in SnapshotterStates:
-                        if state not in [SnapshotterStates.SNAPSHOT_BUILD, SnapshotterStates.RELAYER_SEND]:
-                            continue
-                        state_report_entries = self._redis_conn_sync.hgetall(
-                            name=epoch_id_project_to_state_mapping(epoch_id=epoch_id, state_id=state.value),
-                        )
-                        if state_report_entries:
-                            project_state_report_entries = dict()
-                            epoch_specific_report.transitionStatus = dict()
-                            # epoch_specific_report.transitionStatus[state.value] = dict()
-                            project_state_report_entries = {
-                                project_id.decode('utf-8'): SnapshotterStateUpdate.parse_raw(project_state_entry)
-                                for project_id, project_state_entry in state_report_entries.items()
-                            }
-                            epoch_specific_report.transitionStatus[state.value] = project_state_report_entries
-                            success_percentage += len(
-                                [
-                                    project_state_report_entry
-                                    for project_state_report_entry in project_state_report_entries.values()
-                                    if project_state_report_entry.status == 'success'
-                                ],
-                            ) / len(project_state_report_entries)
-                            success_percentage /= divisor
-                            divisor += 1
-                        else:
-                            epoch_specific_report.transitionStatus[state.value] = None
-                    if success_percentage != 0:
-                        self._logger.debug(
-                            'Epoch {} processing success percentage within states {}: {}',
-                            list(epoch_specific_report.transitionStatus.keys()),
-                            epoch_id,
-                            success_percentage * 100,
-                        )
-
-                    if any([x is None for x in epoch_specific_report.transitionStatus.values()]):
-                        epoch_health[epoch_id] = False
-                        self._logger.debug(
-                            'Marking epoch {} as unhealthy due to missing state reports against transitions {}',
-                            epoch_id,
-                            [x for x, y in epoch_specific_report.transitionStatus.items() if y is None],
-                        )
-                    if success_percentage < 0.5:
-                        epoch_health[epoch_id] = False
-                        self._logger.debug(
-                            'Marking epoch {} as unhealthy due to low success percentage: {}',
-                            epoch_id,
-                            success_percentage,
-                        )
-                if len([epoch_id for epoch_id, healthy in epoch_health.items() if not healthy]) >= 2:
-                    self._logger.debug(
-                        'Sending unhealthy epoch report to reporting service: {}',
-                        epoch_health,
-                    )
-                    send_failure_notifications_sync(
-                        client=self._httpx_client,
-                        message=SnapshotterIssue(
-                            instanceID=settings.instance_id,
-                            issueType=SnapshotterReportState.UNHEALTHY_EPOCH_PROCESSING.value,
-                            projectID='',
-                            epochId='',
-                            timeOfReporting=datetime.now().isoformat(),
-                            extra=json.dumps(
-                                {
-                                    'epoch_health': epoch_health,
-                                },
-                            ),
-                        ),
-                    )
-                    self._logger.info(
-                        'Proceeding to respawn all children because epochs were found unhealthy: {}', epoch_health,
-                    )
-                    self._respawn_all_children()
-                    time.sleep(10)
         self._logger.error(
             (
                 'Caught thread shutdown notification event. Deleting process'
                 ' worker map in redis...'
             ),
-        )
-        send_failure_notifications_sync(
-            client=self._httpx_client,
-            message=SnapshotterIssue(
-                instanceID=settings.instance_id,
-                issueType=SnapshotterReportState.CRASHED_CHILD_WORKER.value,
-                projectID='',
-                epochId='',
-                timeOfReporting=datetime.now().isoformat(),
-                extra=json.dumps(
-                    {
-                        'message': 'internal thread shutdown event caught and deleting process worker map in redis',
-                    }
-                ),
-            )
         )
         redis_conn.delete(
             f'powerloom:snapshotter:{settings.namespace}:{settings.instance_id}:Processes',
@@ -518,8 +369,7 @@ class ProcessHubCore(Process):
     def _respawn_all_children(self):
         self._kill_all_children()
         self._launch_all_children()
-        self._start_time = time.time()
-        self._last_respawn_time = int(time.time())
+        self._set_start_time()
 
     def _launch_all_children(self):
         self._logger.debug('=' * 80)
@@ -528,6 +378,12 @@ class ProcessHubCore(Process):
         for proc_name in PROC_STR_ID_TO_CLASS_MAP.keys():
             self._launch_core_worker(proc_name)
         self._launch_snapshot_cb_workers()
+
+    def _set_start_time(self):
+        self._redis_conn_sync.set(
+            process_hub_core_start_timestamp(),
+            str(int(time.time())),
+        )
 
     @cleanup_proc_hub_children
     def run(self) -> None:
@@ -579,7 +435,7 @@ class ProcessHubCore(Process):
         self._logger.debug(
             'Starting Internal Process State reporter for Process Hub Core...',
         )
-        self._start_time = time.time()
+        self._set_start_time()
         self._reporter_thread = Thread(target=self.internal_state_reporter)
         self._reporter_thread.start()
         self._logger.debug('Starting Process Hub Core...')

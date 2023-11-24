@@ -20,6 +20,7 @@ from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
 from snapshotter.utils.redis.rate_limiter import load_rate_limiter_scripts
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
+from snapshotter.utils.redis.redis_keys import epoch_id_to_state_specific_project_count
 from snapshotter.utils.redis.redis_keys import snapshot_submission_window_key
 from snapshotter.utils.redis.redis_keys import submitted_base_snapshots_key
 
@@ -115,8 +116,8 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 # block time is about 2 seconds on anchor chain, keeping it around ten times the submission window
                 ex=self._submission_window * 10 * 2,
             )
-
-            await self._redis_conn.hset(
+            p = self._redis_conn.pipeline()
+            p.hset(
                 name=epoch_id_project_to_state_mapping(
                     epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
                 ),
@@ -126,7 +127,21 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                     ).json(),
                 },
             )
-
+            p.incr(
+                amount=1,
+                name=epoch_id_to_state_specific_project_count(
+                    epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
+                ),
+            )
+            p.expire(
+                name=epoch_id_to_state_specific_project_count(
+                    epoch_id=msg_obj.epochId,
+                    state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
+                ),
+                time=self._source_chain_block_time * self._epoch_size * 10,
+                nx=True,
+            )
+            await p.execute()
             await self._commit_payload(
                 task_type=task_type,
                 _ipfs_writer_client=self._ipfs_writer_client,
@@ -154,7 +169,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 return
 
             # No transformation lambdas in bulk mode for now.
-            # Planning to depricate transformation lambdas in future.
+            # Planning to deprecate transformation lambdas in future.
             # if task_processor.transformation_lambdas:
             #     for each_lambda in task_processor.transformation_lambdas:
             #         snapshot = each_lambda(snapshot, msg_obj.data_source, msg_obj.begin, msg_obj.end)
@@ -212,8 +227,8 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                     # block time is about 2 seconds on anchor chain, keeping it around ten times the submission window
                     ex=self._submission_window * 10 * 2,
                 )
-
-                await self._redis_conn.hset(
+                p = self._redis_conn.pipeline()
+                p.hset(
                     name=epoch_id_project_to_state_mapping(
                         epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
                     ),
@@ -223,6 +238,21 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                         ).json(),
                     },
                 )
+                p.incr(
+                    amount=len(snapshots),
+                    name=epoch_id_to_state_specific_project_count(
+                        epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
+                    ),
+                )
+                p.expire(
+                    name=epoch_id_to_state_specific_project_count(
+                        epoch_id=msg_obj.epochId,
+                        state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
+                    ),
+                    time=self._source_chain_block_time * self._epoch_size * 10,
+                    nx=True,
+                )
+                await p.execute()
                 await self._commit_payload(
                     task_type=task_type,
                     _ipfs_writer_client=self._ipfs_writer_client,
