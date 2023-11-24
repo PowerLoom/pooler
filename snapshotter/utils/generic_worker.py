@@ -356,10 +356,11 @@ class GenericAsyncWorker(multiprocessing.Process):
             address=Web3.toChecksumAddress(
                 self.protocol_state_contract_address,
             ),
-            abi=self.protocol_state_contract_abi,
+            abi=read_json_file(
+                settings.protocol_state.abi,
+                self._logger,
+            ),
         )
-        # cleaning up ABI
-        self.protocol_state_contract_abi = None
 
     async def _init_httpx_client(self):
         self._async_transport = AsyncHTTPTransport(
@@ -407,7 +408,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             self._logger.debug('Set source chain block time to {}', self._source_chain_block_time)
         try:
             epoch_size = await self._anchor_rpc_helper.web3_call(
-                [self._protocol_state_contract.functions.EPOCH_SIZE().call()],
+                [self._protocol_state_contract.functions.EPOCH_SIZE()],
                 redis_conn=self._redis_conn,
             )
         except Exception as e:
@@ -429,10 +430,6 @@ class GenericAsyncWorker(multiprocessing.Process):
 
     def run(self) -> None:
         self._logger = logger.bind(module=self.name)
-        self.protocol_state_contract_abi = read_json_file(
-            settings.protocol_state.abi,
-            self._logger,
-        )
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         resource.setrlimit(
             resource.RLIMIT_NOFILE,
