@@ -9,7 +9,7 @@ on:
   release:
     types: ['published']
   push:
-    branches: [ "dockerify", "testnet_pretask", "testnet_5_pairs", "zkevm_quests", "eth_uniswapv2"]
+    branches: [ "dockerify", "testnet_pretask", "testnet_5_pairs", "zkevm_quests", "eth_uniswapv2", "eth_uniswapv2_lite"]
     # Publish semver tags as releases.
     tags: [ 'v*.*.*' ]
   pull_request:
