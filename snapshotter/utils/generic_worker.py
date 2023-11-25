@@ -111,16 +111,11 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
         self._running_callback_tasks: Dict[str, asyncio.Task] = dict()
         super(GenericAsyncWorker, self).__init__(name=name, **kwargs)
-        self._logger = logger.bind(module=self.name)
-        self.protocol_state_contract = None
-        self._qos = 20
+        self._protocol_state_contract = None
+        self._qos = 1
 
         self._rate_limiting_lua_scripts = None
 
-        self.protocol_state_contract_abi = read_json_file(
-            settings.protocol_state.abi,
-            self._logger,
-        )
         self.protocol_state_contract_address = settings.protocol_state.address
         self._commit_payload_exchange = (
             f'{settings.rabbitmq.setup.commit_payload.exchange}:{settings.namespace}'
@@ -371,7 +366,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             source_chain_details = await get_source_chain_id(
                 redis_conn=self._redis_conn,
                 rpc_helper=self._anchor_rpc_helper,
-                state_contract_obj=self.protocol_state_contract,
+                state_contract_obj=self._protocol_state_contract,
             )
         except Exception as e:
             self._logger.opt(exception=True).error(
@@ -461,14 +456,15 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._rpc_helper = RpcHelper(rpc_settings=settings.rpc)
         self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
 
-        self.protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
+        self._protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
             address=Web3.toChecksumAddress(
                 self.protocol_state_contract_address,
             ),
-            abi=self.protocol_state_contract_abi,
+            abi=read_json_file(
+                settings.protocol_state.abi,
+                self._logger,
+            ),
         )
-        # cleaning up ABI
-        self.protocol_state_contract_abi = None
 
     async def _init_httpx_client(self):
         """
@@ -500,6 +496,37 @@ class GenericAsyncWorker(multiprocessing.Process):
             headers={'Authorization': 'Bearer ' + settings.web3storage.api_token},
         )
 
+    async def _init_protocol_meta(self):
+        # TODO: combine these into a single call
+        try:
+            source_block_time = await self._anchor_rpc_helper.web3_call(
+                [self._protocol_state_contract.functions.SOURCE_CHAIN_BLOCK_TIME()],
+                redis_conn=self._redis_conn,
+            )
+            # source_block_time = self._protocol_state_contract.functions.SOURCE_CHAIN_BLOCK_TIME().call()
+        except Exception as e:
+            self._logger.exception(
+                'Exception in querying protocol state for source chain block time: {}',
+                e,
+            )
+        else:
+            source_block_time = source_block_time[0]
+            self._source_chain_block_time = source_block_time / 10 ** 4
+            self._logger.debug('Set source chain block time to {}', self._source_chain_block_time)
+        try:
+            epoch_size = await self._anchor_rpc_helper.web3_call(
+                [self._protocol_state_contract.functions.EPOCH_SIZE()],
+                redis_conn=self._redis_conn,
+            )
+        except Exception as e:
+            self._logger.exception(
+                'Exception in querying protocol state for epoch size: {}',
+                e,
+            )
+        else:
+            self._epoch_size = epoch_size[0]
+            self._logger.debug('Set epoch size to {}', self._epoch_size)
+
     async def init(self):
         """
         Initializes the worker by initializing the Redis pool, HTTPX client, and RPC helper.
@@ -508,6 +535,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             await self._init_redis_pool()
             await self._init_httpx_client()
             await self._init_rpc_helper()
+            await self._init_protocol_meta()
         self._initialized = True
 
     def run(self) -> None:
@@ -515,6 +543,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         Runs the worker by setting resource limits, registering signal handlers, starting the RabbitMQ consumer, and
         running the event loop until it is stopped.
         """
+        self._logger = logger.bind(module=self.name)
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         resource.setrlimit(
             resource.RLIMIT_NOFILE,

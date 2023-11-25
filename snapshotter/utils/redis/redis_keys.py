@@ -104,9 +104,21 @@ def epoch_id_project_to_state_mapping(epoch_id, state_id):
     return f'epochID:{epoch_id}:stateID:{state_id}:processingStatus'
 
 
+def last_snapshot_processing_complete_timestamp_key():
+    return f'lastSnapshotProcessingCompleteTimestamp:{settings.namespace}'
+
+
+def last_epoch_detected_timestamp_key():
+    return f'lastEpochDetectedTimestamp:{settings.namespace}'
+
+
 def submitted_base_snapshots_key(epoch_id, project_id):
     return f'submittedBaseSnapshots:{epoch_id}:{project_id}'
 
 
 def submitted_unfinalized_snapshot_cids(project_id):
     return f'projectID:{project_id}:unfinalizedSnapshots'
+
+
+def process_hub_core_start_timestamp():
+    return f'processHubCoreStartTimestamp:{settings.namespace}'

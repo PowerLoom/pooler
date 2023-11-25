@@ -20,6 +20,7 @@ from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
 from snapshotter.utils.redis.rate_limiter import load_rate_limiter_scripts
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
+from snapshotter.utils.redis.redis_keys import last_snapshot_processing_complete_timestamp_key
 from snapshotter.utils.redis.redis_keys import snapshot_submission_window_key
 from snapshotter.utils.redis.redis_keys import submitted_base_snapshots_key
 
@@ -102,14 +103,13 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 self._logger.debug(
                     'No snapshot data for: {}, skipping...', msg_obj,
                 )
-                return
 
-            if task_processor.transformation_lambdas:
+            if task_processor.transformation_lambdas and snapshot:
                 for each_lambda in task_processor.transformation_lambdas:
                     snapshot = each_lambda(snapshot, msg_obj.data_source, msg_obj.begin, msg_obj.end)
 
         except Exception as e:
-            self._logger.opt(exception=True).error(
+            self._logger.opt(exception=settings.logs.trace_enabled).error(
                 'Exception processing callback for epoch: {}, Error: {},'
                 'sending failure notifications', msg_obj, e,
             )
@@ -146,8 +146,8 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 # block time is about 2 seconds on anchor chain, keeping it around ten times the submission window
                 ex=self._submission_window * 10 * 2,
             )
-
-            await self._redis_conn.hset(
+            p = self._redis_conn.pipeline()
+            p.hset(
                 name=epoch_id_project_to_state_mapping(
                     epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
                 ),
@@ -158,6 +158,18 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 },
             )
 
+            await self._redis_conn.set(
+                name=last_snapshot_processing_complete_timestamp_key(),
+                value=int(time.time()),
+            )
+
+            if not snapshot:
+                self._logger.debug(
+                    'No snapshot data for: {}, skipping...', msg_obj,
+                )
+                return
+
+            await p.execute()
             await self._commit_payload(
                 task_type=task_type,
                 _ipfs_writer_client=self._ipfs_writer_client,
@@ -194,10 +206,9 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 self._logger.debug(
                     'No snapshot data for: {}, skipping...', msg_obj,
                 )
-                return
 
             # No transformation lambdas in bulk mode for now.
-            # Planning to depricate transformation lambdas in future.
+            # Planning to deprecate transformation lambdas in future.
             # if task_processor.transformation_lambdas:
             #     for each_lambda in task_processor.transformation_lambdas:
             #         snapshot = each_lambda(snapshot, msg_obj.data_source, msg_obj.begin, msg_obj.end)
@@ -233,6 +244,17 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             )
         else:
 
+            await self._redis_conn.set(
+                name=last_snapshot_processing_complete_timestamp_key(),
+                value=int(time.time()),
+            )
+
+            if not snapshots:
+                self._logger.debug(
+                    'No snapshot data for: {}, skipping...', msg_obj,
+                )
+                return
+
             self._logger.info('Sending snapshots to commit service: {}', snapshots)
 
             for project_data_source, snapshot in snapshots:
@@ -255,8 +277,8 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                     # block time is about 2 seconds on anchor chain, keeping it around ten times the submission window
                     ex=self._submission_window * 10 * 2,
                 )
-
-                await self._redis_conn.hset(
+                p = self._redis_conn.pipeline()
+                p.hset(
                     name=epoch_id_project_to_state_mapping(
                         epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
                     ),
@@ -266,6 +288,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                         ).json(),
                     },
                 )
+                await p.execute()
                 await self._commit_payload(
                     task_type=task_type,
                     _ipfs_writer_client=self._ipfs_writer_client,
