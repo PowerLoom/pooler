@@ -104,11 +104,12 @@ def epoch_id_project_to_state_mapping(epoch_id, state_id):
     return f'epochID:{epoch_id}:stateID:{state_id}:processingStatus'
 
 
-# used to keep track of the number of projects in a given state for a given epoch
-# during bulk processing, there might be no projects to snapshot against in a given epoch
-# determines the current epoch as a valid epoch to be considered for health check on the status of epoch processing
-def epoch_id_to_state_specific_project_count(epoch_id, state_id):
-    return f'epochID:{epoch_id}:stateID:{state_id}:projectCount'
+def last_snapshot_processing_complete_timestamp_key():
+    return f'lastSnapshotProcessingCompleteTimestamp:{settings.namespace}'
+
+
+def last_epoch_detected_timestamp_key():
+    return f'lastEpochDetectedTimestamp:{settings.namespace}'
 
 
 def submitted_base_snapshots_key(epoch_id, project_id):
