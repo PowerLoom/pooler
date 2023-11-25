@@ -436,11 +436,11 @@ class ProcessorDistributor(multiprocessing.Process):
             await self._send_proc_hub_respawn()
 
         # if time difference between last epoch detected and last snapshot processed
-        # is more than 10 epochs, report unhealthy and send respawn command
+        # is more than 30 epochs, report unhealthy and send respawn command
         if last_epoch_detected and last_snapshot_processed and \
-                last_epoch_detected - last_snapshot_processed > 10 * self._source_chain_block_time * self._epoch_size:
+                last_epoch_detected - last_snapshot_processed > 30 * self._source_chain_block_time * self._epoch_size:
             self._logger.debug(
-                'Sending unhealthy epoch report to reporting service due to no snapshot processing for ~10 epochs',
+                'Sending unhealthy epoch report to reporting service due to no snapshot processing for ~30 epochs',
             )
             await send_failure_notifications_async(
                 client=self._client,
@@ -459,7 +459,7 @@ class ProcessorDistributor(multiprocessing.Process):
                 ),
             )
             self._logger.info(
-                'Sending respawn command for all process hub core children because no snapshot processing was done for ~10 epochs',
+                'Sending respawn command for all process hub core children because no snapshot processing was done for ~30 epochs',
             )
             await self._send_proc_hub_respawn()
 
