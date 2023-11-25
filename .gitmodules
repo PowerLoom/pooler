@@ -1,6 +1,6 @@
 [submodule "config"]
 	path = config
 	url = https://github.com/PowerLoom/snapshotter-configs/
-[submodule "snapshotter/modules/boost"]
-	path = snapshotter/modules/boost
+[submodule "snapshotter/modules/computes"]
+	path = snapshotter/modules/computes
 	url = https://github.com/PowerLoom/snapshotter-computes/
