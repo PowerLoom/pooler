@@ -9,7 +9,7 @@ on:
   release:
     types: ['published']
   push:
-    branches: [ "dockerify", "testnet_pretask", "testnet_5_pairs" ]
+    branches: [ "dockerify", "testnet_pretask", "testnet_5_pairs", "zkevm_quests" ]
     # Publish semver tags as releases.
     tags: [ 'v*.*.*' ]
   pull_request:
@@ -37,6 +37,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+        with:
+          submodules: recursive
 
       # Install the cosign tool except on PR
       # https://github.com/sigstore/cosign-installer
