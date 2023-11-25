@@ -374,6 +374,7 @@
 </li>
 <li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.models.html#snapshotter.utils.models.data_models.SnapshotterReportState"><code class="docutils literal notranslate"><span class="pre">SnapshotterReportState</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.models.html#snapshotter.utils.models.data_models.SnapshotterReportState.CRASHED_CHILD_WORKER"><code class="docutils literal notranslate"><span class="pre">SnapshotterReportState.CRASHED_CHILD_WORKER</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.models.html#snapshotter.utils.models.data_models.SnapshotterReportState.CRASHED_REPORTER_THREAD"><code class="docutils literal notranslate"><span class="pre">SnapshotterReportState.CRASHED_REPORTER_THREAD</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.models.html#snapshotter.utils.models.data_models.SnapshotterReportState.MISSED_SNAPSHOT"><code class="docutils literal notranslate"><span class="pre">SnapshotterReportState.MISSED_SNAPSHOT</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.models.html#snapshotter.utils.models.data_models.SnapshotterReportState.SHUTDOWN_INITIATED"><code class="docutils literal notranslate"><span class="pre">SnapshotterReportState.SHUTDOWN_INITIATED</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.models.html#snapshotter.utils.models.data_models.SnapshotterReportState.SUBMITTED_INCORRECT_SNAPSHOT"><code class="docutils literal notranslate"><span class="pre">SnapshotterReportState.SUBMITTED_INCORRECT_SNAPSHOT</span></code></a></li>
@@ -859,12 +860,16 @@
 <li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.redis.html#snapshotter.utils.redis.redis_conn.provide_async_redis_conn"><code class="docutils literal notranslate"><span class="pre">provide_async_redis_conn()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.redis.html#snapshotter.utils.redis.redis_conn.provide_async_redis_conn_insta"><code class="docutils literal notranslate"><span class="pre">provide_async_redis_conn_insta()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.redis.html#snapshotter.utils.redis.redis_conn.provide_redis_conn"><code class="docutils literal notranslate"><span class="pre">provide_redis_conn()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.redis.html#snapshotter.utils.redis.redis_conn.provide_redis_conn_repsawning_thread"><code class="docutils literal notranslate"><span class="pre">provide_redis_conn_repsawning_thread()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="snapshotter.utils.redis.html#module-snapshotter.utils.redis.redis_keys">snapshotter.utils.redis.redis_keys</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.redis.html#snapshotter.utils.redis.redis_keys.epoch_id_epoch_released_key"><code class="docutils literal notranslate"><span class="pre">epoch_id_epoch_released_key()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.redis.html#snapshotter.utils.redis.redis_keys.epoch_id_project_to_state_mapping"><code class="docutils literal notranslate"><span class="pre">epoch_id_project_to_state_mapping()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.redis.html#snapshotter.utils.redis.redis_keys.epoch_txs_htable"><code class="docutils literal notranslate"><span class="pre">epoch_txs_htable()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.redis.html#snapshotter.utils.redis.redis_keys.last_epoch_detected_timestamp_key"><code class="docutils literal notranslate"><span class="pre">last_epoch_detected_timestamp_key()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.redis.html#snapshotter.utils.redis.redis_keys.last_snapshot_processing_complete_timestamp_key"><code class="docutils literal notranslate"><span class="pre">last_snapshot_processing_complete_timestamp_key()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.redis.html#snapshotter.utils.redis.redis_keys.process_hub_core_start_timestamp"><code class="docutils literal notranslate"><span class="pre">process_hub_core_start_timestamp()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.redis.html#snapshotter.utils.redis.redis_keys.project_finalized_data_zset"><code class="docutils literal notranslate"><span class="pre">project_finalized_data_zset()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.redis.html#snapshotter.utils.redis.redis_keys.project_first_epoch_hmap"><code class="docutils literal notranslate"><span class="pre">project_first_epoch_hmap()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.redis.html#snapshotter.utils.redis.redis_keys.project_incorrect_snapshot_submissions_suffix"><code class="docutils literal notranslate"><span class="pre">project_incorrect_snapshot_submissions_suffix()</span></code></a></li>
@@ -1888,6 +1893,11 @@ storage_flag (bool): Whether to upload the snapshot to web3 storage.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.utils.generic_worker.GenericAsyncWorker._init_protocol_meta">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_init_protocol_meta</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/utils/generic_worker.html#GenericAsyncWorker._init_protocol_meta"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.utils.generic_worker.GenericAsyncWorker._init_protocol_meta" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="snapshotter.utils.generic_worker.GenericAsyncWorker._init_redis_pool">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_init_redis_pool</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/utils/generic_worker.html#GenericAsyncWorker._init_redis_pool"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.utils.generic_worker.GenericAsyncWorker._init_redis_pool" title="Permalink to this definition"></a></dt>
 <dd><p>Initializes the Redis connection pool and sets the <cite>_redis_conn</cite> attribute to the created connection pool.</p>
@@ -2791,11 +2801,6 @@ first message to be sent to RabbitMQ</p>
 <dt class="sig sig-object py" id="snapshotter.utils.rpc.RpcHelper">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">snapshotter.utils.rpc.</span></span><span class="sig-name descname"><span class="pre">RpcHelper</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rpc_settings</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="snapshotter.utils.models.html#snapshotter.utils.models.settings_model.RPCConfigBase" title="snapshotter.utils.models.settings_model.RPCConfigBase"><span class="pre">RPCConfigBase</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">RPCConfigFull(full_nodes=[RPCNodeConfig(url='https://rpc-url',</span> <span class="pre">rate_limit='100000000/day;20000/minute;1000/second')],</span> <span class="pre">archive_nodes=[],</span> <span class="pre">force_archive_blocks=100,</span> <span class="pre">retry=5,</span> <span class="pre">request_time_out=5,</span> <span class="pre">connection_limits=ConnectionLimits(max_connections=100,</span> <span class="pre">max_keepalive_connections=50,</span> <span class="pre">keepalive_expiry=300),</span> <span class="pre">skip_epoch_threshold_blocks=30,</span> <span class="pre">polling_interval=10)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">archive_mode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/utils/rpc.html#RpcHelper"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.utils.rpc.RpcHelper" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="snapshotter.utils.rpc.RpcHelper._aiohttp_tcp_connector">
-<span class="sig-name descname"><span class="pre">_aiohttp_tcp_connector</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">TCPConnector</span></em><a class="headerlink" href="#snapshotter.utils.rpc.RpcHelper._aiohttp_tcp_connector" title="Permalink to this definition"></a></dt>
-<dd></dd></dl>
-
 <dl class="py method">
 <dt class="sig sig-object py" id="snapshotter.utils.rpc.RpcHelper._async_web3_call">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_async_web3_call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">contract_function</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">redis_conn</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">from_address</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/utils/rpc.html#RpcHelper._async_web3_call"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.utils.rpc.RpcHelper._async_web3_call" title="Permalink to this definition"></a></dt>
@@ -2875,11 +2880,6 @@ It updates the node index to retry the RPC call on the next node.</p>
 </dd>
 </dl>
 </dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="snapshotter.utils.rpc.RpcHelper._web3_aiohttp_client">
-<span class="sig-name descname"><span class="pre">_web3_aiohttp_client</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClientSession</span></em><a class="headerlink" href="#snapshotter.utils.rpc.RpcHelper._web3_aiohttp_client" title="Permalink to this definition"></a></dt>
-<dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="snapshotter.utils.rpc.RpcHelper.batch_eth_call_on_block_range">

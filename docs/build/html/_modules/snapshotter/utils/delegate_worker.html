@@ -154,8 +154,8 @@
                 <span class="n">response_msg</span><span class="o">=</span><span class="n">result</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
-                <span class="s1">&#39;Exception while processing tx receipt fetch for </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">msg_obj</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">logs</span><span class="o">.</span><span class="n">trace_enabled</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                <span class="s1">&#39;Exception while processing tx receipt fetch for </span><span class="si">{}</span><span class="s1">: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">msg_obj</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span>
             <span class="p">)</span>
 
             <span class="n">notification_message</span> <span class="o">=</span> <span class="n">DelegateTaskProcessorIssue</span><span class="p">(</span>
@@ -212,7 +212,7 @@
                 <span class="p">)</span>
 
         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">logs</span><span class="o">.</span><span class="n">trace_enabled</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
                 <span class="p">(</span>
                     <span class="s1">&#39;Exception sending message to delegate :&#39;</span>
                     <span class="s1">&#39; </span><span class="si">{}</span><span class="s1"> | dump: </span><span class="si">{}</span><span class="s1">&#39;</span>

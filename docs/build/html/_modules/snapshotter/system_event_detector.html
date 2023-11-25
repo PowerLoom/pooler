@@ -97,6 +97,7 @@
 <span class="kn">from</span> <span class="nn">snapshotter.utils.rabbitmq_helpers</span> <span class="kn">import</span> <span class="n">RabbitmqThreadedSelectLoopInteractor</span>
 <span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_conn</span> <span class="kn">import</span> <span class="n">RedisPoolCache</span>
 <span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">event_detector_last_processed_block</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">last_epoch_detected_timestamp_key</span>
 <span class="kn">from</span> <span class="nn">snapshotter.utils.rpc</span> <span class="kn">import</span> <span class="n">get_event_sig_and_abi</span>
 <span class="kn">from</span> <span class="nn">snapshotter.utils.rpc</span> <span class="kn">import</span> <span class="n">RpcHelper</span>
 
@@ -266,6 +267,7 @@
         <span class="p">)</span>
 
         <span class="n">events</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">new_epoch_detected</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="k">for</span> <span class="n">log</span> <span class="ow">in</span> <span class="n">events_log</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">log</span><span class="o">.</span><span class="n">event</span> <span class="o">==</span> <span class="s1">&#39;EpochReleased&#39;</span><span class="p">:</span>
                 <span class="n">event</span> <span class="o">=</span> <span class="n">EpochReleasedEvent</span><span class="p">(</span>
@@ -274,6 +276,7 @@
                     <span class="n">epochId</span><span class="o">=</span><span class="n">log</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">epochId</span><span class="p">,</span>
                     <span class="n">timestamp</span><span class="o">=</span><span class="n">log</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">timestamp</span><span class="p">,</span>
                 <span class="p">)</span>
+                <span class="n">new_epoch_detected</span> <span class="o">=</span> <span class="kc">True</span>
                 <span class="n">events</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">log</span><span class="o">.</span><span class="n">event</span><span class="p">,</span> <span class="n">event</span><span class="p">))</span>
 
             <span class="k">elif</span> <span class="n">log</span><span class="o">.</span><span class="n">event</span> <span class="o">==</span> <span class="s1">&#39;SnapshotFinalized&#39;</span><span class="p">:</span>
@@ -300,6 +303,12 @@
                     <span class="n">timestamp</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()),</span>
                 <span class="p">)</span>
                 <span class="n">events</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">log</span><span class="o">.</span><span class="n">event</span><span class="p">,</span> <span class="n">event</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="n">new_epoch_detected</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                <span class="n">last_epoch_detected_timestamp_key</span><span class="p">(),</span>
+                <span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()),</span>
+            <span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Events: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">events</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">events</span></div>

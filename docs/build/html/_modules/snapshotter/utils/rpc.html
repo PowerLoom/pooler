@@ -77,9 +77,6 @@
 
 <span class="kn">import</span> <span class="nn">eth_abi</span>
 <span class="kn">import</span> <span class="nn">tenacity</span>
-<span class="kn">from</span> <span class="nn">aiohttp</span> <span class="kn">import</span> <span class="n">ClientSession</span>
-<span class="kn">from</span> <span class="nn">aiohttp</span> <span class="kn">import</span> <span class="n">ClientTimeout</span>
-<span class="kn">from</span> <span class="nn">aiohttp</span> <span class="kn">import</span> <span class="n">TCPConnector</span>
 <span class="kn">from</span> <span class="nn">async_limits</span> <span class="kn">import</span> <span class="n">parse_many</span> <span class="k">as</span> <span class="n">limit_parse_many</span>
 <span class="kn">from</span> <span class="nn">eth_abi.codec</span> <span class="kn">import</span> <span class="n">ABICodec</span>
 <span class="kn">from</span> <span class="nn">eth_utils</span> <span class="kn">import</span> <span class="n">keccak</span>
@@ -182,8 +179,6 @@
 
 
 <div class="viewcode-block" id="RpcHelper"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper">[docs]</a><span class="k">class</span> <span class="nc">RpcHelper</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
-    <span class="n">_aiohttp_tcp_connector</span><span class="p">:</span> <span class="n">TCPConnector</span>
-    <span class="n">_web3_aiohttp_client</span><span class="p">:</span> <span class="n">ClientSession</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rpc_settings</span><span class="p">:</span> <span class="n">RPCConfigBase</span> <span class="o">=</span> <span class="n">settings</span><span class="o">.</span><span class="n">rpc</span><span class="p">,</span> <span class="n">archive_mode</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -205,8 +200,6 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_client</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_async_transport</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_rate_limit_lua_script_shas</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_aiohttp_tcp_connector</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_web3_aiohttp_client</span> <span class="o">=</span> <span class="kc">None</span>
 
 <div class="viewcode-block" id="RpcHelper._load_rate_limit_shas"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper._load_rate_limit_shas">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_load_rate_limit_shas</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">redis_conn</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -246,16 +239,6 @@
             <span class="n">timeout</span><span class="o">=</span><span class="n">Timeout</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">),</span>
             <span class="n">follow_redirects</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
             <span class="n">transport</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_async_transport</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_aiohttp_tcp_connector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_aiohttp_tcp_connector</span> <span class="o">=</span> <span class="n">TCPConnector</span><span class="p">(</span>
-            <span class="n">keepalive_timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rpc_settings</span><span class="o">.</span><span class="n">connection_limits</span><span class="o">.</span><span class="n">keepalive_expiry</span><span class="p">,</span>
-            <span class="n">limit</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_web3_aiohttp_client</span> <span class="o">=</span> <span class="n">ClientSession</span><span class="p">(</span>
-            <span class="n">connector</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_aiohttp_tcp_connector</span><span class="p">,</span>
-            <span class="n">timeout</span><span class="o">=</span><span class="n">ClientTimeout</span><span class="p">(</span><span class="n">total</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rpc_settings</span><span class="o">.</span><span class="n">request_time_out</span><span class="p">),</span>
         <span class="p">)</span></div>
 
 <div class="viewcode-block" id="RpcHelper._load_async_web3_providers"><a class="viewcode-back" href="../../../snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper._load_async_web3_providers">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">_load_async_web3_providers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -313,8 +296,7 @@
                     <span class="p">},</span>
                 <span class="p">)</span>
             <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-
-                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">logs</span><span class="o">.</span><span class="n">trace_enabled</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
                     <span class="p">(</span>
                         <span class="s1">&#39;Error while initialising one of the web3 providers,&#39;</span>
                         <span class="sa">f</span><span class="s1">&#39; err_msg: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s1">&#39;</span>
@@ -529,8 +511,7 @@
                     <span class="n">underlying_exception</span><span class="o">=</span><span class="n">e</span><span class="p">,</span>
                     <span class="n">extra_info</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;msg&#39;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)},</span>
                 <span class="p">)</span>
-
-                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">logs</span><span class="o">.</span><span class="n">trace_enabled</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
                     <span class="p">(</span>
                         <span class="s1">&#39;Error while making web3 batch call&#39;</span>
                     <span class="p">),</span>

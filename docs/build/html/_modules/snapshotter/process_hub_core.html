@@ -70,14 +70,12 @@
 
   <h1>Source code for snapshotter.process_hub_core</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">json</span>
-<span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">resource</span>
 <span class="kn">import</span> <span class="nn">threading</span>
 <span class="kn">import</span> <span class="nn">time</span>
 <span class="kn">import</span> <span class="nn">uuid</span>
 <span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span>
 <span class="kn">from</span> <span class="nn">multiprocessing</span> <span class="kn">import</span> <span class="n">Process</span>
-<span class="kn">from</span> <span class="nn">re</span> <span class="kn">import</span> <span class="n">S</span>
 <span class="kn">from</span> <span class="nn">signal</span> <span class="kn">import</span> <span class="n">SIGCHLD</span>
 <span class="kn">from</span> <span class="nn">signal</span> <span class="kn">import</span> <span class="n">SIGINT</span>
 <span class="kn">from</span> <span class="nn">signal</span> <span class="kn">import</span> <span class="n">signal</span>
@@ -92,7 +90,6 @@
 <span class="kn">import</span> <span class="nn">psutil</span>
 <span class="kn">import</span> <span class="nn">pydantic</span>
 <span class="kn">import</span> <span class="nn">redis</span>
-<span class="kn">from</span> <span class="nn">distutils</span> <span class="kn">import</span> <span class="n">core</span>
 <span class="kn">from</span> <span class="nn">eth_utils.address</span> <span class="kn">import</span> <span class="n">to_checksum_address</span>
 
 <span class="kn">from</span> <span class="nn">snapshotter.processor_distributor</span> <span class="kn">import</span> <span class="n">ProcessorDistributor</span>
@@ -106,18 +103,16 @@
 <span class="kn">from</span> <span class="nn">snapshotter.utils.file_utils</span> <span class="kn">import</span> <span class="n">read_json_file</span>
 <span class="kn">from</span> <span class="nn">snapshotter.utils.helper_functions</span> <span class="kn">import</span> <span class="n">cleanup_proc_hub_children</span>
 <span class="kn">from</span> <span class="nn">snapshotter.utils.models.data_models</span> <span class="kn">import</span> <span class="n">ProcessorWorkerDetails</span>
-<span class="kn">from</span> <span class="nn">snapshotter.utils.models.data_models</span> <span class="kn">import</span> <span class="n">SnapshotterEpochProcessingReportItem</span>
 <span class="kn">from</span> <span class="nn">snapshotter.utils.models.data_models</span> <span class="kn">import</span> <span class="n">SnapshotterIssue</span>
 <span class="kn">from</span> <span class="nn">snapshotter.utils.models.data_models</span> <span class="kn">import</span> <span class="n">SnapshotterPing</span>
 <span class="kn">from</span> <span class="nn">snapshotter.utils.models.data_models</span> <span class="kn">import</span> <span class="n">SnapshotterReportState</span>
-<span class="kn">from</span> <span class="nn">snapshotter.utils.models.data_models</span> <span class="kn">import</span> <span class="n">SnapshotterStates</span>
-<span class="kn">from</span> <span class="nn">snapshotter.utils.models.data_models</span> <span class="kn">import</span> <span class="n">SnapshotterStateUpdate</span>
 <span class="kn">from</span> <span class="nn">snapshotter.utils.models.message_models</span> <span class="kn">import</span> <span class="n">ProcessHubCommand</span>
 <span class="kn">from</span> <span class="nn">snapshotter.utils.rabbitmq_helpers</span> <span class="kn">import</span> <span class="n">RabbitmqSelectLoopInteractor</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_conn</span> <span class="kn">import</span> <span class="n">provide_async_redis_conn</span>
 <span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_conn</span> <span class="kn">import</span> <span class="n">provide_redis_conn</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_conn</span> <span class="kn">import</span> <span class="n">provide_redis_conn_repsawning_thread</span>
 <span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_conn</span> <span class="kn">import</span> <span class="n">REDIS_CONN_CONF</span>
-<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">epoch_id_epoch_released_key</span>
-<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">epoch_id_project_to_state_mapping</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">process_hub_core_start_timestamp</span>
 <span class="kn">from</span> <span class="nn">snapshotter.utils.rpc</span> <span class="kn">import</span> <span class="n">RpcHelper</span>
 <span class="kn">from</span> <span class="nn">snapshotter.utils.snapshot_worker</span> <span class="kn">import</span> <span class="n">SnapshotAsyncWorker</span>
 
@@ -163,8 +158,6 @@
             <span class="p">),</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_last_reporting_service_ping</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_last_epoch_processing_health_check</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_start_time</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_source_chain_block_time</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_epoch_size</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_thread_shutdown_event</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
@@ -230,13 +223,16 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;Process ID </span><span class="si">{}</span><span class="s1"> joined...&#39;</span><span class="p">,</span> <span class="n">pid</span><span class="p">)</span>
                 <span class="k">break</span></div>
 
-<div class="viewcode-block" id="ProcessHubCore.internal_state_reporter"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.process_hub_core.ProcessHubCore.internal_state_reporter">[docs]</a>    <span class="nd">@provide_redis_conn</span>
+<div class="viewcode-block" id="ProcessHubCore.internal_state_reporter"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.process_hub_core.ProcessHubCore.internal_state_reporter">[docs]</a>    <span class="nd">@provide_redis_conn_repsawning_thread</span>
     <span class="k">def</span> <span class="nf">internal_state_reporter</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">redis_conn</span><span class="p">:</span> <span class="n">redis</span><span class="o">.</span><span class="n">Redis</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        This method reports the internal state of the process hub core to Redis and pings the reporting service.</span>
-<span class="sd">        It also performs a health check on epoch processing and sends a failure notification if necessary.</span>
+<span class="sd">        Internal state reporter function that periodically reports the state of spawned processes to Redis</span>
+<span class="sd">        and pings a reporting service.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            redis_conn (redis.Redis, optional): Redis connection object. Defaults to None.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_thread_shutdown_event</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mi">2</span><span class="p">):</span>
+        <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_thread_shutdown_event</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
             <span class="n">proc_id_map</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
             <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_spawned_processes_map</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
                 <span class="k">if</span> <span class="n">v</span><span class="p">:</span>
@@ -284,125 +280,6 @@
                         <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
                             <span class="s1">&#39;Error while pinging reporting service: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span>
                         <span class="p">)</span>
-            <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">())</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_last_epoch_processing_health_check</span> <span class="o">&gt;=</span> <span class="mi">60</span><span class="p">:</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_source_chain_block_time</span> <span class="o">!=</span> <span class="mi">0</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_epoch_size</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
-                    <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">())</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_start_time</span> <span class="o">&lt;=</span> <span class="mi">4</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_source_chain_block_time</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_epoch_size</span><span class="p">:</span>
-                        <span class="c1"># self._logger.info(</span>
-                        <span class="c1">#     &#39;Skipping epoch processing health check because &#39;</span>
-                        <span class="c1">#     &#39;not enough time has passed for 4 epochs to consider health check since process start | &#39;</span>
-                        <span class="c1">#     &#39;Start time: {} | Currentime: {} | Source chain block time: {}&#39;,</span>
-                        <span class="c1">#     datetime.fromtimestamp(self._start_time).isoformat(),</span>
-                        <span class="c1">#     datetime.now().isoformat(),</span>
-                        <span class="c1">#     self._source_chain_block_time,</span>
-                        <span class="c1"># )</span>
-                        <span class="k">continue</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-                        <span class="s1">&#39;Skipping epoch processing health check because source chain block time or epoch size is not known | &#39;</span>
-                        <span class="s1">&#39;Source chain block time: </span><span class="si">{}</span><span class="s1"> | Epoch size: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">_source_chain_block_time</span><span class="p">,</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">_epoch_size</span><span class="p">,</span>
-                    <span class="p">)</span>
-                    <span class="k">continue</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_last_epoch_processing_health_check</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">())</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                    <span class="s1">&#39;Continuing with epoch processing health check since 4 or more epochs have passed since process start&#39;</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="c1"># check for epoch processing status</span>
-                <span class="k">try</span><span class="p">:</span>
-                    <span class="n">current_epoch_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_protocol_state_contract</span><span class="o">.</span><span class="n">functions</span><span class="o">.</span><span class="n">currentEpoch</span><span class="p">()</span><span class="o">.</span><span class="n">call</span><span class="p">()</span>
-                    <span class="n">current_epoch</span> <span class="o">=</span> <span class="p">{</span>
-                        <span class="s1">&#39;begin&#39;</span><span class="p">:</span> <span class="n">current_epoch_data</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
-                        <span class="s1">&#39;end&#39;</span><span class="p">:</span> <span class="n">current_epoch_data</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
-                        <span class="s1">&#39;epochId&#39;</span><span class="p">:</span> <span class="n">current_epoch_data</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
-                    <span class="p">}</span>
-
-                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span>
-                        <span class="s1">&#39;Exception in get_current_epoch&#39;</span><span class="p">,</span>
-                        <span class="n">e</span><span class="o">=</span><span class="n">e</span><span class="p">,</span>
-                    <span class="p">)</span>
-                    <span class="k">continue</span>
-                <span class="n">current_epoch_id</span> <span class="o">=</span> <span class="n">current_epoch</span><span class="p">[</span><span class="s1">&#39;epochId&#39;</span><span class="p">]</span>
-                <span class="n">epoch_health</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
-                <span class="c1"># check from previous epoch processing status until 2 further epochs</span>
-                <span class="k">for</span> <span class="n">epoch_id</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">current_epoch_id</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">current_epoch_id</span> <span class="o">-</span> <span class="mi">3</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">):</span>
-                    <span class="n">epoch_specific_report</span> <span class="o">=</span> <span class="n">SnapshotterEpochProcessingReportItem</span><span class="o">.</span><span class="n">construct</span><span class="p">()</span>
-                    <span class="n">success_percentage</span> <span class="o">=</span> <span class="mi">0</span>
-                    <span class="n">divisor</span> <span class="o">=</span> <span class="mi">1</span>
-                    <span class="n">epoch_specific_report</span><span class="o">.</span><span class="n">epochId</span> <span class="o">=</span> <span class="n">epoch_id</span>
-                    <span class="k">for</span> <span class="n">state</span> <span class="ow">in</span> <span class="n">SnapshotterStates</span><span class="p">:</span>
-                        <span class="k">if</span> <span class="n">state</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="n">SnapshotterStates</span><span class="o">.</span><span class="n">SNAPSHOT_BUILD</span><span class="p">,</span> <span class="n">SnapshotterStates</span><span class="o">.</span><span class="n">RELAYER_SEND</span><span class="p">]:</span>
-                            <span class="k">continue</span>
-                        <span class="n">state_report_entries</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn_sync</span><span class="o">.</span><span class="n">hgetall</span><span class="p">(</span>
-                            <span class="n">name</span><span class="o">=</span><span class="n">epoch_id_project_to_state_mapping</span><span class="p">(</span><span class="n">epoch_id</span><span class="o">=</span><span class="n">epoch_id</span><span class="p">,</span> <span class="n">state_id</span><span class="o">=</span><span class="n">state</span><span class="o">.</span><span class="n">value</span><span class="p">),</span>
-                        <span class="p">)</span>
-                        <span class="k">if</span> <span class="n">state_report_entries</span><span class="p">:</span>
-                            <span class="n">project_state_report_entries</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
-                            <span class="n">epoch_specific_report</span><span class="o">.</span><span class="n">transitionStatus</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
-                            <span class="c1"># epoch_specific_report.transitionStatus[state.value] = dict()</span>
-                            <span class="n">project_state_report_entries</span> <span class="o">=</span> <span class="p">{</span>
-                                <span class="n">project_id</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">):</span> <span class="n">SnapshotterStateUpdate</span><span class="o">.</span><span class="n">parse_raw</span><span class="p">(</span><span class="n">project_state_entry</span><span class="p">)</span>
-                                <span class="k">for</span> <span class="n">project_id</span><span class="p">,</span> <span class="n">project_state_entry</span> <span class="ow">in</span> <span class="n">state_report_entries</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
-                            <span class="p">}</span>
-                            <span class="n">epoch_specific_report</span><span class="o">.</span><span class="n">transitionStatus</span><span class="p">[</span><span class="n">state</span><span class="o">.</span><span class="n">value</span><span class="p">]</span> <span class="o">=</span> <span class="n">project_state_report_entries</span>
-                            <span class="n">success_percentage</span> <span class="o">+=</span> <span class="nb">len</span><span class="p">(</span>
-                                <span class="p">[</span>
-                                    <span class="n">project_state_report_entry</span>
-                                    <span class="k">for</span> <span class="n">project_state_report_entry</span> <span class="ow">in</span> <span class="n">project_state_report_entries</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
-                                    <span class="k">if</span> <span class="n">project_state_report_entry</span><span class="o">.</span><span class="n">status</span> <span class="o">==</span> <span class="s1">&#39;success&#39;</span>
-                                <span class="p">],</span>
-                            <span class="p">)</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">project_state_report_entries</span><span class="p">)</span>
-                            <span class="n">success_percentage</span> <span class="o">/=</span> <span class="n">divisor</span>
-                            <span class="n">divisor</span> <span class="o">+=</span> <span class="mi">1</span>
-                        <span class="k">else</span><span class="p">:</span>
-                            <span class="n">epoch_specific_report</span><span class="o">.</span><span class="n">transitionStatus</span><span class="p">[</span><span class="n">state</span><span class="o">.</span><span class="n">value</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-                    <span class="k">if</span> <span class="n">success_percentage</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                            <span class="s1">&#39;Epoch </span><span class="si">{}</span><span class="s1"> processing success percentage within states </span><span class="si">{}</span><span class="s1">: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span>
-                            <span class="nb">list</span><span class="p">(</span><span class="n">epoch_specific_report</span><span class="o">.</span><span class="n">transitionStatus</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span>
-                            <span class="n">epoch_id</span><span class="p">,</span>
-                            <span class="n">success_percentage</span> <span class="o">*</span> <span class="mi">100</span><span class="p">,</span>
-                        <span class="p">)</span>
-
-                    <span class="k">if</span> <span class="nb">any</span><span class="p">([</span><span class="n">x</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">epoch_specific_report</span><span class="o">.</span><span class="n">transitionStatus</span><span class="o">.</span><span class="n">values</span><span class="p">()]):</span>
-                        <span class="n">epoch_health</span><span class="p">[</span><span class="n">epoch_id</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                            <span class="s1">&#39;Marking epoch </span><span class="si">{}</span><span class="s1"> as unhealthy due to missing state reports against transitions </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span>
-                            <span class="n">epoch_id</span><span class="p">,</span>
-                            <span class="p">[</span><span class="n">x</span> <span class="k">for</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="ow">in</span> <span class="n">epoch_specific_report</span><span class="o">.</span><span class="n">transitionStatus</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">y</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">],</span>
-                        <span class="p">)</span>
-                    <span class="k">if</span> <span class="n">success_percentage</span> <span class="o">&lt;</span> <span class="mf">0.5</span><span class="p">:</span>
-                        <span class="n">epoch_health</span><span class="p">[</span><span class="n">epoch_id</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                            <span class="s1">&#39;Marking epoch </span><span class="si">{}</span><span class="s1"> as unhealthy due to low success percentage: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span>
-                            <span class="n">epoch_id</span><span class="p">,</span>
-                            <span class="n">success_percentage</span><span class="p">,</span>
-                        <span class="p">)</span>
-                <span class="k">if</span> <span class="nb">len</span><span class="p">([</span><span class="n">epoch_id</span> <span class="k">for</span> <span class="n">epoch_id</span><span class="p">,</span> <span class="n">healthy</span> <span class="ow">in</span> <span class="n">epoch_health</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">healthy</span><span class="p">])</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">:</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                        <span class="s1">&#39;Sending unhealthy epoch report to reporting service: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span>
-                        <span class="n">epoch_health</span><span class="p">,</span>
-                    <span class="p">)</span>
-                    <span class="n">send_failure_notifications_sync</span><span class="p">(</span>
-                        <span class="n">client</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_httpx_client</span><span class="p">,</span>
-                        <span class="n">message</span><span class="o">=</span><span class="n">SnapshotterIssue</span><span class="p">(</span>
-                            <span class="n">instanceID</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">instance_id</span><span class="p">,</span>
-                            <span class="n">issueType</span><span class="o">=</span><span class="n">SnapshotterReportState</span><span class="o">.</span><span class="n">UNHEALTHY_EPOCH_PROCESSING</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
-                            <span class="n">projectID</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span>
-                            <span class="n">epochId</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span>
-                            <span class="n">timeOfReporting</span><span class="o">=</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="o">.</span><span class="n">isoformat</span><span class="p">(),</span>
-                            <span class="n">extra</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span>
-                                <span class="p">{</span>
-                                    <span class="s1">&#39;epoch_health&#39;</span><span class="p">:</span> <span class="n">epoch_health</span><span class="p">,</span>
-                                <span class="p">},</span>
-                            <span class="p">),</span>
-                        <span class="p">),</span>
-                    <span class="p">)</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-                        <span class="s1">&#39;Proceeding to respawn all children because epochs were found unhealthy: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">epoch_health</span><span class="p">,</span>
-                    <span class="p">)</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_respawn_all_children</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
             <span class="p">(</span>
                 <span class="s1">&#39;Caught thread shutdown notification event. Deleting process&#39;</span>
@@ -616,8 +493,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_kill_all_children</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_launch_all_children</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_start_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_last_epoch_processing_health_check</span> <span class="o">=</span> <span class="mi">0</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_set_start_time</span><span class="p">()</span></div>
 
 <div class="viewcode-block" id="ProcessHubCore._launch_all_children"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.process_hub_core.ProcessHubCore._launch_all_children">[docs]</a>    <span class="k">def</span> <span class="nf">_launch_all_children</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -629,6 +505,12 @@
         <span class="k">for</span> <span class="n">proc_name</span> <span class="ow">in</span> <span class="n">PROC_STR_ID_TO_CLASS_MAP</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_launch_core_worker</span><span class="p">(</span><span class="n">proc_name</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_launch_snapshot_cb_workers</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="ProcessHubCore._set_start_time"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.process_hub_core.ProcessHubCore._set_start_time">[docs]</a>    <span class="k">def</span> <span class="nf">_set_start_time</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn_sync</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+            <span class="n">process_hub_core_start_timestamp</span><span class="p">(),</span>
+            <span class="nb">str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">())),</span>
+        <span class="p">)</span></div>
 
 <div class="viewcode-block" id="ProcessHubCore.run"><a class="viewcode-back" href="../../snapshotter.html#snapshotter.process_hub_core.ProcessHubCore.run">[docs]</a>    <span class="nd">@cleanup_proc_hub_children</span>
     <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -687,7 +569,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
             <span class="s1">&#39;Starting Internal Process State reporter for Process Hub Core...&#39;</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_start_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_set_start_time</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_reporter_thread</span> <span class="o">=</span> <span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">internal_state_reporter</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_reporter_thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;Starting Process Hub Core...&#39;</span><span class="p">)</span>

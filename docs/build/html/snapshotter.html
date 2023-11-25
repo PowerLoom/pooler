@@ -98,6 +98,7 @@
 <li class="toctree-l4"><a class="reference internal" href="#snapshotter.process_hub_core.ProcessHubCore._redis_conn_sync"><code class="docutils literal notranslate"><span class="pre">ProcessHubCore._redis_conn_sync</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#snapshotter.process_hub_core.ProcessHubCore._redis_connection_pool_sync"><code class="docutils literal notranslate"><span class="pre">ProcessHubCore._redis_connection_pool_sync</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#snapshotter.process_hub_core.ProcessHubCore._respawn_all_children"><code class="docutils literal notranslate"><span class="pre">ProcessHubCore._respawn_all_children()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#snapshotter.process_hub_core.ProcessHubCore._set_start_time"><code class="docutils literal notranslate"><span class="pre">ProcessHubCore._set_start_time()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#snapshotter.process_hub_core.ProcessHubCore.callback"><code class="docutils literal notranslate"><span class="pre">ProcessHubCore.callback()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#snapshotter.process_hub_core.ProcessHubCore.internal_state_reporter"><code class="docutils literal notranslate"><span class="pre">ProcessHubCore.internal_state_reporter()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#snapshotter.process_hub_core.ProcessHubCore.kill_process"><code class="docutils literal notranslate"><span class="pre">ProcessHubCore.kill_process()</span></code></a></li>
@@ -118,13 +119,19 @@
 <li class="toctree-l2"><a class="reference internal" href="#module-snapshotter.processor_distributor">snapshotter.processor_distributor</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._aioredis_pool"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._aioredis_pool</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._anchor_rpc_helper"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._anchor_rpc_helper</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._async_transport"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._async_transport</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._cache_and_forward_to_payload_commit_queue"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._cache_and_forward_to_payload_commit_queue()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._cleanup_older_epoch_status"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._cleanup_older_epoch_status()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._client"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._client</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._distribute_callbacks_aggregate"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._distribute_callbacks_aggregate()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._distribute_callbacks_snapshotting"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._distribute_callbacks_snapshotting()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._enable_pending_projects_for_epoch"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._enable_pending_projects_for_epoch()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._epoch_processing_health_check"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._epoch_processing_health_check()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._epoch_release_processor"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._epoch_release_processor()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._exec_preloaders"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._exec_preloaders()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._get_proc_hub_start_time"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._get_proc_hub_start_time()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._init_httpx_client"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._init_httpx_client()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._init_preloader_compute_mapping"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._init_preloader_compute_mapping()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._init_rabbitmq_connection"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._init_rabbitmq_connection()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._init_redis_pool"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._init_redis_pool()</span></code></a></li>
@@ -134,6 +141,7 @@
 <li class="toctree-l4"><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._preloader_waiter"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._preloader_waiter()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._rabbitmq_consumer"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._rabbitmq_consumer()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._redis_conn"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._redis_conn</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._send_proc_hub_respawn"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._send_proc_hub_respawn()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._signal_handler"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._signal_handler()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor._update_all_projects"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor._update_all_projects()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#snapshotter.processor_distributor.ProcessorDistributor.init_worker"><code class="docutils literal notranslate"><span class="pre">ProcessorDistributor.init_worker()</span></code></a></li>
@@ -420,6 +428,7 @@
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._commit_payload"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._commit_payload()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._httpx_client"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._httpx_client</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._init_httpx_client"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._init_httpx_client()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._init_protocol_meta"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._init_protocol_meta()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._init_redis_pool"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._init_redis_pool()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._init_rpc_helper"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._init_rpc_helper()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.generic_worker.GenericAsyncWorker._on_rabbitmq_message"><code class="docutils literal notranslate"><span class="pre">GenericAsyncWorker._on_rabbitmq_message()</span></code></a></li>
@@ -533,7 +542,6 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="snapshotter.utils.html#module-snapshotter.utils.rpc">snapshotter.utils.rpc</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper"><code class="docutils literal notranslate"><span class="pre">RpcHelper</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper._aiohttp_tcp_connector"><code class="docutils literal notranslate"><span class="pre">RpcHelper._aiohttp_tcp_connector</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper._async_web3_call"><code class="docutils literal notranslate"><span class="pre">RpcHelper._async_web3_call()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper._init_http_clients"><code class="docutils literal notranslate"><span class="pre">RpcHelper._init_http_clients()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper._load_async_web3_providers"><code class="docutils literal notranslate"><span class="pre">RpcHelper._load_async_web3_providers()</span></code></a></li>
@@ -541,7 +549,6 @@
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper._load_web3_providers_and_rate_limits"><code class="docutils literal notranslate"><span class="pre">RpcHelper._load_web3_providers_and_rate_limits()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper._make_rpc_jsonrpc_call"><code class="docutils literal notranslate"><span class="pre">RpcHelper._make_rpc_jsonrpc_call()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper._on_node_exception"><code class="docutils literal notranslate"><span class="pre">RpcHelper._on_node_exception()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper._web3_aiohttp_client"><code class="docutils literal notranslate"><span class="pre">RpcHelper._web3_aiohttp_client</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper.batch_eth_call_on_block_range"><code class="docutils literal notranslate"><span class="pre">RpcHelper.batch_eth_call_on_block_range()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper.batch_eth_get_balance_on_block_range"><code class="docutils literal notranslate"><span class="pre">RpcHelper.batch_eth_get_balance_on_block_range()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper.batch_eth_get_block"><code class="docutils literal notranslate"><span class="pre">RpcHelper.batch_eth_get_block()</span></code></a></li>
@@ -999,6 +1006,11 @@ Resets the start time and last epoch processing health check.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.process_hub_core.ProcessHubCore._set_start_time">
+<span class="sig-name descname"><span class="pre">_set_start_time</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/process_hub_core.html#ProcessHubCore._set_start_time"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.process_hub_core.ProcessHubCore._set_start_time" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="snapshotter.process_hub_core.ProcessHubCore.callback">
 <span class="sig-name descname"><span class="pre">callback</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dont_use_ch</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">properties</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">body</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/process_hub_core.html#ProcessHubCore.callback"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.process_hub_core.ProcessHubCore.callback" title="Permalink to this definition"></a></dt>
 <dd><p>Callback function that is called when a message is received from the RabbitMQ queue.
@@ -1008,8 +1020,12 @@ Parses the message and performs the appropriate action based on the command rece
 <dl class="py method">
 <dt class="sig sig-object py" id="snapshotter.process_hub_core.ProcessHubCore.internal_state_reporter">
 <span class="sig-name descname"><span class="pre">internal_state_reporter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">redis_conn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Redis</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/process_hub_core.html#ProcessHubCore.internal_state_reporter"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.process_hub_core.ProcessHubCore.internal_state_reporter" title="Permalink to this definition"></a></dt>
-<dd><p>This method reports the internal state of the process hub core to Redis and pings the reporting service.
-It also performs a health check on epoch processing and sends a failure notification if necessary.</p>
+<dd><p>Internal state reporter function that periodically reports the state of spawned processes to Redis
+and pings a reporting service.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>redis_conn (redis.Redis, optional): Redis connection object. Defaults to None.</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
@@ -1101,6 +1117,16 @@ pid (bool): If True, process_str_id is interpreted as a process ID instead of a 
 <span class="sig-name descname"><span class="pre">_aioredis_pool</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="snapshotter.utils.redis.html#snapshotter.utils.redis.redis_conn.RedisPoolCache" title="snapshotter.utils.redis.redis_conn.RedisPoolCache"><span class="pre">RedisPoolCache</span></a></em><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._aioredis_pool" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
+<dl class="py attribute">
+<dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._anchor_rpc_helper">
+<span class="sig-name descname"><span class="pre">_anchor_rpc_helper</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="snapshotter.utils.html#snapshotter.utils.rpc.RpcHelper" title="snapshotter.utils.rpc.RpcHelper"><span class="pre">RpcHelper</span></a></em><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._anchor_rpc_helper" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._async_transport">
+<span class="sig-name descname"><span class="pre">_async_transport</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">AsyncHTTPTransport</span></em><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._async_transport" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._cache_and_forward_to_payload_commit_queue">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_cache_and_forward_to_payload_commit_queue</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">IncomingMessage</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/processor_distributor.html#ProcessorDistributor._cache_and_forward_to_payload_commit_queue"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._cache_and_forward_to_payload_commit_queue" title="Permalink to this definition"></a></dt>
@@ -1118,6 +1144,11 @@ pid (bool): If True, process_str_id is interpreted as a process ID instead of a 
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_cleanup_older_epoch_status</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">epoch_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/processor_distributor.html#ProcessorDistributor._cleanup_older_epoch_status"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._cleanup_older_epoch_status" title="Permalink to this definition"></a></dt>
 <dd><p>Deletes the epoch status keys for the epoch that is 30 epochs older than the given epoch_id.</p>
 </dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._client">
+<span class="sig-name descname"><span class="pre">_client</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">AsyncClient</span></em><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._client" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._distribute_callbacks_aggregate">
@@ -1161,6 +1192,18 @@ epoch (EpochBase): The epoch to snapshot.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._epoch_processing_health_check">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_epoch_processing_health_check</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">current_epoch_id</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/processor_distributor.html#ProcessorDistributor._epoch_processing_health_check"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._epoch_processing_health_check" title="Permalink to this definition"></a></dt>
+<dd><p>Perform health check for epoch processing.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>current_epoch_id (int): The current epoch ID.</p>
+</dd>
+<dt>Returns:</dt><dd><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._epoch_release_processor">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_epoch_release_processor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">IncomingMessage</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/processor_distributor.html#ProcessorDistributor._epoch_release_processor"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._epoch_release_processor" title="Permalink to this definition"></a></dt>
 <dd><p>This method is called when an epoch is released. It enables pending projects for the epoch and executes preloaders.</p>
@@ -1180,6 +1223,22 @@ epoch (EpochBase): The epoch to snapshot.</p>
 <dt>Returns:</dt><dd><p>None</p>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._get_proc_hub_start_time">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_get_proc_hub_start_time</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="reference internal" href="_modules/snapshotter/processor_distributor.html#ProcessorDistributor._get_proc_hub_start_time"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._get_proc_hub_start_time" title="Permalink to this definition"></a></dt>
+<dd><p>Retrieves the start time of the process hub core from Redis.</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><p>int: The start time of the process hub core, or 0 if not found.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._init_httpx_client">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_init_httpx_client</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/processor_distributor.html#ProcessorDistributor._init_httpx_client"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._init_httpx_client" title="Permalink to this definition"></a></dt>
+<dd><p>Initializes the HTTPX client with the specified settings.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -1263,6 +1322,21 @@ dependencies are satisfied.</p>
 <dd></dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._send_proc_hub_respawn">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_send_proc_hub_respawn</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/processor_distributor.html#ProcessorDistributor._send_proc_hub_respawn"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._send_proc_hub_respawn" title="Permalink to this definition"></a></dt>
+<dd><p>Sends a respawn command to the process hub.</p>
+<p>This method creates a ProcessHubCommand object with the command ‘respawn’,
+acquires a channel from the channel pool, gets the exchange, and publishes
+the command message to the exchange.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>None</p>
+</dd>
+<dt>Returns:</dt><dd><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="snapshotter.processor_distributor.ProcessorDistributor._signal_handler">
 <span class="sig-name descname"><span class="pre">_signal_handler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">signum</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/processor_distributor.html#ProcessorDistributor._signal_handler"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.processor_distributor.ProcessorDistributor._signal_handler" title="Permalink to this definition"></a></dt>
 <dd><p>Signal handler method that cancels the core RMQ consumer when a SIGINT, SIGTERM, or SIGQUIT signal is received.</p>
@@ -1314,17 +1388,35 @@ initializing the worker, starting the RabbitMQ consumer, and running the event l
 <dl class="py method">
 <dt class="sig sig-object py" id="snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._export_project_state">
 <span class="sig-name descname"><span class="pre">_export_project_state</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">project_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">first_epoch_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_epoch_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">redis_conn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Redis</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="snapshotter.utils.models.html#snapshotter.utils.models.data_models.ProjectSpecificState" title="snapshotter.utils.models.data_models.ProjectSpecificState"><span class="pre">ProjectSpecificState</span></a></span></span><a class="reference internal" href="_modules/snapshotter/protocol_state_loader_exporter.html#ProtocolStateLoader._export_project_state"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._export_project_state" title="Permalink to this definition"></a></dt>
-<dd></dd></dl>
+<dd><p>Export the project state for a specific project.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>project_id (str): The ID of the project.
+first_epoch_id (int): The ID of the first epoch.
+end_epoch_id (int): The ID of the last epoch.
+redis_conn (redis.Redis): The Redis connection.</p>
+</dd>
+<dt>Returns:</dt><dd><p>ProjectSpecificState: The exported project state.</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._init_redis_pool">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_init_redis_pool</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/protocol_state_loader_exporter.html#ProtocolStateLoader._init_redis_pool"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._init_redis_pool" title="Permalink to this definition"></a></dt>
-<dd></dd></dl>
+<dd><p>Initializes the Redis connection pool and populates it with connections.</p>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._init_rpc_helper">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_init_rpc_helper</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/protocol_state_loader_exporter.html#ProtocolStateLoader._init_rpc_helper"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._init_rpc_helper" title="Permalink to this definition"></a></dt>
-<dd></dd></dl>
+<dd><p>Initializes the RPC helper and sets the protocol state contract.</p>
+<p>This method creates an instance of RpcHelper using the specified RPC settings.
+It also reads the protocol ABI from the settings and sets the protocol state contract.</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><p>None</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._load_finalized_cids_from_contract">
@@ -1341,7 +1433,16 @@ initializing the worker, starting the RabbitMQ consumer, and running the event l
 <dl class="py method">
 <dt class="sig sig-object py" id="snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._load_project_state">
 <span class="sig-name descname"><span class="pre">_load_project_state</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">project_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project_state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="snapshotter.utils.models.html#snapshotter.utils.models.data_models.ProjectSpecificState" title="snapshotter.utils.models.data_models.ProjectSpecificState"><span class="pre">ProjectSpecificState</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">redis_conn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Redis</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/protocol_state_loader_exporter.html#ProtocolStateLoader._load_project_state"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._load_project_state" title="Permalink to this definition"></a></dt>
-<dd></dd></dl>
+<dd><p>Loads the project state for a specific project.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>project_id (str): The ID of the project.
+project_state (ProjectSpecificState): The project-specific state object.
+redis_conn (redis.Redis): The Redis connection object.</p>
+</dd>
+<dt>Returns:</dt><dd><p>None</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="snapshotter.protocol_state_loader_exporter.ProtocolStateLoader._protocol_state_query_semaphore">
@@ -1356,22 +1457,45 @@ initializing the worker, starting the RabbitMQ consumer, and running the event l
 <dl class="py method">
 <dt class="sig sig-object py" id="snapshotter.protocol_state_loader_exporter.ProtocolStateLoader.export">
 <span class="sig-name descname"><span class="pre">export</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/protocol_state_loader_exporter.html#ProtocolStateLoader.export"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader.export" title="Permalink to this definition"></a></dt>
-<dd></dd></dl>
+<dd><p>Export the protocol state to a compressed JSON file.</p>
+<p>This method runs the preliminary load, retrieves the current epoch ID, project ID mapping,
+and all project IDs. It then exports the project-specific states and finalized CIDs for each project.
+The exported state is saved as a compressed JSON file named ‘state.json.bz2’.</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><p>None</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="snapshotter.protocol_state_loader_exporter.ProtocolStateLoader.init">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">init</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/protocol_state_loader_exporter.html#ProtocolStateLoader.init"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader.init" title="Permalink to this definition"></a></dt>
-<dd></dd></dl>
+<dd><p>Initializes the object by setting up the logger, initializing the Redis pool,
+initializing the RPC helper, and creating a bounded semaphore for protocol state queries.</p>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="snapshotter.protocol_state_loader_exporter.ProtocolStateLoader.load">
 <span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'state.json.bz2'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/protocol_state_loader_exporter.html#ProtocolStateLoader.load"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader.load" title="Permalink to this definition"></a></dt>
-<dd></dd></dl>
+<dd><p>Loads the protocol state from a file.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>file_name (str): The name of the file to load the state from. Default is ‘state.json.bz2’.</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="snapshotter.protocol_state_loader_exporter.ProtocolStateLoader.prelim_load">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">prelim_load</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/snapshotter/protocol_state_loader_exporter.html#ProtocolStateLoader.prelim_load"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#snapshotter.protocol_state_loader_exporter.ProtocolStateLoader.prelim_load" title="Permalink to this definition"></a></dt>
-<dd></dd></dl>
+<dd><p>Performs preliminary loading of protocol state data.</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><dl class="simple">
+<dt>Tuple: A tuple containing the current epoch ID, a dictionary mapping project IDs to their first epoch IDs,</dt><dd><p>and a list of all project IDs.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
 
 </dd></dl>
 

@@ -249,7 +249,7 @@
         <span class="k">return</span> <span class="n">eth_price_usd_dict</span>
 
     <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
-        <span class="n">snapshot_util_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+        <span class="n">snapshot_util_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">logs</span><span class="o">.</span><span class="n">trace_enabled</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
             <span class="sa">f</span><span class="s1">&#39;RPC ERROR failed to fetch ETH price, error_msg:</span><span class="si">{</span><span class="n">err</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">raise</span> <span class="n">err</span></div>
@@ -336,7 +336,7 @@
         <span class="k">return</span> <span class="n">block_details_dict</span>
 
     <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-        <span class="n">snapshot_util_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span>
+        <span class="n">snapshot_util_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">logs</span><span class="o">.</span><span class="n">trace_enabled</span><span class="p">,</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span>
             <span class="s1">&#39;Unable to fetch block details, error_msg:</span><span class="si">{err}</span><span class="s1">&#39;</span><span class="p">,</span>
             <span class="n">err</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">),</span>
         <span class="p">)</span>

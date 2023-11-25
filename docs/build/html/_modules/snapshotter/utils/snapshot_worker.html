@@ -91,6 +91,7 @@
 <span class="kn">from</span> <span class="nn">snapshotter.utils.models.message_models</span> <span class="kn">import</span> <span class="n">PowerloomSnapshotProcessMessage</span>
 <span class="kn">from</span> <span class="nn">snapshotter.utils.redis.rate_limiter</span> <span class="kn">import</span> <span class="n">load_rate_limiter_scripts</span>
 <span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">epoch_id_project_to_state_mapping</span>
+<span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">last_snapshot_processing_complete_timestamp_key</span>
 <span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">snapshot_submission_window_key</span>
 <span class="kn">from</span> <span class="nn">snapshotter.utils.redis.redis_keys</span> <span class="kn">import</span> <span class="n">submitted_base_snapshots_key</span>
 
@@ -173,14 +174,13 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
                     <span class="s1">&#39;No snapshot data for: </span><span class="si">{}</span><span class="s1">, skipping...&#39;</span><span class="p">,</span> <span class="n">msg_obj</span><span class="p">,</span>
                 <span class="p">)</span>
-                <span class="k">return</span>
 
-            <span class="k">if</span> <span class="n">task_processor</span><span class="o">.</span><span class="n">transformation_lambdas</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">task_processor</span><span class="o">.</span><span class="n">transformation_lambdas</span> <span class="ow">and</span> <span class="n">snapshot</span><span class="p">:</span>
                 <span class="k">for</span> <span class="n">each_lambda</span> <span class="ow">in</span> <span class="n">task_processor</span><span class="o">.</span><span class="n">transformation_lambdas</span><span class="p">:</span>
                     <span class="n">snapshot</span> <span class="o">=</span> <span class="n">each_lambda</span><span class="p">(</span><span class="n">snapshot</span><span class="p">,</span> <span class="n">msg_obj</span><span class="o">.</span><span class="n">data_source</span><span class="p">,</span> <span class="n">msg_obj</span><span class="o">.</span><span class="n">begin</span><span class="p">,</span> <span class="n">msg_obj</span><span class="o">.</span><span class="n">end</span><span class="p">)</span>
 
         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">opt</span><span class="p">(</span><span class="n">exception</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">logs</span><span class="o">.</span><span class="n">trace_enabled</span><span class="p">)</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
                 <span class="s1">&#39;Exception processing callback for epoch: </span><span class="si">{}</span><span class="s1">, Error: </span><span class="si">{}</span><span class="s1">,&#39;</span>
                 <span class="s1">&#39;sending failure notifications&#39;</span><span class="p">,</span> <span class="n">msg_obj</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span>
             <span class="p">)</span>
@@ -217,8 +217,8 @@
                 <span class="c1"># block time is about 2 seconds on anchor chain, keeping it around ten times the submission window</span>
                 <span class="n">ex</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_submission_window</span> <span class="o">*</span> <span class="mi">10</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span>
             <span class="p">)</span>
-
-            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">hset</span><span class="p">(</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">()</span>
+            <span class="n">p</span><span class="o">.</span><span class="n">hset</span><span class="p">(</span>
                 <span class="n">name</span><span class="o">=</span><span class="n">epoch_id_project_to_state_mapping</span><span class="p">(</span>
                     <span class="n">epoch_id</span><span class="o">=</span><span class="n">msg_obj</span><span class="o">.</span><span class="n">epochId</span><span class="p">,</span> <span class="n">state_id</span><span class="o">=</span><span class="n">SnapshotterStates</span><span class="o">.</span><span class="n">SNAPSHOT_BUILD</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
                 <span class="p">),</span>
@@ -229,6 +229,18 @@
                 <span class="p">},</span>
             <span class="p">)</span>
 
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="n">last_snapshot_processing_complete_timestamp_key</span><span class="p">(),</span>
+                <span class="n">value</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()),</span>
+            <span class="p">)</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">snapshot</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                    <span class="s1">&#39;No snapshot data for: </span><span class="si">{}</span><span class="s1">, skipping...&#39;</span><span class="p">,</span> <span class="n">msg_obj</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">return</span>
+
+            <span class="k">await</span> <span class="n">p</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
             <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_commit_payload</span><span class="p">(</span>
                 <span class="n">task_type</span><span class="o">=</span><span class="n">task_type</span><span class="p">,</span>
                 <span class="n">_ipfs_writer_client</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_ipfs_writer_client</span><span class="p">,</span>
@@ -265,10 +277,9 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
                     <span class="s1">&#39;No snapshot data for: </span><span class="si">{}</span><span class="s1">, skipping...&#39;</span><span class="p">,</span> <span class="n">msg_obj</span><span class="p">,</span>
                 <span class="p">)</span>
-                <span class="k">return</span>
 
             <span class="c1"># No transformation lambdas in bulk mode for now.</span>
-            <span class="c1"># Planning to depricate transformation lambdas in future.</span>
+            <span class="c1"># Planning to deprecate transformation lambdas in future.</span>
             <span class="c1"># if task_processor.transformation_lambdas:</span>
             <span class="c1">#     for each_lambda in task_processor.transformation_lambdas:</span>
             <span class="c1">#         snapshot = each_lambda(snapshot, msg_obj.data_source, msg_obj.begin, msg_obj.end)</span>
@@ -304,6 +315,17 @@
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
 
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="n">last_snapshot_processing_complete_timestamp_key</span><span class="p">(),</span>
+                <span class="n">value</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()),</span>
+            <span class="p">)</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">snapshots</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                    <span class="s1">&#39;No snapshot data for: </span><span class="si">{}</span><span class="s1">, skipping...&#39;</span><span class="p">,</span> <span class="n">msg_obj</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">return</span>
+
             <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Sending snapshots to commit service: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">snapshots</span><span class="p">)</span>
 
             <span class="k">for</span> <span class="n">project_data_source</span><span class="p">,</span> <span class="n">snapshot</span> <span class="ow">in</span> <span class="n">snapshots</span><span class="p">:</span>
@@ -326,8 +348,8 @@
                     <span class="c1"># block time is about 2 seconds on anchor chain, keeping it around ten times the submission window</span>
                     <span class="n">ex</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_submission_window</span> <span class="o">*</span> <span class="mi">10</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span>
                 <span class="p">)</span>
-
-                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">hset</span><span class="p">(</span>
+                <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis_conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">()</span>
+                <span class="n">p</span><span class="o">.</span><span class="n">hset</span><span class="p">(</span>
                     <span class="n">name</span><span class="o">=</span><span class="n">epoch_id_project_to_state_mapping</span><span class="p">(</span>
                         <span class="n">epoch_id</span><span class="o">=</span><span class="n">msg_obj</span><span class="o">.</span><span class="n">epochId</span><span class="p">,</span> <span class="n">state_id</span><span class="o">=</span><span class="n">SnapshotterStates</span><span class="o">.</span><span class="n">SNAPSHOT_BUILD</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
                     <span class="p">),</span>
@@ -337,6 +359,7 @@
                         <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">(),</span>
                     <span class="p">},</span>
                 <span class="p">)</span>
+                <span class="k">await</span> <span class="n">p</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
                 <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_commit_payload</span><span class="p">(</span>
                     <span class="n">task_type</span><span class="o">=</span><span class="n">task_type</span><span class="p">,</span>
                     <span class="n">_ipfs_writer_client</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_ipfs_writer_client</span><span class="p">,</span>
