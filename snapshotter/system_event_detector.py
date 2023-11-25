@@ -26,6 +26,7 @@ from snapshotter.utils.models.data_models import SnapshottersUpdatedEvent
 from snapshotter.utils.rabbitmq_helpers import RabbitmqThreadedSelectLoopInteractor
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import event_detector_last_processed_block
+from snapshotter.utils.redis.redis_keys import last_epoch_detected_timestamp_key
 from snapshotter.utils.rpc import get_event_sig_and_abi
 from snapshotter.utils.rpc import RpcHelper
 
@@ -195,6 +196,7 @@ class EventDetectorProcess(multiprocessing.Process):
         )
 
         events = []
+        new_epoch_detected = False
         for log in events_log:
             if log.event == 'EpochReleased':
                 event = EpochReleasedEvent(
@@ -203,6 +205,7 @@ class EventDetectorProcess(multiprocessing.Process):
                     epochId=log.args.epochId,
                     timestamp=log.args.timestamp,
                 )
+                new_epoch_detected = True
                 events.append((log.event, event))
 
             elif log.event == 'SnapshotFinalized':
@@ -229,6 +232,12 @@ class EventDetectorProcess(multiprocessing.Process):
                     timestamp=int(time.time()),
                 )
                 events.append((log.event, event))
+
+        if new_epoch_detected:
+            await self._redis_conn.set(
+                last_epoch_detected_timestamp_key(),
+                int(time.time()),
+            )
 
         self._logger.info('Events: {}', events)
         return events

@@ -64,7 +64,8 @@ from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import active_status_key
 from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
-from snapshotter.utils.redis.redis_keys import epoch_id_to_state_specific_project_count
+from snapshotter.utils.redis.redis_keys import last_epoch_detected_timestamp_key
+from snapshotter.utils.redis.redis_keys import last_snapshot_processing_complete_timestamp_key
 from snapshotter.utils.redis.redis_keys import process_hub_core_start_timestamp
 from snapshotter.utils.redis.redis_keys import project_finalized_data_zset
 from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_key
@@ -371,23 +372,97 @@ class ProcessorDistributor(multiprocessing.Process):
             return
         # get last set start time by proc hub core
         start_time = await self._get_proc_hub_start_time()
+
+        # only start if 5 minutes have passed since proc hub core start time
+        if int(time.time()) - start_time < 5 * 60:
+            self._logger.info(
+                'Skipping epoch processing health check because 5 minutes have not passed since proc hub core start time',
+            )
+            return
+
         if start_time == 0:
             self._logger.info('Skipping epoch processing health check because proc hub start time is not set')
             return
-        if (self._last_epoch_processing_health_check != 0 and int(time.time()) - self._last_epoch_processing_health_check > 4 * self._source_chain_block_time * self._epoch_size) or \
-                (self._last_epoch_processing_health_check == 0 and start_time != 0 and int(time.time()) - start_time > 4 * self._source_chain_block_time * self._epoch_size):
-            if not (self._source_chain_block_time != 0 and self._epoch_size != 0):
-                self._logger.info(
-                    'Skipping epoch processing health check because source chain block time or epoch size is not known | '
-                    'Source chain block time: {} | Epoch size: {}',
-                    self._source_chain_block_time,
-                    self._epoch_size,
-                )
-                return
-            self._last_epoch_processing_health_check = int(time.time())
+
+        # only runs once every minute
+        if self._last_epoch_processing_health_check != 0 and int(time.time()) - self._last_epoch_processing_health_check < 60:
             self._logger.debug(
-                'Continuing with epoch processing health check since 4 or more epochs have passed since process start',
+                'Skipping epoch processing health check because it was run less than a minute ago',
             )
+            return
+
+        if not (self._source_chain_block_time != 0 and self._epoch_size != 0):
+            self._logger.info(
+                'Skipping epoch processing health check because source chain block time or epoch size is not known | '
+                'Source chain block time: {} | Epoch size: {}',
+                self._source_chain_block_time,
+                self._epoch_size,
+            )
+            return
+        self._last_epoch_processing_health_check = int(time.time())
+
+        last_epoch_detected = await self._redis_conn.get(last_epoch_detected_timestamp_key())
+        last_snapshot_processed = await self._redis_conn.get(last_snapshot_processing_complete_timestamp_key())
+
+        if last_epoch_detected:
+            last_epoch_detected = int(last_epoch_detected)
+
+        if last_snapshot_processed:
+            last_snapshot_processed = int(last_snapshot_processed)
+
+        # if no epoch is detected for 30 epochs, report unhealthy and send respawn command
+        if last_epoch_detected and int(time.time()) - last_epoch_detected > 30 * self._source_chain_block_time * self._epoch_size:
+            self._logger.debug(
+                'Sending unhealthy epoch report to reporting service due to no epoch detected for ~30 epochs',
+            )
+            await send_failure_notifications_async(
+                client=self._client,
+                message=SnapshotterIssue(
+                    instanceID=settings.instance_id,
+                    issueType=SnapshotterReportState.UNHEALTHY_EPOCH_PROCESSING.value,
+                    projectID='',
+                    epochId='',
+                    timeOfReporting=datetime.now().isoformat(),
+                    extra=json.dumps(
+                        {
+                            'last_epoch_detected': last_epoch_detected,
+                        },
+                    ),
+                ),
+            )
+            self._logger.info(
+                'Sending respawn command for all process hub core children because no epoch was detected for ~30 epochs',
+            )
+            await self._send_proc_hub_respawn()
+
+        # if time difference between last epoch detected and last snapshot processed
+        # is more than 10 epochs, report unhealthy and send respawn command
+        if last_epoch_detected and last_snapshot_processed and \
+                last_epoch_detected - last_snapshot_processed > 10 * self._source_chain_block_time * self._epoch_size:
+            self._logger.debug(
+                'Sending unhealthy epoch report to reporting service due to no snapshot processing for ~10 epochs',
+            )
+            await send_failure_notifications_async(
+                client=self._client,
+                message=SnapshotterIssue(
+                    instanceID=settings.instance_id,
+                    issueType=SnapshotterReportState.UNHEALTHY_EPOCH_PROCESSING.value,
+                    projectID='',
+                    epochId='',
+                    timeOfReporting=datetime.now().isoformat(),
+                    extra=json.dumps(
+                        {
+                            'last_epoch_detected': last_epoch_detected,
+                            'last_snapshot_processed': last_snapshot_processed,
+                        },
+                    ),
+                ),
+            )
+            self._logger.info(
+                'Sending respawn command for all process hub core children because no snapshot processing was done for ~10 epochs',
+            )
+            await self._send_proc_hub_respawn()
+
             # check for epoch processing status
             epoch_health = dict()
             # check from previous epoch processing status until 2 further epochs
@@ -395,15 +470,11 @@ class ProcessorDistributor(multiprocessing.Process):
             for epoch_id in range(current_epoch_id - 1, current_epoch_id - 3 - 1, -1):
                 epoch_specific_report = SnapshotterEpochProcessingReportItem.construct()
                 success_percentage = 0
-                divisor = 1
                 epoch_specific_report.epochId = epoch_id
                 state_report_entries = await self._redis_conn.hgetall(
                     name=epoch_id_project_to_state_mapping(epoch_id=epoch_id, state_id=build_state_val),
                 )
                 if state_report_entries:
-                    project_state_report_entries = dict()
-                    epoch_specific_report.transitionStatus = dict()
-                    # epoch_specific_report.transitionStatus[state.value] = dict()
                     project_state_report_entries = {
                         project_id.decode('utf-8'): SnapshotterStateUpdate.parse_raw(project_state_entry)
                         for project_id, project_state_entry in state_report_entries.items()
@@ -416,27 +487,6 @@ class ProcessorDistributor(multiprocessing.Process):
                             if project_state_report_entry.status == 'success'
                         ],
                     ) / len(project_state_report_entries)
-                    success_percentage /= divisor
-                else:
-                    # fetch snapshot build project count
-                    c = await self._redis_conn.get(epoch_id_to_state_specific_project_count(epoch_id, build_state_val))
-                    # this is odd since the state reports are not present but the snapshot build count is
-                    if c:
-                        self._logger.warning(
-                            'Epoch {} processing success percentage with SNAPSHOT_BUILD: {}',
-                            epoch_id,
-                            success_percentage * 100,
-                        )
-                        success_percentage += int(c)
-                        success_percentage /= divisor
-                        epoch_specific_report.transitionStatus[build_state_val] = dict()
-                divisor += 1
-                if success_percentage != 0:
-                    self._logger.debug(
-                        'Epoch {} processing success percentage with SNAPSHOT_BUILD: {}',
-                        epoch_id,
-                        success_percentage * 100,
-                    )
 
                 if any([x is None for x in epoch_specific_report.transitionStatus.values()]):
                     epoch_health[epoch_id] = False
@@ -445,7 +495,7 @@ class ProcessorDistributor(multiprocessing.Process):
                         epoch_id,
                         [x for x, y in epoch_specific_report.transitionStatus.items() if y is None],
                     )
-                if success_percentage < 0.5:
+                if success_percentage < 0.5 and success_percentage != 0:
                     epoch_health[epoch_id] = False
                     self._logger.debug(
                         'Marking epoch {} as unhealthy due to low success percentage: {}',
