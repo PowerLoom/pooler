@@ -21,6 +21,13 @@ from snapshotter.utils.redis.rate_limiter import load_rate_limiter_scripts
 
 class DelegateAsyncWorker(GenericAsyncWorker):
     def __init__(self, name, **kwargs):
+        """
+        Initializes a new instance of the DelegateAsyncWorker class.
+
+        Args:
+            name (str): The name of the worker.
+            **kwargs: Additional keyword arguments to pass to the base class constructor.
+        """
         super(DelegateAsyncWorker, self).__init__(name=name, **kwargs)
         self._qos = 1
         self._exchange_name = f'{settings.rabbitmq.setup.delegated_worker.exchange}:Request:{settings.namespace}'
@@ -34,7 +41,15 @@ class DelegateAsyncWorker(GenericAsyncWorker):
         self._q, self._rmq_routing = get_delegate_worker_request_queue_routing_key()
 
     async def _processor_task(self, msg_obj: PowerloomDelegateWorkerRequestMessage):
-        """Function used to process the received message object."""
+        """
+        Process a delegate task for the given message object.
+
+        Args:
+            msg_obj (PowerloomDelegateWorkerRequestMessage): The message object containing the task to process.
+
+        Returns:
+            None
+        """
         self._logger.trace(
             'Processing delegate task for {}', msg_obj,
         )
@@ -69,7 +84,7 @@ class DelegateAsyncWorker(GenericAsyncWorker):
             )
         except Exception as e:
             self._logger.opt(exception=settings.logs.trace_enabled).error(
-                'Exception while processing tx receipt fetch for {}: {}', msg_obj, e
+                'Exception while processing tx receipt fetch for {}: {}', msg_obj, e,
             )
 
             notification_message = DelegateTaskProcessorIssue(
@@ -93,7 +108,16 @@ class DelegateAsyncWorker(GenericAsyncWorker):
         request_msg: PowerloomDelegateWorkerRequestMessage,
         response_msg: BaseModel,
     ):
+        """
+        Sends a response message to the delegate worker response queue.
 
+        Args:
+            request_msg (PowerloomDelegateWorkerRequestMessage): The request message that triggered the response.
+            response_msg (BaseModel): The response message to send.
+
+        Raises:
+            Exception: If there was an error sending the message to the delegate worker response queue.
+        """
         response_queue_name, response_routing_key_pattern = get_delegate_worker_response_queue_routing_key_pattern()
 
         response_routing_key = response_routing_key_pattern.replace(
@@ -127,7 +151,16 @@ class DelegateAsyncWorker(GenericAsyncWorker):
             )
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
+        """
+        Callback function that is called when a message is received from RabbitMQ.
+        It processes the message and starts a new task to handle the message.
 
+        Args:
+            message (IncomingMessage): The incoming message from RabbitMQ.
+
+        Returns:
+            None
+        """
         if not self._initialized:
             await self.init_worker()
 
@@ -160,11 +193,17 @@ class DelegateAsyncWorker(GenericAsyncWorker):
         asyncio.ensure_future(self._processor_task(msg_obj=msg_obj))
 
     async def init_worker(self):
+        """
+        Initializes the worker by calling the _init_delegate_task_calculation_mapping and init functions.
+        """
         if not self._initialized:
             await self._init_delegate_task_calculation_mapping()
             await self.init()
 
     async def _init_delegate_task_calculation_mapping(self):
+        """
+        Initializes the mapping of delegate tasks to their corresponding calculation classes.
+        """
         if self._delegate_task_calculation_mapping is not None:
             return
         # Generate project function mapping

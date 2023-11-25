@@ -81,6 +81,37 @@ class ProcessorDistributor(multiprocessing.Process):
     _client: AsyncClient
 
     def __init__(self, name, **kwargs):
+        """
+        Initialize the ProcessorDistributor object.
+
+        Args:
+            name (str): The name of the ProcessorDistributor.
+            **kwargs: Additional keyword arguments.
+
+        Attributes:
+            _unique_id (str): The unique ID of the ProcessorDistributor.
+            _q (queue.Queue): The queue used for processing tasks.
+            _rabbitmq_interactor: The RabbitMQ interactor object.
+            _shutdown_initiated (bool): Flag indicating if shutdown has been initiated.
+            _rpc_helper: The RPC helper object.
+            _source_chain_id: The source chain ID.
+            _projects_list: The list of projects.
+            _consume_exchange_name (str): The name of the exchange for consuming events.
+            _consume_queue_name (str): The name of the queue for consuming events.
+            _initialized (bool): Flag indicating if the ProcessorDistributor has been initialized.
+            _consume_queue_routing_key (str): The routing key for consuming events.
+            _callback_exchange_name (str): The name of the exchange for callbacks.
+            _payload_commit_exchange_name (str): The name of the exchange for payload commits.
+            _payload_commit_routing_key (str): The routing key for payload commits.
+            _upcoming_project_changes (defaultdict): Dictionary of upcoming project changes.
+            _preload_completion_conditions (defaultdict): Dictionary of preload completion conditions.
+            _newly_added_projects (set): Set of newly added projects.
+            _shutdown_initiated (bool): Flag indicating if shutdown has been initiated.
+            _all_preload_tasks (set): Set of all preload tasks.
+            _project_type_config_mapping (dict): Dictionary mapping project types to their configurations.
+            _last_epoch_processing_health_check (int): Timestamp of the last epoch processing health check.
+            _preloader_compute_mapping (dict): Dictionary mapping preloader tasks to compute resources.
+        """
         super(ProcessorDistributor, self).__init__(name=name, **kwargs)
         self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
         self._q = queue.Queue()
@@ -109,7 +140,7 @@ class ProcessorDistributor(multiprocessing.Process):
         )
 
         self._upcoming_project_changes = defaultdict(list)
-        self._preload_completion_conditions: Dict[int, Awaitable] = defaultdict(
+        self._preload_completion_conditions: Dict[int, Dict] = defaultdict(
             dict,
         )  # epoch ID to preloading complete event
 
@@ -125,20 +156,43 @@ class ProcessorDistributor(multiprocessing.Process):
         self._preloader_compute_mapping = dict()
 
     def _signal_handler(self, signum, frame):
+        """
+        Signal handler method that cancels the core RMQ consumer when a SIGINT, SIGTERM, or SIGQUIT signal is received.
+
+        Args:
+            signum (int): The signal number.
+            frame (frame): The current stack frame at the time the signal was received.
+        """
+
         if signum in [SIGINT, SIGTERM, SIGQUIT]:
             self._core_rmq_consumer.cancel()
 
     async def _init_redis_pool(self):
+        """
+        Initializes the Redis connection pool and populates it with connections.
+        """
         self._aioredis_pool = RedisPoolCache()
         await self._aioredis_pool.populate()
         self._redis_conn = self._aioredis_pool._aioredis_pool
 
     async def _init_rpc_helper(self):
+        """
+        Initializes the RpcHelper instance if it is not already initialized.
+        """
         if not self._rpc_helper:
             self._rpc_helper = RpcHelper()
             self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
 
     async def _init_rabbitmq_connection(self):
+        """
+        Initializes the RabbitMQ connection pool and channel pool.
+
+        The RabbitMQ connection pool is used to manage a pool of connections to the RabbitMQ server,
+        while the channel pool is used to manage a pool of channels for each connection.
+
+        Returns:
+            None
+        """
         self._rmq_connection_pool = Pool(
             get_rabbitmq_robust_connection_async,
             max_size=20, loop=asyncio.get_event_loop(),
@@ -149,6 +203,9 @@ class ProcessorDistributor(multiprocessing.Process):
         )
 
     async def _init_httpx_client(self):
+        """
+        Initializes the HTTPX client with the specified settings.
+        """
         self._async_transport = AsyncHTTPTransport(
             limits=Limits(
                 max_connections=100,
@@ -164,6 +221,19 @@ class ProcessorDistributor(multiprocessing.Process):
         )
 
     async def _send_proc_hub_respawn(self):
+        """
+        Sends a respawn command to the process hub.
+
+        This method creates a ProcessHubCommand object with the command 'respawn',
+        acquires a channel from the channel pool, gets the exchange, and publishes
+        the command message to the exchange.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
         proc_hub_cmd = ProcessHubCommand(
             command='respawn',
         )
@@ -178,6 +248,10 @@ class ProcessorDistributor(multiprocessing.Process):
             )
 
     async def _init_preloader_compute_mapping(self):
+        """
+        Initializes the preloader compute mapping by importing the preloader module and class and
+        adding it to the mapping dictionary.
+        """
         if self._preloader_compute_mapping:
             return
 
@@ -188,6 +262,10 @@ class ProcessorDistributor(multiprocessing.Process):
                 self._preloader_compute_mapping[preloader.task_type] = preloader_class
 
     async def init_worker(self):
+        """
+        Initializes the worker by initializing the Redis pool, RPC helper, loading project metadata,
+        initializing the RabbitMQ connection, and initializing the preloader compute mapping.
+        """
         if not self._initialized:
             await self._init_redis_pool()
             await self._init_httpx_client()
@@ -198,6 +276,10 @@ class ProcessorDistributor(multiprocessing.Process):
             self._initialized = True
 
     async def _load_projects_metadata(self):
+        """
+        Loads the metadata for the projects, including the source chain ID, the list of projects, and the submission window
+        for snapshots. It also updates the project type configuration mapping with the relevant projects.
+        """
         if not self._projects_list:
             with open(settings.protocol_state.abi, 'r') as f:
                 abi_dict = json.load(f)
@@ -261,6 +343,12 @@ class ProcessorDistributor(multiprocessing.Process):
                 )
 
     async def _get_proc_hub_start_time(self) -> int:
+        """
+        Retrieves the start time of the process hub core from Redis.
+
+        Returns:
+            int: The start time of the process hub core, or 0 if not found.
+        """
         _ = await self._redis_conn.get(process_hub_core_start_timestamp())
         if _:
             return int(_)
@@ -268,6 +356,15 @@ class ProcessorDistributor(multiprocessing.Process):
             return 0
 
     async def _epoch_processing_health_check(self, current_epoch_id):
+        """
+        Perform health check for epoch processing.
+
+        Args:
+            current_epoch_id (int): The current epoch ID.
+
+        Returns:
+            None
+        """
         # TODO: make the threshold values configurable.
         # Range of epochs to be checked, success percentage/criteria, offset from current epoch
         if current_epoch_id < 5:
@@ -384,6 +481,17 @@ class ProcessorDistributor(multiprocessing.Process):
         self,
         epoch: EpochBase,
     ):
+        """
+        Wait for all preloading tasks to complete for the given epoch, and distribute snapshot build tasks if all preloading
+        dependencies are satisfied.
+
+        Args:
+            epoch: The epoch for which to wait for preloading tasks to complete.
+
+        Returns:
+            None
+        """
+
         preloader_types_l = list(self._preload_completion_conditions[epoch.epochId].keys())
         conditions: List[Awaitable] = [
             self._preload_completion_conditions[epoch.epochId][k]
@@ -461,8 +569,13 @@ class ProcessorDistributor(multiprocessing.Process):
         self, msg_obj: EpochBase,
     ):
         """
-        Functions to preload data points required by snapshot builders
-        This is to save on redundant RPC and cache calls
+        Executes preloading tasks for the given epoch object.
+
+        Args:
+            msg_obj (EpochBase): The epoch object for which preloading tasks need to be executed.
+
+        Returns:
+            None
         """
         # cleanup previous preloading complete tasks and events
         # start all preload tasks
@@ -500,6 +613,12 @@ class ProcessorDistributor(multiprocessing.Process):
         )
 
     async def _epoch_release_processor(self, message: IncomingMessage):
+        """
+        This method is called when an epoch is released. It enables pending projects for the epoch and executes preloaders.
+
+        Args:
+            message (IncomingMessage): The message containing the epoch information.
+        """
         try:
             msg_obj: EpochBase = (
                 EpochBase.parse_raw(message.body)
@@ -523,6 +642,16 @@ class ProcessorDistributor(multiprocessing.Process):
         asyncio.ensure_future(self._epoch_processing_health_check(msg_obj.epochId))
 
     async def _distribute_callbacks_snapshotting(self, project_type: str, epoch: EpochBase):
+        """
+        Distributes callbacks for snapshotting to the appropriate snapshotters based on the project type and epoch.
+
+        Args:
+            project_type (str): The type of project.
+            epoch (EpochBase): The epoch to snapshot.
+
+        Returns:
+            None
+        """
         # send to snapshotters to get the balances of the addresses
         queuing_tasks = []
 
@@ -631,6 +760,14 @@ class ProcessorDistributor(multiprocessing.Process):
                 )
 
     async def _enable_pending_projects_for_epoch(self, epoch_id) -> Set[str]:
+        """
+        Enables pending projects for the given epoch ID and returns a set of project IDs that were allowed.
+
+        :param epoch_id: The epoch ID for which to enable pending projects.
+        :type epoch_id: Any
+        :return: A set of project IDs that were allowed.
+        :rtype: set
+        """
         pending_project_msgs: List[PowerloomProjectsUpdatedMessage] = self._upcoming_project_changes.pop(epoch_id, [])
         if not pending_project_msgs:
             return set()
@@ -653,6 +790,13 @@ class ProcessorDistributor(multiprocessing.Process):
         return set([msg.projectId.lower() for msg in pending_project_msgs if msg.allowed])
 
     async def _update_all_projects(self, message: IncomingMessage):
+        """
+        Updates all projects based on the incoming message.
+
+        Args:
+            message (IncomingMessage): The incoming message containing the project updates.
+        """
+
         event_type = message.routing_key.split('.')[-1]
 
         if event_type == 'ProjectsUpdated':
@@ -665,6 +809,15 @@ class ProcessorDistributor(multiprocessing.Process):
         self._upcoming_project_changes[msg_obj.enableEpochId].append(msg_obj)
 
     async def _cache_and_forward_to_payload_commit_queue(self, message: IncomingMessage):
+        """
+        Caches the snapshot data and forwards it to the payload commit queue.
+
+        Args:
+            message (IncomingMessage): The incoming message containing the snapshot data.
+
+        Returns:
+            None
+        """
         event_type = message.routing_key.split('.')[-1]
 
         if event_type == 'SnapshotFinalized':
@@ -723,6 +876,11 @@ class ProcessorDistributor(multiprocessing.Process):
         )
 
     async def _distribute_callbacks_aggregate(self, message: IncomingMessage):
+        """
+        Distributes the callbacks for aggregation.
+
+        :param message: IncomingMessage object containing the message to be processed.
+        """
         event_type = message.routing_key.split('.')[-1]
         try:
             if event_type != 'SnapshotSubmitted':
@@ -834,6 +992,9 @@ class ProcessorDistributor(multiprocessing.Process):
         await asyncio.gather(*rabbitmq_publish_tasks, return_exceptions=True)
 
     async def _cleanup_older_epoch_status(self, epoch_id: int):
+        """
+        Deletes the epoch status keys for the epoch that is 30 epochs older than the given epoch_id.
+        """
         tasks = [self._redis_conn.delete(epoch_id_epoch_released_key(epoch_id - 30))]
         delete_keys = list()
         for state in SnapshotterStates:
@@ -844,6 +1005,15 @@ class ProcessorDistributor(multiprocessing.Process):
         await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
+        """
+        Callback function to handle incoming RabbitMQ messages.
+
+        Args:
+            message (IncomingMessage): The incoming RabbitMQ message.
+
+        Returns:
+            None
+        """
         await message.ack()
 
         message_type = message.routing_key.split('.')[-1]
@@ -905,6 +1075,15 @@ class ProcessorDistributor(multiprocessing.Process):
             await self._redis_conn.close()
 
     async def _rabbitmq_consumer(self, loop):
+        """
+        Consume messages from a RabbitMQ queue.
+
+        Args:
+            loop: The event loop to use for the consumer.
+
+        Returns:
+            None
+        """
         async with self._rmq_channel_pool.acquire() as channel:
             await channel.set_qos(10)
             exchange = await channel.get_exchange(
@@ -921,6 +1100,10 @@ class ProcessorDistributor(multiprocessing.Process):
             await q_obj.consume(self._on_rabbitmq_message)
 
     def run(self) -> None:
+        """
+        Runs the ProcessorDistributor by setting resource limits, registering signal handlers,
+        initializing the worker, starting the RabbitMQ consumer, and running the event loop.
+        """
         self._logger = logger.bind(
             module=f'Powerloom|Callbacks|ProcessDistributor:{settings.namespace}-{settings.instance_id}',
         )

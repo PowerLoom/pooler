@@ -9,8 +9,13 @@ from snapshotter.utils.redis.redis_conn import REDIS_CONN_CONF
 
 def process_up(pid):
     """
-    Is the process up?
-    :return: True if process is up
+    Check if a process with given PID is running or not.
+
+    Args:
+        pid (int): Process ID to check.
+
+    Returns:
+        bool: True if process is running, False otherwise.
     """
     p_ = psutil.Process(pid)
     return p_.is_running()
@@ -26,6 +31,13 @@ def process_up(pid):
 
 
 def main():
+    """
+    Retrieves process details from Redis cache and prints their running status.
+
+    Retrieves process details from Redis cache and prints their running status. The process details include the System Event
+    Detector, Worker Processor Distributor, and Worker Processes. The running status of each process is determined using the
+    `process_up` function.
+    """
     connection_pool = redis.BlockingConnectionPool(**REDIS_CONN_CONF)
     redis_conn = redis.Redis(connection_pool=connection_pool)
     map_raw = redis_conn.hgetall(

@@ -34,11 +34,33 @@ logger = logger.bind(module='data_helper')
 
 
 def retry_state_callback(retry_state: tenacity.RetryCallState):
+    """
+    Callback function to handle retry attempts for IPFS cat operation.
+
+    Parameters:
+    retry_state (tenacity.RetryCallState): The current state of the retry call.
+
+    Returns:
+    None
+    """
     logger.warning(f'Encountered IPFS cat exception: {retry_state.outcome.exception()}')
 
 
 # TODO: warmup cache to reduce RPC calls overhead
 async def get_project_finalized_cid(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, epoch_id, project_id):
+    """
+    Get the CID of the finalized data for a given project and epoch.
+
+    Args:
+        redis_conn (aioredis.Redis): Redis connection object.
+        state_contract_obj: Contract object for the state contract.
+        rpc_helper: Helper object for making RPC calls.
+        epoch_id (int): Epoch ID for which to get the CID.
+        project_id (str): ID of the project for which to get the CID.
+
+    Returns:
+        str: CID of the finalized data for the given project and epoch, or None if not found.
+    """
 
     project_first_epoch = await get_project_first_epoch(
         redis_conn, state_contract_obj, rpc_helper, project_id,
@@ -76,7 +98,21 @@ async def w3_get_and_cache_finalized_cid(
     epoch_id,
     project_id,
 ):
+    """
+    This function retrieves the consensus status and the max snapshot CID for a given project and epoch.
+    If the consensus status is True, the CID is added to a Redis sorted set with the epoch ID as the score.
+    If the consensus status is False, a null value is added to the sorted set with the epoch ID as the score.
 
+    Args:
+        redis_conn (aioredis.Redis): Redis connection object
+        state_contract_obj: Contract object for the state contract
+        rpc_helper: Helper object for making web3 calls
+        epoch_id (int): Epoch ID
+        project_id (int): Project ID
+
+    Returns:
+        Tuple[str, int]: The CID and epoch ID if the consensus status is True, or the null value and epoch ID if the consensus status is False.
+    """
     tasks = [
         state_contract_obj.functions.snapshotStatus(project_id, epoch_id),
         state_contract_obj.functions.maxSnapshotsCid(project_id, epoch_id),
@@ -101,7 +137,18 @@ async def w3_get_and_cache_finalized_cid(
 
 # TODO: warmup cache to reduce RPC calls overhead
 async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, project_id):
+    """
+    Get the first epoch for a given project ID.
 
+    Args:
+        redis_conn (aioredis.Redis): Redis connection object.
+        state_contract_obj: Contract object for the state contract.
+        rpc_helper: RPC helper object.
+        project_id (str): ID of the project.
+
+    Returns:
+        int: The first epoch for the given project ID.
+    """
     first_epoch_data = await redis_conn.hget(
         project_first_epoch_hmap(),
         project_id,
@@ -137,10 +184,32 @@ async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj
     before_sleep=retry_state_callback,
 )
 async def fetch_file_from_ipfs(ipfs_reader, cid):
+    """
+    Fetches a file from IPFS using the given IPFS reader and CID.
+
+    Args:
+        ipfs_reader: An IPFS reader object.
+        cid: The CID of the file to fetch.
+
+    Returns:
+        The contents of the file as bytes.
+    """
     return await ipfs_reader.cat(cid)
 
 
 async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, project_id: str) -> dict:
+    """
+    Fetches submission data from cache or IPFS.
+
+    Args:
+        redis_conn (aioredis.Redis): Redis connection object.
+        cid (str): IPFS content ID.
+        ipfs_reader (ipfshttpclient.client.Client): IPFS client object.
+        project_id (str): ID of the project.
+
+    Returns:
+        dict: Submission data.
+    """
     if not cid:
         return dict()
 
@@ -173,6 +242,18 @@ async def get_submission_data_bulk(
     ipfs_reader,
     project_ids: List[str],
 ) -> List[dict]:
+    """
+    Retrieves submission data for multiple submissions in bulk.
+
+    Args:
+        redis_conn (aioredis.Redis): Redis connection object.
+        cids (List[str]): List of submission CIDs.
+        ipfs_reader: IPFS reader object.
+        project_ids (List[str]): List of project IDs.
+
+    Returns:
+        List[dict]: List of submission data dictionaries.
+    """
     batch_size = 10
     all_snapshot_data = []
     for i in range(0, len(cids), batch_size):
@@ -192,6 +273,20 @@ async def get_submission_data_bulk(
 async def get_project_epoch_snapshot(
     redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, ipfs_reader, epoch_id, project_id,
 ) -> dict:
+    """
+    Retrieves the epoch snapshot for a given project.
+
+    Args:
+        redis_conn (aioredis.Redis): Redis connection object.
+        state_contract_obj: State contract object.
+        rpc_helper: RPC helper object.
+        ipfs_reader: IPFS reader object.
+        epoch_id (int): Epoch ID.
+        project_id (str): Project ID.
+
+    Returns:
+        dict: The epoch snapshot data.
+    """
     cid = await get_project_finalized_cid(redis_conn, state_contract_obj, rpc_helper, epoch_id, project_id)
     if cid:
         data = await get_submission_data(redis_conn, cid, ipfs_reader, project_id)
@@ -201,7 +296,17 @@ async def get_project_epoch_snapshot(
 
 
 async def get_source_chain_id(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper):
+    """
+    Retrieves the source chain ID from Redis cache if available, otherwise fetches it from the state contract and caches it in Redis.
 
+    Args:
+        redis_conn (aioredis.Redis): Redis connection object.
+        state_contract_obj: State contract object.
+        rpc_helper: RPC helper object.
+
+    Returns:
+        int: The source chain ID.
+    """
     source_chain_id_data = await redis_conn.get(
         source_chain_id_key(),
     )
@@ -223,7 +328,17 @@ async def get_source_chain_id(redis_conn: aioredis.Redis, state_contract_obj, rp
 
 
 async def build_projects_list_from_events(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper):
+    """
+    Builds a list of project IDs from the 'ProjectsUpdated' events emitted by the state contract.
 
+    Args:
+        redis_conn (aioredis.Redis): Redis connection object.
+        state_contract_obj: Contract object of the state contract.
+        rpc_helper: Helper object for making RPC calls.
+
+    Returns:
+        list: List of project IDs.
+    """
     EVENT_SIGS = {
         'ProjectsUpdated': 'ProjectsUpdated(string,bool,uint256)',
     }
@@ -277,6 +392,17 @@ async def build_projects_list_from_events(redis_conn: aioredis.Redis, state_cont
 
 
 async def get_projects_list(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper):
+    """
+    Fetches the list of projects from the state contract.
+
+    Args:
+        redis_conn (aioredis.Redis): Redis connection object.
+        state_contract_obj: Contract object for the state contract.
+        rpc_helper: RPC helper object.
+
+    Returns:
+        List: List of projects.
+    """
     try:
         tasks = [
             state_contract_obj.functions.getProjects(),
@@ -291,6 +417,17 @@ async def get_projects_list(redis_conn: aioredis.Redis, state_contract_obj, rpc_
 
 
 async def get_snapshot_submision_window(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper):
+    """
+    Get the snapshot submission window from the state contract.
+
+    Args:
+        redis_conn (aioredis.Redis): Redis connection object.
+        state_contract_obj: State contract object.
+        rpc_helper: RPC helper object.
+
+    Returns:
+        submission_window (int): The snapshot submission window.
+    """
     tasks = [
         state_contract_obj.functions.snapshotSubmissionWindow(),
     ]
@@ -301,7 +438,17 @@ async def get_snapshot_submision_window(redis_conn: aioredis.Redis, state_contra
 
 
 async def get_source_chain_epoch_size(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper):
+    """
+    This function retrieves the epoch size of the source chain from the state contract.
 
+    Args:
+        redis_conn (aioredis.Redis): Redis connection object.
+        state_contract_obj: Contract object for the state contract.
+        rpc_helper: Helper object for making RPC calls.
+
+    Returns:
+        int: The epoch size of the source chain.
+    """
     source_chain_epoch_size_data = await redis_conn.get(
         source_chain_epoch_size_key(),
     )
@@ -324,6 +471,17 @@ async def get_source_chain_epoch_size(redis_conn: aioredis.Redis, state_contract
 
 
 async def get_source_chain_block_time(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper):
+    """
+    Get the block time of the source chain.
+
+    Args:
+        redis_conn (aioredis.Redis): Redis connection object.
+        state_contract_obj: Contract object for the state contract.
+        rpc_helper: RPC helper object.
+
+    Returns:
+        int: Block time of the source chain.
+    """
     source_chain_block_time_data = await redis_conn.get(
         source_chain_block_time_key(),
     )
@@ -346,7 +504,6 @@ async def get_source_chain_block_time(redis_conn: aioredis.Redis, state_contract
         return source_chain_block_time
 
 
-# calculate tail epoch_id given current epoch and time in seconds
 async def get_tail_epoch_id(
         redis_conn: aioredis.Redis,
         state_contract_obj,
@@ -355,7 +512,20 @@ async def get_tail_epoch_id(
         time_in_seconds,
         project_id,
 ):
-    # Returns tail epoch_id and a boolean indicating if tail contains the full time window
+    """
+    Returns the tail epoch_id and a boolean indicating if tail contains the full time window.
+
+    Args:
+        redis_conn (aioredis.Redis): Redis connection object.
+        state_contract_obj: State contract object.
+        rpc_helper: RPC helper object.
+        current_epoch_id (int): Current epoch ID.
+        time_in_seconds (int): Time in seconds.
+        project_id (str): Project ID.
+
+    Returns:
+        Tuple[int, bool]: Tail epoch ID and a boolean indicating if tail contains the full time window.
+    """
     source_chain_epoch_size = await get_source_chain_epoch_size(redis_conn, state_contract_obj, rpc_helper)
     source_chain_block_time = await get_source_chain_block_time(redis_conn, state_contract_obj, rpc_helper)
 
@@ -385,7 +555,21 @@ async def get_project_epoch_snapshot_bulk(
         epoch_id_max: int,
         project_id,
 ):
+    """
+    Fetches the snapshot data for a given project and epoch range.
 
+    Args:
+        redis_conn (aioredis.Redis): Redis connection object.
+        state_contract_obj: State contract object.
+        rpc_helper: RPC helper object.
+        ipfs_reader: IPFS reader object.
+        epoch_id_min (int): Minimum epoch ID to fetch snapshot data for.
+        epoch_id_max (int): Maximum epoch ID to fetch snapshot data for.
+        project_id: ID of the project to fetch snapshot data for.
+
+    Returns:
+        A list of snapshot data for the given project and epoch range.
+    """
     batch_size = 100
 
     project_first_epoch = await get_project_first_epoch(
@@ -436,8 +620,16 @@ async def get_project_epoch_snapshot_bulk(
     return all_snapshot_data
 
 
-# get snapshotter high level status for all the projects
 async def get_snapshotter_status(redis_conn: aioredis.Redis):
+    """
+    Returns the snapshotter status for all projects.
+
+    Args:
+        redis_conn (aioredis.Redis): Redis connection object.
+
+    Returns:
+        SnapshotterStatus: Object containing the snapshotter status for all projects.
+    """
     status_keys = []
 
     all_projects = await redis_conn.smembers('storedProjectIds')
@@ -492,8 +684,18 @@ async def get_snapshotter_status(redis_conn: aioredis.Redis):
     return overall_status
 
 
-# gets snapshotter status for a particular project
 async def get_snapshotter_project_status(redis_conn: aioredis.Redis, project_id: str, with_data: bool):
+    """
+    Retrieves the snapshotter project status for a given project ID.
+
+    Args:
+        redis_conn (aioredis.Redis): Redis connection object.
+        project_id (str): ID of the project to retrieve the status for.
+        with_data (bool): Whether to include snapshot data in the response.
+
+    Returns:
+        SnapshotterProjectStatus: Object containing the project status.
+    """
     reports = await redis_conn.hgetall(project_snapshotter_status_report_key(project_id))
 
     reports = {

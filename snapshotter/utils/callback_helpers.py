@@ -1,9 +1,9 @@
 import asyncio
+import functools
 from abc import ABC
 from abc import ABCMeta
 from abc import abstractmethod
 from abc import abstractproperty
-import functools
 from typing import Any
 from typing import Dict
 from typing import Union
@@ -31,6 +31,9 @@ helper_logger = logger.bind(module='Powerloom|Callback|Helpers')
 
 
 async def get_rabbitmq_robust_connection_async():
+    """
+    Returns a robust connection to RabbitMQ server using the settings specified in the configuration file.
+    """
     return await aio_pika.connect_robust(
         host=settings.rabbitmq.host,
         port=settings.rabbitmq.port,
@@ -41,6 +44,11 @@ async def get_rabbitmq_robust_connection_async():
 
 
 async def get_rabbitmq_basic_connection_async():
+    """
+    Returns an async connection to RabbitMQ using the settings specified in the config file.
+
+    :return: An async connection to RabbitMQ.
+    """
     return await aio_pika.connect(
         host=settings.rabbitmq.host,
         port=settings.rabbitmq.port,
@@ -51,11 +59,29 @@ async def get_rabbitmq_basic_connection_async():
 
 
 async def get_rabbitmq_channel(connection_pool) -> aio_pika.Channel:
+    """
+    Acquires a connection from the connection pool and returns a channel object for RabbitMQ communication.
+
+    Args:
+        connection_pool: An instance of `aio_pika.pool.Pool`.
+
+    Returns:
+        An instance of `aio_pika.Channel`.
+    """
     async with connection_pool.acquire() as connection:
         return await connection.channel()
 
 
 def misc_notification_callback_result_handler(fut: asyncio.Future):
+    """
+    Handles the result of a callback or notification.
+
+    Args:
+        fut (asyncio.Future): The future object representing the callback or notification.
+
+    Returns:
+        None
+    """
     try:
         r = fut.result()
     except Exception as e:
@@ -70,6 +96,15 @@ def misc_notification_callback_result_handler(fut: asyncio.Future):
 
 
 def sync_notification_callback_result_handler(f: functools.partial):
+    """
+    Handles the result of a synchronous notification callback.
+
+    Args:
+        f (functools.partial): The function to handle.
+
+    Returns:
+        None
+    """
     try:
         result = f()
     except Exception as exc:
@@ -84,6 +119,16 @@ def sync_notification_callback_result_handler(f: functools.partial):
 
 
 async def send_failure_notifications_async(client: AsyncClient, message: BaseModel):
+    """
+    Sends failure notifications to the configured reporting services.
+
+    Args:
+        client (AsyncClient): The async HTTP client to use for sending notifications.
+        message (BaseModel): The message to send as notification.
+
+    Returns:
+        None
+    """
     if settings.reporting.service_url:
         f = asyncio.ensure_future(
             client.post(
@@ -104,6 +149,16 @@ async def send_failure_notifications_async(client: AsyncClient, message: BaseMod
 
 
 def send_failure_notifications_sync(client: SyncClient, message: BaseModel):
+    """
+    Sends failure notifications synchronously to the reporting service and/or Slack.
+
+    Args:
+        client (SyncClient): The HTTP client to use for sending notifications.
+        message (BaseModel): The message to send as notification.
+
+    Returns:
+        None
+    """
     if settings.reporting.service_url:
         f = functools.partial(
             client.post,

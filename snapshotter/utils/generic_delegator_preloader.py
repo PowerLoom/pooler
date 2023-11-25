@@ -25,6 +25,30 @@ from snapshotter.utils.rpc import RpcHelper
 
 class DelegatorPreloaderAsyncWorker(GenericDelegatorPreloader):
     def __init__(self, **kwargs):
+        """
+        Initializes the delegator preloader.
+        Args:
+            **kwargs: Arbitrary keyword arguments.
+
+        Attributes:
+            _qos (int): Quality of service.
+            _filter_worker_request_exchange_name (str): Name of the exchange for worker requests.
+            _filter_worker_response_exchange_name (str): Name of the exchange for worker responses.
+            _filter_worker_request_queue (str): Name of the queue for worker requests.
+            _filter_worker_request_routing_key (str): Routing key for worker requests.
+            _awaited_delegated_response_ids (set): Set of request IDs for which responses are awaited.
+            _collected_response_objects (Dict[str, Dict[Any, Any]]): Dictionary of response objects collected so far.
+            _filter_worker_response_queue (str): Name of the queue for worker responses.
+            _filter_worker_response_routing_key (str): Routing key for worker responses.
+            _rw_lock (aiorwlock.RWLock): Read-write lock for synchronizing access to shared resources.
+            _preload_finished_event (asyncio.Event): Event that is set when preloading is complete.
+            _redis_conn: Redis connection object.
+            _channel: RabbitMQ channel object.
+            _q_obj: RabbitMQ queue object.
+            _unique_id: Unique identifier for this instance.
+            _response_exchange: RabbitMQ exchange object for worker responses.
+        """
+
         self._qos = 1
         self._filter_worker_request_exchange_name = f'{settings.rabbitmq.setup.delegated_worker.exchange}:Request:{settings.namespace}'
         self._filter_worker_response_exchange_name = f'{settings.rabbitmq.setup.delegated_worker.exchange}:Response:{settings.namespace}'
@@ -45,6 +69,10 @@ class DelegatorPreloaderAsyncWorker(GenericDelegatorPreloader):
         self._response_exchange = None
 
     async def cleanup(self):
+        """
+        Cleans up the resources used by the delegator preloader.
+        Closes the Redis connection and cancels the consumer tag.
+        """
         if self._redis_conn:
             try:
                 await self._redis_conn.close()
@@ -56,6 +84,10 @@ class DelegatorPreloaderAsyncWorker(GenericDelegatorPreloader):
             await self._channel.close()
 
     async def _periodic_awaited_responses_checker(self):
+        """
+        Periodically checks for awaited delegated responses and triggers the on_delegated_responses_complete callback
+        when all responses have been received.
+        """
         _running = True
         while _running:
             await asyncio.sleep(1)
@@ -70,6 +102,12 @@ class DelegatorPreloaderAsyncWorker(GenericDelegatorPreloader):
         self,
         message: aio_pika.abc.AbstractIncomingMessage,
     ):
+        """
+        Callback function that is called when a response message is received from the filter worker.
+
+        Args:
+            message (aio_pika.abc.AbstractIncomingMessage): The incoming message from the filter worker.
+        """
         if message.routing_key.split('.')[-1] != self._unique_id:
             await message.nack(requeue=True)
             return
@@ -85,6 +123,17 @@ class DelegatorPreloaderAsyncWorker(GenericDelegatorPreloader):
 
     )
     async def compute_with_retry(self, epoch: EpochBase, redis_conn: aioredis.Redis, rpc_helper: RpcHelper):
+        """
+        Compute with retry logic.
+
+        Args:
+            epoch (EpochBase): The epoch to compute.
+            redis_conn (aioredis.Redis): The Redis connection.
+            rpc_helper (RpcHelper): The RPC helper.
+
+        Returns:
+            The result of the computation.
+        """
         return await self.compute_with_delegate_workers(epoch=epoch, redis_conn=redis_conn, rpc_helper=rpc_helper)
 
     async def compute_with_delegate_workers(
@@ -93,6 +142,17 @@ class DelegatorPreloaderAsyncWorker(GenericDelegatorPreloader):
             redis_conn: aioredis.Redis,
             rpc_helper: RpcHelper,
     ):
+        """
+        Computes the delegated worker responses for the given epoch using RabbitMQ and Redis.
+
+        Args:
+            epoch: An instance of EpochBase representing the epoch for which to compute the delegated worker responses.
+            redis_conn: An instance of aioredis.Redis representing the Redis connection to use.
+            rpc_helper: An instance of RpcHelper representing the RPC helper to use.
+
+        Raises:
+            Exception: If the preloading task times out or if an exception occurs while waiting for preloading to complete.
+        """
         self._redis_conn = redis_conn
         self._awaited_delegated_response_ids = set(self._request_id_query_obj_map.keys())
         self._unique_id = str(uuid.uuid4())

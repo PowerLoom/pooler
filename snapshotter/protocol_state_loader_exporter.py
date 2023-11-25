@@ -112,11 +112,23 @@ class ProtocolStateLoader:
         return eid_cid_map
 
     async def _init_redis_pool(self):
+        """
+        Initializes the Redis connection pool and populates it with connections.
+        """
         self._aioredis_pool = RedisPoolCache(pool_size=1000)
         await self._aioredis_pool.populate()
         self._redis_conn = self._aioredis_pool._aioredis_pool
 
     async def _init_rpc_helper(self):
+        """
+        Initializes the RPC helper and sets the protocol state contract.
+
+        This method creates an instance of RpcHelper using the specified RPC settings.
+        It also reads the protocol ABI from the settings and sets the protocol state contract.
+
+        Returns:
+            None
+        """
         self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
         protocol_abi = read_json_file(settings.protocol_state.abi, self._logger)
         self._protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
@@ -127,6 +139,10 @@ class ProtocolStateLoader:
         )
 
     async def init(self):
+        """
+        Initializes the object by setting up the logger, initializing the Redis pool,
+        initializing the RPC helper, and creating a bounded semaphore for protocol state queries.
+        """
         self._logger = logger.bind(
             module=f'Powerloom|ProtocolStateLoader|{settings.namespace}-{settings.instance_id[:5]}',
         )
@@ -135,6 +151,13 @@ class ProtocolStateLoader:
         self._protocol_state_query_semaphore = asyncio.BoundedSemaphore(10)
 
     async def prelim_load(self):
+        """
+        Performs preliminary loading of protocol state data.
+
+        Returns:
+            Tuple: A tuple containing the current epoch ID, a dictionary mapping project IDs to their first epoch IDs,
+                    and a list of all project IDs.
+        """
         await self.init()
         state_query_call_tasks = []
         cur_epoch_id_task = self._protocol_state_contract.functions.currentEpoch()
@@ -165,7 +188,18 @@ class ProtocolStateLoader:
         return cur_epoch_id, project_id_first_epoch_id_map, all_project_ids
 
     def _export_project_state(self, project_id, first_epoch_id, end_epoch_id, redis_conn: redis.Redis) -> ProjectSpecificState:
+        """
+        Export the project state for a specific project.
 
+        Args:
+            project_id (str): The ID of the project.
+            first_epoch_id (int): The ID of the first epoch.
+            end_epoch_id (int): The ID of the last epoch.
+            redis_conn (redis.Redis): The Redis connection.
+
+        Returns:
+            ProjectSpecificState: The exported project state.
+        """
         self._logger.debug('Exporting project state for {}', project_id)
         project_state = ProjectSpecificState.construct()
         project_state.first_epoch_id = first_epoch_id
@@ -190,6 +224,16 @@ class ProtocolStateLoader:
         return project_state
 
     def export(self):
+        """
+        Export the protocol state to a compressed JSON file.
+
+        This method runs the preliminary load, retrieves the current epoch ID, project ID mapping,
+        and all project IDs. It then exports the project-specific states and finalized CIDs for each project.
+        The exported state is saved as a compressed JSON file named 'state.json.bz2'.
+
+        Returns:
+            None
+        """
         asyncio.get_event_loop().run_until_complete(self.prelim_load())
         state = ProtocolState.construct()
         r = redis.Redis(**REDIS_CONN_CONF, max_connections=20, decode_responses=True)
@@ -238,6 +282,17 @@ class ProtocolStateLoader:
         self._logger.info('Exported state.json.bz2')
 
     def _load_project_state(self, project_id, project_state: ProjectSpecificState, redis_conn: redis.Redis):
+        """
+        Loads the project state for a specific project.
+
+        Args:
+            project_id (str): The ID of the project.
+            project_state (ProjectSpecificState): The project-specific state object.
+            redis_conn (redis.Redis): The Redis connection object.
+
+        Returns:
+            None
+        """
         self._logger.debug('Loading project state for {}', project_id)
         redis_conn.hset(project_first_epoch_hmap(), project_id, project_state.first_epoch_id)
         self._logger.debug('Loaded first epoch ID {} for project {}', project_state.first_epoch_id, project_id)
@@ -252,6 +307,12 @@ class ProtocolStateLoader:
             self._logger.debug('Loaded {} finalized CIDs for project {}', s, project_id)
 
     def load(self, file_name='state.json.bz2'):
+        """
+        Loads the protocol state from a file.
+
+        Args:
+            file_name (str): The name of the file to load the state from. Default is 'state.json.bz2'.
+        """
         asyncio.get_event_loop().run_until_complete(self.init())
         r = redis.Redis(**REDIS_CONN_CONF, max_connections=20, decode_responses=True)
         self._logger.debug('Loading state from file {}', file_name)

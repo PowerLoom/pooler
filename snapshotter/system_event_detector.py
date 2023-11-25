@@ -32,9 +32,15 @@ from snapshotter.utils.rpc import RpcHelper
 
 def rabbitmq_and_redis_cleanup(fn):
     """
-    A decorator that wraps the provided function and handles cleaning up RabbitMQ and Redis resources before exiting.
-    """
+    A decorator function that wraps the given function and handles cleanup of RabbitMQ and Redis connections in case of
+    a GenericExitOnSignal or KeyboardInterrupt exception.
 
+    Args:
+        fn: The function to be wrapped.
+
+    Returns:
+        The wrapped function.
+    """
     @wraps(fn)
     def wrapper(self, *args, **kwargs):
         try:
@@ -75,10 +81,28 @@ class EventDetectorProcess(multiprocessing.Process):
 
     def __init__(self, name, **kwargs):
         """
-        Initializes a new instance of the `EpochDetectorProcess` class.
+        Initializes the SystemEventDetector class.
 
-        Arguments:
-        name -- the name of the process
+        Args:
+            name (str): The name of the process.
+            **kwargs: Additional keyword arguments to be passed to the multiprocessing.Process class.
+
+        Attributes:
+            _rabbitmq_thread (threading.Thread): The RabbitMQ thread.
+            _rabbitmq_queue (queue.Queue): The RabbitMQ queue.
+            _shutdown_initiated (bool): A flag indicating whether shutdown has been initiated.
+            _logger (logging.Logger): The logger instance.
+            _exchange (str): The exchange name.
+            _routing_key_prefix (str): The routing key prefix.
+            _aioredis_pool (None): The aioredis pool.
+            _redis_conn (None): The redis connection.
+            _last_processed_block (None): The last processed block.
+            rpc_helper (RpcHelper): The RpcHelper instance.
+            contract_abi (dict): The contract ABI.
+            contract_address (str): The contract address.
+            contract (web3.eth.Contract): The contract instance.
+            event_sig (dict): The event signature.
+            event_abi (dict): The event ABI.
         """
         multiprocessing.Process.__init__(self, name=name, **kwargs)
         self._rabbitmq_thread: threading.Thread
@@ -112,10 +136,10 @@ class EventDetectorProcess(multiprocessing.Process):
             abi=self.contract_abi,
         )
 
-# event EpochReleased(uint256 indexed epochId, uint256 begin, uint256 end, uint256 timestamp);
-# event SnapshotFinalized(uint256 indexed epochId, uint256 epochEnd, string projectId,
-#     string snapshotCid, uint256 timestamp);
-# event ProjectsUpdated(string projectId, bool allowed);
+        # event EpochReleased(uint256 indexed epochId, uint256 begin, uint256 end, uint256 timestamp);
+        # event SnapshotFinalized(uint256 indexed epochId, uint256 epochEnd, string projectId,
+        #     string snapshotCid, uint256 timestamp);
+        # event ProjectsUpdated(string projectId, bool allowed);
 
         EVENTS_ABI = {
             'EpochReleased': self.contract.events.EpochReleased._get_event_abi(),
@@ -138,20 +162,26 @@ class EventDetectorProcess(multiprocessing.Process):
         )
 
     async def _init_redis_pool(self):
+        """
+        Initializes the Redis connection pool if it hasn't been initialized yet.
+        """
         if not self._aioredis_pool:
             self._aioredis_pool = RedisPoolCache()
             await self._aioredis_pool.populate()
             self._redis_conn = self._aioredis_pool._aioredis_pool
 
     async def get_events(self, from_block: int, to_block: int):
-        """Get the events from the block range.
+        """
+        Retrieves events from the blockchain for the given block range and returns them as a list of tuples.
+        Each tuple contains the event name and an object representing the event data.
 
-        Arguments:
-            int : from block
-            int: to block
+        Args:
+            from_block (int): The starting block number.
+            to_block (int): The ending block number.
 
         Returns:
-            list : (type, event)
+            List[Tuple[str, Any]]: A list of tuples, where each tuple contains the event name
+            and an object representing the event data.
         """
         events_log = await self.rpc_helper.get_events_logs(
             **{
@@ -204,6 +234,12 @@ class EventDetectorProcess(multiprocessing.Process):
         return events
 
     def _interactor_wrapper(self, q: queue.Queue):  # run in a separate thread
+        """
+        A wrapper method that runs in a separate thread and initializes a RabbitmqThreadedSelectLoopInteractor object.
+
+        Args:
+        - q: A queue.Queue object that is used to publish messages to RabbitMQ.
+        """
         self._rabbitmq_interactor = RabbitmqThreadedSelectLoopInteractor(
             publish_queue=q,
             consumer_worker_name=self.name,
@@ -211,6 +247,16 @@ class EventDetectorProcess(multiprocessing.Process):
         self._rabbitmq_interactor.run()  # blocking
 
     def _generic_exit_handler(self, signum, sigframe):
+        """
+        Handles the generic exit signal and initiates shutdown.
+
+        Args:
+            signum (int): The signal number.
+            sigframe (object): The signal frame.
+
+        Raises:
+            GenericExitOnSignal: If the shutdown is initiated.
+        """
         if (
             signum in [SIGINT, SIGTERM, SIGQUIT] and
             not self._shutdown_initiated
@@ -220,7 +266,13 @@ class EventDetectorProcess(multiprocessing.Process):
             raise GenericExitOnSignal
 
     def _broadcast_event(self, event_type: str, event: EventBase):
-        """Broadcast event to the RabbitMQ queue and save update in redis."""
+        """
+        Broadcasts the given event to the RabbitMQ queue.
+
+        Args:
+            event_type (str): The type of the event being broadcasted.
+            event (EventBase): The event being broadcasted.
+        """
         self._logger.info('Broadcasting event: {}', event)
         brodcast_msg = (
             event.json().encode('utf-8'),
@@ -230,6 +282,11 @@ class EventDetectorProcess(multiprocessing.Process):
         self._rabbitmq_queue.put(brodcast_msg)
 
     async def _detect_events(self):
+        """
+        Continuously detects events by fetching the current block and comparing it to the last processed block.
+        If the last processed block is too far behind the current block, it processes the current block and broadcasts the events.
+        The last processed block is saved in Redis for future reference.
+        """
         while True:
             try:
                 current_block = await self.rpc_helper.get_current_block(redis_conn=self._redis_conn)
@@ -327,6 +384,14 @@ class EventDetectorProcess(multiprocessing.Process):
 
     @rabbitmq_and_redis_cleanup
     def run(self):
+        """
+        A class for detecting system events using RabbitMQ and Redis.
+
+        Methods:
+        --------
+        run()
+            Starts the event detection process.
+        """
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         resource.setrlimit(
             resource.RLIMIT_NOFILE,

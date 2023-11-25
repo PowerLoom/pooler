@@ -55,6 +55,15 @@ from snapshotter.utils.rpc import RpcHelper
 
 
 def web3_storage_retry_state_callback(retry_state: tenacity.RetryCallState):
+    """
+    Callback function to handle retry attempts for web3 storage upload.
+
+    Args:
+        retry_state (tenacity.RetryCallState): The current state of the retry call.
+
+    Returns:
+        None
+    """
     if retry_state and retry_state.outcome.failed:
         logger.warning(
             f'Encountered web3 storage upload exception: {retry_state.outcome.exception()} | args: {retry_state.args}, kwargs:{retry_state.kwargs}',
@@ -62,6 +71,15 @@ def web3_storage_retry_state_callback(retry_state: tenacity.RetryCallState):
 
 
 def ipfs_upload_retry_state_callback(retry_state: tenacity.RetryCallState):
+    """
+    Callback function to handle retry attempts for IPFS uploads.
+
+    Args:
+        retry_state (tenacity.RetryCallState): The current state of the retry attempt.
+
+    Returns:
+        None
+    """
     if retry_state and retry_state.outcome.failed:
         logger.warning(
             f'Encountered ipfs upload exception: {retry_state.outcome.exception()} | args: {retry_state.args}, kwargs:{retry_state.kwargs}',
@@ -81,6 +99,13 @@ class GenericAsyncWorker(multiprocessing.Process):
     _web3_storage_upload_client: AsyncClient
 
     def __init__(self, name, **kwargs):
+        """
+        Initializes a GenericAsyncWorker instance.
+
+        Args:
+            name (str): The name of the worker.
+            **kwargs: Additional keyword arguments to pass to the superclass constructor.
+        """
         self._core_rmq_consumer: asyncio.Task
         self._exchange_name = f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}'
         self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
@@ -103,6 +128,13 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._initialized = False
 
     def _signal_handler(self, signum, frame):
+        """
+        Signal handler function that cancels the core RMQ consumer when a SIGINT, SIGTERM or SIGQUIT signal is received.
+
+        Args:
+            signum (int): The signal number.
+            frame (frame): The current stack frame at the time the signal was received.
+        """
         if signum in [SIGINT, SIGTERM, SIGQUIT]:
             self._core_rmq_consumer.cancel()
 
@@ -113,6 +145,18 @@ class GenericAsyncWorker(multiprocessing.Process):
         after=web3_storage_retry_state_callback,
     )
     async def _upload_web3_storage(self, snapshot: bytes):
+        """
+        Uploads the given snapshot to web3 storage.
+
+        Args:
+            snapshot (bytes): The snapshot to upload.
+
+        Returns:
+            None
+
+        Raises:
+            HTTPError: If the upload fails.
+        """
         web3_storage_settings = settings.web3storage
         # if no api token is provided, skip
         if not web3_storage_settings.api_token:
@@ -133,6 +177,16 @@ class GenericAsyncWorker(multiprocessing.Process):
         after=ipfs_upload_retry_state_callback,
     )
     async def _upload_to_ipfs(self, snapshot: bytes, _ipfs_writer_client: AsyncIPFSClient):
+        """
+        Uploads a snapshot to IPFS using the provided AsyncIPFSClient.
+
+        Args:
+            snapshot (bytes): The snapshot to upload.
+            _ipfs_writer_client (AsyncIPFSClient): The IPFS client to use for uploading.
+
+        Returns:
+            str: The CID of the uploaded snapshot.
+        """
         snapshot_cid = await _ipfs_writer_client.add_bytes(snapshot)
         return snapshot_cid
 
@@ -149,6 +203,21 @@ class GenericAsyncWorker(multiprocessing.Process):
             snapshot: Union[BaseModel, AggregateBase],
             storage_flag: bool,
     ):
+        """
+        Commits the given snapshot to IPFS and web3 storage (if enabled), and sends messages to the event detector and relayer
+        dispatch queues.
+
+        Args:
+            task_type (str): The type of task being committed.
+            _ipfs_writer_client (AsyncIPFSClient): The IPFS client to use for uploading the snapshot.
+            project_id (str): The ID of the project the snapshot belongs to.
+            epoch (Union[PowerloomSnapshotProcessMessage, PowerloomSnapshotSubmittedMessage, PowerloomCalculateAggregateMessage]): The epoch the snapshot belongs to.
+            snapshot (Union[BaseModel, AggregateBase]): The snapshot to commit.
+            storage_flag (bool): Whether to upload the snapshot to web3 storage.
+
+        Returns:
+            None
+        """
         # payload commit sequence begins
         # upload to IPFS
         snapshot_json = json.dumps(snapshot.dict(by_alias=True), sort_keys=True, separators=(',', ':'))
@@ -238,6 +307,15 @@ class GenericAsyncWorker(multiprocessing.Process):
             asyncio.ensure_future(self._upload_web3_storage(snapshot_bytes))
 
     async def _rabbitmq_consumer(self, loop):
+        """
+        Consume messages from a RabbitMQ queue.
+
+        Args:
+            loop (asyncio.AbstractEventLoop): The event loop to use for the consumer.
+
+        Returns:
+            None
+        """
         self._rmq_connection_pool = Pool(get_rabbitmq_robust_connection_async, max_size=5, loop=loop)
         self._rmq_channel_pool = Pool(
             partial(get_rabbitmq_channel, self._rmq_connection_pool), max_size=20,
@@ -269,6 +347,21 @@ class GenericAsyncWorker(multiprocessing.Process):
         ],
         snapshot_cid: str,
     ):
+        """
+        Sends a commit payload message to the commit payload queue via RabbitMQ.
+
+        Args:
+            task_type (str): The type of task being performed.
+            project_id (str): The ID of the project.
+            epoch (Union[PowerloomSnapshotProcessMessage, PowerloomSnapshotSubmittedMessage, PowerloomCalculateAggregateMessage]): The epoch object.
+            snapshot_cid (str): The CID of the snapshot.
+
+        Raises:
+            Exception: If there is an error getting the source chain ID or sending the message to the commit payload queue.
+
+        Returns:
+            None
+        """
         try:
             source_chain_details = await get_source_chain_id(
                 redis_conn=self._redis_conn,
@@ -341,14 +434,25 @@ class GenericAsyncWorker(multiprocessing.Process):
             )
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
+        """
+        Callback function that is called when a message is received from RabbitMQ.
+
+        :param message: The incoming message from RabbitMQ.
+        """
         pass
 
     async def _init_redis_pool(self):
+        """
+        Initializes the Redis connection pool and sets the `_redis_conn` attribute to the created connection pool.
+        """
         self._aioredis_pool = RedisPoolCache()
         await self._aioredis_pool.populate()
         self._redis_conn = self._aioredis_pool._aioredis_pool
 
     async def _init_rpc_helper(self):
+        """
+        Initializes the RpcHelper objects for the worker and anchor chain, and sets up the protocol state contract.
+        """
         self._rpc_helper = RpcHelper(rpc_settings=settings.rpc)
         self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
 
@@ -363,6 +467,9 @@ class GenericAsyncWorker(multiprocessing.Process):
         )
 
     async def _init_httpx_client(self):
+        """
+        Initializes the HTTPX client and transport objects for making HTTP requests.
+        """
         self._async_transport = AsyncHTTPTransport(
             limits=Limits(
                 max_connections=200,
@@ -421,6 +528,9 @@ class GenericAsyncWorker(multiprocessing.Process):
             self._logger.debug('Set epoch size to {}', self._epoch_size)
 
     async def init(self):
+        """
+        Initializes the worker by initializing the Redis pool, HTTPX client, and RPC helper.
+        """
         if not self._initialized:
             await self._init_redis_pool()
             await self._init_httpx_client()
@@ -429,6 +539,10 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._initialized = True
 
     def run(self) -> None:
+        """
+        Runs the worker by setting resource limits, registering signal handlers, starting the RabbitMQ consumer, and
+        running the event loop until it is stopped.
+        """
         self._logger = logger.bind(module=self.name)
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         resource.setrlimit(

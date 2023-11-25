@@ -41,9 +41,17 @@ async def get_eth_price_usd(
     rpc_helper: RpcHelper,
 ):
     """
-    returns the price of eth in usd at a given block height
-    """
+    Fetches the ETH price in USD for a given block range using Uniswap DAI/ETH, USDC/ETH and USDT/ETH pairs.
 
+    Args:
+        from_block (int): The starting block number.
+        to_block (int): The ending block number.
+        redis_conn (aioredis.Redis): The Redis connection object.
+        rpc_helper (RpcHelper): The RPC helper object.
+
+    Returns:
+        dict: A dictionary containing the ETH price in USD for each block in the given range.
+    """
     try:
         eth_price_usd_dict = dict()
         redis_cache_mapping = dict()
@@ -183,8 +191,16 @@ async def get_block_details_in_block_range(
     rpc_helper: RpcHelper,
 ):
     """
-    Fetch block-details for a range of block number or a single block
+    Fetches block details for a given range of block numbers.
 
+    Args:
+        from_block (int): The starting block number.
+        to_block (int): The ending block number.
+        redis_conn (aioredis.Redis): The Redis connection object.
+        rpc_helper (RpcHelper): The RPC helper object.
+
+    Returns:
+        dict: A dictionary containing block details for each block number in the given range.
     """
     try:
         cached_details = await redis_conn.zrangebyscore(
@@ -264,10 +280,17 @@ async def warm_up_cache_for_snapshot_constructors(
     rpc_helper: RpcHelper,
 ):
     """
-    This function warm-up cache for uniswap helper functions. Generated cache will be used across
-    snapshot constructors or in multiple pair-contract calculations.
-    : cache block details for epoch
-    : cache ETH USD price for epoch
+    Warms up the cache for snapshot constructors by fetching Ethereum price and block details
+    in the given block range.
+
+    Args:
+        from_block (int): The starting block number.
+        to_block (int): The ending block number.
+        redis_conn (aioredis.Redis): The Redis connection object.
+        rpc_helper (RpcHelper): The RPC helper object.
+
+    Returns:
+        None
     """
     await asyncio.gather(
         get_eth_price_usd(
