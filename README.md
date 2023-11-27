@@ -58,10 +58,10 @@ The Snapshotter Peer is thoughtfully designed with a modular and highly configur
    - This foundational component defines all the essential interfaces and handles a wide range of tasks, from listening to epoch release events to distributing tasks and managing snapshot submissions.
 
 2. **Configuration Files**:
-   - Configuration files, located in the `/config` directory, play a pivotal role in defining project types, specifying paths for individual compute modules, and managing various project-related settings.
+   - Configuration files, located in the `/config` directory are linked to [snapshotter-configs](https://github.com/PowerLoom/snapshotter-configs/) repo, play a pivotal role in defining project types, specifying paths for individual compute modules, and managing various project-related settings.
 
 3. **Compute Modules**:
-   - The heart of the system resides in the `snapshotter/modules` directory, where the actual computation logic for each project type is defined. These modules drive the snapshot generation process for specific project types.
+   - The heart of the system resides in the `snapshotter/modules` directory are linked to [snapshotter-computes](https://github.com/PowerLoom/snapshotter-computes/), where the actual computation logic for each project type is defined. These modules drive the snapshot generation process for specific project types.
 
 ![Snapshotter Architecture](snapshotter/static/docs/assets/SnapshotterArchitecture.png)
 
@@ -594,10 +594,12 @@ Its preloader dependency is [`block_transactions`](snapshotter/utils/preloaders/
 The snapshot builder then goes through all preloaded block transactions, filters out, and then generates relevant snapshots for wallet address that received funds from the Bungee Bridge refuel contract during that epoch.
 
 https://github.com/PowerLoom/snapshotter-computes/blob/29199feab449ad0361b5867efcaae9854992966f/bungee_bridge.py#L40-L92
+
 ## Find us
 
 * [Discord](https://powerloom.io/discord)
 * [Twitter](https://twitter.com/PowerLoomHQ)
 * [Github](https://github.com/PowerLoom)
 * [Careers](https://wellfound.com/company/powerloom/jobs)
+* [Blog](https://blog.powerloom.io/)
 * [Medium Engineering Blog](https://medium.com/powerloom)
