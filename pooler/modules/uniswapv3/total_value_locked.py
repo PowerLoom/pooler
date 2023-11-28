@@ -39,7 +39,7 @@ def transform_tick_bytes_to_list(tickData: bytes):
 
 
 def calculate_tvl_from_ticks(ticks, pair_metadata, sqrt_price):
-    sqrt_price = sqrt_price / (1 << 96)
+    sqrt_price = sqrt_price / 2 ** 96
     liquidity_total = 0
     token0_liquidity = 0
     token1_liquidity = 0
@@ -52,47 +52,60 @@ def calculate_tvl_from_ticks(ticks, pair_metadata, sqrt_price):
         tick_spacing = 60
     elif pair_metadata["pair"]["fee"] == 10000:
         tick_spacing = 200
-
-    for tick in ticks:
+# https://atiselsts.github.io/pdfs/uniswap-v3-liquidity-math.pdf
+    for i in range(len(ticks)):
+        tick = ticks[i]
         liquidity_net = tick["liquidity_net"]
         idx = tick["idx"]
+        next_idx = idx + ticks[i + 1]["idx"] if i < len(ticks) - 1 else idx + tick_spacing
         liquidity_total += liquidity_net
-        sqrtPriceLow = 1.0001 ** (idx // 2)
-        sqrtPriceHigh = 1.0001 ** ((idx + tick_spacing) // 2)
-        token0_liquidity += get_token0_in_pool(
-            liquidity_total,
-            sqrt_price,
-            sqrtPriceLow,
-            sqrtPriceHigh,
-        )
-        token1_liquidity += get_token1_in_pool(
-            liquidity_total,
-            sqrt_price,
-            sqrtPriceLow,
-            sqrtPriceHigh,
-        )
+        sqrtPriceLow = 1.0001 ** (idx // 2) 
+        sqrtPriceHigh = 1.0001 ** ((next_idx) // 2)
+        if sqrt_price <= sqrtPriceLow:
+            token0_liquidity += get_token0_in_pool(
+                liquidity_total,
+                sqrtPriceLow,
+                sqrtPriceHigh,
+            )
+        elif sqrt_price >= sqrtPriceHigh:
+            token1_liquidity += get_token1_in_pool(
+                liquidity_total,
+                sqrtPriceLow,
+                sqrtPriceHigh,
+            )
+        else: 
+            token0_liquidity += get_token0_in_pool(
+                liquidity_total,
+                sqrt_price,
+                sqrtPriceHigh,
+            )
+            token1_liquidity += get_token1_in_pool(
+                liquidity_total,
+                sqrtPriceLow,
+                sqrt_price,
+            )   
 
     return (token0_liquidity, token1_liquidity)
 
 
 def get_token0_in_pool(
     liquidity: int,
-    sqrtPrice: int,
+    
     sqrtPriceLow: int,
     sqrtPriceHigh: int,
 ) -> int:
-    sqrtPrice = max(min(sqrtPrice, sqrtPriceHigh), sqrtPriceLow)
-    return liquidity * (sqrtPriceHigh - sqrtPrice) // (sqrtPrice * sqrtPriceHigh)
+    
+    return liquidity * (sqrtPriceHigh - sqrtPriceLow) / (sqrtPriceLow * sqrtPriceHigh) // 1
 
 
 def get_token1_in_pool(
     liquidity: int,
-    sqrtPrice: int,
+    
     sqrtPriceLow: int,
     sqrtPriceHigh: int,
 ) -> int:
-    sqrtPrice = max(min(sqrtPrice, sqrtPriceHigh), sqrtPriceLow)
-    return liquidity * (sqrtPrice - sqrtPriceLow)
+    
+    return liquidity * (sqrtPriceHigh - sqrtPriceLow) // 1
 
 
 async def get_events(
