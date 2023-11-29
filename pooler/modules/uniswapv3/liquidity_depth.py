@@ -42,7 +42,9 @@ class LiquidityDepthProcessor(GenericProcessorSnapshot):
             rpc_helper=rpc_helper,
             fetch_timestamp=True,
         )
-
+        self._logger.debug(
+            f"liquidity depth snapshot {liquidity_depth_snapshot[max_chain_height]}"
+        )
         self._logger.debug(
             f"liquidity depth {data_source_contract_address}, computation end time {time.time()}"
         )

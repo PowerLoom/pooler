@@ -505,11 +505,10 @@ async def get_liquidity_depth(
     rpc_helper: RpcHelper,
     fetch_timestamp=False,
 ):
+    liquidity_depth_dict = dict()
     core_logger.debug(
     f"Starting liquidity depth query for: {pair_address}",
     )
-    pair_address = Web3.to_checksum_address(pair_address)
-
     if fetch_timestamp:
         try:
             block_details_dict = await get_block_details_in_block_range(
@@ -532,12 +531,36 @@ async def get_liquidity_depth(
     else:
         block_details_dict = dict()
 
+    pair_address = Web3.to_checksum_address(pair_address)
+
     pair_per_token_metadata = await get_pair_metadata(
         pair_address=pair_address,
         redis_conn=redis_conn,
         rpc_helper=rpc_helper,
     )
+    
+    token0_price_map, token1_price_map = await asyncio.gather(
+        get_token_price_in_block_range(
+            token_metadata=pair_per_token_metadata["token0"],
+            from_block=from_block,
+            to_block=to_block,
+            redis_conn=redis_conn,
+            rpc_helper=rpc_helper,
+            debug_log=False,
+    
+        ),
+        get_token_price_in_block_range(
+            token_metadata=pair_per_token_metadata["token1"],
+            from_block=from_block,
+            to_block=to_block,
+            redis_conn=redis_conn,
+            rpc_helper=rpc_helper,
+            debug_log=False,
+            
+        ),
+    )
 
+    core_logger.debug('grabbed pair per token metadata for liquidity depth')
     # grab ticks in range and calculate initial liquidity depth
 
     ticks_list, slot0 = await get_tick_info(
@@ -546,14 +569,23 @@ async def get_liquidity_depth(
         from_block=from_block,
         redis_conn=redis_conn,
     )
-
+    core_logger.debug('the dog jumped over the tracks')
     liquidity_depth_initial = calculate_liquidity_depth(
         ticks_list, 
         slot0[0],
         pair_per_token_metadata)
     
-    block_details_dict[from_block] = liquidity_depth_initial
+    core_logger.debug(
+        "initial liquidity depth fetched block details for epoch for:" f" {pair_address} moose ")
+    
 
+    for block_num in range(from_block, to_block + 1):
+        liquidity_depth_dict[block_num] = liquidity_depth_initial
+        liquidity_depth_dict[block_num]['prices'] = {
+            "token0": token0_price_map.get(block_num, 0),
+            "token1": token1_price_map.get(block_num, 0),
+        }
+    
     events = await get_events(
         pair_address=pair_address,
         rpc=rpc_helper,
@@ -561,6 +593,9 @@ async def get_liquidity_depth(
         to_block=to_block,
         redis_con=redis_conn,
     )
+
+    core_logger.debug(
+        f"Events fetched for liquidity depth: {events}") 
     events_by_block = dict()
     for event in events:
         events_by_block[event["blockNumber"]] = events_by_block.get(
@@ -568,20 +603,33 @@ async def get_liquidity_depth(
         )
         events_by_block[event["blockNumber"]].append(event)
 
+
     for block_num in range(from_block + 1, to_block + 1):
-        liquidity_depth_initial[block_num] = liquidity_depth_initial.get(block_num - 1, {}) 
+        
         events = events_by_block.get(block_num, [])
         for event in events:
             amount0 = event["args"]['amount0']
             amount1 = event["args"]['amount1']
             if event["name"] == "Mint":
-                liquidity_depth_initial[block_num]["token0"]["amount"] += amount0
-                liquidity_depth_initial[block_num]["token1"]["amount"] += amount1
+                liquidity_depth_dict[block_num]["token0"]["amount"] += amount0
+                liquidity_depth_dict[block_num]["token1"]["amount"] += amount1
             else:
-                liquidity_depth_initial[block_num]["token0"]["amount"] -= amount0
-                liquidity_depth_initial[block_num]["token1"]["amount"] -= amount1
-    
-    return liquidity_depth_initial
+                liquidity_depth_dict[block_num]["token0"]["amount"] -= amount0
+                liquidity_depth_dict[block_num]["token1"]["amount"] -= amount1
+
+        current_block_details = block_details_dict.get(block_num, None)
+
+        timestamp = (   
+            current_block_details.get(
+                "timestamp",
+                None,
+            )
+            if current_block_details
+            else None
+        )
+        liquidity_depth_dict[block_num]['timestamp'] = timestamp
+
+    return liquidity_depth_dict
 
 
 
@@ -627,12 +675,12 @@ def calculate_liquidity_depth(
             )
             liquidity_depth_dict[idx] = {
                 "token0": {
-                    "token": pair_metadata["token0"],
-                    "amount": token0_liquidity,
+                    "token": pair_metadata["token0"]['address'],
+                    "amount": abs(token0_liquidity),
                     "decimals": pair_metadata["token0"]["decimals"],
                 },
                 "token1": {
-                    "token": pair_metadata["token1"],
+                    "token": pair_metadata["token1"]['address'],
                     "amount": 0,
                     "decimals": pair_metadata["token1"]["decimals"],
                 },
@@ -646,12 +694,12 @@ def calculate_liquidity_depth(
             )
             liquidity_depth_dict[idx] = {
                 "token0": {
-                    "token": pair_metadata["token1"],
-                    "amount": token1_liquidity,
+                    "token": pair_metadata["token1"]['address'],
+                    "amount": abs(token1_liquidity),
                     "decimals": pair_metadata["token1"]["decimals"],
                 },
                 "token1": {
-                    "token": pair_metadata["token0"],
+                    "token": pair_metadata["token0"]['address'],
                     "amount": 0,
                     "decimals": pair_metadata["token0"]["decimals"],
                 }
@@ -672,13 +720,13 @@ def calculate_liquidity_depth(
 
             liquidity_depth_dict[idx] = {
                 "token0": {
-                    "token": pair_metadata["token0"],
-                    "amount": token0_liquidity,
+                    "token": pair_metadata["token0"]['address'],
+                    "amount": abs(token0_liquidity),
                     "decimals": pair_metadata["token0"]["decimals"],
                 },
                 "token1": {
-                    "token": pair_metadata["token1"],
-                    "amount": token1_liquidity,
+                    "token": pair_metadata["token1"]['address'],
+                    "amount": abs(token1_liquidity),
                     "decimals": pair_metadata["token1"]["decimals"],
                 }
 
