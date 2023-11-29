@@ -16,6 +16,7 @@ from gql import gql, Client
 from gql.transport.aiohttp import AIOHTTPTransport
 
 from pooler.modules.uniswapv3.total_value_locked import get_token0_in_pool, get_token1_in_pool
+from pooler.modules.uniswapv3.utils.constants import UNISWAP_TRADE_EVENT_SIGS
 getcontext().prec = 100 
 
 MIN_TICK = -887272
@@ -116,28 +117,62 @@ def univ3_tvl_txns(w3: Web3):
         "address": address,
         "topics": [
             "0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67",
-            None,
-            None
         ],
     })
 
-    collect_events = w3.eth.get_logs({
+    mint_events = w3.eth.get_logs({
+        "fromBlock": 12376728,
+        "toBlock": 12386728,
+        "address": address,
+        "topics": [
+            w3.keccak(text=UNISWAP_TRADE_EVENT_SIGS['Mint']).hex(),
+        ]
+    })
+    burn_events = w3.eth.get_logs({
+        "fromBlock": 12376728,
+        "toBlock": 12386728,
+        "address": address,
+        "topics": [
+            w3.keccak(text=UNISWAP_TRADE_EVENT_SIGS['Burn']).hex(),
+        ]
+    })
+
+    collect_events = w3.eth.get_logs({  
         "fromBlock": 12376728,
         "toBlock": 12386728,
         "address": address,
         "topics": [
             '0x70935338e69775456a85ddef226c395fb668b63fa0115f5f20610b388e6ca9c0'
         ]
-    })
+        }
+        )
 
-    token0_claimed_fees = 0
-    token1_claimed_fees = 0
-    for i in range(len(collect_events)):    
+        
+
+
+    token0_liquidity_event = 0
+    token1_liquidity_event = 0
+    for i in range(len(mint_events)):
+        event = mint_events[i]
+        data = event['data'].hex()
+        token0_liquidity_event += int(data[-128:-64], 16)
+        token1_liquidity_event += int(data[-64:], 16)
+    
+
+    # for i in range(len(burn_events)):
+    #     event = burn_events[i]
+    #     data = event['data'].hex()
+    #     token0_liquidity_event -= int(data[-128:-64], 16)
+    #     token1_liquidity_event -= int(data[-64:], 16)
+
+    
+    token0_collected = 0
+    token1_collected = 0
+    for i in range(len(collect_events)):
         event = collect_events[i]
         data = event['data'].hex()
-        token0_claimed_fees += abi.decode(("uint128",), bytes.fromhex(data[66:130]))[0]
-        token1_claimed_fees += abi.decode(("uint128",), bytes.fromhex(data[130:]))[0]
-    
+        token0_liquidity_event -= int(data[-128:-64], 16)
+        token1_liquidity_event -= int(data[-64:], 16)
 
     sum_token0_swap = 0
     sum_token1_swap = 0
@@ -146,16 +181,15 @@ def univ3_tvl_txns(w3: Web3):
         data = event['data'].hex()
         token0_swap_amount = abi.decode(("int256",), bytes.fromhex(data[2:66]))[0] 
         token1_swap_amount = abi.decode(("int256",), bytes.fromhex(data[66:130]))[0]
-        sum_token0_swap += token0_swap_amount if token0_swap_amount > 0 else 0
-        sum_token1_swap += token1_swap_amount if token1_swap_amount > 0 else 0
+        sum_token0_swap += token0_swap_amount #if token0_swap_amount > 0 else 0
+        sum_token1_swap += token1_swap_amount #if token1_swap_amount > 0 else 0
 
-    token0_fees_total = (500 * sum_token0_swap / 1_000_000) - token0_claimed_fees
-    token1_fees_total = (500 * sum_token1_swap / 1_000_000) - token1_claimed_fees
-    
-    token0_net -= token0_fees_total
-    token1_net -= token1_fees_total
-    1455725232.568
-    1255318879
+
+    compute_fees_0 = sum_token0_swap * 0.0005
+    compute_fees_1 = sum_token1_swap * 0.0005
+    check_0 = sum_token0_swap + token0_liquidity_event 
+    check_1 = sum_token1_swap + token1_liquidity_event
+
     return (token0_net, token1_net)
     # this is to check tvl based on txns from inception to a certain block
     # then compare to tvl based on ticks which we will calculate using both current method and set to 0 method and whatever other method

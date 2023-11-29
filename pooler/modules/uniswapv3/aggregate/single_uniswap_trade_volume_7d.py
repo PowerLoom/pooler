@@ -15,7 +15,7 @@ from pooler.utils.models.message_models import PowerloomSnapshotSubmittedMessage
 from pooler.utils.rpc import RpcHelper
 
 
-class AggreagateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
+class AggregateTradeVolumeProcessor(GenericProcessorSingleProjectAggregate):
     transformation_lambdas = None
 
     def __init__(self) -> None:

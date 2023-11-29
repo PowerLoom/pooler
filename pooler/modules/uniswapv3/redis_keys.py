@@ -38,6 +38,10 @@ uniswap_tokens_pair_map = (
     "uniswap:pairContract:" + settings.namespace + ":tokensPairMap"
 )
 
+uniswap_ticks_pair_map = (
+    "uniswap:pairContract:" + settings.namespace + ":ticksPairMap"
+)
+
 uniswap_pair_cached_block_height_token_price = (
     "uniswap:pairContract:" + settings.namespace + ":{}:cachedPairBlockHeightTokenPrice"
 )

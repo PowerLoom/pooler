@@ -13,7 +13,7 @@ from pooler.utils.models.message_models import PowerloomCalculateAggregateMessag
 from pooler.utils.rpc import RpcHelper
 
 
-class AggreagateStatsProcessor(GenericProcessorMultiProjectAggregate):
+class AggregateStatsProcessor(GenericProcessorMultiProjectAggregate):
     transformation_lambdas = None
 
     def __init__(self) -> None:

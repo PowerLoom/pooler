@@ -38,7 +38,7 @@ def transform_tick_bytes_to_list(tickData: bytes):
     return ticks
 
 
-def calculate_tvl_from_ticks(ticks, pair_metadata, sqrt_price):
+def calculate_tvl_from_ticks(ticks, pair_metadata, sqrt_price, logger):
     sqrt_price = sqrt_price / 2 ** 96
     liquidity_total = 0
     token0_liquidity = 0
@@ -55,12 +55,15 @@ def calculate_tvl_from_ticks(ticks, pair_metadata, sqrt_price):
 # https://atiselsts.github.io/pdfs/uniswap-v3-liquidity-math.pdf
     for i in range(len(ticks)):
         tick = ticks[i]
-        liquidity_net = tick["liquidity_net"]
         idx = tick["idx"]
-        next_idx = idx + ticks[i + 1]["idx"] if i < len(ticks) - 1 else idx + tick_spacing
+        nextIdx = ticks[i + 1]["idx"] \
+        if i < len(ticks) - 1 \
+        else idx + tick_spacing
+
+        liquidity_net = tick["liquidity_net"]   
         liquidity_total += liquidity_net
-        sqrtPriceLow = 1.0001 ** (idx // 2) 
-        sqrtPriceHigh = 1.0001 ** ((next_idx) // 2)
+        sqrtPriceLow = 1.0001 ** (idx // 2)
+        sqrtPriceHigh = 1.0001 ** (nextIdx // 2)
         if sqrt_price <= sqrtPriceLow:
             token0_liquidity += get_token0_in_pool(
                 liquidity_total,
@@ -73,17 +76,19 @@ def calculate_tvl_from_ticks(ticks, pair_metadata, sqrt_price):
                 sqrtPriceLow,
                 sqrtPriceHigh,
             )
+
         else: 
             token0_liquidity += get_token0_in_pool(
                 liquidity_total,
                 sqrt_price,
-                sqrtPriceHigh,
+                sqrtPriceHigh
             )
             token1_liquidity += get_token1_in_pool(
                 liquidity_total,
                 sqrtPriceLow,
                 sqrt_price,
             )   
+        
 
     return (token0_liquidity, token1_liquidity)
 
@@ -156,6 +161,7 @@ async def calculate_reserves(
     pair_per_token_metadata,
     rpc_helper: RpcHelper,
     redis_conn,
+    logger,
 ):
 
     # get token price function takes care of its own rate limit
@@ -168,12 +174,6 @@ async def calculate_reserves(
     slot0_tasks = [
         pair_contract.functions.slot0(),
     ]
-    
-    # cant batch these tasks due to implementation of web3_call re: state override
-    tickDataResponse, slot0Response = await asyncio.gather(
-        rpc_helper.web3_call(tick_tasks, redis_conn, overrides=overrides, block=from_block),
-        rpc_helper.web3_call(slot0_tasks, redis_conn, block=from_block,),
-        )
         
 
     ticks_list, slot0 = await get_tick_info(
@@ -188,9 +188,11 @@ async def calculate_reserves(
         ticks_list,
         pair_per_token_metadata,
         sqrt_price,
+        logger, 
     )
-
-    return [t0_reserves, t1_reserves]
+    logger.debug('t0_reserves', t0_reserves)
+    logger.debug('t1_reserves', t1_reserves)
+    return [int(t0_reserves), int(t1_reserves)]
 
 
 async def get_tick_info(

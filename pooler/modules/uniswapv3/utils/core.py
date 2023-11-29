@@ -14,7 +14,7 @@ from .models.data_models import trade_data
 from .pricing import (
     get_token_price_in_block_range,
 )
-from pooler.modules.uniswapv3.total_value_locked import calculate_reserves, get_tick_info
+from pooler.modules.uniswapv3.total_value_locked import calculate_reserves, get_tick_info, get_token0_in_pool, get_token1_in_pool
 from pooler.modules.uniswapv3.total_value_locked import get_events
 from pooler.utils.default_logger import logger
 from pooler.utils.rpc import get_event_sig_and_abi
@@ -105,7 +105,10 @@ async def get_pair_reserves(
         pair_per_token_metadata,
         rpc_helper,
         redis_conn,
+        core_logger
     )
+
+    core_logger.debug(f"initial_reserves: {initial_reserves}")
 
     core_logger.debug(
         f"Total reserves fetched tick data for {pair_address} of {initial_reserves} for block {from_block}",
@@ -537,19 +540,19 @@ async def get_liquidity_depth(
 
     # grab ticks in range and calculate initial liquidity depth
 
-    ticks_list, slot0 = get_tick_info(
-        pair_address,
-        from_block,
-        rpc_helper,
-        redis_conn,
+    ticks_list, slot0 = await get_tick_info(
+        rpc_helper=rpc_helper,
+        pair_address=pair_address,
+        from_block=from_block,
+        redis_conn=redis_conn,
     )
 
     liquidity_depth_initial = calculate_liquidity_depth(
         ticks_list, 
-        slot0,
+        slot0[0],
         pair_per_token_metadata)
-
-
+    
+    block_details_dict[from_block] = liquidity_depth_initial
 
     events = await get_events(
         pair_address=pair_address,
@@ -558,12 +561,130 @@ async def get_liquidity_depth(
         to_block=to_block,
         redis_con=redis_conn,
     )
+    events_by_block = dict()
+    for event in events:
+        events_by_block[event["blockNumber"]] = events_by_block.get(
+            event["blockNumber"], []
+        )
+        events_by_block[event["blockNumber"]].append(event)
+
+    for block_num in range(from_block + 1, to_block + 1):
+        liquidity_depth_initial[block_num] = liquidity_depth_initial.get(block_num - 1, {}) 
+        events = events_by_block.get(block_num, [])
+        for event in events:
+            amount0 = event["args"]['amount0']
+            amount1 = event["args"]['amount1']
+            if event["name"] == "Mint":
+                liquidity_depth_initial[block_num]["token0"]["amount"] += amount0
+                liquidity_depth_initial[block_num]["token1"]["amount"] += amount1
+            else:
+                liquidity_depth_initial[block_num]["token0"]["amount"] -= amount0
+                liquidity_depth_initial[block_num]["token1"]["amount"] -= amount1
+    
+    return liquidity_depth_initial
+
+
+
+        
+        
+
+
 
 
 def calculate_liquidity_depth(
-        ticks_list,
-        slot0,
-        pair_per_token_metadata,
+        ticks,
+        sqrt_price,
+        pair_metadata,
     ):  
     liquidity_depth_dict = dict()
+    sqrt_price = sqrt_price / 2 ** 96
+    liquidity_total = 0
+    token0_liquidity = 0
+    token1_liquidity = 0
+    tick_spacing = 10
+
+    if len(ticks) == 0:
+        return (0, 0)
+
+    if pair_metadata["pair"]["fee"] == 3000:
+        tick_spacing = 60
+    elif pair_metadata["pair"]["fee"] == 10000:
+        tick_spacing = 200
+# https://atiselsts.github.io/pdfs/uniswap-v3-liquidity-math.pdf
+    for i in range(len(ticks)):
+        tick = ticks[i]
+        liquidity_net = tick["liquidity_net"]
+        idx = tick["idx"]
+        next_idx = idx + ticks[i + 1]["idx"] if i < len(ticks) - 1 else idx + tick_spacing
+        liquidity_total += liquidity_net
+        sqrtPriceLow = 1.0001 ** (idx // 2) 
+        sqrtPriceHigh = 1.0001 ** ((next_idx) // 2)
+        if sqrt_price <= sqrtPriceLow:
+            token0_liquidity += get_token0_in_pool(
+                liquidity_total,
+                sqrtPriceLow,
+                sqrtPriceHigh,
+            )
+            liquidity_depth_dict[idx] = {
+                "token0": {
+                    "token": pair_metadata["token0"],
+                    "amount": token0_liquidity,
+                    "decimals": pair_metadata["token0"]["decimals"],
+                },
+                "token1": {
+                    "token": pair_metadata["token1"],
+                    "amount": 0,
+                    "decimals": pair_metadata["token1"]["decimals"],
+                },
+
+            }
+        elif sqrt_price >= sqrtPriceHigh:
+            token1_liquidity += get_token1_in_pool(
+                liquidity_total,
+                sqrtPriceLow,
+                sqrtPriceHigh,
+            )
+            liquidity_depth_dict[idx] = {
+                "token0": {
+                    "token": pair_metadata["token1"],
+                    "amount": token1_liquidity,
+                    "decimals": pair_metadata["token1"]["decimals"],
+                },
+                "token1": {
+                    "token": pair_metadata["token0"],
+                    "amount": 0,
+                    "decimals": pair_metadata["token0"]["decimals"],
+                }
+
+            }
+        else: 
+            token0_liquidity += get_token0_in_pool(
+                liquidity_total,
+                sqrt_price,
+                sqrtPriceHigh,
+            )
+            
+            token1_liquidity += get_token1_in_pool(
+                liquidity_total,
+                sqrtPriceLow,
+                sqrt_price,
+            )   
+
+            liquidity_depth_dict[idx] = {
+                "token0": {
+                    "token": pair_metadata["token0"],
+                    "amount": token0_liquidity,
+                    "decimals": pair_metadata["token0"]["decimals"],
+                },
+                "token1": {
+                    "token": pair_metadata["token1"],
+                    "amount": token1_liquidity,
+                    "decimals": pair_metadata["token1"]["decimals"],
+                }
+
+            }
+
+
+    return liquidity_depth_dict
+
     

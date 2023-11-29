@@ -297,7 +297,9 @@ class ProcessorDistributor(multiprocessing.Process):
                         f"projectID config: {config.filters.projectId} process_unit: {process_unit.projectId}"
                     )
                     continue
-
+                self._logger.info(
+                    f"projectId matched {process_unit.projectId} {config.filters.projectId}"
+                )
                 await self._publish_message_to_queue(
                     exchange=self._callback_exchange_name,
                     routing_key=f"powerloom-backend-callback:{settings.namespace}:"
