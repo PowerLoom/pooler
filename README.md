@@ -183,9 +183,9 @@ https://github.com/PowerLoom/pooler/blob/d8b7be32ad329e8dcf0a7e5c1b27862894bc990
 
  As seen above in the section on [base snapshot generation](#base-snapshot-generation), data sources can be dynamically added to the contract according to the role of certain peers in the ecosystem known as 'signallers'. This is the most significant aspect of the Powerloom Protocol ecosystem apart from snapshotting and will soon be decentralized to factor in on-chain activity, and market forces and accommodate a demand-driven, dynamic data ecosystem.
 
-In this present implementation of the wallet boost use case, such sources are added for either the `boost:eth_getBalance` or `boost:erc20_balanceOf` project types as seen in the pre-supplied projects configuration file, where the `projects` key corresponding to the data sources are left as empty.
+In the existing setup, when the `project_type` is set to an empty array (`[]`) and bulk mode is not activated, the snapshotter node attempts to retrieve data sources corresponding to the `projects` key from the protocol state contract.
 
-Every time a new project is added for either of these two types on the protocol state smart contract by an off-chain data source-detector and signaller, a `ProjectUpdated` event is emitted according to the following data model
+Whenever a data source is added or removed by a combination of the data source-detector and signaller, the protocol state smart contract emits a `ProjectUpdated` event, adhering to the defined data model.
 
 https://github.com/PowerLoom/pooler/blob/5892eeb9433d8f4b8aa677006d98a1dde0458cb7/snapshotter/utils/models/data_models.py#L102-L105
 
