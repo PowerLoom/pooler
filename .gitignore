@@ -10,3 +10,4 @@ uniswapTokenData
 **/*aggregator.json
 config/*settings.json
 **/*.backup
+.vscode/*

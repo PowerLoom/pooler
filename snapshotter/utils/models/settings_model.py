@@ -3,6 +3,7 @@ from typing import List
 from typing import Optional
 from typing import Union
 
+from ipfs_client.settings.data_models import IPFSConfig
 from pydantic import BaseModel
 from pydantic import Field
 
@@ -128,20 +129,16 @@ class ExternalAPIAuth(BaseModel):
     apiSecret: str = ''
 
 
-class IPFSconfig(BaseModel):
-    url: str
-    url_auth: Optional[ExternalAPIAuth] = None
-    reader_url: str
-    reader_url_auth: Optional[ExternalAPIAuth] = None
-    write_rate_limit: IPFSWriterRateLimit
-    timeout: int
-    local_cache_path: str
-    connection_limits: ConnectionLimits
-
-
 class Web3Storage(BaseModel):
     upload_snapshots: bool
     upload_aggregates: bool
+    url: str
+    upload_url_suffix: str
+    api_token: str
+    timeout: int
+    max_idle_conns: int
+    idle_conn_timeout: int
+    # rate_limit: Optional[IPFSWriterRateLimit] = None
 
 
 class Settings(BaseModel):
@@ -161,7 +158,7 @@ class Settings(BaseModel):
     aggregator_config_path: str
     protocol_state: EventContract
     callback_worker_config: CallbackWorkerConfig
-    ipfs: IPFSconfig
+    ipfs: IPFSConfig
     web3storage: Web3Storage
     anchor_chain_rpc: RPCConfigBase
 
@@ -177,6 +174,7 @@ class ProjectConfig(BaseModel):
     projects: Optional[List[str]] = None
     processor: ProcessorConfig
     preload_tasks: List[str]
+    bulk_mode: Optional[bool] = False
 
 
 class ProjectsConfig(BaseModel):

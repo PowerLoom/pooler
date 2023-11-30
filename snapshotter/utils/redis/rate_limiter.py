@@ -52,6 +52,15 @@ SCRIPT_SET_EXPIRE = """
 
 # needs to be run only once
 async def load_rate_limiter_scripts(redis_conn: aioredis.Redis):
+    """
+    Load rate limiter scripts into Redis and return their SHA hashes.
+
+    Args:
+        redis_conn (aioredis.Redis): Redis connection object.
+
+    Returns:
+        dict: A dictionary containing the SHA hashes of the loaded scripts.
+    """
     script_clear_keys_sha = await redis_conn.script_load(SCRIPT_CLEAR_KEYS)
     script_incr_expire = await redis_conn.script_load(SCRIPT_INCR_EXPIRE)
     return {
@@ -68,7 +77,15 @@ async def generic_rate_limiter(
     limit_incr_by=1,
 ):
     """
-    return: tuple of (can_request, retry_after in case of false can_request, violated rate limit string if applicable)
+    A generic rate limiter that uses Redis as a storage backend.
+
+    :param parsed_limits: A list of RateLimitItem objects that define the rate limits.
+    :param key_bits: A list of key bits to be used as part of the Redis key.
+    :param redis_conn: An instance of aioredis.Redis that is used to connect to Redis.
+    :param rate_limit_lua_script_shas: A dictionary containing the SHA hashes of the Lua scripts used by the rate limiter.
+    :param limit_incr_by: The amount by which to increment the rate limit counter.
+    :return: A tuple containing a boolean indicating whether the rate limit check passed, the retry-after time in seconds,
+             and a string representation of the rate limit that was checked.
     """
     if not rate_limit_lua_script_shas:
         rate_limit_lua_script_shas = await load_rate_limiter_scripts(redis_conn)
@@ -110,7 +127,23 @@ async def check_rpc_rate_limit(
     limit_incr_by=1,
 ):
     """
-    rate limiter for rpc calls
+    Check if the RPC rate limit has been exceeded for the given app_id and request_payload.
+
+    Args:
+        parsed_limits (list): List of parsed rate limit configurations.
+        app_id (str): The ID of the app making the request.
+        redis_conn (aioredis.Redis): The Redis connection object.
+        request_payload (dict): The payload of the request.
+        error_msg (str): The error message to include in the RPCException if the rate limit is exceeded.
+        logger (Logger): The logger object.
+        rate_limit_lua_script_shas (dict, optional): A dictionary of Lua script SHA1 hashes for rate limiting.
+        limit_incr_by (int, optional): The amount to increment the rate limit by.
+
+    Returns:
+        bool: True if the rate limit has not been exceeded, False otherwise.
+
+    Raises:
+        RPCException: If the rate limit has been exceeded.
     """
     key_bits = [
         app_id,

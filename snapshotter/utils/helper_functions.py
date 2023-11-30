@@ -2,7 +2,6 @@ import asyncio
 import sys
 from functools import wraps
 
-import psutil
 import web3.datastructures
 
 from snapshotter.settings.config import settings
@@ -14,6 +13,16 @@ logger = logger.bind(module='Powerloom|HelperFunctions')
 
 
 def cleanup_proc_hub_children(fn):
+    """
+    A decorator that wraps a function and handles cleanup of any child processes
+    spawned by the function in case of an exception.
+
+    Args:
+        fn (function): The function to be wrapped.
+
+    Returns:
+        function: The wrapped function.
+    """
     @wraps(fn)
     def wrapper(self, *args, **kwargs):
         try:
@@ -33,49 +42,7 @@ def cleanup_proc_hub_children(fn):
             # for p in alive:
             #     logger.error(f'killing process: {p.name()}')
             #     p.kill()
-            logger.error('Waiting on spawned callback workers to join...')
-            for (
-                worker_class_name,
-                unique_worker_entries,
-            ) in self._spawned_cb_processes_map.items():
-                for (
-                    worker_unique_id,
-                    worker_unique_process_details,
-                ) in unique_worker_entries.items():
-                    if worker_unique_process_details is not None and worker_unique_process_details.pid:
-                        logger.error(
-                            (
-                                'Waiting on spawned callback worker {} | Unique'
-                                ' ID {} | PID {}  to join...'
-                            ),
-                            worker_class_name,
-                            worker_unique_id,
-                            worker_unique_process_details.pid,
-                        )
-                        psutil.Process(pid=worker_unique_process_details.pid).wait()
-
-            logger.error(
-                'Waiting on spawned core workers to join... {}',
-                self._spawned_processes_map,
-            )
-            for (
-                worker_class_name,
-                worker_pid,
-            ) in self._spawned_processes_map.items():
-                logger.error(
-                    'spawned Process Pid to wait on {}',
-                    worker_pid,
-                )
-                if worker_pid is not None:
-                    logger.error(
-                        (
-                            'Waiting on spawned core worker {} | PID {}  to'
-                            ' join...'
-                        ),
-                        worker_class_name,
-                        worker_pid,
-                    )
-                    psutil.Process(worker_pid).wait()
+            self._kill_all_children()
             logger.error('Finished waiting for all children...now can exit.')
         finally:
             logger.error('Finished waiting for all children...now can exit.')
@@ -86,6 +53,15 @@ def cleanup_proc_hub_children(fn):
 
 
 def acquire_threading_semaphore(fn):
+    """
+    A decorator function that acquires a threading semaphore before executing the decorated function and releases it after execution.
+
+    Args:
+        fn (function): The function to be decorated.
+
+    Returns:
+        function: The decorated function.
+    """
     @wraps(fn)
     def semaphore_wrapper(*args, **kwargs):
         semaphore = kwargs['semaphore']
@@ -105,6 +81,15 @@ def acquire_threading_semaphore(fn):
 
 
 def preloading_entry_exit_logger(fn):
+    """
+    Decorator function to log entry and exit of preloading worker functions.
+
+    Args:
+        fn (Callable): The function to be decorated.
+
+    Returns:
+        Callable: The decorated function.
+    """
     @wraps(fn)
     async def wrapper(self, *args, **kwargs):
         epoch: EpochBase = kwargs['epoch']
@@ -126,6 +111,15 @@ def preloading_entry_exit_logger(fn):
 
 
 async def as_completed_async(futures):
+    """
+    A coroutine that iterates over given futures and yields their results as they complete.
+
+    Args:
+        futures (List[asyncio.Future]): A list of asyncio.Future objects.
+
+    Yields:
+        The result of each completed future as it completes.
+    """
     loop = asyncio.get_event_loop()
     wrappers = []
     for fut in futures:
@@ -144,6 +138,15 @@ async def as_completed_async(futures):
 
 
 def attribute_dict_to_dict(dictToParse: web3.datastructures.AttributeDict):
+    """
+    Converts an AttributeDict object to a regular dictionary object.
+
+    Args:
+        dictToParse (web3.datastructures.AttributeDict): The AttributeDict object to be converted.
+
+    Returns:
+        dict: The converted dictionary object.
+    """
     # convert any 'AttributeDict' type found to 'dict'
     parsedDict = dict(dictToParse)
     for key, val in parsedDict.items():
@@ -155,6 +158,17 @@ def attribute_dict_to_dict(dictToParse: web3.datastructures.AttributeDict):
 
 
 def _parse_value(val):
+    """
+    Parses the given value and returns a string representation of it.
+    If the value is a nested dictionary, it is converted to a regular dictionary.
+    If the value is of type 'HexBytes', it is converted to a string.
+
+    Args:
+        val: The value to be parsed.
+
+    Returns:
+        A string representation of the given value.
+    """
     # check for nested dict structures to iterate through
     if 'dict' in str(type(val)).lower():
         return attribute_dict_to_dict(val)

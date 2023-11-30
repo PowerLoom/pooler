@@ -32,6 +32,13 @@ class AggregationAsyncWorker(GenericAsyncWorker):
     _ipfs_reader_client: AsyncIPFSClient
 
     def __init__(self, name, **kwargs):
+        """
+        Initializes an instance of AggregationAsyncWorker.
+
+        Args:
+            name (str): The name of the worker.
+            **kwargs: Additional keyword arguments to be passed to the parent class constructor.
+        """
         self._q = f'powerloom-backend-cb-aggregate:{settings.namespace}:{settings.instance_id}'
         self._rmq_routing = f'powerloom-backend-callback:{settings.namespace}'
         f':{settings.instance_id}:CalculateAggregate.*'
@@ -41,7 +48,6 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         self._single_project_types = set()
         self._multi_project_types = set()
         self._task_types = set()
-        self._ipfs_singleton = None
 
         for config in aggregator_config:
             if config.aggregate_on == AggregateOn.single_project:
@@ -50,35 +56,77 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 self._multi_project_types.add(config.project_type)
             self._task_types.add(config.project_type)
 
-    def _gen_single_type_project_id(self, type_, epoch):
+    def _gen_single_type_project_id(self, task_type, epoch):
+        """
+        Generates a project ID for a single task type and epoch.
+
+        Args:
+            task_type (str): The task type.
+            epoch (Epoch): The epoch object.
+
+        Returns:
+            str: The generated project ID.
+        """
         data_source = epoch.projectId.split(':')[-2]
-        project_id = f'{type_}:{data_source}:{settings.namespace}'
+        project_id = f'{task_type}:{data_source}:{settings.namespace}'
         return project_id
 
-    def _gen_multiple_type_project_id(self, type_, epoch):
+    def _gen_multiple_type_project_id(self, task_type, epoch):
+        """
+        Generates a unique project ID based on the task type and epoch messages.
 
+        Args:
+            task_type (str): The type of task.
+            epoch (Epoch): The epoch object containing messages.
+
+        Returns:
+            str: The generated project ID.
+        """
         underlying_project_ids = [project.projectId for project in epoch.messages]
         unique_project_id = ''.join(sorted(underlying_project_ids))
 
         project_hash = hashlib.sha3_256(unique_project_id.encode()).hexdigest()
 
-        project_id = f'{type_}:{project_hash}:{settings.namespace}'
+        project_id = f'{task_type}:{project_hash}:{settings.namespace}'
         return project_id
 
-    def _gen_project_id(self, type_, epoch):
-        if type_ in self._single_project_types:
-            return self._gen_single_type_project_id(type_, epoch)
-        elif type_ in self._multi_project_types:
-            return self._gen_multiple_type_project_id(type_, epoch)
+    def _gen_project_id(self, task_type, epoch):
+        """
+        Generates a project ID based on the given task type and epoch.
+
+        Args:
+            task_type (str): The type of task.
+            epoch (int): The epoch number.
+
+        Returns:
+            str: The generated project ID.
+
+        Raises:
+            ValueError: If the task type is unknown.
+        """
+        if task_type in self._single_project_types:
+            return self._gen_single_type_project_id(task_type, epoch)
+        elif task_type in self._multi_project_types:
+            return self._gen_multiple_type_project_id(task_type, epoch)
         else:
-            raise ValueError(f'Unknown project type {type_}')
+            raise ValueError(f'Unknown project type {task_type}')
 
     async def _processor_task(
         self,
         msg_obj: Union[PowerloomSnapshotSubmittedMessage, PowerloomCalculateAggregateMessage],
         task_type: str,
     ):
-        """Function used to process the received message object."""
+        """
+        Process the given message object and task type.
+
+        Args:
+            msg_obj (Union[PowerloomSnapshotSubmittedMessage, PowerloomCalculateAggregateMessage]):
+                The message object to be processed.
+            task_type (str): The type of task to be performed.
+
+        Returns:
+            None
+        """
         self._logger.debug(
             'Processing callback: {}', msg_obj,
         )
@@ -112,7 +160,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 rpc_helper=self._rpc_helper,
                 anchor_rpc_helper=self._anchor_rpc_helper,
                 ipfs_reader=self._ipfs_reader_client,
-                protocol_state_contract=self.protocol_state_contract,
+                protocol_state_contract=self._protocol_state_contract,
                 project_id=project_id,
             )
 
@@ -121,7 +169,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                     snapshot = each_lambda(snapshot, msg_obj)
 
         except Exception as e:
-            self._logger.opt(exception=True).error(
+            self._logger.opt(exception=settings.logs.trace_enabled).error(
                 'Exception processing callback for epoch: {}, Error: {},'
                 'sending failure notifications', msg_obj, e,
             )
@@ -148,26 +196,63 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 },
             )
         else:
-            await self._send_payload_commit_service_queue(
-                type_=task_type,
-                project_id=project_id,
-                epoch=msg_obj,
-                snapshot=snapshot,
-                storage_flag=settings.web3storage.upload_aggregates,
-            )
-            await self._redis_conn.hset(
-                name=epoch_id_project_to_state_mapping(
-                    epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
-                ),
-                mapping={
-                    project_id: SnapshotterStateUpdate(
-                        status='success', timestamp=int(time.time()),
-                    ).json(),
-                },
+            if not snapshot:
+                await self._redis_conn.hset(
+                    name=epoch_id_project_to_state_mapping(
+                        epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
+                    ),
+                    mapping={
+                        project_id: SnapshotterStateUpdate(
+                            status='failed', timestamp=int(time.time()), error='Empty snapshot',
+                        ).json(),
+                    },
+                )
+                notification_message = SnapshotterIssue(
+                    instanceID=settings.instance_id,
+                    issueType=SnapshotterReportState.MISSED_SNAPSHOT.value,
+                    projectID=project_id,
+                    epochId=str(msg_obj.epochId),
+                    timeOfReporting=str(time.time()),
+                    extra=json.dumps({'issueDetails': 'Error : Empty snapshot'}),
+                )
+                await send_failure_notifications_async(
+                    client=self._client, message=notification_message,
+                )
+            else:
+                await self._redis_conn.hset(
+                    name=epoch_id_project_to_state_mapping(
+                        epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
+                    ),
+                    mapping={
+                        project_id: SnapshotterStateUpdate(
+                            status='success', timestamp=int(time.time()),
+                        ).json(),
+                    },
+                )
+                await self._commit_payload(
+                    task_type=task_type,
+                    project_id=project_id,
+                    epoch=msg_obj,
+                    snapshot=snapshot,
+                    storage_flag=settings.web3storage.upload_aggregates,
+                    _ipfs_writer_client=self._ipfs_writer_client,
+                )
+            self._logger.debug(
+                'Updated epoch processing status in aggregation worker for project {} for transition {}',
+                project_id, SnapshotterStates.SNAPSHOT_BUILD.value,
             )
         await self._redis_conn.close()
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
+        """
+        Callback function to handle incoming RabbitMQ messages.
+
+        Args:
+            message (IncomingMessage): The incoming RabbitMQ message.
+
+        Returns:
+            None
+        """
         task_type = message.routing_key.split('.')[-1]
         if task_type not in self._task_types:
             return
@@ -180,11 +265,9 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         # TODO: Update based on new single project based design
         if task_type in self._single_project_types:
             try:
-                msg_obj: PowerloomSnapshotSubmittedMessage = (
-                    PowerloomSnapshotSubmittedMessage.parse_raw(message.body)
-                )
+                msg_obj: PowerloomSnapshotSubmittedMessage = PowerloomSnapshotSubmittedMessage.parse_raw(message.body)
             except ValidationError as e:
-                self._logger.opt(exception=True).error(
+                self._logger.opt(exception=settings.logs.trace_enabled).error(
                     (
                         'Bad message structure of callback processor. Error: {}'
                     ),
@@ -192,7 +275,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 )
                 return
             except Exception as e:
-                self._logger.opt(exception=True).error(
+                self._logger.opt(exception=settings.logs.trace_enabled).error(
                     (
                         'Unexpected message structure of callback in processor. Error: {}'
                     ),
@@ -205,7 +288,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                     PowerloomCalculateAggregateMessage.parse_raw(message.body)
                 )
             except ValidationError as e:
-                self._logger.opt(exception=True).error(
+                self._logger.opt(exception=settings.logs.trace_enabled).error(
                     (
                         'Bad message structure of callback processor. Error: {}'
                     ),
@@ -213,7 +296,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 )
                 return
             except Exception as e:
-                self._logger.opt(exception=True).error(
+                self._logger.opt(exception=settings.logs.trace_enabled).error(
                     (
                         'Unexpected message structure of callback in processor. Error: {}'
                     ),
@@ -228,6 +311,10 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         asyncio.ensure_future(self._processor_task(msg_obj=msg_obj, task_type=task_type))
 
     async def _init_project_calculation_mapping(self):
+        """
+        Initializes the project calculation mapping by importing the processor module and class for each project type
+        specified in the aggregator and projects configuration. Raises an exception if a duplicate project type is found.
+        """
         if self._project_calculation_mapping is not None:
             return
 
@@ -248,13 +335,18 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             self._project_calculation_mapping[key] = class_()
 
     async def _init_ipfs_client(self):
-        if not self._ipfs_singleton:
-            self._ipfs_singleton = AsyncIPFSClientSingleton(settings.ipfs)
-            await self._ipfs_singleton.init_sessions()
-            self._ipfs_writer_client = self._ipfs_singleton._ipfs_write_client
-            self._ipfs_reader_client = self._ipfs_singleton._ipfs_read_client
+        """
+        Initializes the IPFS client and sets the write and read clients for the class.
+        """
+        self._ipfs_singleton = AsyncIPFSClientSingleton(settings.ipfs)
+        await self._ipfs_singleton.init_sessions()
+        self._ipfs_writer_client = self._ipfs_singleton._ipfs_write_client
+        self._ipfs_reader_client = self._ipfs_singleton._ipfs_read_client
 
     async def init_worker(self):
+        """
+        Initializes the worker by initializing project calculation mapping, IPFS client, and other necessary components.
+        """
         if not self._initialized:
             await self._init_project_calculation_mapping()
             await self._init_ipfs_client()

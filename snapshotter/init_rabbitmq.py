@@ -1,4 +1,3 @@
-import aio_pika
 import pika
 
 from snapshotter.settings.config import settings
@@ -9,6 +8,12 @@ init_rmq_logger = logger.bind(module='Powerloom|RabbitMQ|Init')
 
 
 def create_rabbitmq_conn() -> pika.BlockingConnection:
+    """
+    Creates a connection to RabbitMQ using the settings specified in the application configuration.
+
+    Returns:
+        A `pika.BlockingConnection` object representing the connection to RabbitMQ.
+    """
     c = pika.BlockingConnection(
         pika.ConnectionParameters(
             host=settings.rabbitmq.host,
@@ -27,6 +32,16 @@ def create_rabbitmq_conn() -> pika.BlockingConnection:
 def processhub_command_publish(
     ch: pika.adapters.blocking_connection.BlockingChannel, cmd: str,
 ) -> None:
+    """
+    Publishes a command to the processhub-commands exchange.
+
+    Args:
+        ch (pika.adapters.blocking_connection.BlockingChannel): The channel to use for publishing.
+        cmd (str): The command to publish.
+
+    Returns:
+        None
+    """
     ch.basic_publish(
         exchange=(
             f'{settings.rabbitmq.setup.core.exchange}:{settings.namespace}'
@@ -45,6 +60,12 @@ def processhub_command_publish(
 
 
 def get_snapshot_queue_routing_key_pattern() -> tuple[str, str]:
+    """
+    Returns the queue name and routing key pattern for snapshot messages.
+
+    Returns:
+        A tuple containing the queue name and routing key pattern.
+    """
     queue_name = (
         f'powerloom-backend-cb-snapshot:{settings.namespace}:{settings.instance_id}'
     )
@@ -53,6 +74,12 @@ def get_snapshot_queue_routing_key_pattern() -> tuple[str, str]:
 
 
 def get_aggregate_queue_routing_key_pattern() -> tuple[str, str]:
+    """
+    Returns the queue name and routing key pattern for the aggregate queue.
+
+    Returns:
+        A tuple containing the queue name and routing key pattern.
+    """
     queue_name = (
         f'powerloom-backend-cb-aggregate:{settings.namespace}:{settings.instance_id}'
     )
@@ -61,12 +88,24 @@ def get_aggregate_queue_routing_key_pattern() -> tuple[str, str]:
 
 
 def get_delegate_worker_request_queue_routing_key() -> tuple[str, str]:
+    """
+    Returns the name and routing key for the request queue used by the delegated worker.
+
+    Returns:
+        A tuple containing the request queue name and routing key.
+    """
     request_queue_routing_key = f'powerloom-delegated-worker:{settings.namespace}:{settings.instance_id}:Request'
     request_queue_name = f'powerloom-delegated-worker-request:{settings.namespace}:{settings.instance_id}'
     return request_queue_name, request_queue_routing_key
 
 
 def get_delegate_worker_response_queue_routing_key_pattern() -> tuple[str, str]:
+    """
+    Returns a tuple containing the response queue name and routing key pattern for a delegated worker.
+
+    Returns:
+        tuple[str, str]: A tuple containing the response queue name and routing key pattern.
+    """
     response_queue_routing_key = f'powerloom-delegated-worker:{settings.namespace}:{settings.instance_id}:Response.*'
     response_queue_name = f'powerloom-delegated-worker-response:{settings.namespace}:{settings.instance_id}'
     return response_queue_name, response_queue_routing_key
@@ -79,6 +118,19 @@ def init_queue(
     exchange_name: str,
     bind: bool = True,
 ) -> None:
+    """
+    Declare a queue and optionally bind it to an exchange with a routing key.
+
+    Args:
+        ch: A blocking channel object from a Pika connection.
+        queue_name: The name of the queue to declare.
+        routing_key: The routing key to use for binding the queue to an exchange.
+        exchange_name: The name of the exchange to bind the queue to.
+        bind: Whether or not to bind the queue to the exchange. Defaults to True.
+
+    Returns:
+        None
+    """
     ch.queue_declare(queue_name)
     if bind:
         ch.queue_bind(
@@ -101,6 +153,18 @@ def init_topic_exchange_and_queue(
     queue_name: str,
     routing_key_pattern: str,
 ) -> None:
+    """
+    Initialize a topic exchange and queue in RabbitMQ.
+
+    Args:
+        ch: A blocking channel object for RabbitMQ.
+        exchange_name: The name of the exchange to declare.
+        queue_name: The name of the queue to declare.
+        routing_key_pattern: The routing key pattern to use for the queue.
+
+    Returns:
+        None
+    """
     ch.exchange_declare(
         exchange=exchange_name, exchange_type='topic', durable=True,
     )
@@ -118,6 +182,15 @@ def init_topic_exchange_and_queue(
 def init_callback_queue(
     ch: pika.adapters.blocking_connection.BlockingChannel,
 ) -> None:
+    """
+    Initializes the callback queue for snapshot and aggregate.
+
+    Args:
+        ch (pika.adapters.blocking_connection.BlockingChannel): The blocking channel object.
+
+    Returns:
+        None
+    """
     callback_exchange_name = (
         f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}'
     )
@@ -143,6 +216,15 @@ def init_callback_queue(
 def init_commit_payload_queue(
     ch: pika.adapters.blocking_connection.BlockingChannel,
 ) -> None:
+    """
+    Initializes a RabbitMQ queue for commit payloads.
+
+    Args:
+        ch (pika.adapters.blocking_connection.BlockingChannel): The RabbitMQ channel to use.
+
+    Returns:
+        None
+    """
     commit_payload_exchange_name = (
         f'{settings.rabbitmq.setup.commit_payload.exchange}:{settings.namespace}'
     )
@@ -161,19 +243,36 @@ def init_commit_payload_queue(
 def init_delegate_worker_queue(
     ch: pika.adapters.blocking_connection.BlockingChannel,
 ) -> None:
-    delegated_worker_exchange_name = (
-        f'{settings.rabbitmq.setup.delegated_worker.exchange}:{settings.namespace}'
+    """
+    Initializes the delegate worker queue by declaring the response and request exchanges and initializing the request queue.
+
+    Args:
+        ch (pika.adapters.blocking_connection.BlockingChannel): The blocking channel to use for declaring exchanges and initializing the queue.
+
+    Returns:
+        None
+    """
+    delegated_worker_response_exchange_name = (
+        f'{settings.rabbitmq.setup.delegated_worker.exchange}:Response:{settings.namespace}'
     )
 
     ch.exchange_declare(
-        exchange=delegated_worker_exchange_name, exchange_type='direct', durable=True,
+        exchange=delegated_worker_response_exchange_name, exchange_type='direct', durable=True,
+    )
+
+    delegated_worker_request_exchange_name = (
+        f'{settings.rabbitmq.setup.delegated_worker.exchange}:Request:{settings.namespace}'
+    )
+
+    ch.exchange_declare(
+        exchange=delegated_worker_request_exchange_name, exchange_type='direct', durable=True,
     )
 
     request_queue_name, request_queue_routing_key = get_delegate_worker_request_queue_routing_key()
 
     init_queue(
         ch,
-        exchange_name=delegated_worker_exchange_name,
+        exchange_name=delegated_worker_request_exchange_name,
         queue_name=request_queue_name,
         routing_key=request_queue_routing_key,
         bind=True,
@@ -183,6 +282,17 @@ def init_delegate_worker_queue(
 def init_event_detector_queue(
     ch: pika.adapters.blocking_connection.BlockingChannel,
 ) -> None:
+    """
+    Initializes the event detector queue by creating a topic exchange and a queue
+    with the given exchange name, queue name, and routing key pattern.
+
+    Args:
+        ch (pika.adapters.blocking_connection.BlockingChannel): The blocking channel
+            to use for creating the exchange and queue.
+
+    Returns:
+        None
+    """
     event_detector_exchange_name = (
         f'{settings.rabbitmq.setup.event_detector.exchange}:{settings.namespace}'
     )
@@ -199,6 +309,9 @@ def init_event_detector_queue(
 
 
 def init_exchanges_queues():
+    """
+    Initializes the RabbitMQ Direct exchange and queues required for snapshotter.
+    """
     c = create_rabbitmq_conn()
     ch: pika.adapters.blocking_connection.BlockingChannel = c.channel()
     # core exchange remains same for multiple snapshotter instances

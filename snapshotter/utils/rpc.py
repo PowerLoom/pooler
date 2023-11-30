@@ -6,9 +6,6 @@ from typing import Union
 
 import eth_abi
 import tenacity
-from aiohttp import ClientSession
-from aiohttp import ClientTimeout
-from aiohttp import TCPConnector
 from async_limits import parse_many as limit_parse_many
 from eth_abi.codec import ABICodec
 from eth_utils import keccak
@@ -36,6 +33,7 @@ from snapshotter.utils.models.settings_model import RPCConfigBase
 from snapshotter.utils.redis.rate_limiter import check_rpc_rate_limit
 from snapshotter.utils.redis.rate_limiter import load_rate_limiter_scripts
 from snapshotter.utils.redis.redis_keys import rpc_blocknumber_calls
+from snapshotter.utils.redis.redis_keys import rpc_get_block_number_calls
 from snapshotter.utils.redis.redis_keys import rpc_get_event_logs_calls
 from snapshotter.utils.redis.redis_keys import rpc_get_transaction_receipt_calls
 from snapshotter.utils.redis.redis_keys import rpc_json_rpc_calls
@@ -44,7 +42,13 @@ from snapshotter.utils.redis.redis_keys import rpc_web3_calls
 
 def get_contract_abi_dict(abi):
     """
-    Create dictionary of ABI {function_name -> {signature, abi, input, output}}
+    Returns a dictionary of function signatures, inputs, outputs and full ABI for a given contract ABI.
+
+    Args:
+        abi (list): List of dictionaries representing the contract ABI.
+
+    Returns:
+        dict: Dictionary containing function signatures, inputs, outputs and full ABI.
     """
     abi_dict = {}
     for abi_obj in [obj for obj in abi if obj['type'] == 'function']:
@@ -63,7 +67,15 @@ def get_contract_abi_dict(abi):
 
 def get_encoded_function_signature(abi_dict, function_name, params: Union[List, None]):
     """
-    get function encoded signature with params
+    Returns the encoded function signature for a given function name and parameters.
+
+    Args:
+        abi_dict (dict): The ABI dictionary for the contract.
+        function_name (str): The name of the function.
+        params (list or None): The list of parameters for the function.
+
+    Returns:
+        str: The encoded function signature.
     """
     function_signature = abi_dict.get(function_name)['signature']
     encoded_signature = '0x' + keccak(text=function_signature).hex()[:8]
@@ -76,6 +88,11 @@ def get_encoded_function_signature(abi_dict, function_name, params: Union[List, 
 
 
 def get_event_sig_and_abi(event_signatures, event_abis):
+    """
+    Given a dictionary of event signatures and a dictionary of event ABIs,
+    returns a tuple containing a list of event signatures and a dictionary of
+    event ABIs keyed by their corresponding signature hash.
+    """
     event_sig = [
         '0x' + keccak(text=sig).hex() for name, sig in event_signatures.items()
     ]
@@ -91,10 +108,15 @@ def get_event_sig_and_abi(event_signatures, event_abis):
 
 
 class RpcHelper(object):
-    _aiohttp_tcp_connector: TCPConnector
-    _web3_aiohttp_client: ClientSession
 
     def __init__(self, rpc_settings: RPCConfigBase = settings.rpc, archive_mode=False):
+        """
+        Initializes an instance of the RpcHelper class.
+
+        Args:
+            rpc_settings (RPCConfigBase, optional): The RPC configuration settings to use. Defaults to settings.rpc.
+            archive_mode (bool, optional): Whether to operate in archive mode. Defaults to False.
+        """
         self._archive_mode = archive_mode
         self._rpc_settings = rpc_settings
         self._nodes = list()
@@ -107,10 +129,18 @@ class RpcHelper(object):
         self._client = None
         self._async_transport = None
         self._rate_limit_lua_script_shas = None
-        self._aiohttp_tcp_connector = None
-        self._web3_aiohttp_client = None
 
     async def _load_rate_limit_shas(self, redis_conn):
+        """
+        Loads the rate limit Lua script SHA values from Redis if they haven't already been loaded.
+
+        Args:
+            redis_conn: Redis connection object.
+
+        Returns:
+            None
+        """
+
         if self._rate_limit_lua_script_shas is not None:
             return
         self._rate_limit_lua_script_shas = await load_rate_limiter_scripts(
@@ -118,6 +148,13 @@ class RpcHelper(object):
         )
 
     async def _init_http_clients(self):
+        """
+        Initializes the HTTP clients for making RPC requests.
+
+        If the client has already been initialized, this function returns immediately.
+
+        :return: None
+        """
         if self._client is not None:
             return
         self._async_transport = AsyncHTTPTransport(
@@ -132,18 +169,12 @@ class RpcHelper(object):
             follow_redirects=False,
             transport=self._async_transport,
         )
-        if self._aiohttp_tcp_connector is not None:
-            return
-        self._aiohttp_tcp_connector = TCPConnector(
-            keepalive_timeout=self._rpc_settings.connection_limits.keepalive_expiry,
-            limit=1000,
-        )
-        self._web3_aiohttp_client = ClientSession(
-            connector=self._aiohttp_tcp_connector,
-            timeout=ClientTimeout(total=self._rpc_settings.request_time_out),
-        )
 
     async def _load_async_web3_providers(self):
+        """
+        Loads async web3 providers for each node in the list of nodes.
+        If a node already has a web3 client, it is skipped.
+        """
         for node in self._nodes:
             if node['web3_client_async'] is not None:
                 continue
@@ -152,9 +183,19 @@ class RpcHelper(object):
                 modules={'eth': (AsyncEth,)},
                 middlewares=[],
             )
-            await node['web3_client_async'].provider.cache_async_session(self._web3_aiohttp_client)
 
     async def init(self, redis_conn):
+        """
+        Initializes the RPC client by loading web3 providers and rate limits,
+        loading rate limit SHAs, initializing HTTP clients, and loading async
+        web3 providers.
+
+        Args:
+            redis_conn: Redis connection object.
+
+        Returns:
+            None
+        """
         if not self._sync_nodes_initialized:
             self._load_web3_providers_and_rate_limits()
             self._sync_nodes_initialized = True
@@ -164,6 +205,10 @@ class RpcHelper(object):
         self._initialized = True
 
     def _load_web3_providers_and_rate_limits(self):
+        """
+        Load web3 providers and rate limits based on the archive mode.
+        If archive mode is True, load archive nodes, otherwise load full nodes.
+        """
         if self._archive_mode:
             nodes = self._rpc_settings.archive_nodes
         else:
@@ -180,8 +225,7 @@ class RpcHelper(object):
                     },
                 )
             except Exception as exc:
-
-                self._logger.opt(exception=True).error(
+                self._logger.opt(exception=settings.logs.trace_enabled).error(
                     (
                         'Error while initialising one of the web3 providers,'
                         f' err_msg: {exc}'
@@ -192,6 +236,15 @@ class RpcHelper(object):
             self._node_count = len(self._nodes)
 
     def get_current_node(self):
+        """
+        Returns the current node to use for RPC calls.
+
+        If the sync nodes have not been initialized, it initializes them by loading web3 providers and rate limits.
+        If there are no full nodes available, it raises an exception.
+
+        Returns:
+            The current node to use for RPC calls.
+        """
         if not self._sync_nodes_initialized:
             self._load_web3_providers_and_rate_limits()
             self._sync_nodes_initialized = True
@@ -201,6 +254,16 @@ class RpcHelper(object):
         return self._nodes[self._current_node_index]
 
     def _on_node_exception(self, retry_state: tenacity.RetryCallState):
+        """
+        Callback function to handle exceptions raised during RPC calls to nodes.
+        It updates the node index to retry the RPC call on the next node.
+
+        Args:
+            retry_state (tenacity.RetryCallState): The retry state object containing information about the retry.
+
+        Returns:
+            None
+        """
         exc_idx = retry_state.kwargs['node_idx']
         next_node_idx = (retry_state.kwargs.get('node_idx', 0) + 1) % self._node_count
         retry_state.kwargs['node_idx'] = next_node_idx
@@ -211,9 +274,88 @@ class RpcHelper(object):
             next_node_idx, retry_state.outcome.exception(),
         )
 
-    async def _async_web3_call(self, contract_function, redis_conn, from_address=None):
-        """Make async web3 call"""
+    async def get_current_block_number(self, redis_conn):
+        """
+        Returns the current block number of the Ethereum blockchain.
 
+        Args:
+            redis_conn: Redis connection object.
+
+        Returns:
+            The current block number of the Ethereum blockchain.
+
+        Raises:
+            RPCException: If an error occurs while making the RPC call.
+        """
+        @retry(
+            reraise=True,
+            retry=retry_if_exception_type(RPCException),
+            wait=wait_random_exponential(multiplier=1, max=10),
+            stop=stop_after_attempt(settings.rpc.retry),
+            before_sleep=self._on_node_exception,
+        )
+        async def f(node_idx):
+            if not self._initialized:
+                await self.init(redis_conn=redis_conn)
+            node = self._nodes[node_idx]
+            rpc_url = node.get('rpc_url')
+            web3_provider = node['web3_client_async']
+
+            await check_rpc_rate_limit(
+                parsed_limits=node.get('rate_limit', []),
+                app_id=rpc_url.split('/')[-1],
+                redis_conn=redis_conn,
+                request_payload='get_current_block_number',
+                error_msg={
+                    'msg': 'exhausted_api_key_rate_limit inside get_current_blocknumber',
+                },
+                logger=self._logger,
+                rate_limit_lua_script_shas=self._rate_limit_lua_script_shas,
+                limit_incr_by=1,
+            )
+            try:
+                cur_time = time.time()
+                await asyncio.gather(
+                    redis_conn.zadd(
+                        name=rpc_get_block_number_calls,
+                        mapping={
+                            json.dumps(
+                                'get_current_block_number',
+                            ): cur_time,
+                        },
+                    ),
+                    redis_conn.zremrangebyscore(
+                        name=rpc_get_block_number_calls,
+                        min=0,
+                        max=cur_time - 3600,
+                    ),
+                )
+                current_block = await web3_provider.eth.block_number
+            except Exception as e:
+                exc = RPCException(
+                    request='get_current_block_number',
+                    response=None,
+                    underlying_exception=e,
+                    extra_info=f'RPC_GET_CURRENT_BLOCKNUMBER ERROR: {str(e)}',
+                )
+                self._logger.trace('Error in get_current_block_number, error {}', str(exc))
+                raise exc
+            else:
+                return current_block
+        return await f(node_idx=0)
+
+    async def _async_web3_call(self, contract_function, redis_conn, from_address=None):
+        """
+        Executes a web3 call asynchronously.
+
+        Args:
+            contract_function: The contract function to call.
+            redis_conn: The Redis connection object.
+            from_address: The address to send the transaction from.
+
+        Returns:
+            The result of the web3 call.
+        """
         @retry(
             reraise=True,
             retry=retry_if_exception_type(RPCException),
@@ -298,8 +440,7 @@ class RpcHelper(object):
                     underlying_exception=e,
                     extra_info={'msg': str(e)},
                 )
-
-                self._logger.opt(lazy=True).trace(
+                self._logger.opt(exception=settings.logs.trace_enabled).error(
                     (
                         'Error while making web3 batch call'
                     ),
@@ -310,6 +451,20 @@ class RpcHelper(object):
         return await f(node_idx=0)
 
     async def get_transaction_receipt(self, tx_hash, redis_conn):
+        """
+        Retrieves the transaction receipt for a given transaction hash.
+
+        Args:
+            tx_hash (str): The transaction hash for which to retrieve the receipt.
+            redis_conn: Redis connection object.
+
+        Returns:
+            The transaction receipt details as a dictionary.
+
+        Raises:
+            RPCException: If an error occurs while retrieving the transaction receipt.
+        """
+
         @retry(
             reraise=True,
             retry=retry_if_exception_type(RPCException),
@@ -318,7 +473,7 @@ class RpcHelper(object):
             before_sleep=self._on_node_exception,
         )
         async def f(node_idx):
-            if self._node_count == 0:
+            if not self._initialized:
                 await self.init(redis_conn=redis_conn)
             node = self._nodes[node_idx]
             rpc_url = node.get('rpc_url')
@@ -375,10 +530,18 @@ class RpcHelper(object):
         return await f(node_idx=0)
 
     async def get_current_block(self, redis_conn, node_idx=0):
-        """Get the current block number.
+        """
+        Returns the current block number from the Ethereum node at the specified index.
+
+        Args:
+            redis_conn (redis.Redis): Redis connection object.
+            node_idx (int): Index of the Ethereum node to use. Defaults to 0.
 
         Returns:
-            int : the current block number
+            int: The current block number.
+
+        Raises:
+            ExhaustedApiKeyRateLimitError: If the API key rate limit for the node is exhausted.
         """
         node = self._nodes[node_idx]
         rpc_url = node.get('rpc_url')
@@ -416,7 +579,15 @@ class RpcHelper(object):
 
     async def web3_call(self, tasks, redis_conn, from_address=None):
         """
-        Call web3 functions in parallel
+        Calls the given tasks asynchronously using web3 and returns the response.
+
+        Args:
+            tasks (list): List of contract functions to call.
+            redis_conn: Redis connection object.
+            from_address (str, optional): Address to use as the transaction sender. Defaults to None.
+
+        Returns:
+            list: List of responses from the contract function calls.
         """
         if not self._initialized:
             await self.init(redis_conn)
@@ -433,8 +604,19 @@ class RpcHelper(object):
             raise e
 
     async def _make_rpc_jsonrpc_call(self, rpc_query, redis_conn):
-        """Make a jsonrpc call to the given rpc_url"""
+        """
+        Makes an RPC JSON-RPC call to a node in the pool.
 
+        Args:
+            rpc_query (dict): The JSON-RPC query to be sent.
+            redis_conn (Redis): The Redis connection object.
+
+        Returns:
+            dict: The JSON-RPC response data.
+
+        Raises:
+            RPCException: If there is an error in making the JSON-RPC call.
+        """
         @retry(
             reraise=True,
             retry=retry_if_exception_type(RPCException),
@@ -525,9 +707,17 @@ class RpcHelper(object):
             to_block,
     ):
         """
-        Batch call eth_getBalance for given block-range
+        Batch retrieves the Ethereum balance of an address for a range of blocks.
 
-        RPC_BATCH: for_each_block -> eth_getBalance
+        Args:
+            address (str): The Ethereum address to retrieve the balance for.
+            redis_conn (redis.Redis): The Redis connection object.
+            from_block (int): The starting block number.
+            to_block (int): The ending block number.
+
+        Returns:
+            list: A list of Ethereum balances for each block in the range. If a balance could not be retrieved for a block,
+            None is returned in its place.
         """
         if not self._initialized:
             await self.init(redis_conn)
@@ -574,9 +764,20 @@ class RpcHelper(object):
         from_address=Web3.toChecksumAddress('0x0000000000000000000000000000000000000000'),
     ):
         """
-        Batch call "single-function" on a contract for given block-range
+        Batch executes an Ethereum contract function call on a range of blocks.
 
-        RPC_BATCH: for_each_block -> call_function_x
+        Args:
+            abi_dict (dict): The ABI dictionary of the contract.
+            function_name (str): The name of the function to call.
+            contract_address (str): The address of the contract.
+            redis_conn (redis.Redis): The Redis connection object.
+            from_block (int): The starting block number.
+            to_block (int): The ending block number.
+            params (list, optional): The list of parameters to pass to the function. Defaults to None.
+            from_address (str, optional): The address to use as the sender of the transaction. Defaults to '0x0000000000000000000000000000000000000000'.
+
+        Returns:
+            list: A list of decoded results from the function call.
         """
         if not self._initialized:
             await self.init(redis_conn)
@@ -625,9 +826,15 @@ class RpcHelper(object):
 
     async def batch_eth_get_block(self, from_block, to_block, redis_conn):
         """
-        Batch call "eth_getBlockByNumber" in a range of block numbers
+        Batch retrieves Ethereum blocks using eth_getBlockByNumber JSON-RPC method.
 
-        RPC_BATCH: for_each_block -> eth_getBlockByNumber
+        Args:
+            from_block (int): The block number to start retrieving from.
+            to_block (int): The block number to stop retrieving at.
+            redis_conn (redis.Redis): Redis connection object.
+
+        Returns:
+            dict: A dictionary containing the response data from the JSON-RPC call.
         """
         if not self._initialized:
             await self.init(redis_conn)
@@ -655,6 +862,20 @@ class RpcHelper(object):
     async def get_events_logs(
         self, contract_address, to_block, from_block, topics, event_abi, redis_conn,
     ):
+        """
+        Returns all events logs for a given contract address, within a specified block range and with specified topics.
+
+        Args:
+            contract_address (str): The address of the contract to get events logs for.
+            to_block (int): The highest block number to retrieve events logs from.
+            from_block (int): The lowest block number to retrieve events logs from.
+            topics (List[str]): A list of topics to filter the events logs by.
+            event_abi (Dict): The ABI of the event to decode the logs with.
+            redis_conn (Redis): The Redis connection object to use for rate limiting.
+
+        Returns:
+            List[Dict]: A list of dictionaries representing the decoded events logs.
+        """
         if not self._initialized:
             await self.init(redis_conn)
 
@@ -688,7 +909,7 @@ class RpcHelper(object):
                 },
                 logger=self._logger,
                 rate_limit_lua_script_shas=self._rate_limit_lua_script_shas,
-                limit_incr_by=to_block - from_block + 1,
+                limit_incr_by=1,
             )
             try:
                 cur_time = time.time()
