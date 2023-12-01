@@ -263,10 +263,6 @@ class RpcHelper(object):
                     "output_type": output_type,
                     "fn_name": contract_function.fn_name,  # For debugging purposes
                 }
-                self._logger.debug(
-                    "Making web3 call with payload '{}'", contract_function.fn_name,
-                
-                )       
 
                 cur_time = time.time()
                 redis_cache_data = payload.copy()
