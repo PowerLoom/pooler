@@ -104,8 +104,7 @@ async def get_pair_reserves(
         from_block,
         pair_per_token_metadata,
         rpc_helper,
-        redis_conn,
-        core_logger
+        redis_conn
     )
 
     core_logger.debug(f"initial_reserves: {initial_reserves}")

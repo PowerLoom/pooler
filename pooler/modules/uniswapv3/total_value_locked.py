@@ -39,7 +39,7 @@ def transform_tick_bytes_to_list(tickData: bytes):
     return ticks
 
 
-def calculate_tvl_from_ticks(ticks, pair_metadata, sqrt_price, logger):
+def calculate_tvl_from_ticks(ticks, pair_metadata, sqrt_price):
     sqrt_price = sqrt_price / 2 ** 96
     liquidity_total = 0
     token0_liquidity = 0
@@ -89,9 +89,7 @@ def calculate_tvl_from_ticks(ticks, pair_metadata, sqrt_price, logger):
                 sqrtPriceLow,
                 sqrt_price,
             )   
-        
-    logger.debug('token0_liquidity', token0_liquidity)
-    logger.debug('token1_liquidity', token1_liquidity)
+            
     return (token0_liquidity, token1_liquidity)
 
 
@@ -163,7 +161,6 @@ async def calculate_reserves(
     pair_per_token_metadata,
     rpc_helper: RpcHelper,
     redis_conn,
-    logger,
 ):
 
     ticks_list, slot0 = await get_tick_info(
@@ -178,10 +175,8 @@ async def calculate_reserves(
         ticks_list,
         pair_per_token_metadata,
         sqrt_price,
-        logger, 
     )
-    logger.debug('t0_reserves', t0_reserves)
-    logger.debug('t1_reserves', t1_reserves)
+
     return [int(t0_reserves), int(t1_reserves)]
 
 
