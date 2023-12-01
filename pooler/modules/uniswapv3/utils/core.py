@@ -153,7 +153,7 @@ async def get_pair_reserves(
             else acc - event['args']['amount1'], events_in_block, 0)
         
         token0USD = token0Amount * token0_price_map.get(block_num, 0) * (10 ** -int(pair_per_token_metadata["token0"]["decimals"]))
-        token1USD = token1Amount * token1_price_map.get(block_num, 0) * (10 ** -int(pair_per_token_metadata["token1"]["decimals"]))
+        token1USD = token1Amount * (token1_price_map.get(block_num, 0)) * (10 ** -int(pair_per_token_metadata["token1"]["decimals"]))
         
 
         token0Price = token0_price_map.get(block_num, 0)
@@ -538,7 +538,7 @@ async def get_liquidity_depth(
         redis_conn=redis_conn,
         rpc_helper=rpc_helper,
     )
-    
+
     token0_price_map, token1_price_map = await asyncio.gather(
         get_token_price_in_block_range(
             token_metadata=pair_per_token_metadata["token0"],
@@ -631,10 +631,6 @@ async def get_liquidity_depth(
 
     return liquidity_depth_dict
 
-
-
-        
-        
 
 
 

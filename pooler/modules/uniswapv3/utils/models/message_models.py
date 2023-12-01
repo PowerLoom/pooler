@@ -23,7 +23,7 @@ class UniswapPairTotalReservesSnapshot(SnapshotBase):
 
 
 class LiquidityDepthSnapshot(SnapshotBase):
-    block: Dict[str, dict]  # block number to corresponding tick
+    block: Dict[str, dict]  # block number to corresponding liquidity depth
 
 
 class logsTradeModel(BaseModel):

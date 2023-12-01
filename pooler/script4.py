@@ -5,8 +5,8 @@ from web3 import Web3
 from web3.contract import Contract
 from eth_utils import function_abi_to_4byte_selector
 
-zkevm_rpc = "https://polygonzkevm-mainnet.g.alchemy.com/v2/itw6HKSrSWtJm1RpLstfwH2lnJDY0IJQ"
-prost_rpc = "https://rpc-prost1e.powerloom.io"
+
+
 abi = [
 	{
 		"inputs": [

@@ -160,9 +160,10 @@ async def get_eth_price_usd(
 
             # using fixed weightage for now, will use liquidity based weightage later
 
-            eth_price_usd = (eth_dai_price + eth_usdc_price_ + eth_usdt_price_) / 3
-            
-            eth_price_usd_dict[block_num] = 1 / float(eth_price_usd)
+            eth_price_usd = (dai_eth_price + usdc_eth_price_ + usdt_eth_price_) / 3
+
+
+            eth_price_usd_dict[block_num] = float(eth_price_usd)
             redis_cache_mapping[
                 json.dumps(
                     {"blockHeight": block_num, "price": float(eth_price_usd)},

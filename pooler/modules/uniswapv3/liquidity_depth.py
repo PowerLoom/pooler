@@ -6,7 +6,7 @@ from typing import Union
 from redis import asyncio as aioredis
 
 from .utils.core import get_liquidity_depth, get_pair_reserves
-from .utils.models.message_models import UniswapPairTotalReservesSnapshot
+from .utils.models.message_models import LiquidityDepthSnapshot, UniswapPairTotalReservesSnapshot
 from pooler.utils.callback_helpers import GenericProcessorSnapshot
 from pooler.utils.default_logger import logger
 from pooler.utils.models.message_models import EpochBaseSnapshot
@@ -34,7 +34,7 @@ class LiquidityDepthProcessor(GenericProcessorSnapshot):
             f"liquidity  depth {data_source_contract_address} computation init time {time.time()}"
         )
 
-        liquidity_depth_snapshot = await get_liquidity_depth(
+        liquidity_depth_snapshot: LiquidityDepthSnapshot = await get_liquidity_depth(
             pair_address=data_source_contract_address,
             from_block=min_chain_height,
             to_block=max_chain_height,
@@ -42,9 +42,7 @@ class LiquidityDepthProcessor(GenericProcessorSnapshot):
             rpc_helper=rpc_helper,
             fetch_timestamp=True,
         )
-        self._logger.debug(
-            f"liquidity depth snapshot {liquidity_depth_snapshot[max_chain_height]}"
-        )
+        
         self._logger.debug(
             f"liquidity depth {data_source_contract_address}, computation end time {time.time()}"
         )

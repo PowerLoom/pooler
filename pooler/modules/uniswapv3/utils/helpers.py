@@ -304,7 +304,7 @@ async def get_token_eth_price_dict(
         block_counter = 0
         # parse token_eth_quote and store in dict
         if len(token_eth_quote) > 0:
-            token_eth_quote = [1 / (quote[0] * (10 ** (-36 + token_decimals))) for quote in token_eth_quote]
+            token_eth_quote = [(quote[0] * (10 ** (-36 + token_decimals))) for quote in token_eth_quote]
             for block_num in range(from_block, to_block + 1):
                 token_eth_price_dict[block_num] = token_eth_quote[block_counter]
                 block_counter += 1

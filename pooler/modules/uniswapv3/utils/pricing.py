@@ -75,7 +75,7 @@ async def get_token_price_in_block_range(
             # we want to get the price of token in terms of eth vs on chain resources. 
             # so we need to call the 1inchQuoter contract and transform it to either token/eth or eth/token, lets find out
             # token_eth_price_dict = await get_token_eth_price(
-            #  amount token per 1 eth
+            #  amount eth per 1 token
             token_eth_price_dict = await get_token_eth_price_dict(
                 token_address=token_address,
                 token_decimals=token_decimals,  
@@ -98,12 +98,18 @@ async def get_token_price_in_block_range(
                     rpc_helper=rpc_helper,
 
                 )
- 
+
+                pricing_logger.debug(
+                    f"token_eth_price_dict: {token_eth_price_dict}"
+                )
+                pricing_logger.debug(
+                    f"eth_usd_price_dict: {eth_usd_price_dict}"
+                )
                 for block_num in range(from_block, to_block + 1):
                     token_price_dict[block_num] = token_eth_price_dict.get(
                         block_num,
                         0,
-                    ) * eth_usd_price_dict.get(block_num, 0)
+                    ) * (eth_usd_price_dict.get(block_num, 0))
             else:
                 for block_num in range(from_block, to_block + 1):
                 

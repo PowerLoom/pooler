@@ -89,7 +89,8 @@ def calculate_tvl_from_ticks(ticks, pair_metadata, sqrt_price, logger):
                 sqrt_price,
             )   
         
-
+    logger.debug('token0_liquidity', token0_liquidity)
+    logger.debug('token1_liquidity', token1_liquidity)
     return (token0_liquidity, token1_liquidity)
 
 

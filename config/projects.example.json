@@ -1,14 +1,9 @@
 {
-  "config": [{
-      "project_type": "pairContract_pair_total_reserves",
+  "config": [
+    {
+    "project_type": "pairContract_total_reserves",
       "projects":[
-        "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640",
-        "0x11b815efB8f581194ae79006d24E0d814B7697F6",
-        "0x3416cF6C708Da44DB2624D63ea0AAef7113527C6",
-        "0x5777d92f208679db4b9778590fa3cab3ac9e2168",
-        "0xC2e9F25Be6257c210d7Adf0D4Cd6E3E881ba25f8",
-        "0x1d42064Fc4Beb5F8aAF85F4617AE8b3b5B8Bd801",
-        "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0"
+        "0xa6cc3c2531fdaa6ae1a3ca84c2855806728693e8"
         ],
       "processor":{
         "module": "pooler.modules.uniswapv3.pair_total_reserves",
@@ -18,13 +13,7 @@
     {
       "project_type": "pairContract_trade_volume",
       "projects":[
-        "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640",
-        "0x11b815efB8f581194ae79006d24E0d814B7697F6",
-        "0x3416cF6C708Da44DB2624D63ea0AAef7113527C6",
-        "0x5777d92f208679db4b9778590fa3cab3ac9e2168",
-        "0xC2e9F25Be6257c210d7Adf0D4Cd6E3E881ba25f8",
-        "0x1d42064Fc4Beb5F8aAF85F4617AE8b3b5B8Bd801",
-        "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0"
+        "0xa6cc3c2531fdaa6ae1a3ca84c2855806728693e8"
         ],
         "processor":{
           "module": "pooler.modules.uniswapv3.trade_volume",

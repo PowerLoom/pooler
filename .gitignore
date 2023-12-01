@@ -18,3 +18,5 @@ requirements.txt
 **/*.whl
 script2.py
 script.py
+script3.py
+script4.py
