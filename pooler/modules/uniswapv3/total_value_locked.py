@@ -16,6 +16,7 @@ from pooler.modules.uniswapv3.utils.constants import pair_contract_abi
 from pooler.modules.uniswapv3.utils.constants import override_address
 from pooler.modules.uniswapv3.utils.constants import univ3_helper_bytecode
 from pooler.modules.uniswapv3.utils.constants import UNISWAP_EVENTS_ABI
+from pooler.modules.uniswapv3.utils.constants import MAX_TICK, MIN_TICK
 
 from pooler.utils.rpc import RpcHelper, get_event_sig_and_abi
 
@@ -165,18 +166,6 @@ async def calculate_reserves(
     logger,
 ):
 
-    # get token price function takes care of its own rate limit
-    overrides = {
-        override_address: {"code": univ3_helper_bytecode},
-    }
-    current_node = rpc_helper.get_current_node()
-    pair_contract = current_node['web3_client'].eth.contract(address=pair_address, abi=pair_contract_abi)
-    tick_tasks = [helper_contract.functions.getTicks(pair_address)]
-    slot0_tasks = [
-        pair_contract.functions.slot0(),
-    ]
-        
-
     ticks_list, slot0 = await get_tick_info(
         rpc_helper=rpc_helper,
         pair_address=pair_address,
@@ -208,7 +197,12 @@ async def get_tick_info(
     }
     current_node = rpc_helper.get_current_node()
     pair_contract = current_node['web3_client'].eth.contract(address=pair_address, abi=pair_contract_abi)
-    tick_tasks = [helper_contract.functions.getTicks(pair_address)]
+    # batch rpc calls for tick data to prevent oog errors
+
+    tick_tasks = [
+        helper_contract.functions.getTicks(pair_address, MIN_TICK, int(0)),
+        helper_contract.functions.getTicks(pair_address, int(0), MAX_TICK),
+                  ]
     slot0_tasks = [
         pair_contract.functions.slot0(),
     ]
@@ -220,6 +214,6 @@ async def get_tick_info(
         )
         
 
-    ticks_list = transform_tick_bytes_to_list(tickDataResponse[0])
+    ticks_list = transform_tick_bytes_to_list(tickDataResponse[0] + tickDataResponse[1])
     slot0 = slot0Response[0]
     return ticks_list, slot0

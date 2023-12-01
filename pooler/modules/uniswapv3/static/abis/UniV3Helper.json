@@ -5,6 +5,16 @@
           "internalType": "contract IUniswapV3",
           "name": "pool",
           "type": "address"
+        },
+        {
+          "internalType": "int24",
+          "name": "fromTick",
+          "type": "int24"
+        },
+        {
+          "internalType": "int24",
+          "name": "toTick",
+          "type": "int24"
         }
       ],
       "name": "getTicks",

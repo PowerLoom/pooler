@@ -1,21 +1,31 @@
 [
-    {
-      "inputs": [
-        {
-          "internalType": "contract IUniswapV3",
-          "name": "pool",
-          "type": "address"
-        }
-      ],
-      "name": "getTicks",
-      "outputs": [
-        {
-          "internalType": "bytes[]",
-          "name": "ticks",
-          "type": "bytes[]"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    }
-  ]
+  {
+    "inputs": [
+      {
+        "internalType": "contract IUniswapV3",
+        "name": "pool",
+        "type": "address"
+      },
+      {
+        "internalType": "int24",
+        "name": "fromTick",
+        "type": "int24"
+      },
+      {
+        "internalType": "int24",
+        "name": "toTick",
+        "type": "int24"
+      }
+    ],
+    "name": "getTicks",
+    "outputs": [
+      {
+        "internalType": "bytes[]",
+        "name": "ticks",
+        "type": "bytes[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]
