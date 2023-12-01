@@ -671,12 +671,12 @@ def calculate_liquidity_depth(
             )
             liquidity_depth_dict[idx] = {
                 "token0": {
-                    "token": pair_metadata["token0"]['address'],
+                    "address": pair_metadata["token0"]['address'],
                     "amount": abs(token0_liquidity),
                     "decimals": pair_metadata["token0"]["decimals"],
                 },
                 "token1": {
-                    "token": pair_metadata["token1"]['address'],
+                    "address": pair_metadata["token1"]['address'],
                     "amount": 0,
                     "decimals": pair_metadata["token1"]["decimals"],
                 },

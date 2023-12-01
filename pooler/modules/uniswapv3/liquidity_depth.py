@@ -34,7 +34,7 @@ class LiquidityDepthProcessor(GenericProcessorSnapshot):
             f"liquidity  depth {data_source_contract_address} computation init time {time.time()}"
         )
 
-        liquidity_depth_snapshot: LiquidityDepthSnapshot = await get_liquidity_depth(
+        liquidity_depth_dict = await get_liquidity_depth(
             pair_address=data_source_contract_address,
             from_block=min_chain_height,
             to_block=max_chain_height,
@@ -42,7 +42,10 @@ class LiquidityDepthProcessor(GenericProcessorSnapshot):
             rpc_helper=rpc_helper,
             fetch_timestamp=True,
         )
-        
+        liquidity_depth_snapshot: LiquidityDepthSnapshot = LiquidityDepthSnapshot(liquidity_depth_dict)
+        self._logger.debug(
+            f"liquidity depth dict {liquidity_depth_snapshot[max_chain_height]}, computation end time {time.time()}"
+        )
         self._logger.debug(
             f"liquidity depth {data_source_contract_address}, computation end time {time.time()}"
         )
