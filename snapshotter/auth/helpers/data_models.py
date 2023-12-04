@@ -14,8 +14,13 @@ class AddApiKeyRequest(BaseModel):
     api_key: str
 
 
+class WalletAddressRequest(BaseModel):
+    wallet_address: str
+
+
 class AppOwnerModel(BaseModel):
     email: str
+    walletAddress: Optional[str] = ""
     rate_limit: str
     active: UserStatusEnum
     callsCount: int = 0
