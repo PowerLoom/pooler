@@ -44,7 +44,7 @@ def calculate_tvl_from_ticks(ticks, pair_metadata, sqrt_price):
     liquidity_total = 0
     token0_liquidity = 0
     token1_liquidity = 0
-    tick_spacing = 10
+    tick_spacing = 1
 
     if len(ticks) == 0:
         return (0, 0)
@@ -168,6 +168,7 @@ async def calculate_reserves(
         pair_address=pair_address,
         from_block=from_block,
         redis_conn=redis_conn,
+
     )
 
     sqrt_price = slot0[0]
@@ -185,6 +186,7 @@ async def get_tick_info(
         pair_address: str,  
         from_block,
         redis_conn,
+    
 ):
         # get token price function takes care of its own rate limit
     overrides = {
@@ -193,11 +195,16 @@ async def get_tick_info(
     current_node = rpc_helper.get_current_node()
     pair_contract = current_node['web3_client'].eth.contract(address=pair_address, abi=pair_contract_abi)
     # batch rpc calls for tick data to prevent oog errors
-
     tick_tasks = [
-        helper_contract.functions.getTicks(pair_address, MIN_TICK, int(0)),
-        helper_contract.functions.getTicks(pair_address, int(0), MAX_TICK),
-                  ]
+        helper_contract.functions.getTicks(pair_address, MIN_TICK, int(0)),   
+        helper_contract.functions.getTicks(pair_address, int(0), MAX_TICK),   
+    ]
+    # for i in range(MIN_TICK, MAX_TICK, 221818):
+    #     next_tick = MAX_TICK if i + 221818 > MAX_TICK else i + 221818
+    #     tick_tasks.append(
+    #         helper_contract.functions.getTicks(pair_address, i, next_tick)
+        # )
+
     slot0_tasks = [
         pair_contract.functions.slot0(),
     ]
@@ -208,7 +215,8 @@ async def get_tick_info(
         rpc_helper.web3_call(slot0_tasks, redis_conn, block=from_block,),
         )
         
-
-    ticks_list = transform_tick_bytes_to_list(tickDataResponse[0] + tickDataResponse[1])
+    ticks = functools.reduce(lambda x, y: x + y, tickDataResponse)
+    ticks_list = transform_tick_bytes_to_list(ticks)
+    
     slot0 = slot0Response[0]
     return ticks_list, slot0
