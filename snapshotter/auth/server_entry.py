@@ -137,7 +137,7 @@ async def update_snapshotter(request: Request, email:str, wallet_address: str, u
             user_details_htable(email),
             {
                 'walletAddress': request.app.state.w3.to_checksum_address(wallet_address),
-                'walletAddressPending': 'False'
+                'walletAddressPending': str(0)
             },
         ).execute()
         
@@ -232,6 +232,7 @@ async def create_update_user(
                 return {'success': False, 'error': 'Modify wallet address through /user/email/walletAddress endpoint'}
         user_details = user_cu_request.dict()
         user_details['walletAddressPending'] = 1 if user_details['walletAddressPending'] else 0
+        user_details['walletAddressPending'] = str(user_details['walletAddressPending'])
         p = redis_conn.pipeline(transaction=True)
         p.hset(
             name=user_details_htable(user_cu_request.email),
@@ -289,7 +290,7 @@ async def revoke_wallet_address(
             await redis_conn.hset(
                 user_details_htable(email),
                 'walletAddressPending',
-                str(True),
+                str(1),
             )
             asyncio.ensure_future(update_snapshotter(request, email, wallet_address_request.wallet_address, False))
             return {'success': True}
@@ -326,7 +327,7 @@ async def add_wallet_address(
     await redis_conn.hset(
         user_details_htable(email),
         'walletAddressPending',
-        str(True),
+        str(1),
     )
     asyncio.ensure_future(update_snapshotter(request, email, wallet_address_request.wallet_address, True))
     
