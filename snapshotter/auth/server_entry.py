@@ -90,8 +90,9 @@ async def update_snapshotter_in_contract(request: Request, protocol_state_contra
                 contract,
                 'updateSnapshotters',
                 _nonce,
-                [request.app.state.w3.to_checksum_address(wallet_address)],
-                [update_flag],
+                request.app.state.chain_id,
+                [request.app.state.w3.to_checksum_address(wallet_address), ],
+                [update_flag, ],
             )
 
             request.app.state.signer_nonce += 1
