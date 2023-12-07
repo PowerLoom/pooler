@@ -38,7 +38,7 @@ class AuthCheck(BaseModel):
     authorized: bool = False
     api_key: str
     reason: str = ''
-    owner: Optional[AppOwnerModel] = None
+    owner: AppOwnerModel
 
 
 class RateLimitAuthCheck(AuthCheck):

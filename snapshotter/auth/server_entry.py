@@ -124,6 +124,7 @@ async def update_snapshotter_in_contract(request: Request, protocol_state_contra
             f'tx_hash: {tx_hash} succeeded!, wallet address: {wallet_address}, update flag: {update_flag}',
         )
 
+
 async def update_snapshotter(request: Request, email:str, wallet_address: str, update_flag: bool):
     """
     Submit Snapshot
@@ -216,20 +217,30 @@ async def create_update_user(
     """
     redis_conn: aioredis.Redis = request.app.state.redis_pool
     try:
-        await redis_conn.sadd(
-            all_users_set(),
-            user_cu_request.email,
-        )
         if not await redis_conn.sismember(
             all_users_set(),
             user_cu_request.email,
         ):
             user_cu_request.next_reset_at = int(time.time()) + 86400
+        else:
+            stored_user_details = await redis_conn.hgetall(
+                name=user_details_htable(user_cu_request.email),
+            )
+            stored_user_map = AppOwnerModel.parse_obj(stored_user_details)
+            if stored_user_map.walletAddress != user_cu_request.walletAddress or \
+                stored_user_map.walletAddressPending != user_cu_request.walletAddressPending:
+                return {'success': False, 'error': 'Modify wallet address through /user/email/walletAddress endpoint'}
         user_details = user_cu_request.dict()
-        await redis_conn.hset(
+        p = redis_conn.pipeline(transaction=True)
+        p.hset(
             name=user_details_htable(user_cu_request.email),
             mapping=user_details,
         )
+        p.sadd(
+            all_users_set(),
+            user_cu_request.email,
+        )
+        await p.execute()
     except Exception as e:
         api_logger.opt(exception=True).error('{}', e)
         return {'success': False}
@@ -377,3 +388,22 @@ async def get_all_users(
         'success': True,
         'data': [x.decode('utf-8') for x in all_users],
     }
+
+
+@app.post('/user/{email}/rate_limit')
+async def update_rate_limit(
+    request: Request,
+    response: Response,
+    email: str,
+    rate_limit: str,
+):
+    redis_conn: aioredis.Redis = request.app.state.redis_pool
+    if not await redis_conn.sismember(all_users_set(), email):
+        return {'success': False, 'error': 'User does not exists'}
+
+    await redis_conn.hset(
+        user_details_htable(email),
+        'rate_limit',
+        rate_limit,
+    )
+    return {'success': True}
