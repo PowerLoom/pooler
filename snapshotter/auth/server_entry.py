@@ -124,13 +124,6 @@ async def update_snapshotter_in_contract(request: Request, protocol_state_contra
             f'tx_hash: {tx_hash} succeeded!, wallet address: {wallet_address}, update flag: {update_flag}',
         )
 
-# add or remove snapshotter
-@retry(
-    reraise=True,
-    retry=retry_if_exception_type(Exception),
-    wait=wait_random_exponential(multiplier=1, max=10),
-    stop=stop_after_attempt(3),
-)
 async def update_snapshotter(request: Request, email:str, wallet_address: str, update_flag: bool):
     """
     Submit Snapshot
@@ -141,8 +134,10 @@ async def update_snapshotter(request: Request, email:str, wallet_address: str, u
     async with request.app.state.redis_pool.pipeline(transaction=True) as p:
         await p.hset(
             user_details_htable(email),
-            'walletAddress',
-            request.app.state.w3.to_checksum_address(wallet_address),
+            {
+                'walletAddress': request.app.state.w3.to_checksum_address(wallet_address),
+                'walletAddressPending': 'False'
+            },
         ).execute()
         
 
@@ -264,6 +259,7 @@ async def add_api_key(
 @app.delete('/user/{email}/walletAddress')
 async def revoke_wallet_address(
     request: Request,
+    wallet_address_request: WalletAddressRequest,
     response: Response,
     email: str,
 ):
@@ -271,8 +267,21 @@ async def revoke_wallet_address(
     if not await redis_conn.sismember(all_users_set(), email):
         return {'success': False, 'error': 'User does not exists'}
 
-   # TODO: atomic redis update on updating wallet address to False on protocol state contract
-    return {'success': True}
+    _ = await redis_conn.hget(user_details_htable(email), 'walletAddress')
+    if not _:
+        return {'success': False, 'error': 'Wallet address not active'}
+    else:
+        if _.decode('utf-8').lower() != wallet_address_request.wallet_address.lower():
+            return {'success': False, 'error': 'Wallet address does not match active address'}
+        else:
+            await redis_conn.hset(
+                user_details_htable(email),
+                'walletAddressPending',
+                str(True),
+            )
+            asyncio.ensure_future(update_snapshotter(request, email, wallet_address_request.wallet_address, False))
+            return {'success': True}
+    
 
 @app.post('/user/{email}/walletAddress')
 async def add_wallet_address(
@@ -290,7 +299,11 @@ async def add_wallet_address(
         response.status_code = 403
         return {'success': False, 'error': 'Wallet address already exists'}
     
-    
+    await redis_conn.hset(
+        user_details_htable(email),
+        'walletAddressPending',
+        str(True),
+    )
     asyncio.ensure_future(update_snapshotter(request, email, wallet_address_request.wallet_address, True))
     
     return {'success': True}

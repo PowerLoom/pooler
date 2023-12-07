@@ -21,6 +21,7 @@ class WalletAddressRequest(BaseModel):
 class AppOwnerModel(BaseModel):
     email: str
     walletAddress: Optional[str] = ""
+    walletAddressPending: bool = False
     rate_limit: str
     active: UserStatusEnum
     callsCount: int = 0
