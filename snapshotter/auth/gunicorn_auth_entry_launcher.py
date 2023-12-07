@@ -2,9 +2,13 @@ import json
 import logging
 import os
 import resource
-from snapshotter.settings.config import settings
+import sys
+
 from snapshotter.auth.conf import auth_settings
 from snapshotter.auth.server_entry import app
+from snapshotter.settings.config import settings
+from snapshotter.utils.default_logger import FORMAT
+from snapshotter.utils.default_logger import logger
 from snapshotter.utils.gunicorn import InterceptHandler
 from snapshotter.utils.gunicorn import StandaloneApplication
 from snapshotter.utils.gunicorn import StubbedGunicornLogger
@@ -33,6 +37,8 @@ def post_worker_init(worker):
         resource.RLIMIT_NOFILE,
         (settings.rlimit.file_descriptors, hard),
     )
+
+
 if __name__ == '__main__':
     intercept_handler = InterceptHandler()
     logging.root.setLevel(LOG_LEVEL)
@@ -50,6 +56,9 @@ if __name__ == '__main__':
         if name not in seen:
             seen.add(name.split('.')[0])
             logging.getLogger(name).handlers = [intercept_handler]
+
+    logger.add(sys.stdout, format=FORMAT, level=LOG_LEVEL, serialize=JSON_LOGS)
+    logger.add(sys.stderr, format=FORMAT, level=logging.ERROR, serialize=JSON_LOGS)
 
     options = {
         'bind': f'{auth_settings.bind.host}:{auth_settings.bind.port}',
