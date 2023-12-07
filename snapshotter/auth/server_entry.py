@@ -231,6 +231,7 @@ async def create_update_user(
                 stored_user_map.walletAddressPending != user_cu_request.walletAddressPending:
                 return {'success': False, 'error': 'Modify wallet address through /user/email/walletAddress endpoint'}
         user_details = user_cu_request.dict()
+        user_details['walletAddressPending'] = 1 if user_details['walletAddressPending'] else 0
         p = redis_conn.pipeline(transaction=True)
         p.hset(
             name=user_details_htable(user_cu_request.email),
