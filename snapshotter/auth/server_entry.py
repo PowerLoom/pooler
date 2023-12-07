@@ -201,7 +201,7 @@ async def startup_boilerplate():
         if balance < auth_settings.min_signer_balance_eth:
             api_logger.error(f'Signer {app.state.signer_account} has insufficient balance: {balance} ETH')
             exit(1)
-        app.state.chain_id = app.state.w3.eth.chain_id
+        app.state.chain_id = await app.state.w3.eth.chain_id
         api_logger.info(
             f'Started worker {worker_idx}, with signer_account: {app.state.signer_account}, signer_nonce: {app.state.signer_nonce}',
         )
