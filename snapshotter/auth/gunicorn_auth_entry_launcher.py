@@ -53,7 +53,7 @@ if __name__ == '__main__':
         'uvicorn.access',
         'uvicorn.error',
     ]:
-        if name not in seen:
+        if name not in seen or 'web3' not in name.lower():
             seen.add(name.split('.')[0])
             logging.getLogger(name).handlers = [intercept_handler]
 
