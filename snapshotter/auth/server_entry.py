@@ -301,9 +301,21 @@ async def add_wallet_address(
     response: Response,
     email: str,
 ):
+    """
+    Add a wallet address for a user.
+
+    Args:
+        request (Request): The request object.
+        wallet_address_request (WalletAddressRequest): The wallet address request object.
+        response (Response): The response object.
+        email (str): The email of the user.
+
+    Returns:
+        dict: A dictionary indicating the success status of the operation.
+    """
     redis_conn: aioredis.Redis = request.app.state.redis_pool
     if not await redis_conn.sismember(all_users_set(), email):
-        return {'success': False, 'error': 'User does not exists'}
+        return {'success': False, 'error': 'User does not exist'}
 
     _ = await redis_conn.hget(user_details_htable(email), 'walletAddress')
     if _ and _ != b'':
