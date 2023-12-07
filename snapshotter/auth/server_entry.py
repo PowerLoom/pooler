@@ -133,15 +133,11 @@ async def update_snapshotter(request: Request, email:str, wallet_address: str, u
     update_res = await asyncio.gather(*[update_snapshotter_in_contract(request, each_protocol_state_contract, wallet_address, update_flag) for each_protocol_state_contract in auth_settings.protocol_state_contracts], return_exceptions=True)
     if any([isinstance(x, Exception) for x in update_res]):
         raise Exception('update snapshotter failed')
-    async with request.app.state.redis_pool.pipeline(transaction=True) as p:
-        await p.hset(
-            user_details_htable(email),
-            {
-                'walletAddress': request.app.state.w3.to_checksum_address(wallet_address),
-                'walletAddressPending': str(0)
-            },
-        ).execute()
-        
+    await request.app.state.redis_pool.hset(user_details_htable(email),
+        'walletAddressPending',
+        str(0),
+    )
+    
 
 async def get_protocol_state_contract(request: Request, contract_address: str):
     """
