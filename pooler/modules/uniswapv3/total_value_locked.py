@@ -51,6 +51,8 @@ def calculate_tvl_from_ticks(ticks, pair_metadata, sqrt_price):
 
     if pair_metadata["pair"]["fee"] == 3000:
         tick_spacing = 60
+    elif pair_metadata["pair"]["fee"] == 500:
+        tick_spacing = 10
     elif pair_metadata["pair"]["fee"] == 10000:
         tick_spacing = 200
 # https://atiselsts.github.io/pdfs/uniswap-v3-liquidity-math.pdf
