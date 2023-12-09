@@ -49,11 +49,14 @@ def calculate_tvl_from_ticks(ticks, pair_metadata, sqrt_price):
     if len(ticks) == 0:
         return (0, 0)
 
-    if pair_metadata["pair"]["fee"] == 3000:
+    # returned as string from redis cache, returned as int from pair contract's fee()
+    int_fee = int(pair_metadata["pair"]["fee"])
+
+    if int_fee == 3000:
         tick_spacing = 60
-    elif pair_metadata["pair"]["fee"] == 500:
+    elif int_fee == 500:
         tick_spacing = 10
-    elif pair_metadata["pair"]["fee"] == 10000:
+    elif int_fee == 10000:
         tick_spacing = 200
 # https://atiselsts.github.io/pdfs/uniswap-v3-liquidity-math.pdf
     for i in range(len(ticks)):
@@ -170,6 +173,7 @@ async def calculate_reserves(
         pair_address=pair_address,
         from_block=from_block,
         redis_conn=redis_conn,
+        pair_per_token_metadata=pair_per_token_metadata,
 
     )
 
@@ -188,6 +192,7 @@ async def get_tick_info(
         pair_address: str,  
         from_block,
         redis_conn,
+        pair_per_token_metadata,
     
 ):
         # get token price function takes care of its own rate limit
@@ -196,11 +201,35 @@ async def get_tick_info(
     }
     current_node = rpc_helper.get_current_node()
     pair_contract = current_node['web3_client'].eth.contract(address=pair_address, abi=pair_contract_abi)
+    int_fee = int(pair_per_token_metadata["pair"]["fee"])
+
     # batch rpc calls for tick data to prevent oog errors
-    tick_tasks = [
-        helper_contract.functions.getTicks(pair_address, MIN_TICK, int(0)),   
-        helper_contract.functions.getTicks(pair_address, int(0), MAX_TICK),   
-    ]
+    if int_fee == 100:
+        step = (MAX_TICK - MIN_TICK) // 4
+        tick_tasks = []
+
+        for i in range(MIN_TICK, MAX_TICK, step):
+            upper = i + step
+
+            # account for rounding
+            if upper > MAX_TICK or (upper + step) > MAX_TICK:
+                tick_tasks.append(helper_contract.functions.getTicks(pair_address, i, MAX_TICK))
+
+            # upper - 1 because getTicks() is inclusive for start and end ticks
+            else:
+                tick_tasks.append(helper_contract.functions.getTicks(pair_address, i, upper - 1))
+
+    elif int_fee == 500:
+        tick_tasks = [
+            helper_contract.functions.getTicks(pair_address, MIN_TICK, int(-1)),   
+            helper_contract.functions.getTicks(pair_address, int(0), MAX_TICK),   
+        ]
+        
+    else:
+        tick_tasks = [
+            helper_contract.functions.getTicks(pair_address, MIN_TICK, MAX_TICK) 
+        ]
+
     # for i in range(MIN_TICK, MAX_TICK, 221818):
     #     next_tick = MAX_TICK if i + 221818 > MAX_TICK else i + 221818
     #     tick_tasks.append(
@@ -217,8 +246,11 @@ async def get_tick_info(
         rpc_helper.web3_call(slot0_tasks, redis_conn, block=from_block,),
         )
         
-    ticks = functools.reduce(lambda x, y: x + y, tickDataResponse)
-    ticks_list = transform_tick_bytes_to_list(ticks)
+    ticks_list = []
+    for ticks in tickDataResponse:
+        ticks_list.append(transform_tick_bytes_to_list(ticks))
+    
+    ticks_list = functools.reduce(lambda x, y: x + y, ticks_list)
     
     slot0 = slot0Response[0]
     return ticks_list, slot0

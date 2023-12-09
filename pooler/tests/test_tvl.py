@@ -14,9 +14,9 @@ from pooler.utils.rpc import RpcHelper
 async def test_calculate_reserves():
     # Mock your parameters
     pair_address = Web3.to_checksum_address(
-        "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
+        "0x7858E59e0C01EA06Df3aF3D20aC7B0003275D4Bf"
     )
-    from_block = 18472036
+    from_block = 18746454
     rpc_helper = RpcHelper()
     aioredis_pool = RedisPoolCache()
 
@@ -50,6 +50,9 @@ async def test_calculate_reserves():
     # The function name 'getReserves' and the field names may differ based on the actual ABI
     token0_actual_reserve = token0_contract.functions.balanceOf(pair_address).call()
     token1_actual_reserve = token1_contract.functions.balanceOf(pair_address).call()
+
+    print(reserves)
+    print(token0_actual_reserve, token1_actual_reserve)
 
     # Compare them with returned reserves
     # our calculations should be less than or equal to token balance.
