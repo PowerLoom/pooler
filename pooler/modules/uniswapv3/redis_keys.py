@@ -54,3 +54,7 @@ uniswap_token_derived_eth_cached_block_height = (
 uniswap_cached_block_height_token_eth_price = (
     "uniswap:pairContract:" + settings.namespace + ":{}:cachedBlockHeightTokenEthPrice"
 )
+
+uniswap_cached_tick_data_block_height = (
+    "uniswap:pairContract:" + settings.namespace + ":{}:cachedBlockHeightTickData"
+)

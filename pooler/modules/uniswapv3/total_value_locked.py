@@ -17,6 +17,7 @@ from pooler.modules.uniswapv3.utils.constants import override_address
 from pooler.modules.uniswapv3.utils.constants import univ3_helper_bytecode
 from pooler.modules.uniswapv3.utils.constants import UNISWAP_EVENTS_ABI
 from pooler.modules.uniswapv3.utils.constants import MAX_TICK, MIN_TICK
+from pooler.modules.uniswapv3.redis_keys import uniswap_cached_tick_data_block_height
 
 from pooler.utils.rpc import RpcHelper, get_event_sig_and_abi
 
@@ -199,6 +200,19 @@ async def get_tick_info(
     overrides = {
         override_address: {"code": univ3_helper_bytecode},
     }
+
+    cached_tick_dict = await redis_conn.zrangebyscore(
+        name=uniswap_cached_tick_data_block_height.format(
+                Web3.to_checksum_address(pair_address),
+        ),
+        min=int(from_block),
+        max=int(from_block),
+    )
+
+    if cached_tick_dict:
+        tick_dict = json.loads(cached_tick_dict[0])
+        return tick_dict["ticks_list"], tick_dict["slot0"]
+
     current_node = rpc_helper.get_current_node()
     pair_contract = current_node['web3_client'].eth.contract(address=pair_address, abi=pair_contract_abi)
     int_fee = int(pair_per_token_metadata["pair"]["fee"])
@@ -251,6 +265,18 @@ async def get_tick_info(
         ticks_list.append(transform_tick_bytes_to_list(ticks))
     
     ticks_list = functools.reduce(lambda x, y: x + y, ticks_list)
-    
     slot0 = slot0Response[0]
+
+    if len(ticks_list) > 0:
+        redis_cache_mapping = {
+            json.dumps({"blockHeight": from_block, "slot0": slot0, "ticks_list": ticks_list,}): int(from_block)
+        }
+
+        await redis_conn.zadd(
+            name=uniswap_cached_tick_data_block_height.format(
+                Web3.to_checksum_address(pair_address),
+            ),
+            mapping=redis_cache_mapping,  # timestamp so zset do not ignore same height on multiple heights
+        )
+
     return ticks_list, slot0
