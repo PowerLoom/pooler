@@ -520,7 +520,7 @@ class RpcHelper(object):
                             "data": function_signature,
                         },
                         hex(block),
-                        overrides,
+                        overrides if overrides is not None else {},
                     ],
                     "id": request_id,
                 },
