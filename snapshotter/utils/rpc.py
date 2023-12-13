@@ -345,7 +345,17 @@ class RpcHelper(object):
         return await f(node_idx=0)
 
     async def _async_web3_call(self, contract_function, redis_conn, from_address=None, block=None, overrides=None):
-        """Make async web3 call"""
+
+        """
+        Executes a web3 call asynchronously.
+        Args:
+            contract_function: The contract function to call.
+            redis_conn: The Redis connection object.
+            from_address: The address to send the transaction from.
+
+        Returns:
+            The result of the web3 call.
+        """
 
         @retry(
             reraise=True,
