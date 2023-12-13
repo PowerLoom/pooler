@@ -365,43 +365,42 @@ class RpcHelper(object):
         )
         async def f(node_idx):
             try:
-
                 node = self._nodes[node_idx]
-                rpc_url = node.get('rpc_url')
+                rpc_url = node.get("rpc_url")
 
                 await check_rpc_rate_limit(
-                    parsed_limits=node.get('rate_limit', []),
-                    app_id=rpc_url.split('/')[-1],
+                    parsed_limits=node.get("rate_limit", []),
+                    app_id=rpc_url.split("/")[-1],
                     redis_conn=redis_conn,
                     request_payload=contract_function.fn_name,
                     error_msg={
-                        'msg': 'exhausted_api_key_rate_limit inside web3_call',
+                        "msg": "exhausted_api_key_rate_limit inside web3_call",
                     },
                     logger=self._logger,
                     rate_limit_lua_script_shas=self._rate_limit_lua_script_shas,
                     limit_incr_by=1,
                 )
-
-                params: TxParams = {'gas': Wei(0), 'gasPrice': Wei(0)}
+                # NOTE is there a reason this is set to 0? 
+                params: TxParams = {"gas": Wei(0), "gasPrice": Wei(0)}
 
                 if not contract_function.address:
                     raise ValueError(
-                        f'Missing address for batch_call in `{contract_function.fn_name}`',
+                        f"Missing address for batch_call in `{[contract_function.fn_name]}`",
                     )
 
                 output_type = [
-                    output['type'] for output in contract_function.abi['outputs']
+                    output["type"] for output in contract_function.abi["outputs"]
                 ]
                 payload = {
-                    'to': contract_function.address,
-                    'data': contract_function.build_transaction(params)['data'],
-                    'output_type': output_type,
-                    'fn_name': contract_function.fn_name,  # For debugging purposes
+                    "to": contract_function.address,
+                    "data": contract_function.build_transaction(params)["data"],
+                    "output_type": output_type,
+                    "fn_name": contract_function.fn_name,  # For debugging purposes
                 }
 
                 cur_time = time.time()
                 redis_cache_data = payload.copy()
-                redis_cache_data['time'] = cur_time
+                redis_cache_data["time"] = cur_time
                 await asyncio.gather(
                     redis_conn.zadd(
                         name=rpc_web3_calls,
@@ -417,16 +416,26 @@ class RpcHelper(object):
                 )
 
                 if from_address:
-                    payload['from'] = from_address
+                    payload["from"] = from_address
 
-                data = await node['web3_client_async'].eth.call(payload)
+                data = await node["web3_client_async"].eth.call(
+                    payload, block_identifier=block, state_override=overrides
+                    )
+                
+                # if we're doing a state override call, at time of writing it means grabbing tick data
+                # more efficient to use eth_abi to decode rather than web3 codec
+                if overrides is not None:
+                    return data
 
-                decoded_data = node['web3_client_async'].codec.decode_abi(
-                    output_type, HexBytes(data),
+                decoded_data = node["web3_client_async"].codec.decode(
+                    output_type,
+                    HexBytes(data),
                 )
 
                 normalized_data = map_abi_data(
-                    BASE_RETURN_NORMALIZERS, output_type, decoded_data,
+                    BASE_RETURN_NORMALIZERS,
+                    output_type,
+                    decoded_data,
                 )
 
                 if len(normalized_data) == 1:
@@ -438,12 +447,11 @@ class RpcHelper(object):
                     request=[contract_function.fn_name],
                     response=None,
                     underlying_exception=e,
-                    extra_info={'msg': str(e)},
+                    extra_info={"msg": str(e)},
                 )
-                self._logger.opt(exception=settings.logs.trace_enabled).error(
-                    (
-                        'Error while making web3 batch call'
-                    ),
+
+                self._logger.opt(lazy=True).trace(
+                    ("Error while making web3 batch call"),
                     err=lambda: str(exc),
                 )
                 raise exc
@@ -595,8 +603,14 @@ class RpcHelper(object):
         try:
             web3_tasks = [
                 self._async_web3_call(
-                    contract_function=task, redis_conn=redis_conn, from_address=from_address,
-                ) for task in tasks
+                    contract_function=task,
+                    redis_conn=redis_conn,
+                    from_address=from_address,
+                    block=block,
+                    overrides=overrides
+                
+                )
+                for task in tasks
             ]
             response = await asyncio.gather(*web3_tasks)
             return response
