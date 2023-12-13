@@ -1,6 +1,6 @@
 [submodule "config"]
 	path = config
-	url = https://github.com/PowerLoom/snapshotter-configs/
+	url = https://github.com/PowerLoom/snapshotter-configs/tree/uniswapv3
 [submodule "snapshotter/modules/computes"]
 	path = snapshotter/modules/computes
 	url = https://github.com/PowerLoom/snapshotter-computes/
