@@ -344,7 +344,7 @@ class RpcHelper(object):
                 return current_block
         return await f(node_idx=0)
 
-    async def _async_web3_call(self, contract_function, redis_conn, from_address=None):
+    async def _async_web3_call(self, contract_function, redis_conn, from_address=None, block=None, overrides=None):
         """
         Executes a web3 call asynchronously.
 
@@ -585,7 +585,7 @@ class RpcHelper(object):
         )
         return current_block
 
-    async def web3_call(self, tasks, redis_conn, from_address=None):
+    async def web3_call(self, tasks, redis_conn, from_address=None, block=None, overrides=None):
         """
         Calls the given tasks asynchronously using web3 and returns the response.
 
@@ -608,7 +608,6 @@ class RpcHelper(object):
                     from_address=from_address,
                     block=block,
                     overrides=overrides
-                
                 )
                 for task in tasks
             ]
