@@ -344,14 +344,22 @@ class RpcHelper(object):
                 return current_block
         return await f(node_idx=0)
 
-    async def _async_web3_call(self, contract_function, redis_conn, from_address=None):
+    async def _async_web3_call(self, contract_function, redis_conn, from_address=None, block=None, overrides=None):
         """
         Executes a web3 call asynchronously.
+
+        If state overrides are provided, the raw byte data is returned since
+        it is more efficient to decode large amounts of data
+        using eth_abi rather than the web3 codec and this functionality is 
+        typically used to retrieve large amounts of on chain data ie ticks in a uniswap v3 pool.
 
         Args:
             contract_function: The contract function to call.
             redis_conn: The Redis connection object.
             from_address: The address to send the transaction from.
+            block: The block number to execute the call at.
+            overrides: The overrides to use for the call. Ex: {'0xcontract_address': '0xcontract_bytecode'}
+        
 
         Returns:
             The result of the web3 call.
@@ -365,7 +373,6 @@ class RpcHelper(object):
         )
         async def f(node_idx):
             try:
-
                 node = self._nodes[node_idx]
                 rpc_url = node.get('rpc_url')
 
@@ -381,12 +388,12 @@ class RpcHelper(object):
                     rate_limit_lua_script_shas=self._rate_limit_lua_script_shas,
                     limit_incr_by=1,
                 )
-
+                
                 params: TxParams = {'gas': Wei(0), 'gasPrice': Wei(0)}
 
                 if not contract_function.address:
                     raise ValueError(
-                        f'Missing address for batch_call in `{contract_function.fn_name}`',
+                        f'Missing address for batch_call in `{[contract_function.fn_name]}`',
                     )
 
                 output_type = [
@@ -419,14 +426,22 @@ class RpcHelper(object):
                 if from_address:
                     payload['from'] = from_address
 
-                data = await node['web3_client_async'].eth.call(payload)
+                data = await node['web3_client_async'].eth.call(
+                    payload, block_identifier=block, state_override=overrides
+                    )
+                
+                if overrides is not None:
+                    return data
 
-                decoded_data = node['web3_client_async'].codec.decode_abi(
-                    output_type, HexBytes(data),
+                decoded_data = node['web3_client_async'].codec.decode(
+                    output_type,
+                    HexBytes(data),
                 )
 
                 normalized_data = map_abi_data(
-                    BASE_RETURN_NORMALIZERS, output_type, decoded_data,
+                    BASE_RETURN_NORMALIZERS,
+                    output_type,
+                    decoded_data,
                 )
 
                 if len(normalized_data) == 1:
@@ -440,10 +455,9 @@ class RpcHelper(object):
                     underlying_exception=e,
                     extra_info={'msg': str(e)},
                 )
-                self._logger.opt(exception=settings.logs.trace_enabled).error(
-                    (
-                        'Error while making web3 batch call'
-                    ),
+
+                self._logger.opt(lazy=True).error(
+                    ('Error while making web3 batch call'),
                     err=lambda: str(exc),
                 )
                 raise exc
@@ -577,7 +591,7 @@ class RpcHelper(object):
         )
         return current_block
 
-    async def web3_call(self, tasks, redis_conn, from_address=None):
+    async def web3_call(self, tasks, redis_conn, from_address=None, block=None, overrides=None):
         """
         Calls the given tasks asynchronously using web3 and returns the response.
 
@@ -585,6 +599,8 @@ class RpcHelper(object):
             tasks (list): List of contract functions to call.
             redis_conn: Redis connection object.
             from_address (str, optional): Address to use as the transaction sender. Defaults to None.
+            block: (int, optional): Block number to execute the call at. Defaults to None.
+            overrides: (dict, optional): State overrides to use for the call. Defaults to None. Ex: {"0xcontract_address": "0xcontract_bytecode"}
 
         Returns:
             list: List of responses from the contract function calls.
@@ -595,8 +611,13 @@ class RpcHelper(object):
         try:
             web3_tasks = [
                 self._async_web3_call(
-                    contract_function=task, redis_conn=redis_conn, from_address=from_address,
-                ) for task in tasks
+                    contract_function=task,
+                    redis_conn=redis_conn,
+                    from_address=from_address,
+                    block=block,
+                    overrides=overrides
+                )
+                for task in tasks
             ]
             response = await asyncio.gather(*web3_tasks)
             return response
