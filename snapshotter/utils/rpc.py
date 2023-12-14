@@ -348,10 +348,18 @@ class RpcHelper(object):
         """
         Executes a web3 call asynchronously.
 
+        If state overrides are provided, the raw byte data is returned since
+        it is more efficient to decode large amounts of data
+        using eth_abi rather than the web3 codec and this functionality is 
+        typically used to retrieve large amounts of on chain data ie ticks in a uniswap v3 pool.
+
         Args:
             contract_function: The contract function to call.
             redis_conn: The Redis connection object.
             from_address: The address to send the transaction from.
+            block: The block number to execute the call at.
+            overrides: The overrides to use for the call. Ex: {'0xcontract_address': '0xcontract_bytecode'}
+        
 
         Returns:
             The result of the web3 call.
@@ -366,41 +374,41 @@ class RpcHelper(object):
         async def f(node_idx):
             try:
                 node = self._nodes[node_idx]
-                rpc_url = node.get("rpc_url")
+                rpc_url = node.get('rpc_url')
 
                 await check_rpc_rate_limit(
-                    parsed_limits=node.get("rate_limit", []),
-                    app_id=rpc_url.split("/")[-1],
+                    parsed_limits=node.get('rate_limit', []),
+                    app_id=rpc_url.split('/')[-1],
                     redis_conn=redis_conn,
                     request_payload=contract_function.fn_name,
                     error_msg={
-                        "msg": "exhausted_api_key_rate_limit inside web3_call",
+                        'msg': 'exhausted_api_key_rate_limit inside web3_call',
                     },
                     logger=self._logger,
                     rate_limit_lua_script_shas=self._rate_limit_lua_script_shas,
                     limit_incr_by=1,
                 )
-                # NOTE is there a reason this is set to 0? 
-                params: TxParams = {"gas": Wei(0), "gasPrice": Wei(0)}
+                
+                params: TxParams = {'gas': Wei(0), 'gasPrice': Wei(0)}
 
                 if not contract_function.address:
                     raise ValueError(
-                        f"Missing address for batch_call in `{[contract_function.fn_name]}`",
+                        f'Missing address for batch_call in `{[contract_function.fn_name]}`',
                     )
 
                 output_type = [
-                    output["type"] for output in contract_function.abi["outputs"]
+                    output['type'] for output in contract_function.abi['outputs']
                 ]
                 payload = {
-                    "to": contract_function.address,
-                    "data": contract_function.build_transaction(params)["data"],
-                    "output_type": output_type,
-                    "fn_name": contract_function.fn_name,  # For debugging purposes
+                    'to': contract_function.address,
+                    'data': contract_function.build_transaction(params)['data'],
+                    'output_type': output_type,
+                    'fn_name': contract_function.fn_name,  # For debugging purposes
                 }
 
                 cur_time = time.time()
                 redis_cache_data = payload.copy()
-                redis_cache_data["time"] = cur_time
+                redis_cache_data['time'] = cur_time
                 await asyncio.gather(
                     redis_conn.zadd(
                         name=rpc_web3_calls,
@@ -416,18 +424,16 @@ class RpcHelper(object):
                 )
 
                 if from_address:
-                    payload["from"] = from_address
+                    payload['from'] = from_address
 
-                data = await node["web3_client_async"].eth.call(
+                data = await node['web3_client_async'].eth.call(
                     payload, block_identifier=block, state_override=overrides
                     )
                 
-                # if we're doing a state override call, at time of writing it means grabbing tick data
-                # more efficient to use eth_abi to decode rather than web3 codec
                 if overrides is not None:
                     return data
 
-                decoded_data = node["web3_client_async"].codec.decode(
+                decoded_data = node['web3_client_async'].codec.decode(
                     output_type,
                     HexBytes(data),
                 )
@@ -447,11 +453,11 @@ class RpcHelper(object):
                     request=[contract_function.fn_name],
                     response=None,
                     underlying_exception=e,
-                    extra_info={"msg": str(e)},
+                    extra_info={'msg': str(e)},
                 )
 
-                self._logger.opt(lazy=True).trace(
-                    ("Error while making web3 batch call"),
+                self._logger.opt(lazy=True).error(
+                    ('Error while making web3 batch call'),
                     err=lambda: str(exc),
                 )
                 raise exc
@@ -593,6 +599,8 @@ class RpcHelper(object):
             tasks (list): List of contract functions to call.
             redis_conn: Redis connection object.
             from_address (str, optional): Address to use as the transaction sender. Defaults to None.
+            block: (int, optional): Block number to execute the call at. Defaults to None.
+            overrides: (dict, optional): State overrides to use for the call. Defaults to None. Ex: {"0xcontract_address": "0xcontract_bytecode"}
 
         Returns:
             list: List of responses from the contract function calls.
