@@ -33,6 +33,16 @@ pair_contract_abi = read_json_file(
     snapshot_util_logger,
 )
 
+def sqrtPriceX96ToTokenPrices(sqrtPriceX96, token0_decimals, token1_decimals):
+    # https://blog.uniswap.org/uniswap-v3-math-primer
+
+    price0 = ((sqrtPriceX96 / (2**96))** 2) / (10 ** token1_decimals / 10 ** token0_decimals)
+    price1 = 1 / price0
+    
+    price0 = round(price0, token0_decimals)
+    price1 = round(price1, token1_decimals)
+
+    return price0, price1
 
 async def get_eth_price_usd(
     from_block,
@@ -52,6 +62,7 @@ async def get_eth_price_usd(
     Returns:
         dict: A dictionary containing the ETH price in USD for each block in the given range.
     """
+
     try:
         eth_price_usd_dict = dict()
         redis_cache_mapping = dict()
@@ -61,17 +72,17 @@ async def get_eth_price_usd(
             min=int(from_block),
             max=int(to_block),
         )
-        if cached_price_dict and len(cached_price_dict) == to_block - (
-            from_block - 1
-        ):
+
+        if cached_price_dict and len(cached_price_dict) == to_block - (from_block - 1):
+
             price_dict = {
                 json.loads(
                     price.decode(
                         'utf-8',
                     ),
-                )[
-                    'blockHeight'
-                ]: json.loads(price.decode('utf-8'))['price']
+                )['blockHeight']: json.loads(
+                    price.decode('utf-8'),
+                )['price']
                 for price in cached_price_dict
             }
             return price_dict
@@ -80,25 +91,28 @@ async def get_eth_price_usd(
 
         # NOTE: We can further optimize below call by batching them all,
         # but that would be a large batch call for RPC node
-        dai_eth_pair_reserves_list = await rpc_helper.batch_eth_call_on_block_range(
+
+        dai_eth_slot0_list = await rpc_helper.batch_eth_call_on_block_range(
             abi_dict=pair_abi_dict,
-            function_name='getReserves',
+            function_name='slot0',
             contract_address=DAI_WETH_PAIR,
             from_block=from_block,
             to_block=to_block,
             redis_conn=redis_conn,
         )
-        usdc_eth_pair_reserves_list = await rpc_helper.batch_eth_call_on_block_range(
+
+        usdc_eth_slot0_list = await rpc_helper.batch_eth_call_on_block_range(
             abi_dict=pair_abi_dict,
-            function_name='getReserves',
+            function_name='slot0',
             contract_address=USDC_WETH_PAIR,
             from_block=from_block,
             to_block=to_block,
             redis_conn=redis_conn,
         )
-        eth_usdt_pair_reserves_list = await rpc_helper.batch_eth_call_on_block_range(
+
+        usdt_eth_slot0_list = await rpc_helper.batch_eth_call_on_block_range(
             abi_dict=pair_abi_dict,
-            function_name='getReserves',
+            function_name='slot0',
             contract_address=USDT_WETH_PAIR,
             from_block=from_block,
             to_block=to_block,
@@ -107,51 +121,34 @@ async def get_eth_price_usd(
 
         block_count = 0
         for block_num in range(from_block, to_block + 1):
-            dai_eth_pair_dai_reserve = (
-                dai_eth_pair_reserves_list[block_count][0] /
-                10 ** TOKENS_DECIMALS['DAI']
-            )
-            dai_eth_pair_eth_reserve = (
-                dai_eth_pair_reserves_list[block_count][1] /
-                10 ** TOKENS_DECIMALS['WETH']
-            )
-            dai_price = dai_eth_pair_dai_reserve / dai_eth_pair_eth_reserve
+            dai_eth_sqrt_price_x96 = dai_eth_slot0_list[block_count][0]
+            usdc_eth_sqrt_price_x96 = usdc_eth_slot0_list[block_count][0]
+            usdt_eth_sqrt_price_x96 = usdt_eth_slot0_list[block_count][0]
+            # 1 dai / x ether  1 ether / x dai
+            eth_dai_price, dai_eth_price = sqrtPriceX96ToTokenPrices(
+                sqrtPriceX96=dai_eth_sqrt_price_x96,
+                token0_decimals=TOKENS_DECIMALS['DAI'],
+                token1_decimals=TOKENS_DECIMALS['WETH'],
 
-            usdc_eth_pair_usdc_reserve = (
-                usdc_eth_pair_reserves_list[block_count][0] /
-                10 ** TOKENS_DECIMALS['USDC']
-            )
-            usdc_eth_pair_eth_reserve = (
-                usdc_eth_pair_reserves_list[block_count][1] /
-                10 ** TOKENS_DECIMALS['WETH']
-            )
-            usdc_price = usdc_eth_pair_usdc_reserve / usdc_eth_pair_eth_reserve
-
-            usdt_eth_pair_usdt_reserve = (
-                eth_usdt_pair_reserves_list[block_count][1] /
-                10 ** TOKENS_DECIMALS['USDT']
-            )
-            usdt_eth_pair_eth_reserve = (
-                eth_usdt_pair_reserves_list[block_count][0] /
-                10 ** TOKENS_DECIMALS['WETH']
-            )
-            usdt_price = usdt_eth_pair_usdt_reserve / usdt_eth_pair_eth_reserve
-
-            total_eth_liquidity = (
-                dai_eth_pair_eth_reserve +
-                usdc_eth_pair_eth_reserve +
-                usdt_eth_pair_eth_reserve
             )
 
-            daiWeight = dai_eth_pair_eth_reserve / total_eth_liquidity
-            usdcWeight = usdc_eth_pair_eth_reserve / total_eth_liquidity
-            usdtWeight = usdt_eth_pair_eth_reserve / total_eth_liquidity
+            eth_usdc_price_, usdc_eth_price_ = sqrtPriceX96ToTokenPrices(
+                sqrtPriceX96=usdc_eth_sqrt_price_x96,
+                token0_decimals=TOKENS_DECIMALS['USDC'],
+                token1_decimals=TOKENS_DECIMALS['WETH'],
 
-            eth_price_usd = (
-                daiWeight * dai_price +
-                usdcWeight * usdc_price +
-                usdtWeight * usdt_price
             )
+
+            usdt_eth_price_, eth_usdt_price_ = sqrtPriceX96ToTokenPrices(
+                sqrtPriceX96=usdt_eth_sqrt_price_x96,
+                token0_decimals=TOKENS_DECIMALS['WETH'],
+                token1_decimals=TOKENS_DECIMALS['USDT'],
+
+            )
+
+            # using fixed weightage for now, will use liquidity based weightage later
+
+            eth_price_usd = (dai_eth_price + usdc_eth_price_ + usdt_eth_price_) / 3
 
             eth_price_usd_dict[block_num] = float(eth_price_usd)
             redis_cache_mapping[
@@ -162,7 +159,9 @@ async def get_eth_price_usd(
             block_count += 1
 
         # cache price at height
-        source_chain_epoch_size = int(await redis_conn.get(source_chain_epoch_size_key()))
+        source_chain_epoch_size = int(
+            await redis_conn.get(source_chain_epoch_size_key()),
+        )
         await asyncio.gather(
             redis_conn.zadd(
                 name=uniswap_eth_usd_price_zset,
@@ -178,7 +177,7 @@ async def get_eth_price_usd(
         return eth_price_usd_dict
 
     except Exception as err:
-        snapshot_util_logger.opt(exception=settings.logs.trace_enabled).error(
+        snapshot_util_logger.opt(exception=True).error(
             f'RPC ERROR failed to fetch ETH price, error_msg:{err}',
         )
         raise err
