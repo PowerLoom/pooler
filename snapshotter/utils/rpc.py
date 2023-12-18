@@ -447,7 +447,7 @@ class RpcHelper(object):
                     request=[contract_function.fn_name],
                     response=None,
                     underlying_exception=e,
-                    extra_info={"msg": str(e)},
+                    extra_info={"msg": str(e), "payload": payload},
                 )
 
                 self._logger.opt(lazy=True).trace(
@@ -969,4 +969,4 @@ class RpcHelper(object):
                 raise exc
 
         return await f(node_idx=0)
-        return await f(node_idx=0)
+        
