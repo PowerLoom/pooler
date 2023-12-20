@@ -774,7 +774,7 @@ class RpcHelper(object):
         from_block,
         to_block,
         params: Union[List, None] = None,
-        from_address=Web3.toChecksumAddress('0x0000000000000000000000000000000000000000'),
+        from_address=Web3.to_checksum_address('0x0000000000000000000000000000000000000000'),
     ):
         """
         Batch executes an Ethereum contract function call on a range of blocks.
