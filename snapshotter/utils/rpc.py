@@ -946,8 +946,6 @@ class RpcHelper(object):
                     event_log_query,
                 )
 
-                
-
                 codec: ABICodec = web3_provider.codec
                 all_events = []
                 for log in event_log:
