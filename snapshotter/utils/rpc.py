@@ -904,7 +904,7 @@ class RpcHelper(object):
             rpc_url = node.get('rpc_url')
 
             web3_provider = node['web3_client_async']
-            
+
             event_log_query = {
                 'address': Web3.to_checksum_address(contract_address),
                 'toBlock': to_block,
