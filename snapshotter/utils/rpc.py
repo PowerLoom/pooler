@@ -104,7 +104,7 @@ def get_event_sig_and_abi(event_signatures, event_abis):
         )
         for name, sig in event_signatures.items()
     }
-    return [event_sig], event_abi
+    return event_sig, event_abi
 
 
 class RpcHelper(object):
