@@ -163,8 +163,9 @@ async def get_eth_price_usd(
 
         
         # cache price at height
+        # FIXME REMOVE OR BEFORE COMMIT
         source_chain_epoch_size = int(
-            await redis_conn.get(source_chain_epoch_size_key())
+            await redis_conn.get(source_chain_epoch_size_key()) or 10
         )
         await asyncio.gather(
             redis_conn.zadd(

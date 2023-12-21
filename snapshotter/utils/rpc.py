@@ -80,7 +80,7 @@ def get_encoded_function_signature(abi_dict, function_name, params: Union[List, 
     function_signature = abi_dict.get(function_name)['signature']
     encoded_signature = '0x' + keccak(text=function_signature).hex()[:8]
     if params:
-        encoded_signature += eth_abi.encode_abi(
+        encoded_signature += eth_abi.encode(
             abi_dict.get(function_name)['input'],
             params,
         ).hex()
@@ -104,7 +104,7 @@ def get_event_sig_and_abi(event_signatures, event_abis):
         )
         for name, sig in event_signatures.items()
     }
-    return event_sig, event_abi
+    return [event_sig], event_abi
 
 
 class RpcHelper(object):
@@ -811,7 +811,7 @@ class RpcHelper(object):
                     'params': [
                         {
                             'from': from_address,
-                            'to': Web3.toChecksumAddress(contract_address),
+                            'to': Web3.to_checksum_address(contract_address),
                             'data': function_signature,
                         },
                         hex(block),
@@ -827,7 +827,7 @@ class RpcHelper(object):
         response = response_data if isinstance(response_data, list) else [response_data]
         for result in response:
             rpc_response.append(
-                eth_abi.decode_abi(
+                eth_abi.decode(
                     abi_dict.get(
                         function_name,
                     )['output'],
@@ -904,14 +904,14 @@ class RpcHelper(object):
             rpc_url = node.get('rpc_url')
 
             web3_provider = node['web3_client_async']
-
+            
             event_log_query = {
-                'address': Web3.toChecksumAddress(contract_address),
+                'address': Web3.to_checksum_address(contract_address),
                 'toBlock': to_block,
                 'fromBlock': from_block,
                 'topics': topics,
             }
-
+            
             await check_rpc_rate_limit(
                 parsed_limits=node.get('rate_limit', []),
                 app_id=rpc_url.split('/')[-1],
@@ -945,10 +945,11 @@ class RpcHelper(object):
                 event_log = await web3_provider.eth.get_logs(
                     event_log_query,
                 )
+                
                 codec: ABICodec = web3_provider.codec
                 all_events = []
                 for log in event_log:
-                    abi = event_abi.get(log.topics[0].hex(), '')
+                    abi = event_abi.get(log['topics'][0].hex(), '')
                     evt = get_event_data(codec, abi, log)
                     all_events.append(evt)
 
