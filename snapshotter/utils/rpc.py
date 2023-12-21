@@ -904,7 +904,7 @@ class RpcHelper(object):
             rpc_url = node.get('rpc_url')
 
             web3_provider = node['web3_client_async']
-            self._logger.debug(f'topics moose {topics}')
+
             event_log_query = {
                 'address': Web3.to_checksum_address(contract_address),
                 'toBlock': to_block,
@@ -945,8 +945,6 @@ class RpcHelper(object):
                 event_log = await web3_provider.eth.get_logs(
                     event_log_query,
                 )
-
-                self._logger.debug(f'event log tiger {event_log}')
 
                 codec: ABICodec = web3_provider.codec
                 all_events = []
