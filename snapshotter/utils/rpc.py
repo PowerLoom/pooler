@@ -904,14 +904,14 @@ class RpcHelper(object):
             rpc_url = node.get('rpc_url')
 
             web3_provider = node['web3_client_async']
-            
+
             event_log_query = {
                 'address': Web3.to_checksum_address(contract_address),
                 'toBlock': to_block,
                 'fromBlock': from_block,
                 'topics': topics,
             }
-            
+
             await check_rpc_rate_limit(
                 parsed_limits=node.get('rate_limit', []),
                 app_id=rpc_url.split('/')[-1],
@@ -945,7 +945,7 @@ class RpcHelper(object):
                 event_log = await web3_provider.eth.get_logs(
                     event_log_query,
                 )
-                
+
                 codec: ABICodec = web3_provider.codec
                 all_events = []
                 for log in event_log:
