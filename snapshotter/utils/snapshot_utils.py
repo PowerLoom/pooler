@@ -36,6 +36,7 @@ def sqrtPriceX96ToTokenPricesNoDecimals(sqrtPriceX96):
     price0 = ((sqrtPriceX96 / (2**96))** 2)
     price1 = 1 / price0
     return price0, price1
+
 def sqrtPriceX96ToTokenPrices(sqrtPriceX96, token0_decimals, token1_decimals):
     # https://blog.uniswap.org/uniswap-v3-math-primer
 
