@@ -380,7 +380,7 @@ class RpcHelper(object):
                     rate_limit_lua_script_shas=self._rate_limit_lua_script_shas,
                     limit_incr_by=1,
                 )
-                # NOTE is there a reason this is set to 0?
+                
                 params: TxParams = {'gas': Wei(0), 'gasPrice': Wei(0)}
 
                 if not contract_function.address:
@@ -447,7 +447,7 @@ class RpcHelper(object):
                     request=[contract_function.fn_name],
                     response=None,
                     underlying_exception=e,
-                    extra_info={'msg': str(e), 'payload': payload},
+                    extra_info={'msg': str(e)},
                 )
 
                 self._logger.opt(lazy=True).trace(
@@ -671,6 +671,7 @@ class RpcHelper(object):
                 response = await self._client.post(url=rpc_url, json=rpc_query)
                 response_data = response.json()
             except Exception as e:
+
                 exc = RPCException(
                     request=rpc_query,
                     response=None,
