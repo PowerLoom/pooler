@@ -46,7 +46,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         for project_config in projects_config:
             task_type = project_config.project_type
             self._task_types.append(task_type)
-        self._submission_window = None
+        self._submission_window = 0
 
     def _gen_project_id(self, task_type: str, data_source: Optional[str] = None, primary_data_source: Optional[str] = None):
         """
@@ -70,112 +70,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 project_id = f'{task_type}:{data_source.lower()}:{settings.namespace}'
         return project_id
 
-    async def _process_single_mode(self, msg_obj: PowerloomSnapshotProcessMessage, task_type: str):
-        """
-        Processes a single mode snapshot task for a given message object and task type.
-
-        Args:
-            msg_obj (PowerloomSnapshotProcessMessage): The message object containing the snapshot task details.
-            task_type (str): The type of task to be performed.
-
-        Raises:
-            Exception: If an error occurs while processing the snapshot task.
-
-        Returns:
-            None
-        """
-        project_id = self._gen_project_id(
-            task_type=task_type,
-            data_source=msg_obj.data_source,
-            primary_data_source=msg_obj.primary_data_source,
-        )
-
-        try:
-            task_processor = self._project_calculation_mapping[task_type]
-
-            snapshot = await task_processor.compute(
-                epoch=msg_obj,
-                redis_conn=self._redis_conn,
-                rpc_helper=self._rpc_helper,
-            )
-
-            if snapshot is None:
-                self._logger.debug(
-                    'No snapshot data for: {}, skipping...', msg_obj,
-                )
-
-        except Exception as e:
-            self._logger.opt(exception=settings.logs.trace_enabled).error(
-                'Exception processing callback for epoch: {}, Error: {},'
-                'sending failure notifications', msg_obj, e,
-            )
-
-            notification_message = SnapshotterIssue(
-                instanceID=settings.instance_id,
-                issueType=SnapshotterReportState.MISSED_SNAPSHOT.value,
-                projectID=project_id,
-                epochId=str(msg_obj.epochId),
-                timeOfReporting=str(time.time()),
-                extra=json.dumps({'issueDetails': f'Error : {e}'}),
-            )
-
-            await send_failure_notifications_async(
-                client=self._client, message=notification_message,
-            )
-            await self._redis_conn.hset(
-                name=epoch_id_project_to_state_mapping(
-                    epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
-                ),
-                mapping={
-                    project_id: SnapshotterStateUpdate(
-                        status='failed', error=str(e), timestamp=int(time.time()),
-                    ).json(),
-                },
-            )
-        else:
-
-            await self._redis_conn.set(
-                name=submitted_base_snapshots_key(
-                    epoch_id=msg_obj.epochId, project_id=project_id,
-                ),
-                value=snapshot.json(),
-                # block time is about 2 seconds on anchor chain, keeping it around ten times the submission window
-                ex=self._submission_window * 10 * 2,
-            )
-            p = self._redis_conn.pipeline()
-            p.hset(
-                name=epoch_id_project_to_state_mapping(
-                    epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
-                ),
-                mapping={
-                    project_id: SnapshotterStateUpdate(
-                        status='success', timestamp=int(time.time()),
-                    ).json(),
-                },
-            )
-
-            await self._redis_conn.set(
-                name=last_snapshot_processing_complete_timestamp_key(),
-                value=int(time.time()),
-            )
-
-            if not snapshot:
-                self._logger.debug(
-                    'No snapshot data for: {}, skipping...', msg_obj,
-                )
-                return
-
-            await p.execute()
-            await self._commit_payload(
-                task_type=task_type,
-                _ipfs_writer_client=self._ipfs_writer_client,
-                project_id=project_id,
-                epoch=msg_obj,
-                snapshot=snapshot,
-                storage_flag=settings.web3storage.upload_snapshots,
-            )
-
-    async def _process_bulk_mode(self, msg_obj: PowerloomSnapshotProcessMessage, task_type: str):
+    async def _process(self, msg_obj: PowerloomSnapshotProcessMessage, task_type: str):
         """
         Processes the given PowerloomSnapshotProcessMessage object in bulk mode.
 
@@ -327,11 +222,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             task_type, msg_obj,
         )
 
-        # bulk mode
-        if msg_obj.bulk_mode:
-            await self._process_bulk_mode(msg_obj=msg_obj, task_type=task_type)
-        else:
-            await self._process_single_mode(msg_obj=msg_obj, task_type=task_type)
+        await self._process(msg_obj=msg_obj, task_type=task_type)
         await self._redis_conn.close()
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
