@@ -82,8 +82,8 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         Returns:
             str: The generated project ID.
         """
-        underlying_project_ids = [project.projectId for project in epoch.messages]
-        unique_project_id = ''.join(sorted(underlying_project_ids))
+        underlying_project_types = [project.projectType for project in epoch.messages]
+        unique_project_id = ''.join(sorted(underlying_project_types))
 
         project_hash = hashlib.sha3_256(unique_project_id.encode()).hexdigest()
 
@@ -258,7 +258,6 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         await self.init_worker()
 
         self._logger.debug('task type: {}', task_type)
-        # TODO: Update based on new single project based design
         if task_type in self._single_project_types:
             try:
                 msg_obj: PowerloomSnapshotSubmittedMessage = PowerloomSnapshotSubmittedMessage.parse_raw(message.body)
