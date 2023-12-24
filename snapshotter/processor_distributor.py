@@ -563,7 +563,7 @@ class ProcessorDistributor(multiprocessing.Process):
             for config in aggregator_config:
                 task_type = config.project_type
                 if type(config) == AggregationConfigSingle:
-                    if config.filters.projectType not in process_unit.projectId:
+                    if config.filters.project_type not in process_unit.projectId:
                         continue
 
                     rabbitmq_publish_tasks.append(

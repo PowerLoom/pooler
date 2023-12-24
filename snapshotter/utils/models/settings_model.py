@@ -180,7 +180,7 @@ class ProjectsConfig(BaseModel):
 
 
 class AggregateFilterConfig(BaseModel):
-    projectType: str
+    project_type: str
 
 
 class AggregateOn(str, Enum):
