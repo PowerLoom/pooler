@@ -44,10 +44,7 @@ class EpochBase(BaseModel):
 
 
 class PowerloomSnapshotProcessMessage(EpochBase):
-    data_source: Optional[str] = None
-    primary_data_source: Optional[str] = None
     genesis: Optional[bool] = False
-    bulk_mode: Optional[bool] = False
 
 
 class PowerloomSnapshotFinalizedMessage(BaseModel):
@@ -57,17 +54,22 @@ class PowerloomSnapshotFinalizedMessage(BaseModel):
     timestamp: int
 
 
-class PowerloomProjectsUpdatedMessage(BaseModel):
-    projectId: str
-    allowed: bool
-    enableEpochId: int
-
-
 class PowerloomSnapshotSubmittedMessage(BaseModel):
     snapshotCid: str
     epochId: int
     projectId: str
     timestamp: int
+
+
+class PowerloomSnapshotSubmittedMessageLite(BaseModel):
+    snapshotCid: str
+    projectId: str
+
+
+class PowerloomProjectTypeProcessingCompleteMessage(BaseModel):
+    epochId: int
+    projectType: str
+    snapshotsSubmitted: List[PowerloomSnapshotSubmittedMessageLite]
 
 
 class PowerloomDelegateWorkerRequestMessage(BaseModel):
@@ -88,7 +90,7 @@ class PowerloomDelegateTxReceiptWorkerResponseMessage(PowerloomDelegateWorkerRes
 
 
 class PowerloomCalculateAggregateMessage(BaseModel):
-    messages: List[PowerloomSnapshotSubmittedMessage]
+    messages: List[PowerloomProjectTypeProcessingCompleteMessage]
     epochId: int
     timestamp: int
 

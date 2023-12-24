@@ -100,12 +100,6 @@ class SnapshotFinalizedEvent(EventBase):
     snapshotCid: str
 
 
-class ProjectsUpdatedEvent(EventBase):
-    projectId: str
-    allowed: bool
-    enableEpochId: int
-
-
 class SnapshottersUpdatedEvent(EventBase):
     snapshotterAddress: str
     allowed: bool

@@ -171,10 +171,8 @@ class ProcessorConfig(BaseModel):
 
 class ProjectConfig(BaseModel):
     project_type: str
-    projects: Optional[List[str]] = None
     processor: ProcessorConfig
     preload_tasks: List[str]
-    bulk_mode: Optional[bool] = False
 
 
 class ProjectsConfig(BaseModel):
@@ -182,7 +180,7 @@ class ProjectsConfig(BaseModel):
 
 
 class AggregateFilterConfig(BaseModel):
-    projectId: str
+    projectType: str
 
 
 class AggregateOn(str, Enum):
@@ -190,16 +188,22 @@ class AggregateOn(str, Enum):
     multi_project = 'MultiProject'
 
 
-class AggregationConfig(BaseModel):
+class AggregationConfigSingle(BaseModel):
     project_type: str
     aggregate_on: AggregateOn
-    filters: Optional[AggregateFilterConfig]
-    projects_to_wait_for: Optional[List[str]]
+    filters: AggregateFilterConfig
+    processor: ProcessorConfig
+
+
+class AggregationConfigMulti(BaseModel):
+    project_type: str
+    aggregate_on: AggregateOn
+    project_types_to_wait_for: List[str]
     processor: ProcessorConfig
 
 
 class AggregatorConfig(BaseModel):
-    config: List[AggregationConfig]
+    config: List[Union[AggregationConfigSingle, AggregationConfigMulti]]
 
 
 class Preloader(BaseModel):

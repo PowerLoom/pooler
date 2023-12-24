@@ -20,7 +20,6 @@ from snapshotter.utils.exceptions import GenericExitOnSignal
 from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.models.data_models import EpochReleasedEvent
 from snapshotter.utils.models.data_models import EventBase
-from snapshotter.utils.models.data_models import ProjectsUpdatedEvent
 from snapshotter.utils.models.data_models import SnapshotFinalizedEvent
 from snapshotter.utils.models.data_models import SnapshottersUpdatedEvent
 from snapshotter.utils.rabbitmq_helpers import RabbitmqThreadedSelectLoopInteractor
@@ -141,19 +140,16 @@ class EventDetectorProcess(multiprocessing.Process):
         # event EpochReleased(uint256 indexed epochId, uint256 begin, uint256 end, uint256 timestamp);
         # event SnapshotFinalized(uint256 indexed epochId, uint256 epochEnd, string projectId,
         #     string snapshotCid, uint256 timestamp);
-        # event ProjectsUpdated(string projectId, bool allowed);
 
         EVENTS_ABI = {
             'EpochReleased': self.contract.events.EpochReleased._get_event_abi(),
             'SnapshotFinalized': self.contract.events.SnapshotFinalized._get_event_abi(),
-            'ProjectsUpdated': self.contract.events.ProjectsUpdated._get_event_abi(),
             'allSnapshottersUpdated': self.contract.events.allSnapshottersUpdated._get_event_abi(),
         }
 
         EVENT_SIGS = {
             'EpochReleased': 'EpochReleased(uint256,uint256,uint256,uint256)',
             'SnapshotFinalized': 'SnapshotFinalized(uint256,uint256,string,string,uint256)',
-            'ProjectsUpdated': 'ProjectsUpdated(string,bool,uint256)',
             'allSnapshottersUpdated': 'allSnapshottersUpdated(address,bool)',
 
         }
@@ -218,14 +214,6 @@ class EventDetectorProcess(multiprocessing.Process):
                     projectId=log.args.projectId,
                     snapshotCid=log.args.snapshotCid,
                     timestamp=log.args.timestamp,
-                )
-                events.append((log.event, event))
-            elif log.event == 'ProjectsUpdated':
-                event = ProjectsUpdatedEvent(
-                    projectId=log.args.projectId,
-                    allowed=log.args.allowed,
-                    enableEpochId=log.args.enableEpochId,
-                    timestamp=int(time.time()),
                 )
                 events.append((log.event, event))
             elif log.event == 'allSnapshottersUpdated':
