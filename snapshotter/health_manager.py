@@ -333,19 +333,6 @@ class HealthManager(multiprocessing.Process):
             last_detected_epoch = await self._redis_conn.get(last_epoch_detected_epoch_id_key())
             asyncio.ensure_future(self._epoch_processing_health_check(last_detected_epoch))
 
-    async def _cleanup_older_epoch_status(self, epoch_id: int):
-        """
-        Deletes the epoch status keys for the epoch that is 30 epochs older than the given epoch_id.
-        """
-        tasks = [self._redis_conn.delete(epoch_id_epoch_released_key(epoch_id - 30))]
-        delete_keys = list()
-        for state in SnapshotterStates:
-            k = epoch_id_project_to_state_mapping(epoch_id - 30, state.value)
-            delete_keys.append(k)
-        if delete_keys:
-            tasks.append(self._redis_conn.delete(*delete_keys))
-        await asyncio.gather(*tasks, return_exceptions=True)
-
     def run(self) -> None:
         """
         Runs the HealthManager by setting resource limits, registering signal handlers,
