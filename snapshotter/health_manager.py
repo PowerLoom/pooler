@@ -13,7 +13,6 @@ from httpx import AsyncClient
 from httpx import AsyncHTTPTransport
 from httpx import Limits
 from httpx import Timeout
-from more_itertools import last
 from redis import asyncio as aioredis
 
 from snapshotter.settings.config import settings
@@ -28,7 +27,6 @@ from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.message_models import ProcessHubCommand
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
-from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import last_epoch_detected_epoch_id_key
 from snapshotter.utils.redis.redis_keys import last_epoch_detected_timestamp_key
@@ -331,7 +329,9 @@ class HealthManager(multiprocessing.Process):
                 break
 
             last_detected_epoch = await self._redis_conn.get(last_epoch_detected_epoch_id_key())
-            asyncio.ensure_future(self._epoch_processing_health_check(last_detected_epoch))
+            if last_detected_epoch:
+                last_detected_epoch = int(last_detected_epoch)
+                asyncio.ensure_future(self._epoch_processing_health_check(last_detected_epoch))
 
     def run(self) -> None:
         """

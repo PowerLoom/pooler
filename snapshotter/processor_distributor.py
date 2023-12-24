@@ -733,7 +733,7 @@ class ProcessorDistributor(multiprocessing.Process):
             await self._distribute_callbacks_aggregate_single(
                 message,
             )
-        if message_type == 'ProjectTypeProcessingComplete':
+        elif message_type == 'ProjectTypeProcessingComplete':
             await self._distribute_callbacks_aggregate_multi(
                 message,
             )
@@ -756,7 +756,7 @@ class ProcessorDistributor(multiprocessing.Process):
                 (
                     'Unknown routing key for callback distribution: {}'
                 ),
-                message.routing_key,
+                message_type,
             )
 
         if self._redis_conn:
