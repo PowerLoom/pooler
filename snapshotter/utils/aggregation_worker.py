@@ -164,10 +164,6 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 project_id=project_id,
             )
 
-            if task_processor.transformation_lambdas:
-                for each_lambda in task_processor.transformation_lambdas:
-                    snapshot = each_lambda(snapshot, msg_obj)
-
         except Exception as e:
             self._logger.opt(exception=settings.logs.trace_enabled).error(
                 'Exception processing callback for epoch: {}, Error: {},'

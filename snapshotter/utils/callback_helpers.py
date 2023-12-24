@@ -182,10 +182,6 @@ class GenericProcessorSnapshot(ABC):
     def __init__(self):
         pass
 
-    @abstractproperty
-    def transformation_lambdas(self):
-        pass
-
     @abstractmethod
     async def compute(
         self,
@@ -271,10 +267,6 @@ class GenericProcessorAggregate(ABC):
     __metaclass__ = ABCMeta
 
     def __init__(self):
-        pass
-
-    @abstractproperty
-    def transformation_lambdas(self):
         pass
 
     @abstractmethod

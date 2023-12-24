@@ -104,10 +104,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                     'No snapshot data for: {}, skipping...', msg_obj,
                 )
 
-            if task_processor.transformation_lambdas and snapshot:
-                for each_lambda in task_processor.transformation_lambdas:
-                    snapshot = each_lambda(snapshot, msg_obj.data_source, msg_obj.begin, msg_obj.end)
-
         except Exception as e:
             self._logger.opt(exception=settings.logs.trace_enabled).error(
                 'Exception processing callback for epoch: {}, Error: {},'
@@ -206,12 +202,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 self._logger.debug(
                     'No snapshot data for: {}, skipping...', msg_obj,
                 )
-
-            # No transformation lambdas in bulk mode for now.
-            # Planning to deprecate transformation lambdas in future.
-            # if task_processor.transformation_lambdas:
-            #     for each_lambda in task_processor.transformation_lambdas:
-            #         snapshot = each_lambda(snapshot, msg_obj.data_source, msg_obj.begin, msg_obj.end)
 
         except Exception as e:
             self._logger.opt(exception=True).error(
