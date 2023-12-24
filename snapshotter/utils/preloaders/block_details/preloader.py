@@ -20,8 +20,6 @@ class BlockDetailsPreloader(GenericPreloader):
     ):
         min_chain_height = epoch.begin
         max_chain_height = epoch.end
-        # get eth price for all blocks in range
-        # return dict of block_height: eth_price
         try:
             await get_block_details_in_block_range(
                 from_block=min_chain_height,
