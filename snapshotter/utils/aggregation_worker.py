@@ -73,25 +73,6 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         project_id = f'{task_type}:{data_source}:{settings.namespace}'
         return project_id
 
-    def _gen_multiple_type_project_id(self, task_type, msg_obj):
-        """
-        Generates a unique project ID based on the task type and epoch messages.
-
-        Args:
-            task_type (str): The type of task.
-            epoch (Epoch): The epoch object containing messages.
-
-        Returns:
-            str: The generated project ID.
-        """
-        underlying_project_types = [project.projectType for project in msg_obj.messages]
-        unique_project_id = ''.join(sorted(underlying_project_types))
-
-        project_hash = hashlib.sha3_256(unique_project_id.encode()).hexdigest()
-
-        project_id = f'{task_type}:{project_hash}:{settings.namespace}'
-        return project_id
-
     def _gen_project_id(self, task_type, msg_obj):
         """
         Generates a project ID based on the given task type and epoch.
@@ -109,7 +90,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         if task_type in self._single_project_types:
             return self._gen_single_type_project_id(task_type, msg_obj)
         elif task_type in self._multi_project_types:
-            return self._gen_multiple_type_project_id(task_type, msg_obj)
+            return f'{task_type}:{settings.namespace}'
         else:
             raise ValueError(f'Unknown project type {task_type}')
 
@@ -142,9 +123,12 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             )
             return
 
-        project_ids = []
-        for submitted_snapshot in msg_obj.snapshotsSubmitted:
-            project_ids.append(self._gen_project_id(task_type, submitted_snapshot))
+        if type(msg_obj) == PowerloomProjectTypeProcessingCompleteMessage:
+            project_ids = []
+            for submitted_snapshot in msg_obj.snapshotsSubmitted:
+                project_ids.append(self._gen_project_id(task_type, submitted_snapshot))
+        else:
+            project_ids = [self._gen_project_id(task_type, msg_obj)]
 
         try:
             if not self._rate_limiting_lua_scripts:

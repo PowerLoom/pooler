@@ -530,7 +530,7 @@ class ProcessorDistributor(multiprocessing.Process):
             ),
         )
 
-    async def _distribute_callbacks_aggregate_single(self, message: IncomingMessage):
+    async def _distribute_callbacks_aggregate(self, message: IncomingMessage):
         """
         Distributes the callbacks for aggregation.
 
@@ -571,45 +571,8 @@ class ProcessorDistributor(multiprocessing.Process):
                                 message=Message(process_unit.json().encode('utf-8')),
                             ),
                         )
-        if not rabbitmq_publish_tasks:
-            self._logger.info(f'No aggregators found for {process_unit.projectType}')
-            return
 
-        await asyncio.gather(*rabbitmq_publish_tasks, return_exceptions=True)
-
-    async def _distribute_callbacks_aggregate_multi(self, message: IncomingMessage):
-        """
-        Distributes the callbacks for aggregation.
-
-        :param message: IncomingMessage object containing the message to be processed.
-        """
-        try:
-            process_unit: PowerloomProjectTypeProcessingCompleteMessage = (
-                PowerloomProjectTypeProcessingCompleteMessage.parse_raw(message.body)
-            )
-
-        except ValidationError:
-            self._logger.opt(exception=True).error(
-                'Bad message structure of event callback',
-            )
-            return
-        except Exception:
-            self._logger.opt(exception=True).error(
-                'Unexpected message format of event callback',
-            )
-            return
-        self._logger.trace(f'Aggregation Task Distribution time - {int(time.time())}')
-
-        # go through aggregator config, if it matches then send appropriate message
-        rabbitmq_publish_tasks = list()
-        async with self._rmq_channel_pool.acquire() as channel:
-            exchange = await channel.get_exchange(
-                name=self._callback_exchange_name,
-            )
-            for config in aggregator_config:
-                task_type = config.project_type
-
-                if type(config) == AggregationConfigMulti:
+                elif type(config) == AggregationConfigMulti:
                     if process_unit.projectType not in config.project_types_to_wait_for:
                         continue
 
@@ -667,11 +630,10 @@ class ProcessorDistributor(multiprocessing.Process):
                             process_unit.epochId,
                         )
 
-                    else:
-                        self._logger.trace(
-                            f'Not all projects present for {process_unit.epochId},'
-                            f' {len(set(config.project_types_to_wait_for)) - len(event_project_types)} missing',
-                        )
+        if not rabbitmq_publish_tasks:
+            self._logger.info(f'No aggregators found for {process_unit.projectType}')
+            return
+
         await asyncio.gather(*rabbitmq_publish_tasks, return_exceptions=True)
 
     async def _cleanup_older_epoch_status(self, epoch_id: int):
@@ -727,12 +689,8 @@ class ProcessorDistributor(multiprocessing.Process):
                 else:
                     await self._epoch_release_processor(message)
 
-        # elif message_type == 'SnapshotSubmitted':
-        #     await self._distribute_callbacks_aggregate_single(
-        #         message,
-        #     )
         elif message_type == 'ProjectTypeProcessingComplete':
-            await self._distribute_callbacks_aggregate_single(
+            await self._distribute_callbacks_aggregate(
                 message,
             )
 
