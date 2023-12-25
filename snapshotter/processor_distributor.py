@@ -50,7 +50,6 @@ from snapshotter.utils.models.message_models import PowerloomCalculateAggregateM
 from snapshotter.utils.models.message_models import PowerloomProjectTypeProcessingCompleteMessage
 from snapshotter.utils.models.message_models import PowerloomSnapshotFinalizedMessage
 from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessage
 from snapshotter.utils.models.settings_model import AggregationConfigMulti
 from snapshotter.utils.models.settings_model import AggregationConfigSingle
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
@@ -538,8 +537,8 @@ class ProcessorDistributor(multiprocessing.Process):
         :param message: IncomingMessage object containing the message to be processed.
         """
         try:
-            process_unit: PowerloomSnapshotSubmittedMessage = (
-                PowerloomSnapshotSubmittedMessage.parse_raw(message.body)
+            process_unit: PowerloomProjectTypeProcessingCompleteMessage = (
+                PowerloomProjectTypeProcessingCompleteMessage.parse_raw(message.body)
             )
 
         except ValidationError:
@@ -562,19 +561,18 @@ class ProcessorDistributor(multiprocessing.Process):
             )
             for config in aggregator_config:
                 task_type = config.project_type
-                if type(config) == AggregationConfigSingle:
-                    if config.filters.project_type not in process_unit.projectId:
-                        continue
 
-                    rabbitmq_publish_tasks.append(
-                        exchange.publish(
-                            routing_key=f'powerloom-backend-callback:{settings.namespace}:'
-                            f'{settings.instance_id}:CalculateAggregate.{task_type}',
-                            message=Message(process_unit.json().encode('utf-8')),
-                        ),
-                    )
+                if type(config) == AggregationConfigSingle:
+                    if config.filters.project_type == process_unit.projectType:
+                        rabbitmq_publish_tasks.append(
+                            exchange.publish(
+                                routing_key=f'powerloom-backend-callback:{settings.namespace}:'
+                                f'{settings.instance_id}:CalculateAggregate.{task_type}',
+                                message=Message(process_unit.json().encode('utf-8')),
+                            ),
+                        )
         if not rabbitmq_publish_tasks:
-            self._logger.info(f'No aggregators found for {process_unit.projectId}')
+            self._logger.info(f'No aggregators found for {process_unit.projectType}')
             return
 
         await asyncio.gather(*rabbitmq_publish_tasks, return_exceptions=True)
@@ -729,12 +727,12 @@ class ProcessorDistributor(multiprocessing.Process):
                 else:
                     await self._epoch_release_processor(message)
 
-        elif message_type == 'SnapshotSubmitted':
-            await self._distribute_callbacks_aggregate_single(
-                message,
-            )
+        # elif message_type == 'SnapshotSubmitted':
+        #     await self._distribute_callbacks_aggregate_single(
+        #         message,
+        #     )
         elif message_type == 'ProjectTypeProcessingComplete':
-            await self._distribute_callbacks_aggregate_multi(
+            await self._distribute_callbacks_aggregate_single(
                 message,
             )
 

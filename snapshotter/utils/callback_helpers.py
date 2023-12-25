@@ -6,6 +6,7 @@ from abc import abstractmethod
 from abc import abstractproperty
 from typing import Any
 from typing import Dict
+from typing import List
 from typing import Union
 from urllib.parse import urljoin
 
@@ -22,6 +23,7 @@ from snapshotter.utils.default_logger import logger
 from snapshotter.utils.models.message_models import EpochBase
 from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
 from snapshotter.utils.models.message_models import PowerloomDelegateWorkerRequestMessage
+from snapshotter.utils.models.message_models import PowerloomProjectTypeProcessingCompleteMessage
 from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
 from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessage
 from snapshotter.utils.rpc import RpcHelper
@@ -272,12 +274,12 @@ class GenericProcessorAggregate(ABC):
     @abstractmethod
     async def compute(
         self,
-        msg_obj: Union[PowerloomSnapshotSubmittedMessage, PowerloomCalculateAggregateMessage],
+        msg_obj: Union[PowerloomProjectTypeProcessingCompleteMessage, PowerloomCalculateAggregateMessage],
         redis: aioredis.Redis,
         rpc_helper: RpcHelper,
         anchor_rpc_helper: RpcHelper,
         ipfs_reader: AsyncIPFSClient,
         protocol_state_contract,
-        project_id: str,
+        project_ids: List[str],
     ):
         pass

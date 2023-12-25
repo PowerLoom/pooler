@@ -6,6 +6,7 @@ import time
 from typing import Union
 
 from aio_pika import IncomingMessage
+from aio_pika import Message
 from ipfs_client.main import AsyncIPFSClient
 from ipfs_client.main import AsyncIPFSClientSingleton
 from pydantic import ValidationError
@@ -20,7 +21,8 @@ from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessage
+from snapshotter.utils.models.message_models import PowerloomProjectTypeProcessingCompleteMessage
+from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessageLite
 from snapshotter.utils.models.settings_model import AggregateOn
 from snapshotter.utils.redis.rate_limiter import load_rate_limiter_scripts
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
@@ -56,7 +58,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 self._multi_project_types.add(config.project_type)
             self._task_types.add(config.project_type)
 
-    def _gen_single_type_project_id(self, task_type, epoch):
+    def _gen_single_type_project_id(self, task_type, msg_obj):
         """
         Generates a project ID for a single task type and epoch.
 
@@ -67,11 +69,11 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         Returns:
             str: The generated project ID.
         """
-        data_source = epoch.projectId.split(':')[-2]
+        data_source = msg_obj.projectId.split(':')[-2]
         project_id = f'{task_type}:{data_source}:{settings.namespace}'
         return project_id
 
-    def _gen_multiple_type_project_id(self, task_type, epoch):
+    def _gen_multiple_type_project_id(self, task_type, msg_obj):
         """
         Generates a unique project ID based on the task type and epoch messages.
 
@@ -82,7 +84,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         Returns:
             str: The generated project ID.
         """
-        underlying_project_types = [project.projectType for project in epoch.messages]
+        underlying_project_types = [project.projectType for project in msg_obj.messages]
         unique_project_id = ''.join(sorted(underlying_project_types))
 
         project_hash = hashlib.sha3_256(unique_project_id.encode()).hexdigest()
@@ -90,7 +92,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         project_id = f'{task_type}:{project_hash}:{settings.namespace}'
         return project_id
 
-    def _gen_project_id(self, task_type, epoch):
+    def _gen_project_id(self, task_type, msg_obj):
         """
         Generates a project ID based on the given task type and epoch.
 
@@ -105,22 +107,22 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             ValueError: If the task type is unknown.
         """
         if task_type in self._single_project_types:
-            return self._gen_single_type_project_id(task_type, epoch)
+            return self._gen_single_type_project_id(task_type, msg_obj)
         elif task_type in self._multi_project_types:
-            return self._gen_multiple_type_project_id(task_type, epoch)
+            return self._gen_multiple_type_project_id(task_type, msg_obj)
         else:
             raise ValueError(f'Unknown project type {task_type}')
 
     async def _processor_task(
         self,
-        msg_obj: Union[PowerloomSnapshotSubmittedMessage, PowerloomCalculateAggregateMessage],
+        msg_obj: Union[PowerloomProjectTypeProcessingCompleteMessage, PowerloomCalculateAggregateMessage],
         task_type: str,
     ):
         """
         Process the given message object and task type.
 
         Args:
-            msg_obj (Union[PowerloomSnapshotSubmittedMessage, PowerloomCalculateAggregateMessage]):
+            msg_obj (Union[PowerloomProjectTypeProcessingCompleteMessage, PowerloomCalculateAggregateMessage]):
                 The message object to be processed.
             task_type (str): The type of task to be performed.
 
@@ -140,7 +142,9 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             )
             return
 
-        project_id = self._gen_project_id(task_type, msg_obj)
+        project_ids = []
+        for submitted_snapshot in msg_obj.snapshotsSubmitted:
+            project_ids.append(self._gen_project_id(task_type, submitted_snapshot))
 
         try:
             if not self._rate_limiting_lua_scripts:
@@ -154,14 +158,14 @@ class AggregationAsyncWorker(GenericAsyncWorker):
 
             task_processor = self._project_calculation_mapping[task_type]
 
-            snapshot = await task_processor.compute(
+            snapshots = await task_processor.compute(
                 msg_obj=msg_obj,
                 redis=self._redis_conn,
                 rpc_helper=self._rpc_helper,
                 anchor_rpc_helper=self._anchor_rpc_helper,
                 ipfs_reader=self._ipfs_reader_client,
                 protocol_state_contract=self._protocol_state_contract,
-                project_id=project_id,
+                project_ids=project_ids,
             )
 
         except Exception as e:
@@ -172,7 +176,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             notification_message = SnapshotterIssue(
                 instanceID=settings.instance_id,
                 issueType=SnapshotterReportState.MISSED_SNAPSHOT.value,
-                projectID=project_id,
+                projectID=f'{task_type}:{settings.namespace}',
                 epochId=str(msg_obj.epochId),
                 timeOfReporting=str(time.time()),
                 extra=json.dumps({'issueDetails': f'Error : {e}'}),
@@ -186,19 +190,20 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                     epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
                 ),
                 mapping={
-                    project_id: SnapshotterStateUpdate(
+                    f'{task_type}:{settings.namespace}': SnapshotterStateUpdate(
                         status='failed', error=str(e), timestamp=int(time.time()),
                     ).json(),
                 },
             )
         else:
-            if not snapshot:
+            submitted_snapshots = []
+            if not snapshots:
                 await self._redis_conn.hset(
                     name=epoch_id_project_to_state_mapping(
                         epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
                     ),
                     mapping={
-                        project_id: SnapshotterStateUpdate(
+                        f'{task_type}:{settings.namespace}': SnapshotterStateUpdate(
                             status='failed', timestamp=int(time.time()), error='Empty snapshot',
                         ).json(),
                     },
@@ -206,7 +211,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 notification_message = SnapshotterIssue(
                     instanceID=settings.instance_id,
                     issueType=SnapshotterReportState.MISSED_SNAPSHOT.value,
-                    projectID=project_id,
+                    projectID=f'{task_type}:{settings.namespace}',
                     epochId=str(msg_obj.epochId),
                     timeOfReporting=str(time.time()),
                     extra=json.dumps({'issueDetails': 'Error : Empty snapshot'}),
@@ -215,28 +220,75 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                     client=self._client, message=notification_message,
                 )
             else:
-                await self._redis_conn.hset(
-                    name=epoch_id_project_to_state_mapping(
-                        epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
-                    ),
-                    mapping={
-                        project_id: SnapshotterStateUpdate(
-                            status='success', timestamp=int(time.time()),
-                        ).json(),
-                    },
-                )
-                await self._commit_payload(
-                    task_type=task_type,
-                    project_id=project_id,
-                    epoch=msg_obj,
-                    snapshot=snapshot,
-                    storage_flag=settings.web3storage.upload_aggregates,
-                    _ipfs_writer_client=self._ipfs_writer_client,
-                )
+                for project_id, snapshot in snapshots:
+                    await self._redis_conn.hset(
+                        name=epoch_id_project_to_state_mapping(
+                            epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
+                        ),
+                        mapping={
+                            project_id: SnapshotterStateUpdate(
+                                status='success', timestamp=int(time.time()),
+                            ).json(),
+                        },
+                    )
+                    snapshot_cid = await self._commit_payload(
+                        task_type=task_type,
+                        project_id=project_id,
+                        epoch=msg_obj,
+                        snapshot=snapshot,
+                        storage_flag=settings.web3storage.upload_aggregates,
+                        _ipfs_writer_client=self._ipfs_writer_client,
+                    )
+
+                    submitted_snapshots.append(
+                        (project_id, snapshot_cid),
+                    )
+
             self._logger.debug(
-                'Updated epoch processing status in aggregation worker for project {} for transition {}',
-                project_id, SnapshotterStates.SNAPSHOT_BUILD.value,
+                'Updated epoch processing status in aggregation worker for project type {} for transition {}',
+                task_type, SnapshotterStates.SNAPSHOT_BUILD.value,
             )
+
+            # publish snapshot submitted event to event detector queue
+            processing_complete_message = PowerloomProjectTypeProcessingCompleteMessage(
+                epochId=msg_obj.epochId,
+                projectType=task_type,
+                snapshotsSubmitted=[
+                    PowerloomSnapshotSubmittedMessageLite(
+                        snapshotCid=snapshot_cid,
+                        projectId=project_id,
+                    ) for project_id, snapshot_cid in submitted_snapshots
+                ],
+            )
+
+            try:
+                async with self._rmq_connection_pool.acquire() as connection:
+                    async with self._rmq_channel_pool.acquire() as channel:
+                        # Prepare a message to send
+                        commit_payload_exchange = await channel.get_exchange(
+                            name=self._event_detector_exchange,
+                        )
+                        message_data = processing_complete_message.json().encode()
+
+                        # Prepare a message to send
+                        message = Message(message_data)
+
+                        await commit_payload_exchange.publish(
+                            message=message,
+                            routing_key=self._event_detector_routing_key_prefix + 'ProjectTypeProcessingComplete',
+                        )
+
+                        self._logger.debug(
+                            'Sent project type processing complete message to event detector queue: {} | Project Type: {} | Epoch: {}',
+                            processing_complete_message, task_type, msg_obj.epochId,
+                        )
+
+            except Exception as e:
+                self._logger.opt(exception=True).error(
+                    'Error publishing project type processing complete message to event detector queue: {} | Project Type: {} | Epoch: {}',
+                    processing_complete_message, task_type, msg_obj.epochId,
+                )
+
         await self._redis_conn.close()
 
     async def _on_rabbitmq_message(self, message: IncomingMessage):
@@ -260,7 +312,9 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         self._logger.debug('task type: {}', task_type)
         if task_type in self._single_project_types:
             try:
-                msg_obj: PowerloomSnapshotSubmittedMessage = PowerloomSnapshotSubmittedMessage.parse_raw(message.body)
+                msg_obj: PowerloomProjectTypeProcessingCompleteMessage = PowerloomProjectTypeProcessingCompleteMessage.parse_raw(
+                    message.body,
+                )
             except ValidationError as e:
                 self._logger.opt(exception=settings.logs.trace_enabled).error(
                     (

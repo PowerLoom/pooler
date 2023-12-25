@@ -216,7 +216,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             storage_flag (bool): Whether to upload the snapshot to web3 storage.
 
         Returns:
-            None
+            snapshot_cid (str): The CID of the uploaded snapshot.
         """
         # payload commit sequence begins
         # upload to IPFS
@@ -250,41 +250,41 @@ class GenericAsyncWorker(multiprocessing.Process):
                 name=submitted_unfinalized_snapshot_cids(project_id),
                 mapping={unfinalized_entry.json(sort_keys=True): epoch.epochId},
             )
-            # publish snapshot submitted event to event detector queue
-            snapshot_submitted_message = PowerloomSnapshotSubmittedMessage(
-                snapshotCid=snapshot_cid,
-                epochId=epoch.epochId,
-                projectId=project_id,
-                timestamp=int(time.time()),
-            )
-            try:
-                async with self._rmq_connection_pool.acquire() as connection:
-                    async with self._rmq_channel_pool.acquire() as channel:
-                        # Prepare a message to send
-                        commit_payload_exchange = await channel.get_exchange(
-                            name=self._event_detector_exchange,
-                        )
-                        message_data = snapshot_submitted_message.json().encode()
+            # # publish snapshot submitted event to event detector queue
+            # snapshot_submitted_message = PowerloomSnapshotSubmittedMessage(
+            #     snapshotCid=snapshot_cid,
+            #     epochId=epoch.epochId,
+            #     projectId=project_id,
+            #     timestamp=int(time.time()),
+            # )
+            # try:
+            #     async with self._rmq_connection_pool.acquire() as connection:
+            #         async with self._rmq_channel_pool.acquire() as channel:
+            #             # Prepare a message to send
+            #             commit_payload_exchange = await channel.get_exchange(
+            #                 name=self._event_detector_exchange,
+            #             )
+            #             message_data = snapshot_submitted_message.json().encode()
 
-                        # Prepare a message to send
-                        message = Message(message_data)
+            #             # Prepare a message to send
+            #             message = Message(message_data)
 
-                        await commit_payload_exchange.publish(
-                            message=message,
-                            routing_key=self._event_detector_routing_key_prefix + 'SnapshotSubmitted',
-                        )
+            #             await commit_payload_exchange.publish(
+            #                 message=message,
+            #                 routing_key=self._event_detector_routing_key_prefix + 'SnapshotSubmitted',
+            #             )
 
-                        self._logger.debug(
-                            'Sent snapshot submitted message to event detector queue | '
-                            'Project: {} | Epoch: {} | Snapshot CID: {}',
-                            project_id, epoch.epochId, snapshot_cid,
-                        )
+            #             self._logger.debug(
+            #                 'Sent snapshot submitted message to event detector queue | '
+            #                 'Project: {} | Epoch: {} | Snapshot CID: {}',
+            #                 project_id, epoch.epochId, snapshot_cid,
+            #             )
 
-            except Exception as e:
-                self._logger.opt(exception=True).error(
-                    'Exception sending snapshot submitted message to event detector queue: {} | Project: {} | Epoch: {} | Snapshot CID: {}',
-                    e, project_id, epoch.epochId, snapshot_cid,
-                )
+            # except Exception as e:
+            #     self._logger.opt(exception=True).error(
+            #         'Exception sending snapshot submitted message to event detector queue: {} | Project: {} | Epoch: {} | Snapshot CID: {}',
+            #         e, project_id, epoch.epochId, snapshot_cid,
+            #     )
 
             try:
                 await self._redis_conn.zremrangebyscore(
@@ -305,6 +305,8 @@ class GenericAsyncWorker(multiprocessing.Process):
         # upload to web3 storage
         if storage_flag:
             asyncio.ensure_future(self._upload_web3_storage(snapshot_bytes))
+
+        return snapshot_cid
 
     async def _rabbitmq_consumer(self, loop):
         """
