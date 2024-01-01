@@ -104,16 +104,3 @@ class ProcessHubCommand(BaseModel):
 
 class AggregateBase(BaseModel):
     epochId: int
-
-
-class PayloadCommitMessage(BaseModel):
-    sourceChainId: int
-    projectId: str
-    epochId: int
-    snapshotCID: str
-
-
-class PayloadCommitFinalizedMessage(BaseModel):
-    message: PowerloomSnapshotFinalizedMessage
-    web3Storage: bool
-    sourceChainId: int

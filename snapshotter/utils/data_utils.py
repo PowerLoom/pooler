@@ -216,23 +216,15 @@ async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, proj
     if 'null' in cid:
         return dict()
 
-    cached_data_path = os.path.join(settings.ipfs.local_cache_path, project_id, 'snapshots')
-    filename = f'{cid}.json'
+    logger.trace('Error while reading from cache', error=e)
+    logger.info('Project {} CID {}, fetching data from IPFS', project_id, cid)
     try:
-        submission_data = read_json_file(os.path.join(cached_data_path, filename))
-    except Exception as e:
-        # Fetch from IPFS
-        logger.trace('Error while reading from cache', error=e)
-        logger.info('Project {} CID {}, fetching data from IPFS', project_id, cid)
-        try:
-            submission_data = await fetch_file_from_ipfs(ipfs_reader, cid)
-        except:
-            logger.error('Error while fetching data from IPFS | Project {} | CID {}', project_id, cid)
-            submission_data = dict()
-        else:
-            # Cache it
-            write_json_file(cached_data_path, filename, submission_data)
-            submission_data = json.loads(submission_data)
+        submission_data = await fetch_file_from_ipfs(ipfs_reader, cid)
+    except:
+        logger.error('Error while fetching data from IPFS | Project {} | CID {}', project_id, cid)
+        submission_data = dict()
+    else:
+        submission_data = json.loads(submission_data)
     return submission_data
 
 

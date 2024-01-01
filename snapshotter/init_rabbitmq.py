@@ -213,33 +213,6 @@ def init_callback_queue(
     )
 
 
-def init_commit_payload_queue(
-    ch: pika.adapters.blocking_connection.BlockingChannel,
-) -> None:
-    """
-    Initializes a RabbitMQ queue for commit payloads.
-
-    Args:
-        ch (pika.adapters.blocking_connection.BlockingChannel): The RabbitMQ channel to use.
-
-    Returns:
-        None
-    """
-    commit_payload_exchange_name = (
-        f'{settings.rabbitmq.setup.commit_payload.exchange}:{settings.namespace}'
-    )
-    routing_key_pattern = f'powerloom-backend-commit-payload:{settings.namespace}:{settings.instance_id}.*'
-    queue_name = (
-        f'powerloom-backend-commit-payload-queue:{settings.namespace}:{settings.instance_id}'
-    )
-    init_topic_exchange_and_queue(
-        ch,
-        exchange_name=commit_payload_exchange_name,
-        queue_name=queue_name,
-        routing_key_pattern=routing_key_pattern,
-    )
-
-
 def init_delegate_worker_queue(
     ch: pika.adapters.blocking_connection.BlockingChannel,
 ) -> None:
@@ -338,7 +311,6 @@ def init_exchanges_queues():
 
     init_callback_queue(ch)
     init_event_detector_queue(ch)
-    init_commit_payload_queue(ch)
     init_delegate_worker_queue(ch)
 
 

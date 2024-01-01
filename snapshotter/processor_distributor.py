@@ -45,7 +45,6 @@ from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.data_models import SnapshottersUpdatedEvent
 from snapshotter.utils.models.message_models import EpochBase
-from snapshotter.utils.models.message_models import PayloadCommitFinalizedMessage
 from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
 from snapshotter.utils.models.message_models import PowerloomProjectTypeProcessingCompleteMessage
 from snapshotter.utils.models.message_models import PowerloomSnapshotFinalizedMessage
@@ -91,8 +90,6 @@ class ProcessorDistributor(multiprocessing.Process):
             _initialized (bool): Flag indicating if the ProcessorDistributor has been initialized.
             _consume_queue_routing_key (str): The routing key for consuming events.
             _callback_exchange_name (str): The name of the exchange for callbacks.
-            _payload_commit_exchange_name (str): The name of the exchange for payload commits.
-            _payload_commit_routing_key (str): The routing key for payload commits.
             _upcoming_project_changes (defaultdict): Dictionary of upcoming project changes.
             _preload_completion_conditions (defaultdict): Dictionary of preload completion conditions.
             _shutdown_initiated (bool): Flag indicating if shutdown has been initiated.
@@ -118,13 +115,6 @@ class ProcessorDistributor(multiprocessing.Process):
         self._callback_exchange_name = (
             f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}'
         )
-        self._payload_commit_exchange_name = (
-            f'{settings.rabbitmq.setup.commit_payload.exchange}:{settings.namespace}'
-        )
-        self._payload_commit_routing_key = (
-            f'powerloom-backend-commit-payload:{settings.namespace}:{settings.instance_id}.Finalized'
-        )
-
         self._upcoming_project_changes = defaultdict(list)
         self._preload_completion_conditions: Dict[int, Dict] = defaultdict(
             dict,
@@ -464,12 +454,12 @@ class ProcessorDistributor(multiprocessing.Process):
                 f' {project_type} : {process_unit}',
             )
 
-    async def _cache_and_forward_to_payload_commit_queue(self, message: IncomingMessage):
+    async def _handle_snapshot_finalized_message(self, message: IncomingMessage):
         """
-        Caches the snapshot data and forwards it to the payload commit queue.
+        Handles the SnapshotFinalized message.
 
         Args:
-            message (IncomingMessage): The incoming message containing the snapshot data.
+            message (IncomingMessage): The incoming message object.
 
         Returns:
             None
@@ -502,33 +492,6 @@ class ProcessorDistributor(multiprocessing.Process):
                     status='success', timestamp=int(time.time()), extra={'snapshot_cid': msg_obj.snapshotCid},
                 ).json(),
             },
-        )
-
-        self._logger.trace(f'Payload Commit Message Distribution time - {int(time.time())}')
-
-        # If not initialized yet, return
-        if not self._source_chain_id:
-            return
-
-        process_unit = PayloadCommitFinalizedMessage(
-            message=msg_obj,
-            web3Storage=True,
-            sourceChainId=self._source_chain_id,
-        )
-        async with self._rmq_channel_pool.acquire() as channel:
-            exchange = await channel.get_exchange(
-                name=self._payload_commit_exchange_name,
-            )
-            await exchange.publish(
-                routing_key=self._payload_commit_routing_key,
-                message=Message(process_unit.json().encode('utf-8')),
-            )
-
-        self._logger.trace(
-            (
-                'Sent out Event to Payload Commit Queue'
-                f' {event_type} : {process_unit}'
-            ),
         )
 
     async def _distribute_callbacks_aggregate_single(self, message: IncomingMessage):
@@ -739,7 +702,7 @@ class ProcessorDistributor(multiprocessing.Process):
             )
 
         elif message_type == 'SnapshotFinalized':
-            await self._cache_and_forward_to_payload_commit_queue(
+            await self._handle_snapshot_finalized_message(
                 message,
             )
 

@@ -41,7 +41,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         self._q = f'powerloom-backend-cb-snapshot:{settings.namespace}:{settings.instance_id}'
         self._rmq_routing = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}:EpochReleased.*'
         super(SnapshotAsyncWorker, self).__init__(name=name, **kwargs)
-        self._project_calculation_mapping = None
+        self._project_calculation_mapping = {}
         self._task_types = []
         for project_config in projects_config:
             task_type = project_config.project_type
@@ -236,6 +236,9 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         Returns:
             None
         """
+        if not message.routing_key:
+            return
+
         task_type = message.routing_key.split('.')[-1]
         if task_type not in self._task_types:
             return
