@@ -135,6 +135,34 @@ async def w3_get_and_cache_finalized_cid(
         return f'null_{epoch_id}', epoch_id
 
 
+async def get_project_last_finalized_cid_and_epoch(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, project_id):
+    """
+    Get the last epoch for a given project ID.
+
+    Args:
+        redis_conn (aioredis.Redis): Redis connection object.
+        state_contract_obj: Contract object for the state contract.
+        rpc_helper: RPC helper object.
+        project_id (str): ID of the project.
+
+    Returns:
+        int: The last epoch for the given project ID.
+    """
+    tasks = [
+        state_contract_obj.functions.lastFinalizedSnapshot(project_id),
+    ]
+
+    [last_finalized_epoch] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
+    logger.info(f'last finalized epoch for project {project_id} is {last_finalized_epoch}')
+
+    # getting finalized cid for last finalized epoch
+    last_finalized_cid = await get_project_finalized_cid(
+        redis_conn, state_contract_obj, rpc_helper, last_finalized_epoch, project_id,
+    )
+
+    return last_finalized_cid, int(last_finalized_epoch)
+
+
 # TODO: warmup cache to reduce RPC calls overhead
 async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, project_id):
     """

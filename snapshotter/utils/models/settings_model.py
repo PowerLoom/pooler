@@ -144,7 +144,6 @@ class Web3Storage(BaseModel):
 class Relayer(BaseModel):
     host: str
     endpoint: str
-    timeout: int
 
 
 class Settings(BaseModel):
