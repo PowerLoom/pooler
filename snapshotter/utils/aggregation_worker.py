@@ -14,6 +14,7 @@ from pydantic import ValidationError
 from snapshotter.settings.config import aggregator_config
 from snapshotter.settings.config import projects_config
 from snapshotter.settings.config import settings
+from snapshotter.utils import event_log_decoder
 from snapshotter.utils.callback_helpers import send_failure_notifications_async
 from snapshotter.utils.generic_worker import GenericAsyncWorker
 from snapshotter.utils.models.data_models import SnapshotterIssue
@@ -46,7 +47,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         f':{settings.instance_id}:CalculateAggregate.*'
         super(AggregationAsyncWorker, self).__init__(name=name, **kwargs)
 
-        self._project_calculation_mapping = None
+        self._project_calculation_mapping = dict()
         self._single_project_types = set()
         self._multi_project_types = set()
         self._task_types = set()
@@ -154,8 +155,8 @@ class AggregationAsyncWorker(GenericAsyncWorker):
 
         except Exception as e:
             self._logger.opt(exception=settings.logs.trace_enabled).error(
-                'Exception processing callback for epoch: {}, Error: {},'
-                'sending failure notifications', msg_obj, e,
+                'Exception processing callback for epoch: {}, Task Type: {}, Error: {},'
+                'sending failure notifications', msg_obj, task_type, e,
             )
             notification_message = SnapshotterIssue(
                 instanceID=settings.instance_id,
@@ -249,7 +250,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 async with self._rmq_connection_pool.acquire() as connection:
                     async with self._rmq_channel_pool.acquire() as channel:
                         # Prepare a message to send
-                        commit_payload_exchange = await channel.get_exchange(
+                        event_detector_exchange = await channel.get_exchange(
                             name=self._event_detector_exchange,
                         )
                         message_data = processing_complete_message.json().encode()
@@ -257,7 +258,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                         # Prepare a message to send
                         message = Message(message_data)
 
-                        await commit_payload_exchange.publish(
+                        await event_detector_exchange.publish(
                             message=message,
                             routing_key=self._event_detector_routing_key_prefix + 'ProjectTypeProcessingComplete',
                         )
@@ -348,7 +349,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         Initializes the project calculation mapping by importing the processor module and class for each project type
         specified in the aggregator and projects configuration. Raises an exception if a duplicate project type is found.
         """
-        if self._project_calculation_mapping is not None:
+        if self._project_calculation_mapping != {}:
             return
 
         self._project_calculation_mapping = dict()

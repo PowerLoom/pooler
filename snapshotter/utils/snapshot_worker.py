@@ -204,7 +204,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 async with self._rmq_connection_pool.acquire() as connection:
                     async with self._rmq_channel_pool.acquire() as channel:
                         # Prepare a message to send
-                        commit_payload_exchange = await channel.get_exchange(
+                        event_detector_exchange = await channel.get_exchange(
                             name=self._event_detector_exchange,
                         )
                         message_data = processing_complete_message.json().encode()
@@ -212,7 +212,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                         # Prepare a message to send
                         message = Message(message_data)
 
-                        await commit_payload_exchange.publish(
+                        await event_detector_exchange.publish(
                             message=message,
                             routing_key=self._event_detector_routing_key_prefix + 'ProjectTypeProcessingComplete',
                         )

@@ -216,7 +216,6 @@ async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, proj
     if 'null' in cid:
         return dict()
 
-    logger.trace('Error while reading from cache', error=e)
     logger.info('Project {} CID {}, fetching data from IPFS', project_id, cid)
     try:
         submission_data = await fetch_file_from_ipfs(ipfs_reader, cid)

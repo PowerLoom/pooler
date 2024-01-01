@@ -25,7 +25,6 @@ from snapshotter.utils.models.message_models import PowerloomCalculateAggregateM
 from snapshotter.utils.models.message_models import PowerloomDelegateWorkerRequestMessage
 from snapshotter.utils.models.message_models import PowerloomProjectTypeProcessingCompleteMessage
 from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessage
 from snapshotter.utils.rpc import RpcHelper
 
 # setup logger

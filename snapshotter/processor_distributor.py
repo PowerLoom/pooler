@@ -493,33 +493,6 @@ class ProcessorDistributor(multiprocessing.Process):
             },
         )
 
-        self._logger.trace(f'Payload Commit Message Distribution time - {int(time.time())}')
-
-        # If not initialized yet, return
-        if not self._source_chain_id:
-            return
-
-        process_unit = PayloadCommitFinalizedMessage(
-            message=msg_obj,
-            web3Storage=True,
-            sourceChainId=self._source_chain_id,
-        )
-        async with self._rmq_channel_pool.acquire() as channel:
-            exchange = await channel.get_exchange(
-                name=self._payload_commit_exchange_name,
-            )
-            await exchange.publish(
-                routing_key=self._payload_commit_routing_key,
-                message=Message(process_unit.json().encode('utf-8')),
-            )
-
-        self._logger.trace(
-            (
-                'Sent out Event to Payload Commit Queue'
-                f' {event_type} : {process_unit}'
-            ),
-        )
-
     async def _distribute_callbacks_aggregate(self, message: IncomingMessage):
         """
         Distributes the callbacks for aggregation.
