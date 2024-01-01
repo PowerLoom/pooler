@@ -49,7 +49,6 @@ from snapshotter.utils.models.message_models import PowerloomCalculateAggregateM
 from snapshotter.utils.models.message_models import PowerloomProjectTypeProcessingCompleteMessage
 from snapshotter.utils.models.message_models import PowerloomSnapshotFinalizedMessage
 from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessage
 from snapshotter.utils.models.settings_model import AggregationConfigMulti
 from snapshotter.utils.models.settings_model import AggregationConfigSingle
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
@@ -494,55 +493,34 @@ class ProcessorDistributor(multiprocessing.Process):
             },
         )
 
-    async def _distribute_callbacks_aggregate_single(self, message: IncomingMessage):
-        """
-        Distributes the callbacks for aggregation.
+        self._logger.trace(f'Payload Commit Message Distribution time - {int(time.time())}')
 
-        :param message: IncomingMessage object containing the message to be processed.
-        """
-        try:
-            process_unit: PowerloomSnapshotSubmittedMessage = (
-                PowerloomSnapshotSubmittedMessage.parse_raw(message.body)
-            )
-
-        except ValidationError:
-            self._logger.opt(exception=True).error(
-                'Bad message structure of event callback',
-            )
+        # If not initialized yet, return
+        if not self._source_chain_id:
             return
-        except Exception:
-            self._logger.opt(exception=True).error(
-                'Unexpected message format of event callback',
-            )
-            return
-        self._logger.trace(f'Aggregation Task Distribution time - {int(time.time())}')
 
-        # go through aggregator config, if it matches then send appropriate message
-        rabbitmq_publish_tasks = list()
+        process_unit = PayloadCommitFinalizedMessage(
+            message=msg_obj,
+            web3Storage=True,
+            sourceChainId=self._source_chain_id,
+        )
         async with self._rmq_channel_pool.acquire() as channel:
             exchange = await channel.get_exchange(
-                name=self._callback_exchange_name,
+                name=self._payload_commit_exchange_name,
             )
-            for config in aggregator_config:
-                task_type = config.project_type
-                if type(config) == AggregationConfigSingle:
-                    if config.filters.project_type not in process_unit.projectId:
-                        continue
+            await exchange.publish(
+                routing_key=self._payload_commit_routing_key,
+                message=Message(process_unit.json().encode('utf-8')),
+            )
 
-                    rabbitmq_publish_tasks.append(
-                        exchange.publish(
-                            routing_key=f'powerloom-backend-callback:{settings.namespace}:'
-                            f'{settings.instance_id}:CalculateAggregate.{task_type}',
-                            message=Message(process_unit.json().encode('utf-8')),
-                        ),
-                    )
-        if not rabbitmq_publish_tasks:
-            self._logger.info(f'No aggregators found for {process_unit.projectId}')
-            return
+        self._logger.trace(
+            (
+                'Sent out Event to Payload Commit Queue'
+                f' {event_type} : {process_unit}'
+            ),
+        )
 
-        await asyncio.gather(*rabbitmq_publish_tasks, return_exceptions=True)
-
-    async def _distribute_callbacks_aggregate_multi(self, message: IncomingMessage):
+    async def _distribute_callbacks_aggregate(self, message: IncomingMessage):
         """
         Distributes the callbacks for aggregation.
 
@@ -574,7 +552,17 @@ class ProcessorDistributor(multiprocessing.Process):
             for config in aggregator_config:
                 task_type = config.project_type
 
-                if type(config) == AggregationConfigMulti:
+                if type(config) == AggregationConfigSingle:
+                    if config.filters.project_type == process_unit.projectType:
+                        rabbitmq_publish_tasks.append(
+                            exchange.publish(
+                                routing_key=f'powerloom-backend-callback:{settings.namespace}:'
+                                f'{settings.instance_id}:CalculateAggregate.{task_type}',
+                                message=Message(process_unit.json().encode('utf-8')),
+                            ),
+                        )
+
+                elif type(config) == AggregationConfigMulti:
                     if process_unit.projectType not in config.project_types_to_wait_for:
                         continue
 
@@ -632,11 +620,10 @@ class ProcessorDistributor(multiprocessing.Process):
                             process_unit.epochId,
                         )
 
-                    else:
-                        self._logger.trace(
-                            f'Not all projects present for {process_unit.epochId},'
-                            f' {len(set(config.project_types_to_wait_for)) - len(event_project_types)} missing',
-                        )
+        if not rabbitmq_publish_tasks:
+            self._logger.info(f'No aggregators found for {process_unit.projectType}')
+            return
+
         await asyncio.gather(*rabbitmq_publish_tasks, return_exceptions=True)
 
     async def _cleanup_older_epoch_status(self, epoch_id: int):
@@ -692,12 +679,8 @@ class ProcessorDistributor(multiprocessing.Process):
                 else:
                     await self._epoch_release_processor(message)
 
-        elif message_type == 'SnapshotSubmitted':
-            await self._distribute_callbacks_aggregate_single(
-                message,
-            )
-        if message_type == 'ProjectTypeProcessingComplete':
-            await self._distribute_callbacks_aggregate_multi(
+        elif message_type == 'ProjectTypeProcessingComplete':
+            await self._distribute_callbacks_aggregate(
                 message,
             )
 
@@ -719,7 +702,7 @@ class ProcessorDistributor(multiprocessing.Process):
                 (
                     'Unknown routing key for callback distribution: {}'
                 ),
-                message.routing_key,
+                message_type,
             )
 
         if self._redis_conn:

@@ -5,6 +5,7 @@ import time
 from typing import Optional
 
 from aio_pika import IncomingMessage
+from aio_pika import Message
 from ipfs_client.main import AsyncIPFSClient
 from ipfs_client.main import AsyncIPFSClientSingleton
 from pydantic import ValidationError
@@ -17,7 +18,9 @@ from snapshotter.utils.models.data_models import SnapshotterIssue
 from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
+from snapshotter.utils.models.message_models import PowerloomProjectTypeProcessingCompleteMessage
 from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
+from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessageLite
 from snapshotter.utils.redis.rate_limiter import load_rate_limiter_scripts
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import last_snapshot_processing_complete_timestamp_key
@@ -141,7 +144,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 return
 
             self._logger.info('Sending snapshots to commit service: {}', snapshots)
-
+            submitted_snapshots = []
             for project_data_source, snapshot in snapshots:
                 data_sources = project_data_source.split('_')
                 if len(data_sources) == 1:
@@ -174,13 +177,55 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                     },
                 )
                 await p.execute()
-                await self._commit_payload(
+                snapshot_cid = await self._commit_payload(
                     task_type=task_type,
                     _ipfs_writer_client=self._ipfs_writer_client,
                     project_id=project_id,
                     epoch=msg_obj,
                     snapshot=snapshot,
                     storage_flag=settings.web3storage.upload_snapshots,
+                )
+
+                submitted_snapshots.append((project_id, snapshot_cid))
+
+            # publish snapshot submitted event to event detector queue
+            processing_complete_message = PowerloomProjectTypeProcessingCompleteMessage(
+                epochId=msg_obj.epochId,
+                projectType=task_type,
+                snapshotsSubmitted=[
+                    PowerloomSnapshotSubmittedMessageLite(
+                        snapshotCid=snapshot_cid,
+                        projectId=project_id,
+                    ) for project_id, snapshot_cid in submitted_snapshots
+                ],
+            )
+
+            try:
+                async with self._rmq_connection_pool.acquire() as connection:
+                    async with self._rmq_channel_pool.acquire() as channel:
+                        # Prepare a message to send
+                        commit_payload_exchange = await channel.get_exchange(
+                            name=self._event_detector_exchange,
+                        )
+                        message_data = processing_complete_message.json().encode()
+
+                        # Prepare a message to send
+                        message = Message(message_data)
+
+                        await commit_payload_exchange.publish(
+                            message=message,
+                            routing_key=self._event_detector_routing_key_prefix + 'ProjectTypeProcessingComplete',
+                        )
+
+                        self._logger.debug(
+                            'Sent project type processing complete message to event detector queue: {} | Project Type: {} | Epoch: {}',
+                            processing_complete_message, task_type, msg_obj.epochId,
+                        )
+
+            except Exception as e:
+                self._logger.opt(exception=True).error(
+                    'Error publishing project type processing complete message to event detector queue: {} | Project Type: {} | Epoch: {}',
+                    processing_complete_message, task_type, msg_obj.epochId,
                 )
 
     async def _processor_task(self, msg_obj: PowerloomSnapshotProcessMessage, task_type: str):
@@ -280,7 +325,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         Raises:
             Exception: If a duplicate project type is found in the projects configuration.
         """
-        if self._project_calculation_mapping is not None:
+        if self._project_calculation_mapping != {}:
             return
         # Generate project function mapping
         self._project_calculation_mapping = dict()

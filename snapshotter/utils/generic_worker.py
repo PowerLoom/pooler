@@ -245,7 +245,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             storage_flag (bool): Whether to upload the snapshot to web3 storage.
 
         Returns:
-            None
+            snapshot_cid (str): The CID of the uploaded snapshot.
         """
         # upload to IPFS
         snapshot_json = json.dumps(snapshot.dict(by_alias=True), sort_keys=True, separators=(',', ':'))
