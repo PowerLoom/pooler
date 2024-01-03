@@ -64,7 +64,23 @@ cp config/aggregator.example.json config/aggregator.json
 cp config/auth_settings.example.json config/auth_settings.json
 cp config/settings.example.json config/settings.json
 
-export namespace="${NAMESPACE:-UNISWAPV2}"
+# config hash
+cd 'config';
+# run git rev-parse HEAD
+config_hash=$(git rev-parse HEAD);
+
+cd ..
+
+cd 'snapshotter/modules/computes';
+
+compute_hash=$(git rev-parse HEAD);
+
+export namespace_hash="${config_hash}-${compute_hash}";
+echo "Namespace hash: ${namespace_hash}";
+
+cd ../../../;
+
+export namespace="${namespace_hash}"
 export ipfs_url="${IPFS_URL:-/dns/ipfs/tcp/5001}"
 export ipfs_api_key="${IPFS_API_KEY:-}"
 export ipfs_api_secret="${IPFS_API_SECRET:-}"

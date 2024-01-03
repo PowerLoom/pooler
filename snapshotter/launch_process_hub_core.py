@@ -28,13 +28,13 @@ def main():
     # setup logging
     # Using bind to pass extra parameters to the logger, will show up in the {extra} field
     launcher_logger = logger.bind(
-        module='Powerloom|SnapshotterProcessHub|Core|Launcher',
+        module='SnapshotterProcessHub|Core|Launcher',
         namespace=settings.namespace,
         instance_id=settings.instance_id[:5],
     )
 
     init_exchanges_queues()
-    p_name = f'Powerloom|SnapshotterProcessHub|Core-{settings.instance_id[:5]}'
+    p_name = 'SnapshotterProcessHub|Core'
     core = ProcessHubCore(name=p_name)
     core.start()
     launcher_logger.debug('Launched {} with PID {}', p_name, core.pid)

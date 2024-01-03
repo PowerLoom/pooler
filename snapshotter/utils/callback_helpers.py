@@ -20,15 +20,15 @@ from redis import asyncio as aioredis
 
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import logger
+from snapshotter.utils.models.message_models import CalculateAggregateMessage
+from snapshotter.utils.models.message_models import DelegateWorkerRequestMessage
 from snapshotter.utils.models.message_models import EpochBase
-from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
-from snapshotter.utils.models.message_models import PowerloomDelegateWorkerRequestMessage
-from snapshotter.utils.models.message_models import PowerloomProjectTypeProcessingCompleteMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
+from snapshotter.utils.models.message_models import ProjectTypeProcessingCompleteMessage
+from snapshotter.utils.models.message_models import SnapshotProcessMessage
 from snapshotter.utils.rpc import RpcHelper
 
 # setup logger
-helper_logger = logger.bind(module='Powerloom|Callback|Helpers')
+helper_logger = logger.bind(module='Callback|Helpers')
 
 
 async def get_rabbitmq_robust_connection_async():
@@ -241,7 +241,7 @@ class GenericDelegateProcessor(ABC):
     @abstractmethod
     async def compute(
         self,
-        msg_obj: PowerloomDelegateWorkerRequestMessage,
+        msg_obj: DelegateWorkerRequestMessage,
         redis_conn: aioredis.Redis,
         rpc_helper: RpcHelper,
     ):
@@ -257,7 +257,7 @@ class GenericProcessor(ABC):
     @abstractmethod
     async def compute(
         self,
-        msg_obj: PowerloomSnapshotProcessMessage,
+        msg_obj: SnapshotProcessMessage,
         redis: aioredis.Redis,
         rpc_helper: RpcHelper,
         anchor_rpc_helper: RpcHelper,
@@ -277,8 +277,8 @@ class GenericProcessorAggregate(ABC):
     async def compute(
         self,
         msg_obj: Union[
-            PowerloomProjectTypeProcessingCompleteMessage,
-            PowerloomCalculateAggregateMessage,
+            ProjectTypeProcessingCompleteMessage,
+            CalculateAggregateMessage,
         ],
         redis: aioredis.Redis,
         rpc_helper: RpcHelper,

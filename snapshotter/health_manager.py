@@ -339,7 +339,7 @@ class HealthManager(multiprocessing.Process):
         initializing the worker, starting the RabbitMQ consumer, and running the event loop.
         """
         self._logger = logger.bind(
-            module=f'Powerloom|Callbacks|ProcessDistributor:{settings.namespace}-{settings.instance_id}',
+            module=f'HealthManager',
         )
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         resource.setrlimit(

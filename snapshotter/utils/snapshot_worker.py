@@ -18,9 +18,9 @@ from snapshotter.utils.models.data_models import SnapshotterIssue
 from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
-from snapshotter.utils.models.message_models import PowerloomProjectTypeProcessingCompleteMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessageLite
+from snapshotter.utils.models.message_models import ProjectTypeProcessingCompleteMessage
+from snapshotter.utils.models.message_models import SnapshotProcessMessage
+from snapshotter.utils.models.message_models import SnapshotSubmittedMessageLite
 from snapshotter.utils.redis.rate_limiter import load_rate_limiter_scripts
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import last_snapshot_processing_complete_timestamp_key
@@ -41,8 +41,8 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             name (str): The name of the worker.
             **kwargs: Additional keyword arguments to be passed to the AsyncWorker constructor.
         """
-        self._q = f'powerloom-backend-cb-snapshot:{settings.namespace}:{settings.instance_id}'
-        self._rmq_routing = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}:EpochReleased.*'
+        self._q = f'backend-cb-snapshot:{settings.namespace}:{settings.instance_id}'
+        self._rmq_routing = f'backend-callback:{settings.namespace}:{settings.instance_id}:EpochReleased.*'
         super(SnapshotAsyncWorker, self).__init__(name=name, **kwargs)
         self._project_calculation_mapping = {}
         self._task_types = []
@@ -73,12 +73,12 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 project_id = f'{task_type}:{data_source.lower()}:{settings.namespace}'
         return project_id
 
-    async def _process(self, msg_obj: PowerloomSnapshotProcessMessage, task_type: str):
+    async def _process(self, msg_obj: SnapshotProcessMessage, task_type: str):
         """
-        Processes the given PowerloomSnapshotProcessMessage object in bulk mode.
+        Processes the given SnapshotProcessMessage object in bulk mode.
 
         Args:
-            msg_obj (PowerloomSnapshotProcessMessage): The message object to process.
+            msg_obj (SnapshotProcessMessage): The message object to process.
             task_type (str): The type of task to perform.
 
         Raises:
@@ -192,11 +192,11 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 submitted_snapshots.append((project_id, snapshot_cid))
 
             # publish snapshot submitted event to event detector queue
-            processing_complete_message = PowerloomProjectTypeProcessingCompleteMessage(
+            processing_complete_message = ProjectTypeProcessingCompleteMessage(
                 epochId=msg_obj.epochId,
                 projectType=task_type,
                 snapshotsSubmitted=[
-                    PowerloomSnapshotSubmittedMessageLite(
+                    SnapshotSubmittedMessageLite(
                         snapshotCid=snapshot_cid,
                         projectId=project_id,
                     ) for project_id, snapshot_cid in submitted_snapshots
@@ -231,12 +231,12 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                     processing_complete_message, task_type, msg_obj.epochId,
                 )
 
-    async def _processor_task(self, msg_obj: PowerloomSnapshotProcessMessage, task_type: str):
+    async def _processor_task(self, msg_obj: SnapshotProcessMessage, task_type: str):
         """
-        Process a PowerloomSnapshotProcessMessage object for a given task type.
+        Process a SnapshotProcessMessage object for a given task type.
 
         Args:
-            msg_obj (PowerloomSnapshotProcessMessage): The message object to process.
+            msg_obj (SnapshotProcessMessage): The message object to process.
             task_type (str): The type of task to perform.
 
         Returns:
@@ -298,8 +298,8 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         self._logger.debug('task type: {}', task_type)
 
         try:
-            msg_obj: PowerloomSnapshotProcessMessage = (
-                PowerloomSnapshotProcessMessage.parse_raw(message.body)
+            msg_obj: SnapshotProcessMessage = (
+                SnapshotProcessMessage.parse_raw(message.body)
             )
         except ValidationError as e:
             self._logger.opt(exception=True).error(

@@ -110,14 +110,14 @@ class EventDetectorProcess(multiprocessing.Process):
         self._rabbitmq_queue = queue.Queue()
         self._shutdown_initiated = False
         self._logger = logger.bind(
-            module=f'{name}|{settings.namespace}-{settings.instance_id[:5]}',
+            module=name,
         )
 
         self._exchange = (
             f'{settings.rabbitmq.setup.event_detector.exchange}:{settings.namespace}'
         )
         self._routing_key_prefix = (
-            f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.'
+            f'event-detector:{settings.namespace}:{settings.instance_id}.'
         )
         self._aioredis_pool = None
         self._redis_conn = None

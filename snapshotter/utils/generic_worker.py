@@ -53,10 +53,10 @@ from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.data_models import UnfinalizedSnapshot
 from snapshotter.utils.models.message_models import AggregateBase
-from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessageLite
+from snapshotter.utils.models.message_models import CalculateAggregateMessage
+from snapshotter.utils.models.message_models import SnapshotProcessMessage
+from snapshotter.utils.models.message_models import SnapshotSubmittedMessage
+from snapshotter.utils.models.message_models import SnapshotSubmittedMessageLite
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import submitted_unfinalized_snapshot_cids
@@ -150,7 +150,7 @@ class GenericAsyncWorker(multiprocessing.Process):
 
         self.protocol_state_contract_address = settings.protocol_state.address
         self._event_detector_exchange = f'{settings.rabbitmq.setup.event_detector.exchange}:{settings.namespace}'
-        self._event_detector_routing_key_prefix = f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.'
+        self._event_detector_routing_key_prefix = f'event-detector:{settings.namespace}:{settings.instance_id}.'
         self._initialized = False
 
     def _signal_handler(self, signum, frame):
@@ -222,10 +222,10 @@ class GenericAsyncWorker(multiprocessing.Process):
             _ipfs_writer_client: AsyncIPFSClient,
             project_id: str,
             epoch: Union[
-                PowerloomSnapshotProcessMessage,
-                PowerloomSnapshotSubmittedMessage,
-                PowerloomSnapshotSubmittedMessageLite,
-                PowerloomCalculateAggregateMessage,
+                SnapshotProcessMessage,
+                SnapshotSubmittedMessage,
+                SnapshotSubmittedMessageLite,
+                CalculateAggregateMessage,
             ],
             snapshot: Union[BaseModel, AggregateBase],
             storage_flag: bool,
@@ -238,8 +238,8 @@ class GenericAsyncWorker(multiprocessing.Process):
             task_type (str): The type of task being committed.
             _ipfs_writer_client (AsyncIPFSClient): The IPFS client to use for uploading the snapshot.
             project_id (str): The ID of the project the snapshot belongs to.
-            epoch (Union[PowerloomSnapshotProcessMessage, PowerloomSnapshotSubmittedMessage,
-            PowerloomSnapshotSubmittedMessageLite, PowerloomCalculateAggregateMessage]): The epoch the snapshot belongs to.
+            epoch (Union[SnapshotProcessMessage, SnapshotSubmittedMessage,
+            SnapshotSubmittedMessageLite, CalculateAggregateMessage]): The epoch the snapshot belongs to.
             snapshot (Union[BaseModel, AggregateBase]): The snapshot to commit.
             storage_flag (bool): Whether to upload the snapshot to web3 storage.
 

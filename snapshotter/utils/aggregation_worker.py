@@ -21,9 +21,9 @@ from snapshotter.utils.models.data_models import SnapshotterIssue
 from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
-from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
-from snapshotter.utils.models.message_models import PowerloomProjectTypeProcessingCompleteMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessageLite
+from snapshotter.utils.models.message_models import CalculateAggregateMessage
+from snapshotter.utils.models.message_models import ProjectTypeProcessingCompleteMessage
+from snapshotter.utils.models.message_models import SnapshotSubmittedMessageLite
 from snapshotter.utils.models.settings_model import AggregateOn
 from snapshotter.utils.redis.rate_limiter import load_rate_limiter_scripts
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
@@ -42,8 +42,8 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             name (str): The name of the worker.
             **kwargs: Additional keyword arguments to be passed to the parent class constructor.
         """
-        self._q = f'powerloom-backend-cb-aggregate:{settings.namespace}:{settings.instance_id}'
-        self._rmq_routing = f'powerloom-backend-callback:{settings.namespace}'
+        self._q = f'backend-cb-aggregate:{settings.namespace}:{settings.instance_id}'
+        self._rmq_routing = f'backend-callback:{settings.namespace}'
         f':{settings.instance_id}:CalculateAggregate.*'
         super(AggregationAsyncWorker, self).__init__(name=name, **kwargs)
 
@@ -97,14 +97,14 @@ class AggregationAsyncWorker(GenericAsyncWorker):
 
     async def _processor_task(
         self,
-        msg_obj: Union[PowerloomProjectTypeProcessingCompleteMessage, PowerloomCalculateAggregateMessage],
+        msg_obj: Union[ProjectTypeProcessingCompleteMessage, CalculateAggregateMessage],
         task_type: str,
     ):
         """
         Process the given message object and task type.
 
         Args:
-            msg_obj (Union[PowerloomProjectTypeProcessingCompleteMessage, PowerloomCalculateAggregateMessage]):
+            msg_obj (Union[ProjectTypeProcessingCompleteMessage, CalculateAggregateMessage]):
                 The message object to be processed.
             task_type (str): The type of task to be performed.
 
@@ -124,7 +124,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             )
             return
 
-        if type(msg_obj) == PowerloomProjectTypeProcessingCompleteMessage:
+        if type(msg_obj) == ProjectTypeProcessingCompleteMessage:
             project_ids = []
             for submitted_snapshot in msg_obj.snapshotsSubmitted:
                 project_ids.append(self._gen_project_id(task_type, submitted_snapshot))
@@ -235,11 +235,11 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             )
 
             # publish snapshot submitted event to event detector queue
-            processing_complete_message = PowerloomProjectTypeProcessingCompleteMessage(
+            processing_complete_message = ProjectTypeProcessingCompleteMessage(
                 epochId=msg_obj.epochId,
                 projectType=task_type,
                 snapshotsSubmitted=[
-                    PowerloomSnapshotSubmittedMessageLite(
+                    SnapshotSubmittedMessageLite(
                         snapshotCid=snapshot_cid,
                         projectId=project_id,
                     ) for project_id, snapshot_cid in submitted_snapshots
@@ -297,7 +297,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         self._logger.debug('task type: {}', task_type)
         if task_type in self._single_project_types:
             try:
-                msg_obj: PowerloomProjectTypeProcessingCompleteMessage = PowerloomProjectTypeProcessingCompleteMessage.parse_raw(
+                msg_obj: ProjectTypeProcessingCompleteMessage = ProjectTypeProcessingCompleteMessage.parse_raw(
                     message.body,
                 )
             except ValidationError as e:
@@ -318,8 +318,8 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 return
         elif task_type in self._multi_project_types:
             try:
-                msg_obj: PowerloomCalculateAggregateMessage = (
-                    PowerloomCalculateAggregateMessage.parse_raw(message.body)
+                msg_obj: CalculateAggregateMessage = (
+                    CalculateAggregateMessage.parse_raw(message.body)
                 )
             except ValidationError as e:
                 self._logger.opt(exception=settings.logs.trace_enabled).error(

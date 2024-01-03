@@ -15,7 +15,7 @@ from snapshotter.settings.config import settings
 from snapshotter.utils.callback_helpers import send_failure_notifications_async
 from snapshotter.utils.generic_worker import GenericAsyncWorker
 from snapshotter.utils.models.data_models import DelegateTaskProcessorIssue
-from snapshotter.utils.models.message_models import PowerloomDelegateWorkerRequestMessage
+from snapshotter.utils.models.message_models import DelegateWorkerRequestMessage
 from snapshotter.utils.redis.rate_limiter import load_rate_limiter_scripts
 
 
@@ -40,12 +40,12 @@ class DelegateAsyncWorker(GenericAsyncWorker):
 
         self._q, self._rmq_routing = get_delegate_worker_request_queue_routing_key()
 
-    async def _processor_task(self, msg_obj: PowerloomDelegateWorkerRequestMessage):
+    async def _processor_task(self, msg_obj: DelegateWorkerRequestMessage):
         """
         Process a delegate task for the given message object.
 
         Args:
-            msg_obj (PowerloomDelegateWorkerRequestMessage): The message object containing the task to process.
+            msg_obj (DelegateWorkerRequestMessage): The message object containing the task to process.
 
         Returns:
             None
@@ -105,14 +105,14 @@ class DelegateAsyncWorker(GenericAsyncWorker):
     # TODO: send to delegate worker response queue
     async def _send_delegate_worker_response_queue(
         self,
-        request_msg: PowerloomDelegateWorkerRequestMessage,
+        request_msg: DelegateWorkerRequestMessage,
         response_msg: BaseModel,
     ):
         """
         Sends a response message to the delegate worker response queue.
 
         Args:
-            request_msg (PowerloomDelegateWorkerRequestMessage): The request message that triggered the response.
+            request_msg (DelegateWorkerRequestMessage): The request message that triggered the response.
             response_msg (BaseModel): The response message to send.
 
         Raises:
@@ -165,8 +165,8 @@ class DelegateAsyncWorker(GenericAsyncWorker):
             await self.init_worker()
 
         try:
-            msg_obj: PowerloomDelegateWorkerRequestMessage = (
-                PowerloomDelegateWorkerRequestMessage.parse_raw(message.body)
+            msg_obj: DelegateWorkerRequestMessage = (
+                DelegateWorkerRequestMessage.parse_raw(message.body)
             )
             task_type = msg_obj.task_type
             if task_type not in self._task_types:

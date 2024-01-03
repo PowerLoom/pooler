@@ -43,54 +43,54 @@ class EpochBase(BaseModel):
     end: int
 
 
-class PowerloomSnapshotProcessMessage(EpochBase):
+class SnapshotProcessMessage(EpochBase):
     genesis: Optional[bool] = False
 
 
-class PowerloomSnapshotFinalizedMessage(BaseModel):
+class SnapshotFinalizedMessage(BaseModel):
     epochId: int
     projectId: str
     snapshotCid: str
     timestamp: int
 
 
-class PowerloomSnapshotSubmittedMessage(BaseModel):
+class SnapshotSubmittedMessage(BaseModel):
     snapshotCid: str
     epochId: int
     projectId: str
     timestamp: int
 
 
-class PowerloomSnapshotSubmittedMessageLite(BaseModel):
+class SnapshotSubmittedMessageLite(BaseModel):
     snapshotCid: str
     projectId: str
 
 
-class PowerloomProjectTypeProcessingCompleteMessage(BaseModel):
+class ProjectTypeProcessingCompleteMessage(BaseModel):
     epochId: int
     projectType: str
-    snapshotsSubmitted: List[PowerloomSnapshotSubmittedMessageLite]
+    snapshotsSubmitted: List[SnapshotSubmittedMessageLite]
 
 
-class PowerloomDelegateWorkerRequestMessage(BaseModel):
+class DelegateWorkerRequestMessage(BaseModel):
     epochId: int
     requestId: int
     task_type: str
     extra: Optional[Dict[Any, Any]] = dict()
 
 
-class PowerloomDelegateWorkerResponseMessage(BaseModel):
+class DelegateWorkerResponseMessage(BaseModel):
     epochId: int
     requestId: int
 
 
-class PowerloomDelegateTxReceiptWorkerResponseMessage(PowerloomDelegateWorkerResponseMessage):
+class DelegateTxReceiptWorkerResponseMessage(DelegateWorkerResponseMessage):
     txHash: str
     txReceipt: Dict[Any, Any]
 
 
-class PowerloomCalculateAggregateMessage(BaseModel):
-    messages: List[PowerloomProjectTypeProcessingCompleteMessage]
+class CalculateAggregateMessage(BaseModel):
+    messages: List[ProjectTypeProcessingCompleteMessage]
     epochId: int
     timestamp: int
 

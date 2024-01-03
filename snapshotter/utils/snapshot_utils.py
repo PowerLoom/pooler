@@ -13,7 +13,7 @@ from snapshotter.utils.rpc import get_contract_abi_dict
 from snapshotter.utils.rpc import RpcHelper
 
 
-snapshot_util_logger = logger.bind(module='Powerloom|Snapshotter|SnapshotUtilLogger')
+snapshot_util_logger = logger.bind(module='Snapshotter|SnapshotUtilLogger')
 
 # TODO: Move this to preloader config
 DAI_WETH_PAIR = '0x60594a405d53811d3BC4766596EFD80fd545A270'
@@ -32,21 +32,25 @@ pair_contract_abi = read_json_file(
     settings.pair_contract_abi,
     snapshot_util_logger,
 )
+
+
 def sqrtPriceX96ToTokenPricesNoDecimals(sqrtPriceX96):
-    price0 = ((sqrtPriceX96 / (2**96))** 2)
+    price0 = ((sqrtPriceX96 / (2**96)) ** 2)
     price1 = 1 / price0
     return price0, price1
+
 
 def sqrtPriceX96ToTokenPrices(sqrtPriceX96, token0_decimals, token1_decimals):
     # https://blog.uniswap.org/uniswap-v3-math-primer
 
-    price0 = ((sqrtPriceX96 / (2**96))** 2) / (10 ** token1_decimals / 10 ** token0_decimals)
+    price0 = ((sqrtPriceX96 / (2**96)) ** 2) / (10 ** token1_decimals / 10 ** token0_decimals)
     price1 = 1 / price0
 
     price0 = round(price0, token0_decimals)
     price1 = round(price1, token1_decimals)
 
     return price0, price1
+
 
 async def get_eth_price_usd(
     from_block,
@@ -91,7 +95,6 @@ async def get_eth_price_usd(
             return price_dict
 
         pair_abi_dict = get_contract_abi_dict(pair_contract_abi)
-
 
         # Get the current sqrtPriceX96 value from the pool
         # sqrtPriceX96 = pair_contract.functions.slot0().call()[0]
@@ -156,7 +159,6 @@ async def get_eth_price_usd(
 
             eth_price_usd = (dai_eth_price + usdc_eth_price_ + usdt_eth_price_) / 3
 
-
             eth_price_usd_dict[block_num] = float(eth_price_usd)
             redis_cache_mapping[
                 json.dumps(
@@ -164,7 +166,6 @@ async def get_eth_price_usd(
                 )
             ] = int(block_num)
             block_count += 1
-
 
         # cache price at height
         source_chain_epoch_size = int(
@@ -189,6 +190,7 @@ async def get_eth_price_usd(
             f'RPC ERROR failed to fetch ETH price, error_msg:{err}',
         )
         raise err
+
 
 async def get_block_details_in_block_range(
     from_block,

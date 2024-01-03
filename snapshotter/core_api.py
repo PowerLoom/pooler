@@ -49,7 +49,7 @@ REDIS_CONN_CONF = {
 }
 
 # setup logging
-rest_logger = logger.bind(module='Powerloom|CoreAPI')
+rest_logger = logger.bind(module='CoreAPI')
 
 
 protocol_state_contract_abi = read_json_file(
