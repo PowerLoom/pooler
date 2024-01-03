@@ -177,22 +177,6 @@ def send_failure_notifications_sync(client: SyncClient, message: BaseModel):
         sync_notification_callback_result_handler(f)
 
 
-class GenericProcessorSnapshot(ABC):
-    __metaclass__ = ABCMeta
-
-    def __init__(self):
-        pass
-
-    @abstractmethod
-    async def compute(
-        self,
-        epoch: PowerloomSnapshotProcessMessage,
-        redis: aioredis.Redis,
-        rpc_helper: RpcHelper,
-    ):
-        pass
-
-
 class GenericPreloader(ABC):
     __metaclass__ = ABCMeta
 
@@ -264,6 +248,25 @@ class GenericDelegateProcessor(ABC):
         pass
 
 
+class GenericProcessor(ABC):
+    __metaclass__ = ABCMeta
+
+    def __init__(self):
+        pass
+
+    @abstractmethod
+    async def compute(
+        self,
+        msg_obj: PowerloomSnapshotProcessMessage,
+        redis: aioredis.Redis,
+        rpc_helper: RpcHelper,
+        anchor_rpc_helper: RpcHelper,
+        ipfs_reader: AsyncIPFSClient,
+        protocol_state_contract,
+    ):
+        pass
+
+
 class GenericProcessorAggregate(ABC):
     __metaclass__ = ABCMeta
 
@@ -273,7 +276,10 @@ class GenericProcessorAggregate(ABC):
     @abstractmethod
     async def compute(
         self,
-        msg_obj: Union[PowerloomProjectTypeProcessingCompleteMessage, PowerloomCalculateAggregateMessage],
+        msg_obj: Union[
+            PowerloomProjectTypeProcessingCompleteMessage,
+            PowerloomCalculateAggregateMessage,
+        ],
         redis: aioredis.Redis,
         rpc_helper: RpcHelper,
         anchor_rpc_helper: RpcHelper,

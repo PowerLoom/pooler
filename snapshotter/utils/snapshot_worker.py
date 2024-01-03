@@ -91,9 +91,12 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             task_processor = self._project_calculation_mapping[task_type]
 
             snapshots = await task_processor.compute(
-                epoch=msg_obj,
-                redis_conn=self._redis_conn,
+                msg_obj=msg_obj,
+                redis=self._redis_conn,
                 rpc_helper=self._rpc_helper,
+                anchor_rpc_helper=self._anchor_rpc_helper,
+                ipfs_reader=self._ipfs_reader_client,
+                protocol_state_contract=self._protocol_state_contract,
             )
 
             if not snapshots:
