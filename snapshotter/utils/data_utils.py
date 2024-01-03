@@ -148,6 +148,23 @@ async def get_project_last_finalized_cid_and_epoch(redis_conn: aioredis.Redis, s
     Returns:
         int: The last epoch for the given project ID.
     """
+    project_last_finalized = await redis_conn.zrevrangebyscore(
+        project_finalized_data_zset(project_id),
+        max='+inf',
+        min='-inf',
+        withscores=True,
+        start=0,
+        num=1,
+    )
+
+    if project_last_finalized:
+        project_last_finalized_cid, project_last_finalized_epoch = project_last_finalized[0]
+        project_last_finalized_epoch = int(project_last_finalized_epoch)
+        project_last_finalized_cid = project_last_finalized_cid.decode('utf-8')
+
+        if project_last_finalized_cid and 'null' not in project_last_finalized_cid:
+            return project_last_finalized_cid, project_last_finalized_epoch
+
     tasks = [
         state_contract_obj.functions.lastFinalizedSnapshot(project_id),
     ]
@@ -160,7 +177,10 @@ async def get_project_last_finalized_cid_and_epoch(redis_conn: aioredis.Redis, s
         redis_conn, state_contract_obj, rpc_helper, last_finalized_epoch, project_id,
     )
 
-    return last_finalized_cid, int(last_finalized_epoch)
+    if last_finalized_cid and 'null' not in last_finalized_cid:
+        return last_finalized_cid, int(last_finalized_epoch)
+    else:
+        return '', 0
 
 
 # TODO: warmup cache to reduce RPC calls overhead
