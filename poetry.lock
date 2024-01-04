@@ -2182,6 +2182,16 @@ files = [
 ]
 
 [[package]]
+name = "safe-pysha3"
+version = "1.0.4"
+description = "SHA-3 (Keccak) for Python 3.9 - 3.11"
+optional = false
+python-versions = "*"
+files = [
+    {file = "safe-pysha3-1.0.4.tar.gz", hash = "sha256:e429146b1edd198b2ca934a2046a65656c5d31b0ec894bbd6055127f4deaff17"},
+]
+
+[[package]]
 name = "setuptools"
 version = "69.0.3"
 description = "Easily download, build, install, upgrade, and uninstall Python packages"
@@ -2737,4 +2747,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "f99799b31747317a5b7beb3755b6221e07dfe47bc066a54ca8a4a0c38f4152a6"
+content-hash = "a3e579aeea83374ea8acb8a58721fa7cc4954e67f08817ecde533fed744dfc3b"

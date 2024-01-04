@@ -34,7 +34,7 @@ aio-pika = "^9.1.4"
 fastapi-pagination = "^0.12.12"
 eip712-structs = "^1.1.0"
 coincurve = "^18.0.0"
-pysha3 = "^1.0.2"
+safe-pysha3 = "^1.0.4"
 
 
 [build-system]
