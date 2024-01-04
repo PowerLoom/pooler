@@ -414,7 +414,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
 
         self._protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
-            address=Web3.toChecksumAddress(
+            address=Web3.to_checksum_address(
                 self.protocol_state_contract_address,
             ),
             abi=read_json_file(
@@ -423,7 +423,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             ),
         )
 
-        self._anchor_chain_id = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.chainId
+        self._anchor_chain_id = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.chain_id
         self._keccak_hash = lambda x: sha3.keccak_256(x).digest()
         self._domain_separator = make_domain(
             name='PowerloomProtocolContract', version='0.1', chainId=self._anchor_chain_id,
@@ -432,7 +432,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._signer_private_key = PrivateKey.from_hex(settings.signer_private_key)
 
     def generate_signature(self, snapshot_cid, epoch_id, project_id):
-        current_block = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.blockNumber
+        current_block = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.block_number
 
         deadline = current_block + settings.protocol_state.deadline_buffer
         request = Request(

@@ -37,8 +37,6 @@ from snapshotter.utils.models.data_models import SnapshotterPing
 from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.message_models import ProcessHubCommand
 from snapshotter.utils.rabbitmq_helpers import RabbitmqSelectLoopInteractor
-from snapshotter.utils.redis.redis_conn import provide_async_redis_conn
-from snapshotter.utils.redis.redis_conn import provide_redis_conn
 from snapshotter.utils.redis.redis_conn import provide_redis_conn_repsawning_thread
 from snapshotter.utils.redis.redis_conn import REDIS_CONN_CONF
 from snapshotter.utils.redis.redis_keys import process_hub_core_start_timestamp

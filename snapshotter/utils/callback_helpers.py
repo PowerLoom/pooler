@@ -3,7 +3,6 @@ import functools
 from abc import ABC
 from abc import ABCMeta
 from abc import abstractmethod
-from abc import abstractproperty
 from typing import Any
 from typing import Dict
 from typing import List

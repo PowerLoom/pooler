@@ -1,5 +1,4 @@
 import asyncio
-import hashlib
 import importlib
 import json
 import time
@@ -14,7 +13,6 @@ from pydantic import ValidationError
 from snapshotter.settings.config import aggregator_config
 from snapshotter.settings.config import projects_config
 from snapshotter.settings.config import settings
-from snapshotter.utils import event_log_decoder
 from snapshotter.utils.callback_helpers import send_failure_notifications_async
 from snapshotter.utils.generic_worker import GenericAsyncWorker
 from snapshotter.utils.models.data_models import SnapshotterIssue

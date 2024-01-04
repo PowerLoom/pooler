@@ -131,7 +131,7 @@ class EventDetectorProcess(multiprocessing.Process):
         )
         self.contract_address = settings.protocol_state.address
         self.contract = self.rpc_helper.get_current_node()['web3_client'].eth.contract(
-            address=Web3.toChecksumAddress(
+            address=Web3.to_checksum_address(
                 self.contract_address,
             ),
             abi=self.contract_abi,

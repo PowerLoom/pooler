@@ -1,6 +1,5 @@
 import asyncio
 import json
-import os
 from typing import List
 
 import tenacity
@@ -11,10 +10,7 @@ from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
 
-from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import logger
-from snapshotter.utils.file_utils import read_json_file
-from snapshotter.utils.file_utils import write_json_file
 from snapshotter.utils.models.data_models import ProjectStatus
 from snapshotter.utils.models.data_models import SnapshotterIncorrectSnapshotSubmission
 from snapshotter.utils.models.data_models import SnapshotterMissedSnapshotSubmission

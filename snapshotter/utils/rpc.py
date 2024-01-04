@@ -18,11 +18,12 @@ from tenacity import retry
 from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
+from web3 import AsyncHTTPProvider
+from web3 import AsyncWeb3
 from web3 import Web3
 from web3._utils.abi import map_abi_data
 from web3._utils.events import get_event_data
 from web3._utils.normalizers import BASE_RETURN_NORMALIZERS
-from web3.eth import AsyncEth
 from web3.types import TxParams
 from web3.types import Wei
 
@@ -178,11 +179,7 @@ class RpcHelper(object):
         for node in self._nodes:
             if node['web3_client_async'] is not None:
                 continue
-            node['web3_client_async'] = Web3(
-                Web3.AsyncHTTPProvider(node['rpc_url']),
-                modules={'eth': (AsyncEth,)},
-                middlewares=[],
-            )
+            node['web3_client_async'] = AsyncWeb3(AsyncHTTPProvider(node['rpc_url']))
 
     async def init(self, redis_conn):
         """
