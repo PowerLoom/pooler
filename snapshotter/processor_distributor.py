@@ -47,17 +47,19 @@ from snapshotter.utils.models.data_models import SnapshottersUpdatedEvent
 from snapshotter.utils.models.message_models import CalculateAggregateMessage
 from snapshotter.utils.models.message_models import EpochBase
 from snapshotter.utils.models.message_models import ProjectTypeProcessingCompleteMessage
+from snapshotter.utils.models.message_models import SlotsPerDayUpdatedMessage
 from snapshotter.utils.models.message_models import SnapshotFinalizedMessage
 from snapshotter.utils.models.message_models import SnapshotProcessMessage
 from snapshotter.utils.models.settings_model import AggregationConfigMulti
 from snapshotter.utils.models.settings_model import AggregationConfigSingle
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
-from snapshotter.utils.redis.redis_keys import active_status_key
 from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import project_finalized_data_zset
 from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_key
 from snapshotter.utils.redis.redis_keys import snapshot_submission_window_key
+from snapshotter.utils.redis.redis_keys import snapshotter_active_status_key
+from snapshotter.utils.redis.redis_keys import snapshotter_enabled_status_key
 from snapshotter.utils.rpc import RpcHelper
 
 
@@ -612,6 +614,26 @@ class ProcessorDistributor(multiprocessing.Process):
             tasks.append(self._redis_conn.delete(*delete_keys))
         await asyncio.gather(*tasks, return_exceptions=True)
 
+    def _is_allowed_for_slot(self, epoch: EpochBase):
+        """
+        Checks if the snapshotter should proceed with snapshotting for the given epoch.
+
+        Args:
+            epoch (EpochBase): The epoch to check.
+
+        Returns:
+            bool: True if the epoch falls in the snapshotter's slot, False otherwise.
+        """
+        N = self._slots_per_day
+        epochs_in_a_day = (self._epoch_size * self._source_chain_block_time) // 86400
+
+        snapshotter_addr = settings.instance_id
+        slod_id = hash(int(snapshotter_addr.lower(), 16)) % N
+
+        if (epoch.epochId % epochs_in_a_day) // (epochs_in_a_day // N) == slod_id:
+            return True
+        return False
+
     async def _on_rabbitmq_message(self, message: IncomingMessage):
         """
         Callback function to handle incoming RabbitMQ messages.
@@ -633,24 +655,32 @@ class ProcessorDistributor(multiprocessing.Process):
         )
 
         if message_type == 'EpochReleased':
-            try:
-                _: EpochBase = EpochBase.parse_raw(message.body)
-            except:
-                pass
-            else:
-                await self._redis_conn.set(
-                    epoch_id_epoch_released_key(_.epochId),
-                    int(time.time()),
-                )
-                asyncio.ensure_future(self._cleanup_older_epoch_status(_.epochId))
+            epoch: EpochBase = EpochBase.parse_raw(message.body)
+            await self._redis_conn.set(
+                epoch_id_epoch_released_key(epoch.epochId),
+                int(time.time()),
+            )
+            asyncio.ensure_future(self._cleanup_older_epoch_status(epoch.epochId))
 
-            _is_snapshotter_active = await self._redis_conn.get(active_status_key)
+            _is_snapshotter_enabled = await self._redis_conn.get(snapshotter_enabled_status_key)
+            if _is_snapshotter_enabled:
+                _is_snapshotter_enabled = int(_is_snapshotter_enabled)
+            else:
+                _is_snapshotter_enabled = 0
+
+            _is_snapshotter_active = await self._redis_conn.get(snapshotter_active_status_key)
             if _is_snapshotter_active:
-                active_status = bool(int(_is_snapshotter_active))
-                if not active_status:
-                    self._logger.error('System is not active, ignoring released Epoch')
-                else:
+                _is_snapshotter_active = int(_is_snapshotter_active)
+            else:
+                _is_snapshotter_active = 0
+
+            if _is_snapshotter_enabled and _is_snapshotter_active:
+                if self._is_allowed_for_slot(epoch):
                     await self._epoch_release_processor(message)
+                else:
+                    self._logger.info('Epoch {} not in snapshotter slot, ignoring', epoch.epochId)
+            else:
+                self._logger.error('System is not active, ignoring released Epoch')
 
         elif message_type == 'ProjectTypeProcessingComplete':
             await self._distribute_callbacks_aggregate(
@@ -667,9 +697,28 @@ class ProcessorDistributor(multiprocessing.Process):
             if msg_cast.snapshotterAddress == to_checksum_address(settings.instance_id):
                 if self._redis_conn:
                     await self._redis_conn.set(
-                        active_status_key,
+                        snapshotter_enabled_status_key,
                         int(msg_cast.allowed),
                     )
+        elif message_type == 'DayStartedEvent':
+            self._logger.info('Day started event received, setting active status to True')
+            if self._redis_conn:
+                await self._redis_conn.set(
+                    snapshotter_active_status_key,
+                    1,
+                )
+        elif message_type == 'DailyTaskCompletedEvent':
+            self._logger.info('Daily task completed event received, setting active status to False')
+            if self._redis_conn:
+                await self._redis_conn.set(
+                    snapshotter_active_status_key,
+                    0,
+                )
+        elif message_type == 'SlotsPerDayUpdated':
+            msg_cast = SlotsPerDayUpdatedMessage.parse_raw(message.body)
+            self._slots_per_day = msg_cast.slotsPerDay
+            self._logger.info('Slots per day updated to {}', self._slots_per_day)
+
         else:
             self._logger.error(
                 (
@@ -712,7 +761,7 @@ class ProcessorDistributor(multiprocessing.Process):
         initializing the worker, starting the RabbitMQ consumer, and running the event loop.
         """
         self._logger = logger.bind(
-            module=f'ProcessDistributor',
+            module='ProcessDistributor',
         )
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         resource.setrlimit(
@@ -753,6 +802,17 @@ class ProcessorDistributor(multiprocessing.Process):
             )
         else:
             self._epoch_size = epoch_size
+
+        try:
+            slots_per_day = self._protocol_state_contract.functions.SLOTS_PER_DAY().call()
+        except Exception as e:
+            self._logger.exception(
+                'Exception in querying protocol state for epoch size: {}',
+                e,
+            )
+        else:
+            self._slots_per_day = slots_per_day
+
         ev_loop = asyncio.get_event_loop()
         ev_loop.run_until_complete(self.init_worker())
 
