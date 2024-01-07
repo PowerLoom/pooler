@@ -1,28 +1,17 @@
-from enum import Enum
 from typing import List
 from typing import Optional
-from typing import Union
 
 from ipfs_client.settings.data_models import IPFSConfig
 from pydantic import BaseModel
-from pydantic import Field
-
-
-class Auth(BaseModel):
-    enabled: bool = Field(True, description='Whether auth is enabled or not')
-    header_key: str = Field('X-API-KEY', description='Key used for auth')
 
 
 class CoreAPI(BaseModel):
     host: str
     port: int
-    auth: Auth
-    public_rate_limit: str
 
 
 class RPCNodeConfig(BaseModel):
     url: str
-    rate_limit: str
 
 
 class ConnectionLimits(BaseModel):
@@ -55,50 +44,9 @@ class Timeouts(BaseModel):
     connection_init: int
 
 
-class QueueConfig(BaseModel):
-    num_instances: int
-
-
-class RabbitMQConfig(BaseModel):
-    exchange: str
-
-
-class RabbitMQSetup(BaseModel):
-    core: RabbitMQConfig
-    callbacks: RabbitMQConfig
-    event_detector: RabbitMQConfig
-    delegated_worker: RabbitMQConfig
-
-
-class RabbitMQ(BaseModel):
-    user: str
-    password: str
-    host: str
-    port: int
-    setup: RabbitMQSetup
-
-
 class ReportingConfig(BaseModel):
     slack_url: str
     service_url: str
-
-
-class Redis(BaseModel):
-    host: str
-    port: int
-    db: int
-    password: Union[str, None] = None
-    ssl: bool = False
-    cluster_mode: bool = False
-
-
-class RedisReader(BaseModel):
-    host: str
-    port: int
-    db: int
-    password: Union[str, None] = None
-    ssl: bool = False
-    cluster_mode: bool = False
 
 
 class Logs(BaseModel):
@@ -110,12 +58,6 @@ class EventContract(BaseModel):
     address: str
     abi: str
     deadline_buffer: int
-
-
-class CallbackWorkerConfig(BaseModel):
-    num_snapshot_workers: int
-    num_aggregation_workers: int
-    num_delegate_workers: int
 
 
 class IPFSWriterRateLimit(BaseModel):
@@ -138,7 +80,6 @@ class Web3Storage(BaseModel):
     timeout: int
     max_idle_conns: int
     idle_conn_timeout: int
-    # rate_limit: Optional[IPFSWriterRateLimit] = None
 
 
 class Relayer(BaseModel):
@@ -153,18 +94,13 @@ class Settings(BaseModel):
     signer_private_key: str
     rpc: RPCConfigFull
     rlimit: RLimit
-    rabbitmq: RabbitMQ
     reporting: ReportingConfig
-    redis: Redis
-    redis_reader: RedisReader
     logs: Logs
     projects_config_path: str
     preloader_config_path: str
     pair_contract_abi: str
-    aggregator_config_path: str
     protocol_state: EventContract
     relayer: Relayer
-    callback_worker_config: CallbackWorkerConfig
     ipfs: IPFSConfig
     web3storage: Web3Storage
     anchor_chain_rpc: RPCConfigBase
@@ -186,40 +122,7 @@ class ProjectsConfig(BaseModel):
     config: List[ProjectConfig]
 
 
-class AggregateFilterConfig(BaseModel):
-    project_type: str
-
-
-class AggregateOn(str, Enum):
-    single_project = 'SingleProject'
-    multi_project = 'MultiProject'
-
-
-class AggregationConfigSingle(BaseModel):
-    project_type: str
-    aggregate_on: AggregateOn
-    filters: AggregateFilterConfig
-    processor: ProcessorConfig
-
-
-class AggregationConfigMulti(BaseModel):
-    project_type: str
-    aggregate_on: AggregateOn
-    project_types_to_wait_for: List[str]
-    processor: ProcessorConfig
-
-
-class AggregatorConfig(BaseModel):
-    config: List[Union[AggregationConfigSingle, AggregationConfigMulti]]
-
-
 class Preloader(BaseModel):
-    task_type: str
-    module: str
-    class_name: str
-
-
-class DelegatedTask(BaseModel):
     task_type: str
     module: str
     class_name: str
@@ -227,5 +130,3 @@ class DelegatedTask(BaseModel):
 
 class PreloaderConfig(BaseModel):
     preloaders: List[Preloader]
-    delegate_tasks: List[DelegatedTask]
-    timeout: int

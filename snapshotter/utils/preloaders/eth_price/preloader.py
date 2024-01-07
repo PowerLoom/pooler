@@ -1,5 +1,3 @@
-from redis import asyncio as aioredis
-
 from snapshotter.utils.callback_helpers import GenericPreloader
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.models.message_models import EpochBase
@@ -14,7 +12,6 @@ class EthPricePreloader(GenericPreloader):
     async def compute(
             self,
             epoch: EpochBase,
-            redis_conn: aioredis.Redis,
             rpc_helper: RpcHelper,
 
     ):
@@ -23,16 +20,14 @@ class EthPricePreloader(GenericPreloader):
         # get eth price for all blocks in range
         # return dict of block_height: eth_price
         try:
-            await get_eth_price_usd(
+            eth_price_dict = await get_eth_price_usd(
                 from_block=min_chain_height,
                 to_block=max_chain_height,
-                redis_conn=redis_conn,
                 rpc_helper=rpc_helper,
             )
+            return eth_price_dict
         except Exception as e:
             self._logger.error(f'Error in Eth Price preloader: {e}')
-        finally:
-            await redis_conn.close()
 
     async def cleanup(self):
         pass

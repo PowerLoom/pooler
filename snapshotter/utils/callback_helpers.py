@@ -3,73 +3,21 @@ import functools
 from abc import ABC
 from abc import ABCMeta
 from abc import abstractmethod
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Union
 from urllib.parse import urljoin
 
-import aio_pika
-import loguru._logger
 from httpx import AsyncClient
 from httpx import Client as SyncClient
 from ipfs_client.main import AsyncIPFSClient
 from pydantic import BaseModel
-from redis import asyncio as aioredis
 
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import logger
-from snapshotter.utils.models.message_models import CalculateAggregateMessage
-from snapshotter.utils.models.message_models import DelegateWorkerRequestMessage
 from snapshotter.utils.models.message_models import EpochBase
-from snapshotter.utils.models.message_models import ProjectTypeProcessingCompleteMessage
 from snapshotter.utils.models.message_models import SnapshotProcessMessage
 from snapshotter.utils.rpc import RpcHelper
 
 # setup logger
 helper_logger = logger.bind(module='Callback|Helpers')
-
-
-async def get_rabbitmq_robust_connection_async():
-    """
-    Returns a robust connection to RabbitMQ server using the settings specified in the configuration file.
-    """
-    return await aio_pika.connect_robust(
-        host=settings.rabbitmq.host,
-        port=settings.rabbitmq.port,
-        virtual_host='/',
-        login=settings.rabbitmq.user,
-        password=settings.rabbitmq.password,
-    )
-
-
-async def get_rabbitmq_basic_connection_async():
-    """
-    Returns an async connection to RabbitMQ using the settings specified in the config file.
-
-    :return: An async connection to RabbitMQ.
-    """
-    return await aio_pika.connect(
-        host=settings.rabbitmq.host,
-        port=settings.rabbitmq.port,
-        virtual_host='/',
-        login=settings.rabbitmq.user,
-        password=settings.rabbitmq.password,
-    )
-
-
-async def get_rabbitmq_channel(connection_pool) -> aio_pika.Channel:
-    """
-    Acquires a connection from the connection pool and returns a channel object for RabbitMQ communication.
-
-    Args:
-        connection_pool: An instance of `aio_pika.pool.Pool`.
-
-    Returns:
-        An instance of `aio_pika.Channel`.
-    """
-    async with connection_pool.acquire() as connection:
-        return await connection.channel()
 
 
 def misc_notification_callback_result_handler(fut: asyncio.Future):
@@ -186,64 +134,12 @@ class GenericPreloader(ABC):
     async def compute(
         self,
         epoch: EpochBase,
-        redis_conn: aioredis.Redis,
         rpc_helper: RpcHelper,
     ):
         pass
 
     @abstractmethod
     async def cleanup(self):
-        pass
-
-
-class GenericDelegatorPreloader(GenericPreloader):
-    _epoch: EpochBase
-    _channel: aio_pika.abc.AbstractChannel
-    _exchange: aio_pika.abc.AbstractExchange
-    _q_obj: aio_pika.abc.AbstractQueue
-    _consumer_tag: str
-    _redis_conn: aioredis.Redis
-    _task_type: str
-    _epoch_id: int
-    _preload_successful_event: asyncio.Event
-    _awaited_delegated_response_ids: set
-    _collected_response_objects: Dict[int, Dict[str, Dict[Any, Any]]]
-    _logger: loguru._logger.Logger
-    _request_id_query_obj_map: Dict[int, Any]
-
-    @abstractmethod
-    async def _on_delegated_responses_complete(self):
-        pass
-
-    @abstractmethod
-    async def _on_filter_worker_response_message(
-        self,
-        message: aio_pika.abc.AbstractIncomingMessage,
-    ):
-        pass
-
-    @abstractmethod
-    async def _handle_filter_worker_response_message(self, message_body: bytes):
-        pass
-
-    @abstractmethod
-    async def _periodic_awaited_responses_checker(self):
-        pass
-
-
-class GenericDelegateProcessor(ABC):
-    __metaclass__ = ABCMeta
-
-    def __init__(self):
-        pass
-
-    @abstractmethod
-    async def compute(
-        self,
-        msg_obj: DelegateWorkerRequestMessage,
-        redis_conn: aioredis.Redis,
-        rpc_helper: RpcHelper,
-    ):
         pass
 
 
@@ -257,33 +153,9 @@ class GenericProcessor(ABC):
     async def compute(
         self,
         msg_obj: SnapshotProcessMessage,
-        redis: aioredis.Redis,
         rpc_helper: RpcHelper,
         anchor_rpc_helper: RpcHelper,
         ipfs_reader: AsyncIPFSClient,
         protocol_state_contract,
-    ):
-        pass
-
-
-class GenericProcessorAggregate(ABC):
-    __metaclass__ = ABCMeta
-
-    def __init__(self):
-        pass
-
-    @abstractmethod
-    async def compute(
-        self,
-        msg_obj: Union[
-            ProjectTypeProcessingCompleteMessage,
-            CalculateAggregateMessage,
-        ],
-        redis: aioredis.Redis,
-        rpc_helper: RpcHelper,
-        anchor_rpc_helper: RpcHelper,
-        ipfs_reader: AsyncIPFSClient,
-        protocol_state_contract,
-        project_ids: List[str],
     ):
         pass

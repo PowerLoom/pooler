@@ -1,4 +1,3 @@
-from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -75,35 +74,8 @@ class ProjectTypeProcessingCompleteMessage(BaseModel):
     snapshotsSubmitted: List[SnapshotSubmittedMessageLite]
 
 
-class DelegateWorkerRequestMessage(BaseModel):
-    epochId: int
-    requestId: int
-    task_type: str
-    extra: Optional[Dict[Any, Any]] = dict()
-
-
-class DelegateWorkerResponseMessage(BaseModel):
-    epochId: int
-    requestId: int
-
-
-class DelegateTxReceiptWorkerResponseMessage(DelegateWorkerResponseMessage):
-    txHash: str
-    txReceipt: Dict[Any, Any]
-
-
-class CalculateAggregateMessage(BaseModel):
-    messages: List[ProjectTypeProcessingCompleteMessage]
-    epochId: int
-    timestamp: int
-
-
 class ProcessHubCommand(BaseModel):
     command: str
     pid: Optional[int] = None
     proc_str_id: Optional[str] = None
     init_kwargs: Optional[Dict] = dict()
-
-
-class AggregateBase(BaseModel):
-    epochId: int

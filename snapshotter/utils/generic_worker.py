@@ -3,11 +3,6 @@ import json
 import multiprocessing
 import resource
 import time
-from functools import partial
-from signal import SIGINT
-from signal import signal
-from signal import SIGQUIT
-from signal import SIGTERM
 from typing import Dict
 from typing import Union
 from urllib.parse import urljoin
@@ -16,9 +11,6 @@ from uuid import uuid4
 import httpx
 import sha3
 import tenacity
-from aio_pika import IncomingMessage
-from aio_pika import Message
-from aio_pika.pool import Pool
 from coincurve import PrivateKey
 from eip712_structs import EIP712Struct
 from eip712_structs import make_domain
@@ -33,7 +25,6 @@ from httpx import Timeout
 from ipfs_client.dag import IPFSAsyncClientError
 from ipfs_client.main import AsyncIPFSClient
 from pydantic import BaseModel
-from redis import asyncio as aioredis
 from tenacity import retry
 from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
@@ -41,25 +32,17 @@ from tenacity import wait_random_exponential
 from web3 import Web3
 
 from snapshotter.settings.config import settings
-from snapshotter.utils.callback_helpers import get_rabbitmq_channel
-from snapshotter.utils.callback_helpers import get_rabbitmq_robust_connection_async
 from snapshotter.utils.callback_helpers import misc_notification_callback_result_handler
 from snapshotter.utils.callback_helpers import send_failure_notifications_async
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.models.data_models import SnapshotterIssue
 from snapshotter.utils.models.data_models import SnapshotterReportState
-from snapshotter.utils.models.data_models import SnapshotterStates
-from snapshotter.utils.models.data_models import SnapshotterStateUpdate
-from snapshotter.utils.models.data_models import UnfinalizedSnapshot
 from snapshotter.utils.models.message_models import AggregateBase
 from snapshotter.utils.models.message_models import CalculateAggregateMessage
 from snapshotter.utils.models.message_models import SnapshotProcessMessage
 from snapshotter.utils.models.message_models import SnapshotSubmittedMessage
 from snapshotter.utils.models.message_models import SnapshotSubmittedMessageLite
-from snapshotter.utils.redis.redis_conn import RedisPoolCache
-from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
-from snapshotter.utils.redis.redis_keys import submitted_unfinalized_snapshot_cids
 from snapshotter.utils.rpc import RpcHelper
 
 
@@ -120,10 +103,6 @@ def ipfs_upload_retry_state_callback(retry_state: tenacity.RetryCallState):
 
 class GenericAsyncWorker(multiprocessing.Process):
     _async_transport: AsyncHTTPTransport
-    _rmq_connection_pool: Pool
-    _rmq_channel_pool: Pool
-    _aioredis_pool: RedisPoolCache
-    _redis_conn: aioredis.Redis
     _rpc_helper: RpcHelper
     _anchor_rpc_helper: RpcHelper
     _httpx_client: AsyncClient
@@ -138,31 +117,14 @@ class GenericAsyncWorker(multiprocessing.Process):
             name (str): The name of the worker.
             **kwargs: Additional keyword arguments to pass to the superclass constructor.
         """
-        self._core_rmq_consumer: asyncio.Task
-        self._exchange_name = f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}'
         self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
         self._running_callback_tasks: Dict[str, asyncio.Task] = dict()
         super(GenericAsyncWorker, self).__init__(name=name, **kwargs)
         self._protocol_state_contract = None
         self._qos = 1
 
-        self._rate_limiting_lua_scripts = None
-
         self.protocol_state_contract_address = settings.protocol_state.address
-        self._event_detector_exchange = f'{settings.rabbitmq.setup.event_detector.exchange}:{settings.namespace}'
-        self._event_detector_routing_key_prefix = f'event-detector:{settings.namespace}:{settings.instance_id}.'
         self._initialized = False
-
-    def _signal_handler(self, signum, frame):
-        """
-        Signal handler function that cancels the core RMQ consumer when a SIGINT, SIGTERM or SIGQUIT signal is received.
-
-        Args:
-            signum (int): The signal number.
-            frame (frame): The current stack frame at the time the signal was received.
-        """
-        if signum in [SIGINT, SIGTERM, SIGQUIT]:
-            self._core_rmq_consumer.cancel()
 
     @retry(
         wait=wait_random_exponential(multiplier=1, max=10),
@@ -268,49 +230,25 @@ class GenericAsyncWorker(multiprocessing.Process):
                 client=self._client, message=notification_message,
             )
         else:
-            # add to zset of unfinalized snapshot CIDs
-            unfinalized_entry = UnfinalizedSnapshot(
-                snapshotCid=snapshot_cid,
-                snapshot=snapshot.dict(by_alias=True),
-            )
-            await self._redis_conn.zadd(
-                name=submitted_unfinalized_snapshot_cids(project_id),
-                mapping={unfinalized_entry.json(sort_keys=True): epoch.epochId},
-            )
-
-            try:
-                await self._redis_conn.zremrangebyscore(
-                    name=submitted_unfinalized_snapshot_cids(project_id),
-                    min='-inf',
-                    max=epoch.epochId - 32,
-                )
-            except:
-                pass
 
             # submit to relayer
             try:
                 await self._submit_to_relayer(snapshot_cid, epoch.epochId, project_id)
             except Exception as e:
-                await self._redis_conn.hset(
-                    name=epoch_id_project_to_state_mapping(
-                        epoch.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_RELAYER.value,
-                    ),
-                    mapping={
-                        project_id: SnapshotterStateUpdate(
-                            status='failed', error=str(e), timestamp=int(time.time()),
-                        ).json(),
-                    },
+                self._logger.opt(exception=True).error(
+                    'Exception submitting snapshot to relayer for epoch {}: {}, Error: {},'
+                    'sending failure notifications', epoch, snapshot, e,
                 )
-            else:
-                await self._redis_conn.hset(
-                    name=epoch_id_project_to_state_mapping(
-                        epoch.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_RELAYER.value,
-                    ),
-                    mapping={
-                        project_id: SnapshotterStateUpdate(
-                            status='success', timestamp=int(time.time()),
-                        ).json(),
-                    },
+                notification_message = SnapshotterIssue(
+                    instanceID=settings.instance_id,
+                    issueType=SnapshotterReportState.MISSED_SNAPSHOT.value,
+                    projectID=project_id,
+                    epochId=str(epoch.epochId),
+                    timeOfReporting=str(time.time()),
+                    extra=json.dumps({'issueDetails': f'Error : {e}'}),
+                )
+                await send_failure_notifications_async(
+                    client=self._client, message=notification_message,
                 )
 
         # upload to web3 storage
@@ -359,52 +297,6 @@ class GenericAsyncWorker(multiprocessing.Process):
             epoch_id,
             project_id,
         )
-
-    async def _rabbitmq_consumer(self, loop):
-        """
-        Consume messages from a RabbitMQ queue.
-
-        Args:
-            loop (asyncio.AbstractEventLoop): The event loop to use for the consumer.
-
-        Returns:
-            None
-        """
-        self._rmq_connection_pool = Pool(get_rabbitmq_robust_connection_async, max_size=5, loop=loop)
-        self._rmq_channel_pool = Pool(
-            partial(get_rabbitmq_channel, self._rmq_connection_pool), max_size=20,
-            loop=loop,
-        )
-        async with self._rmq_channel_pool.acquire() as channel:
-            await channel.set_qos(self._qos)
-            exchange = await channel.get_exchange(
-                name=self._exchange_name,
-            )
-            q_obj = await channel.get_queue(
-                name=self._q,
-                ensure=False,
-            )
-            self._logger.debug(
-                f'Consuming queue {self._q} with routing key {self._rmq_routing}...',
-            )
-            await q_obj.bind(exchange, routing_key=self._rmq_routing)
-            await q_obj.consume(self._on_rabbitmq_message)
-
-    async def _on_rabbitmq_message(self, message: IncomingMessage):
-        """
-        Callback function that is called when a message is received from RabbitMQ.
-
-        :param message: The incoming message from RabbitMQ.
-        """
-        pass
-
-    async def _init_redis_pool(self):
-        """
-        Initializes the Redis connection pool and sets the `_redis_conn` attribute to the created connection pool.
-        """
-        self._aioredis_pool = RedisPoolCache()
-        await self._aioredis_pool.populate()
-        self._redis_conn = self._aioredis_pool._aioredis_pool
 
     async def _init_rpc_helper(self):
         """
@@ -487,9 +379,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         try:
             source_block_time = await self._anchor_rpc_helper.web3_call(
                 [self._protocol_state_contract.functions.SOURCE_CHAIN_BLOCK_TIME()],
-                redis_conn=self._redis_conn,
             )
-            # source_block_time = self._protocol_state_contract.functions.SOURCE_CHAIN_BLOCK_TIME().call()
         except Exception as e:
             self._logger.exception(
                 'Exception in querying protocol state for source chain block time: {}',
@@ -502,7 +392,6 @@ class GenericAsyncWorker(multiprocessing.Process):
         try:
             epoch_size = await self._anchor_rpc_helper.web3_call(
                 [self._protocol_state_contract.functions.EPOCH_SIZE()],
-                redis_conn=self._redis_conn,
             )
         except Exception as e:
             self._logger.exception(
@@ -515,10 +404,9 @@ class GenericAsyncWorker(multiprocessing.Process):
 
     async def init(self):
         """
-        Initializes the worker by initializing the Redis pool, HTTPX client, and RPC helper.
+        Initializes the worker by initializing the HTTPX client, and RPC helper.
         """
         if not self._initialized:
-            await self._init_redis_pool()
             await self._init_httpx_client()
             await self._init_rpc_helper()
             await self._init_protocol_meta()
@@ -526,7 +414,7 @@ class GenericAsyncWorker(multiprocessing.Process):
 
     def run(self) -> None:
         """
-        Runs the worker by setting resource limits, registering signal handlers, starting the RabbitMQ consumer, and
+        Runs the worker by setting resource limits, starting the
         running the event loop until it is stopped.
         """
         self._logger = logger.bind(module=self.name)
@@ -535,15 +423,11 @@ class GenericAsyncWorker(multiprocessing.Process):
             resource.RLIMIT_NOFILE,
             (settings.rlimit.file_descriptors, hard),
         )
-        for signame in [SIGINT, SIGTERM, SIGQUIT]:
-            signal(signame, self._signal_handler)
         ev_loop = asyncio.get_event_loop()
         self._logger.debug(
             f'Starting asynchronous callback worker {self._unique_id}...',
         )
-        self._core_rmq_consumer = asyncio.ensure_future(
-            self._rabbitmq_consumer(ev_loop),
-        )
+        # TODO: start something
         try:
             ev_loop.run_forever()
         finally:

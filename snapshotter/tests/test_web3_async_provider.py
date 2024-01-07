@@ -7,18 +7,14 @@ from web3 import Web3
 
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import logger
-from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.rpc import RpcHelper
 
 
 async def test_web3_async_call():
     with open('snapshotter/tests/static/abi/storage_contract.json') as f:
         contract_abi = json.load(f)
-    aioredis_pool = RedisPoolCache()
-    await aioredis_pool.populate()
-    writer_redis_pool = aioredis_pool._aioredis_pool
     rpc_helper = RpcHelper(settings.anchor_chain_rpc)
-    await rpc_helper.init(writer_redis_pool)
+    await rpc_helper.init()
     sync_w3_client = Web3(HTTPProvider(settings.anchor_chain_rpc.full_nodes[0].url))
     contract_obj = sync_w3_client.eth.contract(
         address=to_checksum_address('0x31b554545279DBB438FC66c55A449263a6b56dB5'),
@@ -28,7 +24,7 @@ async def test_web3_async_call():
     tasks = [
         contract_obj.functions.retrieve(),
     ]
-    result = await rpc_helper.web3_call(tasks, redis_conn=writer_redis_pool)
+    result = await rpc_helper.web3_call(tasks)
     logger.debug('Retrieve: {}', result)
 
 
