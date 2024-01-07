@@ -33,11 +33,11 @@ from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.data_models import TaskStatusRequest
 from snapshotter.utils.redis.rate_limiter import load_rate_limiter_scripts
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
-from snapshotter.utils.redis.redis_keys import active_status_key
 from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import epoch_process_report_cached_key
 from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_key
+from snapshotter.utils.redis.redis_keys import snapshotter_enabled_status_key
 from snapshotter.utils.rpc import RpcHelper
 
 
@@ -121,7 +121,7 @@ async def health_check(
     dict: A dictionary containing the status of the service.
     """
     redis_conn: aioredis.Redis = request.app.state.redis_pool
-    _ = await redis_conn.get(active_status_key)
+    _ = await redis_conn.get(snapshotter_enabled_status_key)
     if _:
         active_status = bool(int(_))
         if not active_status:

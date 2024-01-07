@@ -7,7 +7,8 @@ from web3 import Web3
 from snapshotter.auth.helpers.redis_conn import RedisPoolCache
 from snapshotter.settings.config import settings
 from snapshotter.utils.file_utils import read_json_file
-from snapshotter.utils.redis.redis_keys import active_status_key
+from snapshotter.utils.redis.redis_keys import snapshotter_active_status_key
+from snapshotter.utils.redis.redis_keys import snapshotter_enabled_status_key
 from snapshotter.utils.rpc import RpcHelper
 
 
@@ -38,7 +39,11 @@ async def main():
     if to_checksum_address(settings.instance_id) in allowed_snapshotters:
         print('Snapshotting allowed...')
         await redis_conn.set(
-            active_status_key,
+            snapshotter_enabled_status_key,
+            int(True),
+        )
+        await redis_conn.set(
+            snapshotter_active_status_key,
             int(True),
         )
         sys.exit(0)
