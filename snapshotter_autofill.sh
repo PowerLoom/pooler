@@ -1,7 +1,5 @@
 #!/bin/bash
-
-#This script is run from high level docker-compose. Refer to https://github.com/PowerLoom/deploy
-set -e
+source .env
 
 echo 'populating setting from environment values...';
 
@@ -60,8 +58,6 @@ if [ "$NAMESPACE" ]; then
 fi
 
 cp config/projects.example.json config/projects.json
-cp config/aggregator.example.json config/aggregator.json
-cp config/auth_settings.example.json config/auth_settings.json
 cp config/settings.example.json config/settings.json
 
 # config hash
@@ -80,7 +76,7 @@ echo "Namespace hash: ${namespace_hash}";
 
 cd ../../../;
 
-export namespace="${namespace_hash}"
+export namespace="${NAMESPACE:-namespace_hash}"
 export ipfs_url="${IPFS_URL:-/dns/ipfs/tcp/5001}"
 export ipfs_api_key="${IPFS_API_KEY:-}"
 export ipfs_api_secret="${IPFS_API_SECRET:-}"

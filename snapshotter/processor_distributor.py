@@ -139,6 +139,39 @@ class ProcessorDistributor:
             else:
                 self._slots_per_day = slots_per_day
 
+            try:
+                allowed_snapshotters = self._protocol_state_contract.functions.getSnapshotters().call()
+                if to_checksum_address(settings.instance_id) in allowed_snapshotters:
+                    self._snapshotter_enabled = True
+                else:
+                    self._snapshotter_enabled = False
+            except Exception as e:
+                self._logger.exception(
+                    'Exception in querying protocol state for snapshotters: {}',
+                    e,
+                )
+                self._snapshotter_enabled = False
+            self._logger.info('Snapshotter enabled: {}', self._snapshotter_enabled)
+
+            try:
+                current_day = self._protocol_state_contract.functions.dayCounter().call()
+
+                task_completion_status = self._protocol_state_contract.functions.checkUserTaskStatusForDay(
+                    to_checksum_address(settings.instance_id),
+                    current_day,
+                ).call()
+                if task_completion_status:
+                    self._snapshotter_active = False
+                else:
+                    self._snapshotter_active = True
+            except Exception as e:
+                self._logger.exception(
+                    'Exception in querying protocol state for snapshotters: {}',
+                    e,
+                )
+                self._snapshotter_active = False
+            self._logger.info('Snapshotter active: {}', self._snapshotter_active)
+
             await self._init_httpx_client()
             await self._init_rpc_helper()
             await self._load_projects_metadata()
@@ -235,8 +268,7 @@ class ProcessorDistributor:
         epochs_in_a_day = 86400 // (self._epoch_size * self._source_chain_block_time)
         self._logger.info('Epochs in a day: {}', epochs_in_a_day)
         snapshotter_addr = settings.instance_id
-        # slod_id = hash(int(snapshotter_addr.lower(), 16)) % N
-        slod_id = 0
+        slod_id = hash(int(snapshotter_addr.lower(), 16)) % N
         self._logger.info('Snapshotter ID: {}', slod_id)
         if (epoch.epochId % epochs_in_a_day) // (epochs_in_a_day // N) == slod_id:
             return True

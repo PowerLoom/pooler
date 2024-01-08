@@ -1,12 +1,8 @@
 #!/bin/bash
 
-poetry run python -m snapshotter.snapshotter_id_ping
-ret_status=$?
+echo 'populating setting from environment values...';
+./snapshotter_autofill.sh || exit 1
 
-if [ $ret_status -ne 0 ]; then
-    echo "Snapshotter identity check failed on protocol smart contract"
-    exit 1
-fi
 echo 'starting processes...';
 pm2 start pm2.config.js
 
