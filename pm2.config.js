@@ -19,5 +19,17 @@ module.exports = {
         GUNICORN_WORKERS: 1,
       }
     },
+    {
+      name   : "msnapshotter",
+      script : `poetry run python -m snapshotter.system_event_detector`,
+      max_restarts: MAX_RESTART,
+      min_uptime: MIN_UPTIME,
+      error_file: "/dev/null",
+      out_file: "/dev/null",
+      env: {
+        NODE_ENV: NODE_ENV,
+      }
+    },
+
   ]
 }

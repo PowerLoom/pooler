@@ -124,25 +124,6 @@ def send_failure_notifications_sync(client: SyncClient, message: BaseModel):
         sync_notification_callback_result_handler(f)
 
 
-class GenericPreloader(ABC):
-    __metaclass__ = ABCMeta
-
-    def __init__(self):
-        pass
-
-    @abstractmethod
-    async def compute(
-        self,
-        epoch: EpochBase,
-        rpc_helper: RpcHelper,
-    ):
-        pass
-
-    @abstractmethod
-    async def cleanup(self):
-        pass
-
-
 class GenericProcessor(ABC):
     __metaclass__ = ABCMeta
 

@@ -13,9 +13,7 @@ from snapshotter.utils.data_utils import get_snapshot_submision_window
 from snapshotter.utils.generic_worker import GenericAsyncWorker
 from snapshotter.utils.models.data_models import SnapshotterIssue
 from snapshotter.utils.models.data_models import SnapshotterReportState
-from snapshotter.utils.models.message_models import ProjectTypeProcessingCompleteMessage
 from snapshotter.utils.models.message_models import SnapshotProcessMessage
-from snapshotter.utils.models.message_models import SnapshotSubmittedMessageLite
 
 
 class SnapshotAsyncWorker(GenericAsyncWorker):
@@ -23,7 +21,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
     _ipfs_writer_client: AsyncIPFSClient
     _ipfs_reader_client: AsyncIPFSClient
 
-    def __init__(self, name, **kwargs):
+    def __init__(self):
         """
         Initializes a SnapshotAsyncWorker object.
 
@@ -31,8 +29,8 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             name (str): The name of the worker.
             **kwargs: Additional keyword arguments to be passed to the AsyncWorker constructor.
         """
-        super(SnapshotAsyncWorker, self).__init__(name=name, **kwargs)
         self._project_calculation_mapping = {}
+        super().__init__()
         self._task_types = []
         for project_config in projects_config:
             task_type = project_config.project_type
@@ -83,16 +81,16 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 rpc_helper=self._rpc_helper,
                 anchor_rpc_helper=self._anchor_rpc_helper,
                 ipfs_reader=self._ipfs_reader_client,
-                protocol_state_contract=self._protocol_state_contract,
+                protocol_state_contract=self.protocol_state_contract,
             )
 
             if not snapshots:
-                self._logger.debug(
+                self.logger.debug(
                     'No snapshot data for: {}, skipping...', msg_obj,
                 )
 
         except Exception as e:
-            self._logger.opt(exception=True).error(
+            self.logger.opt(exception=True).error(
                 'Exception processing callback for epoch: {}, Error: {},'
                 'sending failure notifications', msg_obj, e,
             )
@@ -112,12 +110,12 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         else:
 
             if not snapshots:
-                self._logger.debug(
+                self.logger.debug(
                     'No snapshot data for: {}, skipping...', msg_obj,
                 )
                 return
 
-            self._logger.info('Sending snapshots to commit service: {}', snapshots)
+            self.logger.info('Sending snapshots to commit service: {}', snapshots)
             submitted_snapshots = []
             for project_data_source, snapshot in snapshots:
                 data_sources = project_data_source.split('_')
@@ -141,19 +139,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
 
                 submitted_snapshots.append((project_id, snapshot_cid))
 
-            # publish snapshot submitted event to event detector queue
-            processing_complete_message = ProjectTypeProcessingCompleteMessage(
-                epochId=msg_obj.epochId,
-                projectType=task_type,
-                snapshotsSubmitted=[
-                    SnapshotSubmittedMessageLite(
-                        snapshotCid=snapshot_cid,
-                        projectId=project_id,
-                    ) for project_id, snapshot_cid in submitted_snapshots
-                ],
-            )
-
-    async def _processor_task(self, msg_obj: SnapshotProcessMessage, task_type: str):
+    async def process_task(self, msg_obj: SnapshotProcessMessage, task_type: str):
         """
         Process a SnapshotProcessMessage object for a given task type.
 
@@ -164,11 +150,11 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         Returns:
             None
         """
-        self._logger.debug(
+        self.logger.debug(
             'Processing callback: {}', msg_obj,
         )
         if task_type not in self._project_calculation_mapping:
-            self._logger.error(
+            self.logger.error(
                 (
                     'No project calculation mapping found for task type'
                     f' {task_type}. Skipping...'
@@ -179,17 +165,15 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         if not self._submission_window:
             self._submission_window = await get_snapshot_submision_window(
                 rpc_helper=self._anchor_rpc_helper,
-                state_contract_obj=self._protocol_state_contract,
+                state_contract_obj=self.protocol_state_contract,
             )
 
-        self._logger.debug(
+        self.logger.debug(
             'Got epoch to process for {}: {}',
             task_type, msg_obj,
         )
 
         await self._process(msg_obj=msg_obj, task_type=task_type)
-
-    # self._processor_task(msg_obj=msg_obj, task_type=task_type)
 
     async def _init_project_calculation_mapping(self):
         """
@@ -225,7 +209,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         """
         Initializes the worker by initializing project calculation mapping, IPFS client, and other necessary components.
         """
-        if not self._initialized:
+        if not self.initialized:
             await self._init_project_calculation_mapping()
             await self._init_ipfs_client()
             await self.init()

@@ -1,12 +1,9 @@
 import asyncio
 import json
-import multiprocessing
-import resource
 import time
 from typing import Dict
 from typing import Union
 from urllib.parse import urljoin
-from uuid import uuid4
 
 import httpx
 import sha3
@@ -17,7 +14,6 @@ from eip712_structs import make_domain
 from eip712_structs import String
 from eip712_structs import Uint
 from eth_utils import big_endian_to_int
-from eth_utils import keccak
 from httpx import AsyncClient
 from httpx import AsyncHTTPTransport
 from httpx import Limits
@@ -38,8 +34,6 @@ from snapshotter.utils.default_logger import logger
 from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.models.data_models import SnapshotterIssue
 from snapshotter.utils.models.data_models import SnapshotterReportState
-from snapshotter.utils.models.message_models import AggregateBase
-from snapshotter.utils.models.message_models import CalculateAggregateMessage
 from snapshotter.utils.models.message_models import SnapshotProcessMessage
 from snapshotter.utils.models.message_models import SnapshotSubmittedMessage
 from snapshotter.utils.models.message_models import SnapshotSubmittedMessageLite
@@ -101,7 +95,7 @@ def ipfs_upload_retry_state_callback(retry_state: tenacity.RetryCallState):
         )
 
 
-class GenericAsyncWorker(multiprocessing.Process):
+class GenericAsyncWorker:
     _async_transport: AsyncHTTPTransport
     _rpc_helper: RpcHelper
     _anchor_rpc_helper: RpcHelper
@@ -109,7 +103,7 @@ class GenericAsyncWorker(multiprocessing.Process):
     _web3_storage_upload_transport: AsyncHTTPTransport
     _web3_storage_upload_client: AsyncClient
 
-    def __init__(self, name, **kwargs):
+    def __init__(self):
         """
         Initializes a GenericAsyncWorker instance.
 
@@ -117,14 +111,12 @@ class GenericAsyncWorker(multiprocessing.Process):
             name (str): The name of the worker.
             **kwargs: Additional keyword arguments to pass to the superclass constructor.
         """
-        self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
         self._running_callback_tasks: Dict[str, asyncio.Task] = dict()
-        super(GenericAsyncWorker, self).__init__(name=name, **kwargs)
-        self._protocol_state_contract = None
-        self._qos = 1
+        self.protocol_state_contract = None
 
         self.protocol_state_contract_address = settings.protocol_state.address
-        self._initialized = False
+        self.initialized = False
+        self.logger = logger.bind(module='GenericAsyncWorker')
 
     @retry(
         wait=wait_random_exponential(multiplier=1, max=10),
@@ -156,7 +148,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         )
         r.raise_for_status()
         resp = r.json()
-        self._logger.info('Uploaded snapshot to web3 storage: {} | Response: {}', snapshot, resp)
+        self.logger.info('Uploaded snapshot to web3 storage: {} | Response: {}', snapshot, resp)
 
     @retry(
         wait=wait_random_exponential(multiplier=1, max=10),
@@ -187,9 +179,8 @@ class GenericAsyncWorker(multiprocessing.Process):
                 SnapshotProcessMessage,
                 SnapshotSubmittedMessage,
                 SnapshotSubmittedMessageLite,
-                CalculateAggregateMessage,
             ],
-            snapshot: Union[BaseModel, AggregateBase],
+            snapshot: BaseModel,
             storage_flag: bool,
     ):
         """
@@ -201,8 +192,8 @@ class GenericAsyncWorker(multiprocessing.Process):
             _ipfs_writer_client (AsyncIPFSClient): The IPFS client to use for uploading the snapshot.
             project_id (str): The ID of the project the snapshot belongs to.
             epoch (Union[SnapshotProcessMessage, SnapshotSubmittedMessage,
-            SnapshotSubmittedMessageLite, CalculateAggregateMessage]): The epoch the snapshot belongs to.
-            snapshot (Union[BaseModel, AggregateBase]): The snapshot to commit.
+            SnapshotSubmittedMessageLite]): The epoch the snapshot belongs to.
+            snapshot (BaseModel): The snapshot to commit.
             storage_flag (bool): Whether to upload the snapshot to web3 storage.
 
         Returns:
@@ -214,7 +205,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         try:
             snapshot_cid = await self._upload_to_ipfs(snapshot_bytes, _ipfs_writer_client)
         except Exception as e:
-            self._logger.opt(exception=True).error(
+            self.logger.opt(exception=True).error(
                 'Exception uploading snapshot to IPFS for epoch {}: {}, Error: {},'
                 'sending failure notifications', epoch, snapshot, e,
             )
@@ -235,7 +226,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             try:
                 await self._submit_to_relayer(snapshot_cid, epoch.epochId, project_id)
             except Exception as e:
-                self._logger.opt(exception=True).error(
+                self.logger.opt(exception=True).error(
                     'Exception submitting snapshot to relayer for epoch {}: {}, Error: {},'
                     'sending failure notifications', epoch, snapshot, e,
                 )
@@ -291,7 +282,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             ),
         )
         f.add_done_callback(misc_notification_callback_result_handler)
-        self._logger.info(
+        self.logger.info(
             'Submitted snapshot CID {} to relayer | Epoch: {} | Project: {}',
             snapshot_cid,
             epoch_id,
@@ -305,13 +296,13 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._rpc_helper = RpcHelper(rpc_settings=settings.rpc)
         self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
 
-        self._protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
+        self.protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
             address=Web3.to_checksum_address(
                 self.protocol_state_contract_address,
             ),
             abi=read_json_file(
                 settings.protocol_state.abi,
-                self._logger,
+                self.logger,
             ),
         )
 
@@ -378,57 +369,36 @@ class GenericAsyncWorker(multiprocessing.Process):
         # TODO: combine these into a single call
         try:
             source_block_time = await self._anchor_rpc_helper.web3_call(
-                [self._protocol_state_contract.functions.SOURCE_CHAIN_BLOCK_TIME()],
+                [self.protocol_state_contract.functions.SOURCE_CHAIN_BLOCK_TIME()],
             )
         except Exception as e:
-            self._logger.exception(
+            self.logger.exception(
                 'Exception in querying protocol state for source chain block time: {}',
                 e,
             )
         else:
             source_block_time = source_block_time[0]
             self._source_chain_block_time = source_block_time / 10 ** 4
-            self._logger.debug('Set source chain block time to {}', self._source_chain_block_time)
+            self.logger.debug('Set source chain block time to {}', self._source_chain_block_time)
         try:
             epoch_size = await self._anchor_rpc_helper.web3_call(
-                [self._protocol_state_contract.functions.EPOCH_SIZE()],
+                [self.protocol_state_contract.functions.EPOCH_SIZE()],
             )
         except Exception as e:
-            self._logger.exception(
+            self.logger.exception(
                 'Exception in querying protocol state for epoch size: {}',
                 e,
             )
         else:
             self._epoch_size = epoch_size[0]
-            self._logger.debug('Set epoch size to {}', self._epoch_size)
+            self.logger.debug('Set epoch size to {}', self._epoch_size)
 
     async def init(self):
         """
         Initializes the worker by initializing the HTTPX client, and RPC helper.
         """
-        if not self._initialized:
+        if not self.initialized:
             await self._init_httpx_client()
             await self._init_rpc_helper()
             await self._init_protocol_meta()
-        self._initialized = True
-
-    def run(self) -> None:
-        """
-        Runs the worker by setting resource limits, starting the
-        running the event loop until it is stopped.
-        """
-        self._logger = logger.bind(module=self.name)
-        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
-        resource.setrlimit(
-            resource.RLIMIT_NOFILE,
-            (settings.rlimit.file_descriptors, hard),
-        )
-        ev_loop = asyncio.get_event_loop()
-        self._logger.debug(
-            f'Starting asynchronous callback worker {self._unique_id}...',
-        )
-        # TODO: start something
-        try:
-            ev_loop.run_forever()
-        finally:
-            ev_loop.close()
+        self.initialized = True

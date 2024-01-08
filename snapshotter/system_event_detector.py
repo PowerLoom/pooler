@@ -7,14 +7,18 @@ from signal import SIGINT
 from signal import SIGQUIT
 from signal import SIGTERM
 
+from eth_utils.address import to_checksum_address
 from web3 import Web3
 
+from snapshotter.processor_distributor import ProcessorDistributor
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.exceptions import GenericExitOnSignal
 from snapshotter.utils.file_utils import read_json_file
+from snapshotter.utils.models.data_models import DailyTaskCompletedEvent
+from snapshotter.utils.models.data_models import DayStartedEvent
 from snapshotter.utils.models.data_models import EpochReleasedEvent
-from snapshotter.utils.models.data_models import SnapshotFinalizedEvent
+from snapshotter.utils.models.data_models import SlotsPerDayUpdatedEvent
 from snapshotter.utils.models.data_models import SnapshottersUpdatedEvent
 from snapshotter.utils.rpc import get_event_sig_and_abi
 from snapshotter.utils.rpc import RpcHelper
@@ -63,19 +67,24 @@ class EventDetectorProcess(multiprocessing.Process):
         )
 
         # event EpochReleased(uint256 indexed epochId, uint256 begin, uint256 end, uint256 timestamp);
-        # event SnapshotFinalized(uint256 indexed epochId, uint256 epochEnd, string projectId,
-        #     string snapshotCid, uint256 timestamp);
+        # event SlotsPerDayUpdated(uint256 slotsPerDay);
+        # event DayStartedEvent(uint256 dayId, uint256 timestamp);
+        # event DailyTaskCompletedEvent(address snapshotterAddress, uint256 dayId, uint256 timestamp);
 
         EVENTS_ABI = {
             'EpochReleased': self.contract.events.EpochReleased._get_event_abi(),
-            'SnapshotFinalized': self.contract.events.SnapshotFinalized._get_event_abi(),
             'allSnapshottersUpdated': self.contract.events.allSnapshottersUpdated._get_event_abi(),
+            'SlotsPerDayUpdated': self.contract.events.SlotsPerDayUpdated._get_event_abi(),
+            'DayStartedEvent': self.contract.events.DayStartedEvent._get_event_abi(),
+            'DailyTaskCompletedEvent': self.contract.events.DailyTaskCompletedEvent._get_event_abi(),
         }
 
         EVENT_SIGS = {
             'EpochReleased': 'EpochReleased(uint256,uint256,uint256,uint256)',
-            'SnapshotFinalized': 'SnapshotFinalized(uint256,uint256,string,string,uint256)',
             'allSnapshottersUpdated': 'allSnapshottersUpdated(address,bool)',
+            'SlotsPerDayUpdated': 'SlotsPerDayUpdated(uint256)',
+            'DayStartedEvent': 'DayStartedEvent(uint256,uint256)',
+            'DailyTaskCompletedEvent': 'DailyTaskCompletedEvent(address,uint256,uint256)',
 
         }
 
@@ -83,6 +92,12 @@ class EventDetectorProcess(multiprocessing.Process):
             EVENT_SIGS,
             EVENTS_ABI,
         )
+
+        self.processor_distributor = ProcessorDistributor()
+        self._initialized = False
+
+    async def init(self):
+        await self.processor_distributor.init()
 
     async def get_events(self, from_block: int, to_block: int):
         """
@@ -97,6 +112,11 @@ class EventDetectorProcess(multiprocessing.Process):
             List[Tuple[str, Any]]: A list of tuples, where each tuple contains the event name
             and an object representing the event data.
         """
+
+        if not self._initialized:
+            await self.init()
+            self._initialized = True
+
         events_log = await self.rpc_helper.get_events_logs(
             **{
                 'contract_address': self.contract_address,
@@ -108,7 +128,6 @@ class EventDetectorProcess(multiprocessing.Process):
         )
 
         events = []
-        new_epoch_detected = False
         latest_epoch_id = - 1
         for log in events_log:
             if log.event == 'EpochReleased':
@@ -118,19 +137,9 @@ class EventDetectorProcess(multiprocessing.Process):
                     epochId=log.args.epochId,
                     timestamp=log.args.timestamp,
                 )
-                new_epoch_detected = True
                 latest_epoch_id = max(latest_epoch_id, log.args.epochId)
                 events.append((log.event, event))
 
-            elif log.event == 'SnapshotFinalized':
-                event = SnapshotFinalizedEvent(
-                    epochId=log.args.epochId,
-                    epochEnd=log.args.epochEnd,
-                    projectId=log.args.projectId,
-                    snapshotCid=log.args.snapshotCid,
-                    timestamp=log.args.timestamp,
-                )
-                events.append((log.event, event))
             elif log.event == 'allSnapshottersUpdated':
                 event = SnapshottersUpdatedEvent(
                     snapshotterAddress=log.args.snapshotterAddress,
@@ -138,6 +147,25 @@ class EventDetectorProcess(multiprocessing.Process):
                     timestamp=int(time.time()),
                 )
                 events.append((log.event, event))
+            elif log.event == 'SlotsPerDayUpdated':
+                event = SlotsPerDayUpdatedEvent(
+                    slotsPerDay=log.args.slotsPerDay,
+                    timestamp=int(time.time()),
+                )
+                events.append((log.event, event))
+            elif log.event == 'DayStartedEvent':
+                event = DayStartedEvent(
+                    dayId=log.args.dayId,
+                    timestamp=log.args.timestamp,
+                )
+                events.append((log.event, event))
+            elif log.event == 'DailyTaskCompletedEvent':
+                if log.args.snapshotterAddress == to_checksum_address(settings.instance_id):
+                    event = DailyTaskCompletedEvent(
+                        dayId=log.args.dayId,
+                        timestamp=log.args.timestamp,
+                    )
+                    events.append((log.event, event))
 
         self._logger.info('Events: {}', events)
         return events
@@ -237,8 +265,11 @@ class EventDetectorProcess(multiprocessing.Process):
                 self._logger.info(
                     'Processing event: {}', event,
                 )
-                # TODO: Do work here
-                # self._broadcast_event(event_type, event)
+                asyncio.ensure_future(
+                    self.processor_distributor.process_event(
+                        event_type, event,
+                    ),
+                )
 
             self._last_processed_block = current_block
 
@@ -274,3 +305,8 @@ class EventDetectorProcess(multiprocessing.Process):
         self.ev_loop.run_until_complete(
             self._detect_events(),
         )
+
+
+if __name__ == '__main__':
+    event_detector = EventDetectorProcess('EventDetector')
+    event_detector.run()

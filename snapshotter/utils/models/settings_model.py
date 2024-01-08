@@ -73,7 +73,6 @@ class ExternalAPIAuth(BaseModel):
 
 class Web3Storage(BaseModel):
     upload_snapshots: bool
-    upload_aggregates: bool
     url: str
     upload_url_suffix: str
     api_token: str
@@ -97,7 +96,6 @@ class Settings(BaseModel):
     reporting: ReportingConfig
     logs: Logs
     projects_config_path: str
-    preloader_config_path: str
     pair_contract_abi: str
     protocol_state: EventContract
     relayer: Relayer
@@ -115,18 +113,7 @@ class ProcessorConfig(BaseModel):
 class ProjectConfig(BaseModel):
     project_type: str
     processor: ProcessorConfig
-    preload_tasks: List[str]
 
 
 class ProjectsConfig(BaseModel):
     config: List[ProjectConfig]
-
-
-class Preloader(BaseModel):
-    task_type: str
-    module: str
-    class_name: str
-
-
-class PreloaderConfig(BaseModel):
-    preloaders: List[Preloader]

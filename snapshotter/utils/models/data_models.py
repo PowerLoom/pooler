@@ -1,4 +1,3 @@
-import asyncio
 from enum import Enum
 from typing import Any
 from typing import Dict
@@ -8,20 +7,10 @@ from typing import Union
 
 from pydantic import BaseModel
 
-from snapshotter.utils.callback_helpers import GenericPreloader
-
 
 class ProcessorWorkerDetails(BaseModel):
     unique_name: str
     pid: Union[None, int] = None
-
-
-class PreloaderAsyncFutureDetails(BaseModel):
-    obj: GenericPreloader
-    future: asyncio.Task
-
-    class Config:
-        arbitrary_types_allowed = True
 
 
 class SnapshotterReportState(Enum):
@@ -103,6 +92,18 @@ class SnapshotFinalizedEvent(EventBase):
 class SnapshottersUpdatedEvent(EventBase):
     snapshotterAddress: str
     allowed: bool
+
+
+class SlotsPerDayUpdatedEvent(EventBase):
+    slotsPerDay: int
+
+
+class DayStartedEvent(EventBase):
+    dayId: int
+
+
+class DailyTaskCompletedEvent(EventBase):
+    dayId: int
 
 
 class SnapshotSubmittedEvent(EventBase):

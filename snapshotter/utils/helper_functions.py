@@ -80,36 +80,6 @@ def acquire_threading_semaphore(fn):
     return semaphore_wrapper
 
 
-def preloading_entry_exit_logger(fn):
-    """
-    Decorator function to log entry and exit of preloading worker functions.
-
-    Args:
-        fn (Callable): The function to be decorated.
-
-    Returns:
-        Callable: The decorated function.
-    """
-    @wraps(fn)
-    async def wrapper(self, *args, **kwargs):
-        epoch: EpochBase = kwargs['epoch']
-        try:
-            await fn(self, *args, **kwargs)
-            logger.info('Finished running preloader {}...', self.__class__.__name__)
-        except asyncio.CancelledError:
-            self._logger.error('Cancelled preloader worker {} for epoch {}', self.__class__.__name__, epoch.epochId)
-            raise asyncio.CancelledError
-        except Exception as e:
-            self._logger.opt(exception=settings.logs.trace_enabled).error(
-                'Exception while running preloader worker {} for epoch {}, Error: {}',
-                self.__class__.__name__,
-                epoch.epochId,
-                e,
-            )
-            raise e
-    return wrapper
-
-
 async def as_completed_async(futures):
     """
     A coroutine that iterates over given futures and yields their results as they complete.
