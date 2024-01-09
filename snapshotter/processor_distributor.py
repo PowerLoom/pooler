@@ -269,8 +269,8 @@ class ProcessorDistributor:
         epochs_in_a_day = 86400 // (self._epoch_size * self._source_chain_block_time)
         self._logger.info('Epochs in a day: {}', epochs_in_a_day)
         snapshotter_addr = settings.instance_id
-        # slot_id = hash(int(snapshotter_addr.lower(), 16)) % N
-        slot_id = 0
+        slot_id = hash(int(snapshotter_addr.lower(), 16)) % N
+        # slot_id = 0
         self._logger.info('Snapshotter ID: {}', slot_id)
         if (epoch.epochId % epochs_in_a_day) // (epochs_in_a_day // N) == slot_id:
             return True
