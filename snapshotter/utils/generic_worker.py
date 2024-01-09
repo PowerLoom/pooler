@@ -39,7 +39,7 @@ from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
 from web3 import Web3
-
+from grpclib.client import Channel
 from snapshotter.settings.config import settings
 from snapshotter.utils.callback_helpers import get_rabbitmq_channel
 from snapshotter.utils.callback_helpers import get_rabbitmq_robust_connection_async
@@ -52,6 +52,8 @@ from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.data_models import UnfinalizedSnapshot
+from snapshotter.utils.models.proto.snapshot_submission.submission_pb2 import ByteSubmission
+from snapshotter.utils.models.proto.snapshot_submission.submission_grpc import SubmissionStub
 from snapshotter.utils.models.message_models import AggregateBase
 from snapshotter.utils.models.message_models import CalculateAggregateMessage
 from snapshotter.utils.models.message_models import SnapshotProcessMessage
@@ -126,6 +128,8 @@ class GenericAsyncWorker(multiprocessing.Process):
     _redis_conn: aioredis.Redis
     _rpc_helper: RpcHelper
     _anchor_rpc_helper: RpcHelper
+    _grpc_channel: Channel
+    _grpc_stub: SubmissionStub
     _httpx_client: AsyncClient
     _web3_storage_upload_transport: AsyncHTTPTransport
     _web3_storage_upload_client: AsyncClient
@@ -289,29 +293,36 @@ class GenericAsyncWorker(multiprocessing.Process):
 
             # submit to relayer
             try:
-                await self._submit_to_relayer(snapshot_cid, epoch.epochId, project_id)
+                await self._send_submission_to_collector(snapshot_cid)
             except Exception as e:
-                await self._redis_conn.hset(
-                    name=epoch_id_project_to_state_mapping(
-                        epoch.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_RELAYER.value,
-                    ),
-                    mapping={
-                        project_id: SnapshotterStateUpdate(
-                            status='failed', error=str(e), timestamp=int(time.time()),
-                        ).json(),
-                    },
+                self._logger.error(
+                    'Exception submitting snapshot to relayer for epoch {}: {}, Error: {},'
+                    'sending failure notifications', epoch, snapshot, e,
                 )
-            else:
-                await self._redis_conn.hset(
-                    name=epoch_id_project_to_state_mapping(
-                        epoch.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_RELAYER.value,
-                    ),
-                    mapping={
-                        project_id: SnapshotterStateUpdate(
-                            status='success', timestamp=int(time.time()),
-                        ).json(),
-                    },
-                )
+            # try:
+            #     await self._submit_to_relayer(snapshot_cid, epoch.epochId, project_id)
+            # except Exception as e:
+            #     await self._redis_conn.hset(
+            #         name=epoch_id_project_to_state_mapping(
+            #             epoch.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_RELAYER.value,
+            #         ),
+            #         mapping={
+            #             project_id: SnapshotterStateUpdate(
+            #                 status='failed', error=str(e), timestamp=int(time.time()),
+            #             ).json(),
+            #         },
+            #     )
+            # else:
+            #     await self._redis_conn.hset(
+            #         name=epoch_id_project_to_state_mapping(
+            #             epoch.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_RELAYER.value,
+            #         ),
+            #         mapping={
+            #             project_id: SnapshotterStateUpdate(
+            #                 status='success', timestamp=int(time.time()),
+            #             ).json(),
+            #         },
+            #     )
 
         # upload to web3 storage
         if storage_flag:
@@ -319,6 +330,13 @@ class GenericAsyncWorker(multiprocessing.Process):
 
         return snapshot_cid
 
+    async def _send_submission_to_collector(self, snapshot_cid):
+        async with self._grpc_stub.SubmitSnapshot.open() as stream:
+            await stream.send_message(ByteSubmission(submission=snapshot_cid.encode('utf-8')))
+            response = await stream.recv_message()
+            self._logger.info('Received response from collector: {}', response)
+        
+    
     @retry(
         wait=wait_random_exponential(multiplier=1, max=10),
         stop=stop_after_attempt(5),
@@ -481,6 +499,13 @@ class GenericAsyncWorker(multiprocessing.Process):
             transport=self._web3_storage_upload_transport,
             headers={'Authorization': 'Bearer ' + settings.web3storage.api_token},
         )
+    async def _init_grpc(self):
+        self._grpc_channel = Channel(
+            host='127.0.0.1',
+            port=50051,
+            ssl=False,
+        )
+        self._grpc_stub = SubmissionStub(self._grpc_channel)
 
     async def _init_protocol_meta(self):
         # TODO: combine these into a single call
@@ -522,6 +547,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             await self._init_httpx_client()
             await self._init_rpc_helper()
             await self._init_protocol_meta()
+            await self._init_grpc()
         self._initialized = True
 
     def run(self) -> None:
