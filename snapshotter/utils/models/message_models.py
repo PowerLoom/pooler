@@ -39,6 +39,7 @@ class EpochBase(BaseModel):
     epochId: int
     begin: int
     end: int
+    day: int
 
 
 class SlotsPerDayUpdatedMessage(BaseModel):

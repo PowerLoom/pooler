@@ -154,11 +154,11 @@ class ProcessorDistributor:
             self._logger.info('Snapshotter enabled: {}', self._snapshotter_enabled)
 
             try:
-                current_day = self._protocol_state_contract.functions.dayCounter().call()
+                self._current_day = self._protocol_state_contract.functions.dayCounter().call()
 
                 task_completion_status = self._protocol_state_contract.functions.checkUserTaskStatusForDay(
                     to_checksum_address(settings.instance_id),
-                    current_day,
+                    self._current_day,
                 ).call()
                 if task_completion_status:
                     self._snapshotter_active = False
@@ -221,6 +221,7 @@ class ProcessorDistributor:
             begin=message.begin,
             end=message.end,
             epochId=message.epochId,
+            day=self._current_day,
         )
         for project_type, _ in self._project_type_config_mapping.items():
             # release for snapshotting
@@ -246,12 +247,12 @@ class ProcessorDistributor:
             begin=epoch.begin,
             end=epoch.end,
             epochId=epoch.epochId,
+            day=epoch.day,
         )
 
         asyncio.ensure_future(
             self.snapshot_worker.process_task(process_unit, project_type),
         )
-        # TODO: use this message to build snapshot and send
 
     def _is_allowed_for_slot(self, epoch: EpochBase):
         """
@@ -268,9 +269,10 @@ class ProcessorDistributor:
         epochs_in_a_day = 86400 // (self._epoch_size * self._source_chain_block_time)
         self._logger.info('Epochs in a day: {}', epochs_in_a_day)
         snapshotter_addr = settings.instance_id
-        slod_id = hash(int(snapshotter_addr.lower(), 16)) % N
-        self._logger.info('Snapshotter ID: {}', slod_id)
-        if (epoch.epochId % epochs_in_a_day) // (epochs_in_a_day // N) == slod_id:
+        # slot_id = hash(int(snapshotter_addr.lower(), 16)) % N
+        slot_id = 0
+        self._logger.info('Snapshotter ID: {}', slot_id)
+        if (epoch.epochId % epochs_in_a_day) // (epochs_in_a_day // N) == slot_id:
             return True
         return False
 
@@ -302,7 +304,7 @@ class ProcessorDistributor:
                 else:
                     self._logger.info('Epoch {} not in snapshotter slot, ignoring', event.epochId)
             else:
-                self._logger.error('System is not active, ignoring released Epoch')
+                self._logger.info('System is not active, ignoring released Epoch')
 
         elif type_ == 'allSnapshottersUpdated':
             if event.snapshotterAddress == to_checksum_address(settings.instance_id):
