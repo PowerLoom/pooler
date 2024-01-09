@@ -30,6 +30,7 @@ fastapi-pagination = "^0.12.12"
 eip712-structs = "^1.1.0"
 coincurve = "^18.0.0"
 safe-pysha3 = "^1.0.4"
+ipfs-cid = "^1.0.0"
 
 
 [build-system]

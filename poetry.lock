@@ -1264,6 +1264,17 @@ docs = ["furo", "jaraco.packaging (>=9.3)", "jaraco.tidelift (>=1.4)", "rst.link
 testing = ["pytest (>=6)", "pytest-black (>=0.3.7)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=2.2)", "pytest-mypy (>=0.9.1)", "pytest-ruff", "zipp (>=3.17)"]
 
 [[package]]
+name = "ipfs-cid"
+version = "1.0.0"
+description = "A library for building IPFS CID v1 compatible content identifiers using fixed encoding parameters."
+optional = false
+python-versions = ">=3.8,<4.0"
+files = [
+    {file = "ipfs_cid-1.0.0-py3-none-any.whl", hash = "sha256:341985f50f893e0e49cf7da0fc0c4ba1afbe57fdea8a215724fd708de4ef96cb"},
+    {file = "ipfs_cid-1.0.0.tar.gz", hash = "sha256:a752c87cde68840e27dcb02f4e7cf940297fae43872bb5e6ef3bf73ad31af73d"},
+]
+
+[[package]]
 name = "jsonschema"
 version = "4.20.0"
 description = "An implementation of JSON Schema validation for Python"
@@ -2516,4 +2527,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "56ee2e60dc587046c93768d3191dadaa387f01d43e469cd915bb502784b34670"
+content-hash = "7e5d294fab6fd3d91870c751139d872c5fd6f4e6d18fbcd730d83e4f7c29aeaa"
