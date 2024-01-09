@@ -10,7 +10,7 @@ module.exports = {
     {
       name   : "core-api",
       script : `poetry run python -m snapshotter.gunicorn_core_launcher`,
-      max_restarts: MAX_RESTART,
+      max_restarts: 1,
       min_uptime: MIN_UPTIME,
       error_file: "/dev/null",
       out_file: "/dev/null",

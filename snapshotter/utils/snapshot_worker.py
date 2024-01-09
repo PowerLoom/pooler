@@ -200,6 +200,10 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         Initializes the IPFS client by creating a singleton instance of AsyncIPFSClientSingleton
         and initializing its sessions. The write and read clients are then assigned to instance variables.
         """
+        self._ipfs_reader_client = None
+        self._ipfs_writer_client = None
+        if not settings.ipfs.url:
+            return
         self._ipfs_singleton = AsyncIPFSClientSingleton(settings.ipfs)
         await self._ipfs_singleton.init_sessions()
         self._ipfs_writer_client = self._ipfs_singleton._ipfs_write_client

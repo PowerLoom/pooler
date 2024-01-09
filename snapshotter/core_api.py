@@ -58,6 +58,11 @@ async def startup_boilerplate():
         ),
         abi=protocol_state_contract_abi,
     )
+
+    if not settings.ipfs.url:
+        rest_logger.error('IPFS url not set, exiting')
+        exit(1)
+
     app.state.ipfs_singleton = AsyncIPFSClientSingleton(settings.ipfs)
     await app.state.ipfs_singleton.init_sessions()
     app.state.ipfs_reader_client = app.state.ipfs_singleton._ipfs_read_client

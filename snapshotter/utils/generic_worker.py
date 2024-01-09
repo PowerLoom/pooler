@@ -18,6 +18,7 @@ from httpx import AsyncClient
 from httpx import AsyncHTTPTransport
 from httpx import Limits
 from httpx import Timeout
+from ipfs_cid import cid_sha256_hash
 from ipfs_client.dag import IPFSAsyncClientError
 from ipfs_client.main import AsyncIPFSClient
 from pydantic import BaseModel
@@ -203,7 +204,10 @@ class GenericAsyncWorker:
         snapshot_json = json.dumps(snapshot.dict(by_alias=True), sort_keys=True, separators=(',', ':'))
         snapshot_bytes = snapshot_json.encode('utf-8')
         try:
-            snapshot_cid = await self._upload_to_ipfs(snapshot_bytes, _ipfs_writer_client)
+            if settings.ipfs.url:
+                snapshot_cid = await self._upload_to_ipfs(snapshot_bytes, _ipfs_writer_client)
+            else:
+                snapshot_cid = cid_sha256_hash(snapshot_bytes)
         except Exception as e:
             self.logger.opt(exception=True).error(
                 'Exception uploading snapshot to IPFS for epoch {}: {}, Error: {},'
@@ -267,7 +271,6 @@ class GenericAsyncWorker:
             None
         """
         request_, signature = self.generate_signature(snapshot_cid, epoch_id, project_id)
-
         # submit to relayer
         f = asyncio.ensure_future(
             self._client.post(

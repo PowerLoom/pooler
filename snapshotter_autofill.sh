@@ -77,7 +77,7 @@ echo "Namespace hash: ${namespace_hash}";
 cd ../../../;
 
 export namespace="${NAMESPACE:-namespace_hash}"
-export ipfs_url="${IPFS_URL:-/dns/ipfs/tcp/5001}"
+export ipfs_url="${IPFS_URL:-}"
 export ipfs_api_key="${IPFS_API_KEY:-}"
 export ipfs_api_secret="${IPFS_API_SECRET:-}"
 export web3_storage_token="${WEB3_STORAGE_TOKEN:-}"
