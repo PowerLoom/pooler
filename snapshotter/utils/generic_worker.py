@@ -52,7 +52,7 @@ from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.data_models import UnfinalizedSnapshot
-from snapshotter.utils.models.proto.snapshot_submission.submission_pb2 import ByteSubmission
+from snapshotter.utils.models.proto.snapshot_submission.submission_pb2 import Request, SnapshotSubmission
 from snapshotter.utils.models.proto.snapshot_submission.submission_grpc import SubmissionStub
 from snapshotter.utils.models.message_models import AggregateBase
 from snapshotter.utils.models.message_models import CalculateAggregateMessage
@@ -65,7 +65,7 @@ from snapshotter.utils.redis.redis_keys import submitted_unfinalized_snapshot_ci
 from snapshotter.utils.rpc import RpcHelper
 
 
-class Request(EIP712Struct):
+class EIPRequest(EIP712Struct):
     deadline = Uint()
     snapshotCid = String()
     epochId = Uint()
@@ -271,6 +271,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             await send_failure_notifications_async(
                 client=self._client, message=notification_message,
             )
+            return None
         else:
             # add to zset of unfinalized snapshot CIDs
             unfinalized_entry = UnfinalizedSnapshot(
@@ -290,93 +291,99 @@ class GenericAsyncWorker(multiprocessing.Process):
                 )
             except:
                 pass
-
             # submit to relayer
+            # TODO: rename state to SNAPSHOT_SUBMIT_COLLECTOR?
             try:
-                await self._send_submission_to_collector(snapshot_cid)
+                await self._send_submission_to_collector(snapshot_cid, epoch.epochId, project_id)
             except Exception as e:
                 self._logger.error(
                     'Exception submitting snapshot to relayer for epoch {}: {}, Error: {},'
                     'sending failure notifications', epoch, snapshot, e,
                 )
+                await self._redis_conn.hset(
+                    name=epoch_id_project_to_state_mapping(
+                        epoch.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_RELAYER.value,
+                    ),
+                    mapping={
+                        project_id: SnapshotterStateUpdate(
+                            status='failed', error=str(e), timestamp=int(time.time()),
+                        ).json(),
+                    },
+                )
+            else:
+                await self._redis_conn.hset(
+                    name=epoch_id_project_to_state_mapping(
+                        epoch.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_RELAYER.value,
+                    ),
+                    mapping={
+                        project_id: SnapshotterStateUpdate(
+                            status='success', timestamp=int(time.time()),
+                        ).json(),
+                    },
+                )
             # try:
             #     await self._submit_to_relayer(snapshot_cid, epoch.epochId, project_id)
             # except Exception as e:
-            #     await self._redis_conn.hset(
-            #         name=epoch_id_project_to_state_mapping(
-            #             epoch.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_RELAYER.value,
-            #         ),
-            #         mapping={
-            #             project_id: SnapshotterStateUpdate(
-            #                 status='failed', error=str(e), timestamp=int(time.time()),
-            #             ).json(),
-            #         },
-            #     )
             # else:
-            #     await self._redis_conn.hset(
-            #         name=epoch_id_project_to_state_mapping(
-            #             epoch.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_RELAYER.value,
-            #         ),
-            #         mapping={
-            #             project_id: SnapshotterStateUpdate(
-            #                 status='success', timestamp=int(time.time()),
-            #             ).json(),
-            #         },
-            #     )
-
+            #     
         # upload to web3 storage
         if storage_flag:
             asyncio.ensure_future(self._upload_web3_storage(snapshot_bytes))
-
         return snapshot_cid
 
-    async def _send_submission_to_collector(self, snapshot_cid):
+    async def _send_submission_to_collector(self, snapshot_cid, epoch_id, project_id):
+        request_, signature = self.generate_signature(snapshot_cid, epoch_id, project_id)
         async with self._grpc_stub.SubmitSnapshot.open() as stream:
-            await stream.send_message(ByteSubmission(submission=snapshot_cid.encode('utf-8')))
+            request_msg = Request(
+                deadline=request_['deadline'],
+                snapshotCid=request_['snapshotCid'],
+                epochId=request_['epochId'],
+                projectId=request_['projectId'],
+            )
+            msg = SnapshotSubmission(request=request_msg, signature=signature, signerPubKey=settings.instance_id)
+            await stream.send_message(msg)
             response = await stream.recv_message()
             self._logger.info('Received response from collector: {}', response)
-        
-    
-    @retry(
-        wait=wait_random_exponential(multiplier=1, max=10),
-        stop=stop_after_attempt(5),
-        retry=retry_if_exception_type(Exception),
-        after=relayer_submit_retry_state_callback,
-    )
-    async def _submit_to_relayer(self, snapshot_cid: str, epoch_id: int, project_id: str):
-        """
-        Submits the given snapshot to the relayer.
+    # @retry(
+    #     wait=wait_random_exponential(multiplier=1, max=10),
+    #     stop=stop_after_attempt(5),
+    #     retry=retry_if_exception_type(Exception),
+    #     after=relayer_submit_retry_state_callback,
+    # )
+    # async def _submit_to_relayer(self, snapshot_cid: str, epoch_id: int, project_id: str):
+    #     """
+    #     Submits the given snapshot to the relayer.
 
-        Args:
-            snapshot_cid (str): The CID of the snapshot to submit.
-            epoch (int): The epoch the snapshot belongs to.
-            project_id (str): The ID of the project the snapshot belongs to.
+    #     Args:
+    #         snapshot_cid (str): The CID of the snapshot to submit.
+    #         epoch (int): The epoch the snapshot belongs to.
+    #         project_id (str): The ID of the project the snapshot belongs to.
 
-        Returns:
-            None
-        """
-        request_, signature = self.generate_signature(snapshot_cid, epoch_id, project_id)
+    #     Returns:
+    #         None
+    #     """
+    #     request_, signature = self.generate_signature(snapshot_cid, epoch_id, project_id)
 
-        # submit to relayer
-        f = asyncio.ensure_future(
-            self._client.post(
-                url=urljoin(settings.relayer.host, settings.relayer.endpoint),
-                json={
-                    'request': request_,
-                    'signature': '0x' + str(signature.hex()),
-                    'projectId': project_id,
-                    'epochId': epoch_id,
-                    'snapshotCid': snapshot_cid,
-                },
-            ),
-        )
-        f.add_done_callback(misc_notification_callback_result_handler)
-        self._logger.info(
-            'Submitted snapshot CID {} to relayer | Epoch: {} | Project: {}',
-            snapshot_cid,
-            epoch_id,
-            project_id,
-        )
+    #     # submit to relayer
+    #     f = asyncio.ensure_future(
+    #         self._client.post(
+    #             url=urljoin(settings.relayer.host, settings.relayer.endpoint),
+    #             json={
+    #                 'request': request_,
+    #                 'signature': '0x' + str(signature.hex()),
+    #                 'projectId': project_id,
+    #                 'epochId': epoch_id,
+    #                 'snapshotCid': snapshot_cid,
+    #             },
+    #         ),
+    #     )
+    #     f.add_done_callback(misc_notification_callback_result_handler)
+    #     self._logger.info(
+    #         'Submitted snapshot CID {} to relayer | Epoch: {} | Project: {}',
+    #         snapshot_cid,
+    #         epoch_id,
+    #         project_id,
+    #     )
 
     async def _rabbitmq_consumer(self, loop):
         """
@@ -453,7 +460,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         current_block = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.block_number
 
         deadline = current_block + settings.protocol_state.deadline_buffer
-        request = Request(
+        request = EIPRequest(
             deadline=deadline,
             snapshotCid=snapshot_cid,
             epochId=epoch_id,
@@ -501,7 +508,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         )
     async def _init_grpc(self):
         self._grpc_channel = Channel(
-            host='127.0.0.1',
+            host='snapshot-collector',
             port=50051,
             ssl=False,
         )

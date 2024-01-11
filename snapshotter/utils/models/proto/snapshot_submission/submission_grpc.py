@@ -15,7 +15,7 @@ import snapshotter.utils.models.proto.snapshot_submission.submission_pb2
 class SubmissionBase(abc.ABC):
 
     @abc.abstractmethod
-    async def SubmitSnapshot(self, stream: 'grpclib.server.Stream[snapshotter.utils.models.proto.snapshot_submission.submission_pb2.ByteSubmission, snapshotter.utils.models.proto.snapshot_submission.submission_pb2.SubmissionResponse]') -> None:
+    async def SubmitSnapshot(self, stream: 'grpclib.server.Stream[snapshotter.utils.models.proto.snapshot_submission.submission_pb2.SnapshotSubmission, snapshotter.utils.models.proto.snapshot_submission.submission_pb2.SubmissionResponse]') -> None:
         pass
 
     def __mapping__(self) -> typing.Dict[str, grpclib.const.Handler]:
@@ -23,7 +23,7 @@ class SubmissionBase(abc.ABC):
             '/submission.Submission/SubmitSnapshot': grpclib.const.Handler(
                 self.SubmitSnapshot,
                 grpclib.const.Cardinality.STREAM_UNARY,
-                snapshotter.utils.models.proto.snapshot_submission.submission_pb2.ByteSubmission,
+                snapshotter.utils.models.proto.snapshot_submission.submission_pb2.SnapshotSubmission,
                 snapshotter.utils.models.proto.snapshot_submission.submission_pb2.SubmissionResponse,
             ),
         }
@@ -35,6 +35,6 @@ class SubmissionStub:
         self.SubmitSnapshot = grpclib.client.StreamUnaryMethod(
             channel,
             '/submission.Submission/SubmitSnapshot',
-            snapshotter.utils.models.proto.snapshot_submission.submission_pb2.ByteSubmission,
+            snapshotter.utils.models.proto.snapshot_submission.submission_pb2.SnapshotSubmission,
             snapshotter.utils.models.proto.snapshot_submission.submission_pb2.SubmissionResponse,
         )

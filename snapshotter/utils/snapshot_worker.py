@@ -180,6 +180,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                     },
                 )
                 await p.execute()
+                # TODO: check on return value of _commit_payload. snapshot_cid can be null
                 snapshot_cid = await self._commit_payload(
                     task_type=task_type,
                     _ipfs_writer_client=self._ipfs_writer_client,

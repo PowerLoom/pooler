@@ -214,6 +214,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                             ).json(),
                         },
                     )
+                    # TODO: check on return value of _commit_payload. snapshot_cid can be null
                     snapshot_cid = await self._commit_payload(
                         task_type=task_type,
                         project_id=project_id,

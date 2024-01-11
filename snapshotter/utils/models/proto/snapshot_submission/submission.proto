@@ -14,15 +14,11 @@ message Request {
 message SnapshotSubmission {
   Request request = 1;
   bytes signature = 2;
-  bytes signerPubKey = 3; // Public key in bytes
-}
-
-message ByteSubmission {
-  bytes submission = 1;
+  string signerPubKey = 3;
 }
 
 service Submission {
-  rpc SubmitSnapshot (stream ByteSubmission) returns (SubmissionResponse);
+  rpc SubmitSnapshot (stream SnapshotSubmission) returns (SubmissionResponse);
 }
 
 message SubmissionResponse {
