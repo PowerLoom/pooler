@@ -48,8 +48,10 @@ if ! command -v node &> /dev/null
 then
     echo "node could not be found"
     # install node
-    nvm install node@latest
+    nvm install node
+    nvm use node
 fi
+
 
 # check pm2 is installed
 if ! command -v pm2 &> /dev/null
