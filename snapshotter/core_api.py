@@ -60,12 +60,11 @@ async def startup_boilerplate():
     )
 
     if not settings.ipfs.url:
-        rest_logger.error('IPFS url not set, exiting')
-        exit(1)
-
-    app.state.ipfs_singleton = AsyncIPFSClientSingleton(settings.ipfs)
-    await app.state.ipfs_singleton.init_sessions()
-    app.state.ipfs_reader_client = app.state.ipfs_singleton._ipfs_read_client
+        rest_logger.warning('IPFS url not set, /data API endpoint will be unusable!')
+    else:
+        app.state.ipfs_singleton = AsyncIPFSClientSingleton(settings.ipfs)
+        await app.state.ipfs_singleton.init_sessions()
+        app.state.ipfs_reader_client = app.state.ipfs_singleton._ipfs_read_client
     app.state.epoch_size = 0
 
 
@@ -254,6 +253,12 @@ async def get_data_for_project_id_epoch_id(
     Returns:
         dict: The data for the given project and epoch ID.
     """
+    if not settings.ipfs.url:
+        response.status_code = 500
+        return {
+            'status': 'error',
+            'message': f'IPFS url not set, /data API endpoint is unusable, please use /cid endpoint instead!',
+        }
     try:
         data = await get_project_epoch_snapshot(
             request.app.state.protocol_state_contract,
