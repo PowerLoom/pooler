@@ -37,7 +37,7 @@ if ! command -v poetry &> /dev/null
 then
     echo "poetry could not be found"
     # install poetry
-    curl -sSL https://install.python-poetry.org | python3 -
+    curl -sSL https://install.python-poetry.org | POETRY_VERSION=1.5.0 python3 -
 fi
 
 # install poetry dependencies
