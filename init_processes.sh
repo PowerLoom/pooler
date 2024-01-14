@@ -1,8 +1,19 @@
 #!/bin/bash
 
+# only works for debian based systems
+
 # setting up git submodules
 git submodule update --init --recursive
 
+# check if wget is installed
+# only for mac os, linux should have wget installed by default
+if ! command -v wget &> /dev/null
+then
+    echo "wget could not be found"
+    # install wget
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    brew install wget
+fi
 
 if ! command -v python3 &> /dev/null
 then
@@ -26,11 +37,16 @@ if ! command -v poetry &> /dev/null
 then
     echo "poetry could not be found"
     # install poetry
-    pip3 install poetry
+    curl -sSL https://install.python-poetry.org | python3 -
 fi
 
 # install poetry dependencies
 poetry install --no-root
+
+export NVM_DIR=$HOME/.nvm;
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+    source $NVM_DIR/nvm.sh;
+fi
 
 # check nvm is installed
 if ! command -v nvm &> /dev/null
