@@ -1,4 +1,9 @@
 #!/bin/bash
+
+# setting up git submodules
+git submodule update --init --recursive
+
+
 if ! command -v python3 &> /dev/null
 then
     echo "python3 could not be found"
