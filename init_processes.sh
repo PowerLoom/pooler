@@ -43,47 +43,7 @@ fi
 # install poetry dependencies
 poetry install --no-root
 
-export NVM_DIR=$HOME/.nvm;
-if [ -s "$NVM_DIR/nvm.sh" ]; then
-    source $NVM_DIR/nvm.sh;
-fi
-
-# check nvm is installed
-if ! command -v nvm &> /dev/null
-then
-    echo "nvm could not be found"
-    # install nvm
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-    export NVM_DIR="$HOME/.nvm"
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-
-fi
-
-# check node is installed
-if ! command -v node &> /dev/null
-then
-    echo "node could not be found"
-    # install node
-    nvm install node
-    nvm use node
-fi
-
-
-# check pm2 is installed
-if ! command -v pm2 &> /dev/null
-then
-    echo "pm2 could not be found"
-    # install pm2
-    sudo npm install pm2 -g
-fi
-
-
 echo 'populating setting from environment values...';
 ./snapshotter_autofill.sh || exit 1
 
-echo 'starting processes...';
-pm2 start pm2.config.js
-
-echo 'started all snapshotter scripts';
-
-pm2 logs --lines 1000
+poetry run python -m snapshotter.gunicorn_core_launcher & poetry run python -m snapshotter.system_event_detector &

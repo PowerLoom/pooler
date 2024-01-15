@@ -42,10 +42,6 @@ class EpochBase(BaseModel):
     day: int
 
 
-class SlotsPerDayUpdatedMessage(BaseModel):
-    slotsPerDay: int
-
-
 class SnapshotProcessMessage(EpochBase):
     genesis: Optional[bool] = False
 

@@ -18,7 +18,6 @@ from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.models.data_models import DailyTaskCompletedEvent
 from snapshotter.utils.models.data_models import DayStartedEvent
 from snapshotter.utils.models.data_models import EpochReleasedEvent
-from snapshotter.utils.models.data_models import SlotsPerDayUpdatedEvent
 from snapshotter.utils.models.data_models import SnapshottersUpdatedEvent
 from snapshotter.utils.rpc import get_event_sig_and_abi
 from snapshotter.utils.rpc import RpcHelper
@@ -67,14 +66,12 @@ class EventDetectorProcess(multiprocessing.Process):
         )
 
         # event EpochReleased(uint256 indexed epochId, uint256 begin, uint256 end, uint256 timestamp);
-        # event SlotsPerDayUpdated(uint256 slotsPerDay);
         # event DayStartedEvent(uint256 dayId, uint256 timestamp);
         # event DailyTaskCompletedEvent(address snapshotterAddress, uint256 dayId, uint256 timestamp);
 
         EVENTS_ABI = {
             'EpochReleased': self.contract.events.EpochReleased._get_event_abi(),
             'allSnapshottersUpdated': self.contract.events.allSnapshottersUpdated._get_event_abi(),
-            'SlotsPerDayUpdated': self.contract.events.SlotsPerDayUpdated._get_event_abi(),
             'DayStartedEvent': self.contract.events.DayStartedEvent._get_event_abi(),
             'DailyTaskCompletedEvent': self.contract.events.DailyTaskCompletedEvent._get_event_abi(),
         }
@@ -82,7 +79,6 @@ class EventDetectorProcess(multiprocessing.Process):
         EVENT_SIGS = {
             'EpochReleased': 'EpochReleased(uint256,uint256,uint256,uint256)',
             'allSnapshottersUpdated': 'allSnapshottersUpdated(address,bool)',
-            'SlotsPerDayUpdated': 'SlotsPerDayUpdated(uint256)',
             'DayStartedEvent': 'DayStartedEvent(uint256,uint256)',
             'DailyTaskCompletedEvent': 'DailyTaskCompletedEvent(address,uint256,uint256)',
 
@@ -144,12 +140,6 @@ class EventDetectorProcess(multiprocessing.Process):
                 event = SnapshottersUpdatedEvent(
                     snapshotterAddress=log.args.snapshotterAddress,
                     allowed=log.args.allowed,
-                    timestamp=int(time.time()),
-                )
-                events.append((log.event, event))
-            elif log.event == 'SlotsPerDayUpdated':
-                event = SlotsPerDayUpdatedEvent(
-                    slotsPerDay=log.args.slotsPerDay,
                     timestamp=int(time.time()),
                 )
                 events.append((log.event, event))

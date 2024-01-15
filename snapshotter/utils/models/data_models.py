@@ -94,10 +94,6 @@ class SnapshottersUpdatedEvent(EventBase):
     allowed: bool
 
 
-class SlotsPerDayUpdatedEvent(EventBase):
-    slotsPerDay: int
-
-
 class DayStartedEvent(EventBase):
     dayId: int
 

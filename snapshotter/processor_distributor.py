@@ -20,7 +20,6 @@ from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.models.data_models import DailyTaskCompletedEvent
 from snapshotter.utils.models.data_models import DayStartedEvent
 from snapshotter.utils.models.data_models import EpochReleasedEvent
-from snapshotter.utils.models.data_models import SlotsPerDayUpdatedEvent
 from snapshotter.utils.models.data_models import SnapshotFinalizedEvent
 from snapshotter.utils.models.data_models import SnapshottersUpdatedEvent
 from snapshotter.utils.models.message_models import EpochBase
@@ -111,7 +110,7 @@ class ProcessorDistributor:
             try:
                 source_block_time = self._protocol_state_contract.functions.SOURCE_CHAIN_BLOCK_TIME().call()
             except Exception as e:
-                self._logger.exception(
+                self._logger.error(
                     'Exception in querying protocol state for source chain block time: {}',
                     e,
                 )
@@ -122,7 +121,7 @@ class ProcessorDistributor:
             try:
                 epoch_size = self._protocol_state_contract.functions.EPOCH_SIZE().call()
             except Exception as e:
-                self._logger.exception(
+                self._logger.error(
                     'Exception in querying protocol state for epoch size: {}',
                     e,
                 )
@@ -132,8 +131,8 @@ class ProcessorDistributor:
             try:
                 slots_per_day = self._protocol_state_contract.functions.SLOTS_PER_DAY().call()
             except Exception as e:
-                self._logger.exception(
-                    'Exception in querying protocol state for epoch size: {}',
+                self._logger.error(
+                    'Exception in querying protocol state for slots per day: {}',
                     e,
                 )
             else:
@@ -146,11 +145,31 @@ class ProcessorDistributor:
                 else:
                     self._snapshotter_enabled = False
             except Exception as e:
-                self._logger.exception(
-                    'Exception in querying protocol state for snapshotters: {}',
+                self._logger.error(
+                    'Exception in querying protocol state for snapshotter: {}',
                     e,
                 )
                 self._snapshotter_enabled = False
+            self._logger.info('Snapshotter enabled: {}', self._snapshotter_enabled)
+
+            try:
+                snapshotter_slot = self._protocol_state_contract.functions.getSnapshotterSlot(
+                    to_checksum_address(settings.instance_id),
+                ).call()
+                if snapshotter_slot == 0:
+                    self._logger.error('Snapshotter slot is not set, exiting')
+                    exit(0)
+                else:
+                    self._logger.info('Snapshotter slot is set to {}', snapshotter_slot)
+                    self._snapshotter_slot = snapshotter_slot
+            except Exception as e:
+                self._logger.error(
+                    'Exception in querying protocol state for time slot {}',
+                    e,
+                )
+                self._logger.error('Unable to get snapshotter slot, exiting')
+                exit(1)
+
             self._logger.info('Snapshotter enabled: {}', self._snapshotter_enabled)
 
             try:
@@ -165,8 +184,8 @@ class ProcessorDistributor:
                 else:
                     self._snapshotter_active = True
             except Exception as e:
-                self._logger.exception(
-                    'Exception in querying protocol state for snapshotters: {}',
+                self._logger.error(
+                    'Exception in querying protocol state for user task status for day {}',
                     e,
                 )
                 self._snapshotter_active = False
@@ -254,7 +273,7 @@ class ProcessorDistributor:
             self.snapshot_worker.process_task(process_unit, project_type),
         )
 
-    def _is_allowed_for_slot(self, epoch: EpochBase):
+    def _is_allowed_for_epoch(self, epoch: EpochBase):
         """
         Checks if the snapshotter should proceed with snapshotting for the given epoch.
 
@@ -268,11 +287,8 @@ class ProcessorDistributor:
         self._logger.info('Slots per day: {}', N)
         epochs_in_a_day = 86400 // (self._epoch_size * self._source_chain_block_time)
         self._logger.info('Epochs in a day: {}', epochs_in_a_day)
-        snapshotter_addr = settings.instance_id
-        # slot_id = hash(int(snapshotter_addr.lower(), 16)) % N
-        slot_id = 0
-        self._logger.info('Snapshotter ID: {}', slot_id)
-        if (epoch.epochId % epochs_in_a_day) // (epochs_in_a_day // N) == slot_id:
+
+        if (epoch.epochId % epochs_in_a_day) // (epochs_in_a_day // N) == self._snapshotter_slot - 1:
             return True
         return False
 
@@ -281,7 +297,6 @@ class ProcessorDistributor:
             EpochReleasedEvent,
             SnapshotFinalizedEvent,
             SnapshottersUpdatedEvent,
-            SlotsPerDayUpdatedEvent,
             DayStartedEvent,
             DailyTaskCompletedEvent,
         ],
@@ -291,7 +306,8 @@ class ProcessorDistributor:
 
         Args:
             type_ (str): The type of the event.
-            event (Union[EpochReleasedEvent, SnapshotFinalizedEvent, SnapshottersUpdatedEvent, SlotsPerDayUpdatedEvent, DayStartedEvent, DailyTaskCompletedEvent]): The event object.
+            event (Union[EpochReleasedEvent, SnapshotFinalizedEvent, SnapshottersUpdatedEvent,
+            DayStartedEvent, DailyTaskCompletedEvent]): The event object.
 
         Returns:
             None
@@ -299,7 +315,7 @@ class ProcessorDistributor:
         if type_ == 'EpochReleased':
 
             if self._snapshotter_enabled and self._snapshotter_active:
-                if self._is_allowed_for_slot(event):
+                if self._is_allowed_for_epoch(event):
                     await self._epoch_release_processor(event)
                 else:
                     self._logger.info('Epoch {} not in snapshotter slot, ignoring', event.epochId)
@@ -317,10 +333,6 @@ class ProcessorDistributor:
         elif type_ == 'DailyTaskCompletedEvent':
             self._logger.info('Daily task completed event received, setting active status to False')
             self._snapshotter_active = False
-
-        elif type_ == 'SlotsPerDayUpdated':
-            self._slots_per_day = event.slotsPerDay
-            self._logger.info('Slots per day updated to {}', self._slots_per_day)
 
         else:
             self._logger.error(
