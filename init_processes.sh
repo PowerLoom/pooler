@@ -1,5 +1,7 @@
 #!/bin/bash
 
+echo "Killing old processes..."
+pkill -f snapshotter
 # only works for debian based systems
 
 # setting up git submodules
