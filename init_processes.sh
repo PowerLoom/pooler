@@ -17,6 +17,7 @@ then
     brew install wget
 fi
 
+# present by default on mac os
 if ! command -v python3 &> /dev/null
 then
     echo "python3 could not be found"
@@ -39,7 +40,7 @@ if ! command -v poetry &> /dev/null
 then
     echo "poetry could not be found"
     # install poetry
-    curl -sSL https://install.python-poetry.org | POETRY_VERSION=1.5.0 python3 -
+    curl -sSL https://install.python-poetry.org | POETRY_VERSION=1.7.1 python3 -
 fi
 
 # install poetry dependencies
