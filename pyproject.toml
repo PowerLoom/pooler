@@ -30,7 +30,7 @@ fastapi-pagination = "^0.12.12"
 coincurve = "^18.0.0"
 safe-pysha3 = "^1.0.4"
 ipfs-cid = "^1.0.0"
-eip712-structs = {git = "https://github.com/xadahiya/py-eip712-structs"}
+eip712-structs = {git = "https://github.com/powerloom/py-eip712-structs"}
 
 
 [build-system]

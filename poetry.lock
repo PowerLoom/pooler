@@ -728,9 +728,9 @@ safe-pysha3 = ">=1.0.4"
 
 [package.source]
 type = "git"
-url = "https://github.com/xadahiya/py-eip712-structs"
+url = "https://github.com/powerloom/py-eip712-structs"
 reference = "HEAD"
-resolved_reference = "bd4f1cbe223fbda1d671c06ea355e464e73c18a7"
+resolved_reference = "9f702859aeae7ea9c4dfd799f4a7d16a65949973"
 
 [[package]]
 name = "eth-abi"
@@ -2494,4 +2494,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "ce8213b05c4d71a435e6be4c7f631146db027ce37ad6971ea282065ea3eef332"
+content-hash = "a0b841ad6763aa4aa3bce07adbf458a27e148791511f3f46fd594161b0641b51"
