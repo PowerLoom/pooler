@@ -30,5 +30,5 @@ fi
 
 
 # install python dependencies
-pip install -r requirements.txt
-python -m snapshotter.gunicorn_core_launcher & python -m snapshotter.system_event_detector &
+pip3 install -r requirements.txt
+python3 -m snapshotter.gunicorn_core_launcher & python -m snapshotter.system_event_detector &
