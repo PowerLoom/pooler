@@ -28,16 +28,7 @@ then
     sudo apt install python3-pip
 fi
 
-# check if poetry is installed
-if command -v poetry &> /dev/null
-then
-    # install poetry dependencies
-    poetry install --no-root
-    poetry run python -m snapshotter.gunicorn_core_launcher & poetry run python -m snapshotter.system_event_detector &
 
-else
-    echo "poetry could not be found, using pip3 instead"
-    # install python dependencies
-    pip install -r requirements.txt
-    python -m snapshotter.gunicorn_core_launcher & python -m snapshotter.system_event_detector &
-fi
+# install python dependencies
+pip install -r requirements.txt
+python -m snapshotter.gunicorn_core_launcher & python -m snapshotter.system_event_detector &
