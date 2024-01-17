@@ -7,6 +7,9 @@ pkill -f snapshotter
 # setting up git submodules
 git submodule update --init --recursive
 
+echo 'populating setting from environment values...';
+./snapshotter_autofill.sh || exit 1
+
 # present by default on mac os
 if ! command -v python3 &> /dev/null
 then
@@ -26,17 +29,15 @@ then
 fi
 
 # check if poetry is installed
-if ! command -v poetry &> /dev/null
+if command -v poetry &> /dev/null
 then
-    echo "poetry could not be found"
-    # install poetry
-    curl -sSL https://install.python-poetry.org | POETRY_VERSION=1.7.1 python3 -
+    # install poetry dependencies
+    poetry install --no-root
+    poetry run python -m snapshotter.gunicorn_core_launcher & poetry run python -m snapshotter.system_event_detector &
+
+else
+    echo "poetry could not be found, using pip3 instead"
+    # install python dependencies
+    pip install -r requirements.txt
+    python -m snapshotter.gunicorn_core_launcher & python -m snapshotter.system_event_detector &
 fi
-
-# install poetry dependencies
-poetry install --no-root
-
-echo 'populating setting from environment values...';
-./snapshotter_autofill.sh || exit 1
-
-poetry run python -m snapshotter.gunicorn_core_launcher & poetry run python -m snapshotter.system_event_detector &
