@@ -43,6 +43,9 @@ def read_json_file(
             # logger.warning(f'Upon JSON decoding File {file_path}, content does not contain a dictionary. Actual content: {json_data}')
             while type(json_data) != dict and type(json_data) == str:
                 json_data = json.loads(json_data)
+    finally:
+        f_.close()
+        
         return json_data
 
 
