@@ -434,12 +434,14 @@ class RpcHelper(object):
                         )
                         await asyncio.sleep(error_data['backoff_seconds'])
 
-                        return await self._async_web3_call(contract_function=contract_function,
-                                                            redis_conn=redis_conn,
-                                                            from_address=from_address,
-                                                            block=block,
-                                                            overrides=overrides,    
-                                                            semaphore=semaphore)
+                        return await self._async_web3_call(
+                            contract_function=contract_function,
+                            redis_conn=redis_conn,
+                            from_address=from_address,
+                            block=block,
+                            overrides=overrides,
+                            semaphore=semaphore,
+                        )
                     elif 'daily request count exceeded' in error.get('message', ''):
                         self._logger.warning('Daily request count exceeded, deactivating for the day')
                         raise RPCException(
@@ -957,6 +959,7 @@ class RpcHelper(object):
 
         response_data = await self._make_rpc_jsonrpc_call(rpc_query, redis_conn=redis_conn, semaphore=semaphore)
         return response_data
+
     @acquire_bounded_semaphore
     async def get_events_logs(
         self, contract_address, to_block, from_block, topics, event_abi, redis_conn, semaphore=None,
@@ -1043,14 +1046,14 @@ class RpcHelper(object):
                         await asyncio.sleep(error_data['backoff_seconds'])
 
                         return await self.get_events_logs(
-                                                        contract_address=contract_address,
-                                                        to_block=to_block,
-                                                        from_block=from_block,
-                                                        topics=topics,
-                                                        event_abi=event_abi,
-                                                        redis_conn=redis_conn,   
-                                                        semaphore=semaphore
-                                                        )
+                            contract_address=contract_address,
+                            to_block=to_block,
+                            from_block=from_block,
+                            topics=topics,
+                            event_abi=event_abi,
+                            redis_conn=redis_conn,
+                            semaphore=semaphore,
+                        )
                     elif 'daily request count exceeded' in error.get('message', ''):
                         self._logger.warning('Daily request count exceeded, deactivating for the day')
                         raise RPCException(
@@ -1061,7 +1064,6 @@ class RpcHelper(object):
                         )
                         # TODO implement shutdown for day
 
-                
                 codec: ABICodec = web3_provider.codec
                 all_events = []
                 for log in event_log:
