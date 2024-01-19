@@ -18,12 +18,11 @@ from tenacity import retry
 from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
-from web3 import AsyncHTTPProvider
-from web3 import AsyncWeb3
 from web3 import Web3
 from web3._utils.abi import map_abi_data
 from web3._utils.events import get_event_data
 from web3._utils.normalizers import BASE_RETURN_NORMALIZERS
+from web3.eth import AsyncEth
 from web3.types import TxParams
 from web3.types import Wei
 
@@ -39,6 +38,7 @@ from snapshotter.utils.redis.redis_keys import rpc_get_event_logs_calls
 from snapshotter.utils.redis.redis_keys import rpc_get_transaction_receipt_calls
 from snapshotter.utils.redis.redis_keys import rpc_json_rpc_calls
 from snapshotter.utils.redis.redis_keys import rpc_web3_calls
+from snapshotter.utils.utility_functions import acquire_bounded_semaphore
 
 
 def get_contract_abi_dict(abi):
@@ -126,7 +126,7 @@ class RpcHelper(object):
         self._rate_limit_lua_script_shas = None
         self._initialized = False
         self._sync_nodes_initialized = False
-        self._logger = logger.bind(module='RpcHelper')
+        self._logger = logger.bind(module='Powerloom|RpcHelper')
         self._client = None
         self._async_transport = None
         self._rate_limit_lua_script_shas = None
@@ -179,7 +179,11 @@ class RpcHelper(object):
         for node in self._nodes:
             if node['web3_client_async'] is not None:
                 continue
-            node['web3_client_async'] = AsyncWeb3(AsyncHTTPProvider(node['rpc_url']))
+            node['web3_client_async'] = Web3(
+                Web3.AsyncHTTPProvider(node['rpc_url']),
+                modules={'eth': (AsyncEth,)},
+                middlewares=[],
+            )
 
     async def init(self, redis_conn):
         """
@@ -340,8 +344,10 @@ class RpcHelper(object):
             else:
                 return current_block
         return await f(node_idx=0)
+    
 
-    async def _async_web3_call(self, contract_function, redis_conn, from_address=None, block=None, overrides=None):
+    @acquire_bounded_semaphore
+    async def _async_web3_call(self, contract_function, redis_conn, from_address=None, block=None, overrides=None, semaphore=None):
         """
         Executes a web3 call asynchronously.
 
@@ -364,7 +370,7 @@ class RpcHelper(object):
             try:
                 node = self._nodes[node_idx]
                 rpc_url = node.get('rpc_url')
-
+               
                 await check_rpc_rate_limit(
                     parsed_limits=node.get('rate_limit', []),
                     app_id=rpc_url.split('/')[-1],
@@ -418,6 +424,24 @@ class RpcHelper(object):
                 data = await node['web3_client_async'].eth.call(
                     payload, block_identifier=block, state_override=overrides,
                 )
+                
+                error = data.get('error', {})
+                if error != {}:
+                    error_data = error.get('data', {})
+                    if "backoff_seconds" in error_data:
+                        self._logger.warning("Rate limit exceeded, sleeping for {} seconds", error_data['backoff_seconds']) 
+                        await asyncio.sleep(error_data['backoff_seconds'])
+
+                        return await self._make_rpc_jsonrpc_call(rpc_query, redis_conn, semaphore=semaphore)
+                    elif "daily request count exceeded" in error.get("message", ""):
+                        self._logger.warning("Daily request count exceeded, deactivating for the day")
+                        raise RPCException(
+                            request=payload,
+                            response=(429, error.get('message', '')),
+                            underlying_exception=None,
+                            extra_info=f'RPC_CALL_ERROR: daily request count exceeded',
+                        )
+                        # TODO implement shutdown for day
 
                 # if we're doing a state override call, at time of writing it means grabbing tick data
                 # more efficient to use eth_abi to decode rather than web3 codec
@@ -581,12 +605,13 @@ class RpcHelper(object):
             ),
         )
         return current_block
-
+    
     async def web3_call(self, tasks, redis_conn, from_address=None, block=None, overrides=None):
         """
         Calls the given tasks asynchronously using web3 and returns the response.
 
         Args:
+        ß
             tasks (list): List of contract functions to call.
             redis_conn: Redis connection object.
             from_address (str, optional): Address to use as the transaction sender. Defaults to None.
@@ -598,6 +623,15 @@ class RpcHelper(object):
             await self.init(redis_conn)
 
         try:
+            rate_limit = self._nodes[0].get('rate_limit', [])
+
+            sem_limit = rate_limit[2].amount / (settings.callback_worker_config.num_snapshot_workers + \
+                                         settings.callback_worker_config.num_aggregation_workers + \
+                                         settings.callback_worker_config.num_delegate_workers)
+
+            
+            semaphore = asyncio.BoundedSemaphore(sem_limit)
+            
             web3_tasks = [
                 self._async_web3_call(
                     contract_function=task,
@@ -605,6 +639,7 @@ class RpcHelper(object):
                     from_address=from_address,
                     block=block,
                     overrides=overrides,
+                    semaphore=semaphore,
                 )
                 for task in tasks
             ]
@@ -612,8 +647,8 @@ class RpcHelper(object):
             return response
         except Exception as e:
             raise e
-
-    async def _make_rpc_jsonrpc_call(self, rpc_query, redis_conn):
+    @acquire_bounded_semaphore
+    async def _make_rpc_jsonrpc_call(self, rpc_query, redis_conn, semaphore=None):
         """
         Makes an RPC JSON-RPC call to a node in the pool.
 
@@ -639,6 +674,7 @@ class RpcHelper(object):
             node = self._nodes[node_idx]
             rpc_url = node.get('rpc_url')
 
+            
             await check_rpc_rate_limit(
                 parsed_limits=node.get('rate_limit', []),
                 app_id=rpc_url.split('/')[-1],
@@ -679,12 +715,30 @@ class RpcHelper(object):
                     'Error in making jsonrpc call, error {}', str(exc),
                 )
                 raise exc
+            else: 
+                if response.status_code != 429:
+                    error_data = response_data.get('error', {}).get('data', {})
+                    if "backoff_seconds" in error_data:
+                        self._logger.warning("Rate limit exceeded, sleeping for {} seconds", error_data['backoff_seconds']) 
+                        await asyncio.sleep(error_data['backoff_seconds'])
 
+                        return await self._make_rpc_jsonrpc_call(rpc_query, redis_conn, semaphore=semaphore)
+                    elif "daily request count exceeded" in response_data.get("error", {}).get("message", ""):
+                        self._logger.warning("Daily request count exceeded, deactivating for the day")
+                        raise RPCException(
+                            request=rpc_query,
+                            response=(response.status_code, response.text),
+                            underlying_exception=None,
+                            extra_info=f'RPC_CALL_ERROR: daily request count exceeded',
+                        )
+                        # TODO implement shutdown for day
+                        
+                        
             if response.status_code != 200:
                 raise RPCException(
                     request=rpc_query,
                     response=(response.status_code, response.text),
-                    underlying_exception=None,
+                    underlying_exception=response_data,
                     extra_info=f'RPC_CALL_ERROR: {response.text}',
                 )
 
@@ -747,7 +801,12 @@ class RpcHelper(object):
             request_id += 1
 
         try:
-            response_data = await self._make_rpc_jsonrpc_call(rpc_query, redis_conn)
+            rate_limit = self._nodes[0].get('rate_limit', [])
+            sem_limit = rate_limit[2].amount / (settings.callback_worker_config.num_snapshot_workers + \
+                                         settings.callback_worker_config.num_aggregation_workers + \
+                                         settings.callback_worker_config.num_delegate_workers)
+            semaphore = asyncio.BoundedSemaphore(sem_limit)
+            response_data = await self._make_rpc_jsonrpc_call(rpc_query, redis_conn, semaphore=semaphore)
 
             rpc_respnse = []
 
@@ -818,8 +877,16 @@ class RpcHelper(object):
                 },
             )
             request_id += 1
+        
+        rate_limit = self._nodes[0].get('rate_limit', [])
+        sem_limit = rate_limit[2].amount / (settings.callback_worker_config.num_snapshot_workers + \
+                                        settings.callback_worker_config.num_aggregation_workers + \
+                                        settings.callback_worker_config.num_delegate_workers)
+        semaphore = asyncio.BoundedSemaphore(sem_limit)
+        
+        response_data = await self._make_rpc_jsonrpc_call(rpc_query, redis_conn=redis_conn, semaphore=semaphore)
+    
 
-        response_data = await self._make_rpc_jsonrpc_call(rpc_query, redis_conn=redis_conn)
         rpc_response = []
 
         response = response_data if isinstance(response_data, list) else [response_data]
@@ -867,7 +934,13 @@ class RpcHelper(object):
             )
             request_id += 1
 
-        response_data = await self._make_rpc_jsonrpc_call(rpc_query, redis_conn=redis_conn)
+        rate_limit = self._nodes[0].get('rate_limit', [])
+        sem_limit = rate_limit[2].amount / (settings.callback_worker_config.num_snapshot_workers + \
+                                        settings.callback_worker_config.num_aggregation_workers + \
+                                        settings.callback_worker_config.num_delegate_workers)
+        semaphore = asyncio.BoundedSemaphore(sem_limit)
+
+        response_data = await self._make_rpc_jsonrpc_call(rpc_query, redis_conn=redis_conn, semaphore=semaphore)
         return response_data
 
     async def get_events_logs(
