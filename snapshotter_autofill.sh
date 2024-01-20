@@ -55,7 +55,7 @@ cp config/aggregator.example.json config/aggregator.json
 cp config/auth_settings.example.json config/auth_settings.json
 cp config/settings.example.json config/settings.json
 
-export namespace="${NAMESPACE:-UNISWAPV2}"
+export namespace="${NAMESPACE:-aavev3}"
 export ipfs_url="${IPFS_URL:-/dns/ipfs/tcp/5001}"
 export ipfs_api_key="${IPFS_API_KEY:-}"
 export ipfs_api_secret="${IPFS_API_SECRET:-}"
