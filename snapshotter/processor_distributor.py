@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import importlib
 import json
 import multiprocessing
@@ -52,7 +53,7 @@ from snapshotter.utils.models.message_models import SnapshotProcessMessage
 from snapshotter.utils.models.settings_model import AggregationConfigMulti
 from snapshotter.utils.models.settings_model import AggregationConfigSingle
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
-from snapshotter.utils.redis.redis_keys import active_status_key
+from snapshotter.utils.redis.redis_keys import active_status_key, time_to_resume_active_status_key
 from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import project_finalized_data_zset
@@ -648,7 +649,14 @@ class ProcessorDistributor(multiprocessing.Process):
             if _is_snapshotter_active:
                 active_status = bool(int(_is_snapshotter_active))
                 if not active_status:
-                    self._logger.error('System is not active, ignoring released Epoch')
+                    time_to_resume = await self._redis_conn.get(time_to_resume_active_status_key)
+                    curr_time = int(datetime.datetime.now().timestamp())
+                    if time_to_resume <= curr_time:
+                        await self._redis_conn.set(active_status_key, int(True))
+                        await self._redis_conn.delete(time_to_resume_active_status_key)
+                        await self._epoch_release_processor(message)
+                    else: 
+                        self._logger.error('System is not active, ignoring released Epoch')
                 else:
                     await self._epoch_release_processor(message)
 

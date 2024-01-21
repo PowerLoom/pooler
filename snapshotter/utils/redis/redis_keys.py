@@ -42,6 +42,8 @@ snapshot_submission_window_key = 'snapshotSubmissionWindow'
 
 active_status_key = f'snapshotterActiveStatus:{settings.namespace}'
 
+time_to_resume_active_status_key = f'timeToResumeActiveStatus:{settings.namespace}'
+
 # project finalzed data zset
 
 
