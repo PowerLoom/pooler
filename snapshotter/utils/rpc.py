@@ -424,7 +424,7 @@ class RpcHelper(object):
                     payload, block_identifier=block, state_override=overrides,
                 )
 
-                is_dict = isinstance(data, dict)    
+                is_dict = isinstance(data, dict)
                 if is_dict:
                     if data.get('status_code') == 429:
                         # return to be handled by semaphore
@@ -707,7 +707,7 @@ class RpcHelper(object):
                 # return to be handled by semaphore
                 # done this way so can also handle get event logs
                 return response
-            
+
             if response.status_code != 200:
                 raise RPCException(
                     request=rpc_query,
