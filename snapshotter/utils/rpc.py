@@ -1,8 +1,12 @@
 import asyncio
+import datetime
 import json
 import time
 from typing import List
 from typing import Union
+
+from snapshotter.utils.redis.redis_keys import active_status_key
+from snapshotter.utils.redis.redis_keys import time_to_resume_active_status_key
 
 import eth_abi
 import tenacity
@@ -10,7 +14,7 @@ from async_limits import parse_many as limit_parse_many
 from eth_abi.codec import ABICodec
 from eth_utils import keccak
 from hexbytes import HexBytes
-from httpx import AsyncClient
+from httpx import AsyncClient, HTTPError
 from httpx import AsyncHTTPTransport
 from httpx import Limits
 from httpx import Timeout
@@ -424,12 +428,6 @@ class RpcHelper(object):
                     payload, block_identifier=block, state_override=overrides,
                 )
 
-                is_dict = isinstance(data, dict)
-                if is_dict:
-                    if data.get('status_code') == 429:
-                        # return to be handled by semaphore
-                        return data
-
                 # if we're doing a state override call, at time of writing it means grabbing tick data
                 # more efficient to use eth_abi to decode rather than web3 codec
                 if overrides is not None:
@@ -451,6 +449,41 @@ class RpcHelper(object):
                 else:
                     return normalized_data
             except Exception as e:
+                if e.response.status_code == 429:
+                    # return to be handled by semaphore
+                    result = e.response
+                    if result.status_code == 429:
+                        result_data = result.json()
+
+                        error_data = result_data.get('error', {}).get('data', {}).get('rate', {})
+
+                        if 'daily request count exceeded' in result_data.get('error', {}).get('message', ''):
+        
+                            # get current active status
+                            active_status = await redis_conn.get(active_status_key)
+                            # if active status is already False, then do nothing
+                            if active_status is not None and int(active_status) == int(False):
+                                self._logger.warning('Daily request count exceeded, deactivating for the day')
+                                # set the active status key to False
+                                await redis_conn.set(active_status_key, int(False))
+                                # set time to resume active status to 24 hours from now
+                                seconds_to_resume = int(datetime.datetime.now().timestamp()) + 24 * 60 * 60
+                                await redis_conn.set(time_to_resume_active_status_key, seconds_to_resume)
+                                
+                                
+                        if error_data.get('backoff_seconds', None) is not None:
+
+                            await asyncio.sleep(error_data['backoff_seconds'])
+
+                            return await self._async_web3_call(
+                                contract_function=contract_function,
+                                redis_conn=redis_conn,
+                                from_address=from_address,
+                                block=block,
+                                overrides=overrides,
+                                semaphore=semaphore,
+                            )
+                
                 exc = RPCException(
                     request=[contract_function.fn_name],
                     response=None,
@@ -462,6 +495,7 @@ class RpcHelper(object):
                     ('Error while making web3 batch call'),
                     err=lambda: str(exc),
                 )
+    
                 raise exc
 
         return await f(node_idx=0)
@@ -703,10 +737,43 @@ class RpcHelper(object):
                     'Error in making jsonrpc call, error {}', str(exc),
                 )
                 raise exc
+            
             if response.status_code == 429:
-                # return to be handled by semaphore
-                # done this way so can also handle get event logs
-                return response
+                result_data = response.json()
+
+                error_data = result_data.get('error', {}).get('data', {}).get('rate', {})
+
+                if 'daily request count exceeded' in result_data.get('error', {}).get('message', ''):
+
+                    # get current active status
+                    active_status = await redis_conn.get(active_status_key)
+                    # if active status is already False, then do nothing
+                    if active_status is not None and int(active_status) == int(False):
+                        self._logger.warning('Daily request count exceeded, deactivating for the day')
+                        # set the active status key to False
+                        await redis_conn.set(active_status_key, int(False))
+                        # set time to resume active status to 24 hours from now
+                        seconds_to_resume = int(datetime.datetime.now().timestamp()) + 24 * 60 * 60
+                        await redis_conn.set(time_to_resume_active_status_key, seconds_to_resume)
+                        
+                    raise RPCException(
+                    request=rpc_query,
+                    response=(response.status_code, response.text),
+                    underlying_exception=response_data,
+                    extra_info=f'RPC_CALL_ERROR: {response.text}',
+                    )
+                            
+                if error_data.get('backoff_seconds', None) is not None:
+                    self._logger.warning('Rate limit exceeded, sleeping for {} seconds', error_data['backoff_seconds'])
+
+                    await asyncio.sleep(error_data['backoff_seconds'])
+
+                    return await self._make_rpc_jsonrpc_call(
+                        rpc_query=rpc_query,
+                        redis_conn=redis_conn,
+                        semaphore=semaphore,
+                    )
+                
 
             if response.status_code != 200:
                 raise RPCException(
@@ -997,12 +1064,6 @@ class RpcHelper(object):
                     event_log_query,
                 )
 
-                is_dict = isinstance(event_log, dict)
-                if is_dict:
-                    if event_log.get('status_code', None) == 429:
-                        # return to be handled by semaphore
-                        return event_log
-
                 codec: ABICodec = web3_provider.codec
                 all_events = []
                 for log in event_log:
@@ -1024,6 +1085,43 @@ class RpcHelper(object):
                     extra_info=f'RPC_GET_EVENT_LOGS_ERROR: {str(e)}',
                 )
                 self._logger.trace('Error in get_events_logs, error {}', str(exc))
+                if e.response.status_code == 429:
+                    # return to be handled by semaphore
+                    result = e.response
+                    if result.status_code == 429:
+                        result_data = result.json()
+
+                        error_data = result_data.get('error', {}).get('data', {}).get('rate', {})
+
+                        if 'daily request count exceeded' in result_data.get('error', {}).get('message', ''):
+        
+                            # get current active status
+                            active_status = await redis_conn.get(active_status_key)
+                            # if active status is already False, then do nothing
+                            if active_status is not None and int(active_status) == int(False):
+                                self._logger.warning('Daily request count exceeded, deactivating for the day')
+                                # set the active status key to False
+                                await redis_conn.set(active_status_key, int(False))
+                                # set time to resume active status to 24 hours from now
+                                seconds_to_resume = int(datetime.datetime.now().timestamp()) + 24 * 60 * 60
+                                await redis_conn.set(time_to_resume_active_status_key, seconds_to_resume)
+                            raise exc
+                                
+                                
+                        if error_data.get('backoff_seconds', None) is not None:
+
+                            await asyncio.sleep(error_data['backoff_seconds'])
+
+                            return await self.get_events_logs(
+                                contract_address=contract_address,
+                                to_block=to_block,
+                                from_block=from_block,
+                                topics=topics,
+                                event_abi=event_abi,
+                                redis_conn=redis_conn,
+                                semaphore=semaphore,
+                            )
+
                 raise exc
 
         return await f(node_idx=0)
