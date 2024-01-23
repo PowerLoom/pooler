@@ -11,6 +11,7 @@ from functools import wraps
 from signal import SIGINT
 from signal import SIGQUIT
 from signal import SIGTERM
+from typing import List
 
 from web3 import Web3
 from web3.types import EventData
@@ -30,8 +31,6 @@ from snapshotter.utils.redis.redis_keys import last_epoch_detected_epoch_id_key
 from snapshotter.utils.redis.redis_keys import last_epoch_detected_timestamp_key
 from snapshotter.utils.rpc import get_event_sig_and_abi
 from snapshotter.utils.rpc import RpcHelper
-
-from typing import List
 
 
 def rabbitmq_and_redis_cleanup(fn):
@@ -171,7 +170,7 @@ class EventDetectorProcess(multiprocessing.Process):
             await self._aioredis_pool.populate()
             self._redis_conn = self._aioredis_pool._aioredis_pool
 
-    async def get_events(self, from_block: int, to_block: int)-> List[EventData]:
+    async def get_events(self, from_block: int, to_block: int) -> List[EventData]:
         """
         Retrieves events from the blockchain for the given block range and returns them as a list of tuples.
         Each tuple contains the event name and an object representing the event data.

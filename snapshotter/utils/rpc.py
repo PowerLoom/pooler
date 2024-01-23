@@ -25,9 +25,9 @@ from web3._utils.abi import map_abi_data
 from web3._utils.events import get_event_data
 from web3._utils.normalizers import BASE_RETURN_NORMALIZERS
 from web3.eth import AsyncEth
+from web3.types import EventData
 from web3.types import TxParams
 from web3.types import Wei
-from web3.types import EventData
 
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import logger
@@ -693,7 +693,7 @@ class RpcHelper(object):
             before_sleep=self._on_node_exception,
         )
         async def f(node_idx):
-           
+
             node = self._nodes[node_idx]
             rpc_url = node.get('rpc_url')
 
@@ -989,10 +989,9 @@ class RpcHelper(object):
         response_data = await self._make_rpc_jsonrpc_call(rpc_query=rpc_query, redis_conn=redis_conn, semaphore=semaphore)
         return response_data
 
-    
     async def get_events_logs(
-        self, contract_address, to_block, from_block, topics, event_abi, redis_conn, semaphore=None
-    )->list[EventData]:
+        self, contract_address, to_block, from_block, topics, event_abi, redis_conn, semaphore=None,
+    ) -> list[EventData]:
         """
         Returns all events logs for a given contract address, within a specified block range and with specified topics.
 
@@ -1010,8 +1009,7 @@ class RpcHelper(object):
         if not self._initialized:
             await self.init(redis_conn)
 
-
-        async def f(node_idx)->list[EventData]:
+        async def f(node_idx) -> list[EventData]:
             node = self._nodes[node_idx]
             rpc_url = node.get('rpc_url')
 
@@ -1064,7 +1062,7 @@ class RpcHelper(object):
                     abi = event_abi.get(log['topics'][0].hex(), '')
                     evt = get_event_data(codec, abi, log)
                     all_events.append(evt)
-             
+
                 return all_events
             except Exception as e:
                 exc = RPCException(

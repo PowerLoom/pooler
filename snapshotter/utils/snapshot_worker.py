@@ -149,11 +149,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             self._logger.info('Sending snapshots to commit service: {}', snapshots)
             submitted_snapshots = []
 
-
-
-
             for project_data_source, snapshot in snapshots:
-
 
                 data_sources = project_data_source.split('_')
                 if len(data_sources) == 1:
@@ -165,7 +161,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 project_id = self._gen_project_id(
                     task_type=task_type, data_source=data_source, primary_data_source=primary_data_source,
                 )
-                
+
                 await self._redis_conn.set(
                     name=submitted_base_snapshots_key(
                         epoch_id=msg_obj.epochId, project_id=project_id,

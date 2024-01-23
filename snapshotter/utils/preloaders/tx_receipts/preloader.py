@@ -84,7 +84,7 @@ class TxPreloadWorker(DelegatorPreloaderAsyncWorker):
             redis_conn=redis_conn,
             rpc_helper=rpc_helper,
         )
-        
+
         [tx_list.extend(block['transactions']) for block in block_details.values()]
         tx_receipt_query_messages = [
             DelegateWorkerRequestMessage(

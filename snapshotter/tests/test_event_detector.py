@@ -1,5 +1,3 @@
-
-
 from snapshotter.system_event_detector import EventDetectorProcess
 from snapshotter.utils.rpc import RpcHelper
 
@@ -10,7 +8,7 @@ async def test_event_detector():
     # events = await ed.get_events(
     #     from_block=19057638,
     #     to_block=19057738,
-        
+
     # )
     rpc_helper = RpcHelper()
     events = await rpc_helper.get_events_logs(
@@ -20,6 +18,6 @@ async def test_event_detector():
     )
     print(events)
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     import asyncio
     asyncio.run(test_event_detector())

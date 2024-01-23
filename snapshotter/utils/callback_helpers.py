@@ -92,14 +92,14 @@ def misc_notification_callback_result_handler(fut: asyncio.Future):
         else:
             logger.error('Exception while sending callback or notification: {}', e)
     else:
-			
+
         logger.debug('Misc Callback or notification result:{}', r)
         try:
             status_code = r.status_code
-             
+
             logger.debug('data', r.error)
         except:
-            pass    
+            pass
 
 
 def sync_notification_callback_result_handler(f: functools.partial):
@@ -294,4 +294,3 @@ class GenericProcessorAggregate(ABC):
         project_ids: List[str],
     ):
         pass
-

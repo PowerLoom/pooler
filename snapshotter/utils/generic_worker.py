@@ -348,7 +348,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                     'projectId': project_id,
                     'epochId': epoch_id,
                     'snapshotCid': snapshot_cid,
-                    'contractAddress': settings.protocol_state.address 
+                    'contractAddress': settings.protocol_state.address,
                 },
             ),
         )
