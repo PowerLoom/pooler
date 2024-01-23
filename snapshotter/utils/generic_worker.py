@@ -338,7 +338,6 @@ class GenericAsyncWorker(multiprocessing.Process):
             None
         """
         request_, signature = self.generate_signature(snapshot_cid, epoch_id, project_id)
-
         # submit to relayer
         f = asyncio.ensure_future(
             self._client.post(
@@ -349,6 +348,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                     'projectId': project_id,
                     'epochId': epoch_id,
                     'snapshotCid': snapshot_cid,
+                    'contractAddress': settings.protocol_state.address 
                 },
             ),
         )

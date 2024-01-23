@@ -24,6 +24,7 @@ class TxReceiptProcessor(GenericDelegateProcessor):
         self._logger.trace(
             'Processing tx receipt fetch for {}', msg_obj,
         )
+
         if 'tx_hash' not in msg_obj.extra:
             raise ValidationError(
                 f'No tx_hash found in'
@@ -34,6 +35,7 @@ class TxReceiptProcessor(GenericDelegateProcessor):
             tx_hash,
             redis_conn,
         )
+
         tx_receipt_dict = attribute_dict_to_dict(tx_receipt_obj)
         return DelegateTxReceiptWorkerResponseMessage(
             txHash=tx_hash,

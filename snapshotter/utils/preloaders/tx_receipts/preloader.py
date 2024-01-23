@@ -77,12 +77,14 @@ class TxPreloadWorker(DelegatorPreloaderAsyncWorker):
         await self._redis_conn.delete(epoch_txs_htable(epoch_id=self._epoch.epochId - 30))
 
         tx_list = list()
+
         block_details = await get_block_details_in_block_range(
             from_block=epoch.begin,
             to_block=epoch.end,
             redis_conn=redis_conn,
             rpc_helper=rpc_helper,
         )
+        
         [tx_list.extend(block['transactions']) for block in block_details.values()]
         tx_receipt_query_messages = [
             DelegateWorkerRequestMessage(
@@ -93,6 +95,7 @@ class TxPreloadWorker(DelegatorPreloaderAsyncWorker):
             )
             for idx, tx_hash in enumerate(tx_list)
         ]
+
         self._request_id_query_obj_map = {
             msg_obj.requestId: msg_obj
             for msg_obj in tx_receipt_query_messages

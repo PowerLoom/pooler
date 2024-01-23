@@ -270,6 +270,7 @@ async def get_block_details_in_block_range(
                 max=int(from_block) - source_chain_epoch_size * 3,
             ),
         )
+
         return block_details_dict
 
     except Exception as e:

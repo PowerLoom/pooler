@@ -182,6 +182,7 @@ class ProjectConfig(BaseModel):
     preload_tasks: List[str]
 
 
+
 class ProjectsConfig(BaseModel):
     config: List[ProjectConfig]
 
