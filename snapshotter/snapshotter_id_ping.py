@@ -32,7 +32,7 @@ async def main():
         [
             protocol_state_contract.functions.getSnapshotters(),
         ],
-        redis_conn=redis_conn,
+        redis_conn,
     )
     allowed_snapshotters = snapshotters_arr_query[0]
     if to_checksum_address(settings.instance_id) in allowed_snapshotters:

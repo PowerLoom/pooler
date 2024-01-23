@@ -654,7 +654,6 @@ class ProcessorDistributor(multiprocessing.Process):
                     curr_time = int(datetime.datetime.now().timestamp())
                     if time_to_resume <= curr_time:
                         await self._redis_conn.set(active_status_key, int(True))
-                        await self._redis_conn.delete(time_to_resume_active_status_key)
                         await self._epoch_release_processor(message)
                     else:
                         self._logger.error('System is not active, ignoring released Epoch')

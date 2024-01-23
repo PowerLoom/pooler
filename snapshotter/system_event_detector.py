@@ -11,10 +11,8 @@ from functools import wraps
 from signal import SIGINT
 from signal import SIGQUIT
 from signal import SIGTERM
-from typing import List
 
 from web3 import Web3
-from web3.types import EventData
 
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import logger
@@ -170,7 +168,7 @@ class EventDetectorProcess(multiprocessing.Process):
             await self._aioredis_pool.populate()
             self._redis_conn = self._aioredis_pool._aioredis_pool
 
-    async def get_events(self, from_block: int, to_block: int) -> List[EventData]:
+    async def get_events(self, from_block: int, to_block: int):
         """
         Retrieves events from the blockchain for the given block range and returns them as a list of tuples.
         Each tuple contains the event name and an object representing the event data.
@@ -183,7 +181,7 @@ class EventDetectorProcess(multiprocessing.Process):
             List[Tuple[str, Any]]: A list of tuples, where each tuple contains the event name
             and an object representing the event data.
         """
-        events_log: list[EventData] = await self.rpc_helper.get_events_logs(
+        events_log = await self.rpc_helper.get_events_logs(
             **{
                 'contract_address': self.contract_address,
                 'to_block': to_block,
@@ -198,33 +196,33 @@ class EventDetectorProcess(multiprocessing.Process):
         new_epoch_detected = False
         latest_epoch_id = - 1
         for log in events_log:
-            if log['event'] == 'EpochReleased':
+            if log.event == 'EpochReleased':
                 event = EpochReleasedEvent(
-                    begin=log['args']['begin'],
-                    end=log['args']['end'],
-                    epochId=log['args']['epochId'],
-                    timestamp=log['args']['timestamp'],
+                    begin=log.args.begin,
+                    end=log.args.end,
+                    epochId=log.args.epochId,
+                    timestamp=log.args.timestamp,
                 )
                 new_epoch_detected = True
-                latest_epoch_id = max(latest_epoch_id, log['args']['epochId'])
-                events.append((log['event'], event))
+                latest_epoch_id = max(latest_epoch_id, log.args.epochId)
+                events.append((log.event, event))
 
-            elif log['event'] == 'SnapshotFinalized':
+            elif log.event == 'SnapshotFinalized':
                 event = SnapshotFinalizedEvent(
-                    epochId=log['args']['epochId'],
-                    epochEnd=log['args']['epochEnd'],
-                    projectId=log['args']['projectId'],
-                    snapshotCid=log['args']['snapshotCid'],
-                    timestamp=log['args']['timestamp'],
+                    epochId=log.args.epochId,
+                    epochEnd=log.args.epochEnd,
+                    projectId=log.args.projectId,
+                    snapshotCid=log.args.snapshotCid,
+                    timestamp=log.args.timestamp,
                 )
-                events.append((log['event'], event))
-            elif log['event'] == 'allSnapshottersUpdated':
+                events.append((log.event, event))
+            elif log.event == 'allSnapshottersUpdated':
                 event = SnapshottersUpdatedEvent(
-                    snapshotterAddress=log['args']['snapshotterAddress'],
-                    allowed=log['args']['allowed'],
+                    snapshotterAddress=log.args.snapshotterAddress,
+                    allowed=log.args.allowed,
                     timestamp=int(time.time()),
                 )
-                events.append((log['event'], event))
+                events.append((log.event, event))
 
         if new_epoch_detected:
             await self._redis_conn.set(
