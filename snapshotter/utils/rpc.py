@@ -338,6 +338,7 @@ class RpcHelper(object):
             retry_state.fn, self._nodes[exc_idx], exc_idx, self._nodes[next_node_idx],
             next_node_idx, retry_state.outcome.exception(),
         )
+            
 
     async def get_current_block_number(self, redis_conn):
         """
@@ -352,6 +353,9 @@ class RpcHelper(object):
         Raises:
             RPCException: If an error occurs while making the RPC call.
         """
+        if not self._initialized:
+            await self.init(redis_conn)
+
         @retry(
             reraise=True,
             retry=retry_if_exception_type(RPCException),
@@ -359,8 +363,8 @@ class RpcHelper(object):
             stop=stop_after_attempt(settings.rpc.retry),
             before_sleep=self._on_node_exception,
         )
-        @acquire_bounded_semaphore
-        async def f(node_idx, semaphore=None):
+        @acquire_bounded_semaphore(semaphore=self._semaphore)
+        async def f(node_idx):
             if not self._initialized:
                 await self.init(redis_conn=redis_conn)
             node = self._nodes[node_idx]
@@ -411,7 +415,9 @@ class RpcHelper(object):
                 raise exc
             else:
                 return current_block
-        return await f(self, node_idx=0, semaphore=self._semaphore)
+        
+        return f(node_idx=0)
+    
 
     async def _async_web3_call(self, contract_function, redis_conn, from_address=None, block=None, overrides=None):
         """
@@ -432,8 +438,8 @@ class RpcHelper(object):
             stop=stop_after_attempt(settings.rpc.retry),
             before_sleep=self._on_node_exception,
         )
-        @acquire_bounded_semaphore
-        async def f(node_idx, semaphore=None):
+        @acquire_bounded_semaphore(semaphore=self._semaphore)
+        async def f(node_idx):
             try:
                 node = self._nodes[node_idx]
                 rpc_url = node.get('rpc_url')
@@ -529,8 +535,8 @@ class RpcHelper(object):
                 )
                 raise exc
 
-        return await f(self, node_idx=0, semaphore=self._semaphore)
-
+        return await f(node_idx=0)
+    
     async def get_transaction_receipt(self, tx_hash, redis_conn):
         """
         Retrieves the transaction receipt for a given transaction hash.
@@ -545,6 +551,9 @@ class RpcHelper(object):
         Raises:
             RPCException: If an error occurs while retrieving the transaction receipt.
         """
+        if not self._initialized:
+            await self.init(redis_conn)
+
         @retry(
             reraise=True,
             retry=retry_if_exception_type(RPCException),
@@ -552,8 +561,8 @@ class RpcHelper(object):
             stop=stop_after_attempt(settings.rpc.retry),
             before_sleep=self._on_node_exception,
         )
-        @acquire_bounded_semaphore
-        async def f(node_idx, semaphore=None):
+        @acquire_bounded_semaphore(semaphore=self._semaphore)
+        async def f(node_idx):
             if not self._initialized:
                 await self.init(redis_conn=redis_conn)
             node = self._nodes[node_idx]
@@ -611,8 +620,8 @@ class RpcHelper(object):
                 raise exc
             else:
                 return tx_receipt_details
-        return await f(self, node_idx=0, semaphore=self._semaphore)
-    
+        return await f(node_idx=0)
+
     async def get_current_block(self, redis_conn, node_idx=0):
         """
         Returns the current block number from the Ethereum node at the specified index.
@@ -629,6 +638,9 @@ class RpcHelper(object):
         """
         node = self._nodes[node_idx]
         rpc_url = node.get('rpc_url')
+
+        if not self._initialized:
+            await self.init(redis_conn) 
 
         await check_rpc_rate_limit(
             parsed_limits=node.get('rate_limit', []),
@@ -691,7 +703,7 @@ class RpcHelper(object):
             return response
         except Exception as e:
             raise e
-
+        
     async def _make_rpc_jsonrpc_call(self, rpc_query, redis_conn):
         """
         Makes an RPC JSON-RPC call to a node in the pool.
@@ -713,8 +725,8 @@ class RpcHelper(object):
             stop=stop_after_attempt(settings.rpc.retry),
             before_sleep=self._on_node_exception,
         )
-        @acquire_bounded_semaphore
-        async def f(node_idx, semaphore=None):
+        @acquire_bounded_semaphore(semaphore=self._semaphore)
+        async def f(node_idx):
 
             node = self._nodes[node_idx]
             rpc_url = node.get('rpc_url')
@@ -791,7 +803,9 @@ class RpcHelper(object):
                 )
 
             return response_data
-        return await f(self, node_idx=0, semaphore=self._semaphore)
+        
+           
+        return await f(node_idx=0) 
 
     async def batch_eth_get_balance_on_block_range(
             self,
@@ -952,7 +966,8 @@ class RpcHelper(object):
 
         response_data = await self._make_rpc_jsonrpc_call(rpc_query, redis_conn=redis_conn)
         return response_data
-
+    
+    
     async def get_events_logs(
         self, contract_address, to_block, from_block, topics, event_abi, redis_conn,
     ):
@@ -980,8 +995,9 @@ class RpcHelper(object):
             stop=stop_after_attempt(settings.rpc.retry),
             before_sleep=self._on_node_exception,
         )
-        @acquire_bounded_semaphore
-        async def f(node_idx, semaphore=None):
+        
+        @acquire_bounded_semaphore(semaphore=self._semaphore)
+        async def f(node_idx):
             node = self._nodes[node_idx]
             rpc_url = node.get('rpc_url')
 
@@ -1054,5 +1070,6 @@ class RpcHelper(object):
                 )
                 self._logger.trace('Error in get_events_logs, error {}', str(exc))
                 raise exc
-
-        return await f(self, node_idx=0, semaphore=self._semaphore)
+            
+        
+        return await f(node_idx=0)
