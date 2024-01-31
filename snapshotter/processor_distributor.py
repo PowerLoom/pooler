@@ -269,8 +269,10 @@ class ProcessorDistributor:
             day=epoch.day,
         )
 
+        commit_payload = self._is_allowed_for_epoch(epoch)
+
         asyncio.ensure_future(
-            self.snapshot_worker.process_task(process_unit, project_type),
+            self.snapshot_worker.process_task(process_unit, project_type, commit_payload),
         )
 
     def _is_allowed_for_epoch(self, epoch: EpochBase):
@@ -283,6 +285,9 @@ class ProcessorDistributor:
         Returns:
             bool: True if the epoch falls in the snapshotter's slot, False otherwise.
         """
+        if not self._snapshotter_active:
+            return False
+
         N = self._slots_per_day
         self._logger.info('Slots per day: {}', N)
         epochs_in_a_day = 86400 // (self._epoch_size * self._source_chain_block_time)
@@ -314,11 +319,8 @@ class ProcessorDistributor:
         """
         if type_ == 'EpochReleased':
 
-            if self._snapshotter_enabled and self._snapshotter_active:
-                if self._is_allowed_for_epoch(event):
-                    await self._epoch_release_processor(event)
-                else:
-                    self._logger.info('Epoch {} not in snapshotter slot, ignoring', event.epochId)
+            if self._snapshotter_enabled:
+                await self._epoch_release_processor(event)
             else:
                 self._logger.info('System is not active, ignoring released Epoch')
 

@@ -59,7 +59,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 project_id = f'{task_type}:{data_source.lower()}:{settings.namespace}'
         return project_id
 
-    async def _process(self, msg_obj: SnapshotProcessMessage, task_type: str):
+    async def _process(self, msg_obj: SnapshotProcessMessage, task_type: str, commit_payload: bool):
         """
         Processes the given SnapshotProcessMessage object in bulk mode.
 
@@ -115,8 +115,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 )
                 return
 
-            self.logger.info('Sending snapshots to commit service: {}', snapshots)
-            submitted_snapshots = []
             for project_data_source, snapshot in snapshots:
                 data_sources = project_data_source.split('_')
                 if len(data_sources) == 1:
@@ -128,18 +126,21 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 project_id = self._gen_project_id(
                     task_type=task_type, data_source=data_source, primary_data_source=primary_data_source,
                 )
-                snapshot_cid = await self._commit_payload(
-                    task_type=task_type,
-                    _ipfs_writer_client=self._ipfs_writer_client,
-                    project_id=project_id,
-                    epoch=msg_obj,
-                    snapshot=snapshot,
-                    storage_flag=settings.web3storage.upload_snapshots,
-                )
+                if commit_payload:
+                    await self._commit_payload(
+                        task_type=task_type,
+                        _ipfs_writer_client=self._ipfs_writer_client,
+                        project_id=project_id,
+                        epoch=msg_obj,
+                        snapshot=snapshot,
+                        storage_flag=settings.web3storage.upload_snapshots,
+                    )
+            if commit_payload:
+                self.logger.info('Sent snapshots to commit service: {}', snapshots)
+            else:
+                self.logger.info('Generated snapshots: {}', snapshots)
 
-                submitted_snapshots.append((project_id, snapshot_cid))
-
-    async def process_task(self, msg_obj: SnapshotProcessMessage, task_type: str):
+    async def process_task(self, msg_obj: SnapshotProcessMessage, task_type: str, commit_payload: bool):
         """
         Process a SnapshotProcessMessage object for a given task type.
 
@@ -173,7 +174,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             task_type, msg_obj,
         )
 
-        await self._process(msg_obj=msg_obj, task_type=task_type)
+        await self._process(msg_obj=msg_obj, task_type=task_type, commit_payload=commit_payload)
 
     async def _init_project_calculation_mapping(self):
         """
