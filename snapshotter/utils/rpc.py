@@ -261,11 +261,12 @@ class RpcHelper(object):
         await self._load_async_web3_providers()
 
         rate_limit = self._nodes[0].get('rate_limit', [])
-        sem_limit = rate_limit[2].amount / (
-            settings.callback_worker_config.num_snapshot_workers +
-            settings.callback_worker_config.num_aggregation_workers +
-            settings.callback_worker_config.num_delegate_workers
-        )
+        sem_limit = 1000
+        # sem_limit = rate_limit[2].amount / (
+        #     settings.callback_worker_config.num_snapshot_workers +
+        #     settings.callback_worker_config.num_aggregation_workers +
+        #     settings.callback_worker_config.num_delegate_workers
+        # )
         self._semaphore = asyncio.BoundedSemaphore(sem_limit)
         self._initialized = True
 
