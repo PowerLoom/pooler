@@ -23,6 +23,7 @@ from snapshotter.auth.helpers.redis_conn import RedisPoolCache as AuthRedisPoolC
 from snapshotter.settings.config import settings
 from snapshotter.utils.data_utils import get_project_epoch_snapshot
 from snapshotter.utils.data_utils import get_project_finalized_cid
+from snapshotter.utils.data_utils import get_project_time_series_data
 from snapshotter.utils.data_utils import get_snapshotter_project_status
 from snapshotter.utils.data_utils import get_snapshotter_status
 from snapshotter.utils.default_logger import logger
@@ -402,6 +403,109 @@ async def get_data_for_project_id_epoch_id(
     await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
 
     return data
+
+
+# get data points at each step begining at start_time until epoch_id is reached for project_id
+@app.get('/time_series/{epoch_id}/{start_time}/{step_seconds}/{project_id}')
+async def get_time_series_data_for_project_id(
+    request: Request,
+    response: Response,
+    epoch_id: int,
+    start_time: int,
+    step_seconds: int,
+    project_id: str,
+    rate_limit_auth_dep: RateLimitAuthCheck = Depends(
+        rate_limit_auth_check,
+    ),
+):
+    """
+    Get data points at each step begining at start_time until current_epoch for project_id.
+
+    Args:
+        request (Request): The incoming request.
+        response (Response): The outgoing response.
+        epoch_id (int): The epoch ID to end the series at.
+        start_time (int): Unix timestamp in seconds of when to begin data
+        step_seconds (int): Length of time in seconds between data points to gather
+        project_id (str): The ID of the project to get the data points for.
+        rate_limit_auth_dep (RateLimitAuthCheck, optional): The rate limit authentication check. Defaults to Depends(rate_limit_auth_check).
+
+    Returns:
+        dict: The data for the given project and epoch ID.
+    """
+    if not (
+        rate_limit_auth_dep.rate_limit_passed and
+        rate_limit_auth_dep.authorized and
+        rate_limit_auth_dep.owner.active == UserStatusEnum.active
+    ):
+        return inject_rate_limit_fail_response(rate_limit_auth_dep)
+
+    try:
+
+        [epoch_info_data] = await request.app.state.anchor_rpc_helper.web3_call(
+            [request.app.state.protocol_state_contract.functions.epochInfo(epoch_id)],
+            redis_conn=request.app.state.redis_pool,
+        )
+
+        end_timestamp = epoch_info_data[0]
+
+        observations = int((end_timestamp - start_time) / step_seconds)
+
+        if observations <= 0:
+            rest_logger.exception(
+                f'Invalid start time in get_time_series_data_for_project_id for project_id: {project_id}',
+            )
+            response.status_code = 500
+            return {
+                'status': 'error',
+                'message': f'Unable to get time series data for project_id: {project_id},'
+                f' start_time: {start_time}, step: {step_seconds}, error: Start timestamp is after current epoch timestamp',
+            }
+        elif observations > 200:
+            rest_logger.exception(
+                f'Requested too many observations in get_time_series_data_for_project_id for project_id: {project_id}',
+            )
+            response.status_code = 500
+            return {
+                'status': 'error',
+                'message': f'Unable to get time series data for project_id: {project_id},'
+                f' start_time: {start_time}, step: {step_seconds}, error: Too many observations requested, use smaller step size or increase start time',
+            }
+
+        data_list = await get_project_time_series_data(
+            observations,
+            step_seconds,
+            epoch_id,
+            request.app.state.redis_pool,
+            request.app.state.protocol_state_contract,
+            request.app.state.anchor_rpc_helper,
+            request.app.state.ipfs_reader_client,
+            project_id,
+        )
+
+    except Exception as e:
+        rest_logger.exception(
+            'Exception in get_time_series_data_for_project_id',
+            e=e,
+        )
+        response.status_code = 500
+        return {
+            'status': 'error',
+            'message': f'Unable to get time series data for project_id: {project_id},'
+            f' start_time: {start_time}, step: {step_seconds}, error: {e}',
+        }
+
+    if not any(data_list):
+        response.status_code = 404
+        return {
+            'status': 'error',
+            'message': f'No time series data found for project_id: {project_id},'
+            f' start_time: {start_time}, step: {step_seconds}',
+        }
+    auth_redis_conn: aioredis.Redis = request.app.state.auth_aioredis_pool
+    await incr_success_calls_count(auth_redis_conn, rate_limit_auth_dep)
+
+    return data_list
 
 
 # get finalized cid for epoch_id, project_id
