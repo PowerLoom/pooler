@@ -5,6 +5,11 @@ import time
 from typing import List
 from typing import Union
 
+from web3.middleware import async_construct_simple_cache_middleware
+from web3.middleware import construct_simple_cache_middleware
+from web3.utils.caching import SimpleCache
+from web3.types import RPCEndpoint
+
 import eth_abi
 import tenacity
 from async_limits import parse_many as limit_parse_many
@@ -44,7 +49,18 @@ from snapshotter.utils.redis.redis_keys import rpc_json_rpc_calls
 from snapshotter.utils.redis.redis_keys import rpc_web3_calls
 from snapshotter.utils.redis.redis_keys import time_to_resume_active_status_key
 from snapshotter.utils.utility_functions import acquire_bounded_semaphore
+from typing import cast
+from typing import Set
 
+
+SIMPLE_CACHE_RPC_CHAIN_ID = cast(
+    Set[RPCEndpoint],
+    (
+        "web3_clientVersion",
+        "net_version",
+        "eth_chainId",
+    ),
+)
 
 def get_contract_abi_dict(abi):
     """
@@ -134,6 +150,8 @@ class RpcHelper(object):
         self._logger = logger.bind(module='RpcHelper')
         self._client = None
         self._async_transport = None
+        self._async_cache_chain_id_middleware = None
+        self._cache_chain_id_middleware = None
         self._rate_limit_lua_script_shas = None
         self._semaphore = None
 
@@ -182,10 +200,20 @@ class RpcHelper(object):
         Loads async web3 providers for each node in the list of nodes.
         If a node already has a web3 client, it is skipped.
         """
+        if not self._async_cache_chain_id_middleware:
+            self._async_cache_chain_id_middleware = await async_construct_simple_cache_middleware(
+                SimpleCache(),
+                SIMPLE_CACHE_RPC_CHAIN_ID,
+            )
         for node in self._nodes:
             if node['web3_client_async'] is not None:
                 continue
+
             node['web3_client_async'] = AsyncWeb3(AsyncHTTPProvider(node['rpc_url']))
+            node['web3_client_async'].middleware_onion.add(
+                self._async_cache_chain_id_middleware,
+                name='simple_cache_chain_id',
+            )
 
     async def _handle_429(self, result, request, redis_conn: aioredis):
         """
@@ -270,23 +298,32 @@ class RpcHelper(object):
         self._semaphore = asyncio.BoundedSemaphore(sem_limit)
         self._initialized = True
 
-    def _load_web3_providers_and_rate_limits(self):
+    def _load_web3_providers(self):
         """
-        Load web3 providers and rate limits based on the archive mode.
+        Load web3 providers based on the archive mode.
         If archive mode is True, load archive nodes, otherwise load full nodes.
         """
+
+        if not self._cache_chain_id_middleware:
+            self._cache_chain_id_middleware = construct_simple_cache_middleware(
+                SimpleCache(),
+                SIMPLE_CACHE_RPC_CHAIN_ID,
+            )
         if self._archive_mode:
             nodes = self._rpc_settings.archive_nodes
         else:
             nodes = self._rpc_settings.full_nodes
 
         for node in nodes:
+            self._logger.debug('Loading web3 provider for node {}', node.url)
             try:
+                _w3 = Web3(Web3.HTTPProvider(node.url))
+                _w3.middleware_onion.add(self._cache_chain_id_middleware, name='simple_cache_chain_id')
+
                 self._nodes.append(
                     {
-                        'web3_client': Web3(Web3.HTTPProvider(node.url)),
+                        'web3_client': _w3,
                         'web3_client_async': None,
-                        'rate_limit': limit_parse_many(node.rate_limit),
                         'rpc_url': node.url,
                     },
                 )
@@ -300,6 +337,7 @@ class RpcHelper(object):
 
         if self._nodes:
             self._node_count = len(self._nodes)
+
 
     def get_current_node(self):
         """
@@ -623,56 +661,7 @@ class RpcHelper(object):
                 return tx_receipt_details
         return await f(node_idx=0)
 
-    async def get_current_block(self, redis_conn, node_idx=0):
-        """
-        Returns the current block number from the Ethereum node at the specified index.
 
-        Args:
-            redis_conn (redis.Redis): Redis connection object.
-            node_idx (int): Index of the Ethereum node to use. Defaults to 0.
-
-        Returns:
-            int: The current block number.
-
-        Raises:
-            ExhaustedApiKeyRateLimitError: If the API key rate limit for the node is exhausted.
-        """
-        node = self._nodes[node_idx]
-        rpc_url = node.get('rpc_url')
-
-        if not self._initialized:
-            await self.init(redis_conn)
-
-        await check_rpc_rate_limit(
-            parsed_limits=node.get('rate_limit', []),
-            app_id=rpc_url.split('/')[-1],
-            redis_conn=redis_conn,
-            request_payload='get_current_block',
-            error_msg={
-                'msg': 'exhausted_api_key_rate_limit inside web3_call',
-            },
-            logger=self._logger,
-            rate_limit_lua_script_shas=self._rate_limit_lua_script_shas,
-            limit_incr_by=1,
-        )
-        current_block = node['web3_client'].eth.block_number
-
-        cur_time = time.time()
-        payload = {'time': cur_time, 'fn_name': 'get_current_block'}
-        await asyncio.gather(
-            redis_conn.zadd(
-                name=rpc_blocknumber_calls,
-                mapping={
-                    json.dumps(payload): cur_time,
-                },
-            ),
-            redis_conn.zremrangebyscore(
-                name=rpc_blocknumber_calls,
-                min=0,
-                max=cur_time - 3600,
-            ),
-        )
-        return current_block
 
     async def web3_call(self, tasks, redis_conn, from_address=None, block=None, overrides=None):
         """
