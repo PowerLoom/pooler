@@ -294,7 +294,7 @@ class EventDetectorProcess(multiprocessing.Process):
         """
         while True:
             try:
-                current_block = await self.rpc_helper.get_current_block_number(redis_conn=self._redis_conn)
+                current_block = await self.rpc_helper.get_current_block_number()
                 self._logger.info('Current block: {}', current_block)
 
             except Exception as e:

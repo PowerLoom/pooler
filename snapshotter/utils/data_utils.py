@@ -387,7 +387,7 @@ async def build_projects_list_from_events(redis_conn: aioredis.Redis, state_cont
         redis_conn=redis_conn,
     )
 
-    current_block = await rpc_helper.get_current_block_number(redis_conn)
+    current_block = await rpc_helper.get_current_block_number()
     event_sig, event_abi = get_event_sig_and_abi(EVENT_SIGS, EVENT_ABI)
 
     # from start_block to current block, get all events in batches of 1000, 10 requests parallelly
