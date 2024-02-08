@@ -31,6 +31,7 @@ from snapshotter.utils.rpc import get_event_sig_and_abi
 from snapshotter.utils.rpc import RpcHelper
 
 
+
 def rabbitmq_and_redis_cleanup(fn):
     """
     A decorator function that wraps the given function and handles cleanup of RabbitMQ and Redis connections in case of
@@ -293,7 +294,7 @@ class EventDetectorProcess(multiprocessing.Process):
         """
         while True:
             try:
-                current_block = await self.rpc_helper.get_current_block(redis_conn=self._redis_conn)
+                current_block = await self.rpc_helper.get_current_block_number(redis_conn=self._redis_conn)
                 self._logger.info('Current block: {}', current_block)
 
             except Exception as e:
