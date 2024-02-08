@@ -548,7 +548,7 @@ class RpcHelper(object):
             RPCException: If an error occurs while retrieving the transaction receipt.
         """
         if not self._initialized:
-            await self.init(redis_conn)
+            await self.init()
 
         @retry(
             reraise=True,
@@ -631,7 +631,7 @@ class RpcHelper(object):
             list: List of responses from the contract function calls.
         """
         if not self._initialized:
-            await self.init(redis_conn)
+            await self.init()
 
         try:
             web3_tasks = [
@@ -772,7 +772,7 @@ class RpcHelper(object):
             None is returned in its place.
         """
         if not self._initialized:
-            await self.init(redis_conn)
+            await self.init()
 
         rpc_query = []
         request_id = 1
@@ -832,7 +832,7 @@ class RpcHelper(object):
             list: A list of decoded results from the function call.
         """
         if not self._initialized:
-            await self.init(redis_conn)
+            await self.init()
 
         if params is None:
             params = []
@@ -889,7 +889,7 @@ class RpcHelper(object):
             dict: A dictionary containing the response data from the JSON-RPC call.
         """
         if not self._initialized:
-            await self.init(redis_conn)
+            await self.init()
 
         rpc_query = []
 
@@ -929,7 +929,7 @@ class RpcHelper(object):
             List[Dict]: A list of dictionaries representing the decoded events logs.
         """
         if not self._initialized:
-            await self.init(redis_conn)
+            await self.init()
 
         @retry(
             reraise=True,
