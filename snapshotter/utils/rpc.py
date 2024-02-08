@@ -269,7 +269,7 @@ class RpcHelper(object):
             )
             raise exc
 
-    async def init(self, redis_conn):
+    async def init(self):
         """
         Initializes the RPC client by loading web3 providers and rate limits,
         loading rate limit SHAs, initializing HTTP clients, and loading async
