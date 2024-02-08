@@ -2,13 +2,10 @@ import asyncio
 import datetime
 import json
 import time
+from typing import cast
 from typing import List
+from typing import Set
 from typing import Union
-
-from web3.middleware import async_construct_simple_cache_middleware
-from web3.middleware import construct_simple_cache_middleware
-from web3.utils.caching import SimpleCache
-from web3.types import RPCEndpoint
 
 import eth_abi
 import tenacity
@@ -31,8 +28,12 @@ from web3 import Web3
 from web3._utils.abi import map_abi_data
 from web3._utils.events import get_event_data
 from web3._utils.normalizers import BASE_RETURN_NORMALIZERS
+from web3.middleware import async_construct_simple_cache_middleware
+from web3.middleware import construct_simple_cache_middleware
+from web3.types import RPCEndpoint
 from web3.types import TxParams
 from web3.types import Wei
+from web3.utils.caching import SimpleCache
 
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import logger
@@ -49,18 +50,17 @@ from snapshotter.utils.redis.redis_keys import rpc_json_rpc_calls
 from snapshotter.utils.redis.redis_keys import rpc_web3_calls
 from snapshotter.utils.redis.redis_keys import time_to_resume_active_status_key
 from snapshotter.utils.utility_functions import acquire_bounded_semaphore
-from typing import cast
-from typing import Set
 
 
 SIMPLE_CACHE_RPC_CHAIN_ID = cast(
     Set[RPCEndpoint],
     (
-        "web3_clientVersion",
-        "net_version",
-        "eth_chainId",
+        'web3_clientVersion',
+        'net_version',
+        'eth_chainId',
     ),
 )
+
 
 def get_contract_abi_dict(abi):
     """
@@ -282,7 +282,7 @@ class RpcHelper(object):
             None
         """
         if not self._sync_nodes_initialized:
-            self._load_web3_providers_and_rate_limits()
+            self._load_web3_providers()
             self._sync_nodes_initialized = True
         await self._load_rate_limit_shas(redis_conn)
         await self._init_http_clients()
@@ -337,7 +337,6 @@ class RpcHelper(object):
 
         if self._nodes:
             self._node_count = len(self._nodes)
-
 
     def get_current_node(self):
         """
@@ -660,8 +659,6 @@ class RpcHelper(object):
             else:
                 return tx_receipt_details
         return await f(node_idx=0)
-
-
 
     async def web3_call(self, tasks, redis_conn, from_address=None, block=None, overrides=None):
         """
