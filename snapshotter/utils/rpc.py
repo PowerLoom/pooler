@@ -377,12 +377,9 @@ class RpcHelper(object):
             next_node_idx, retry_state.outcome.exception(),
         )
 
-    async def get_current_block_number(self, redis_conn):
+    async def get_current_block_number(self):
         """
         Returns the current block number of the Ethereum blockchain.
-
-        Args:
-            redis_conn: Redis connection object.
 
         Returns:
             The current block number of the Ethereum blockchain.
@@ -390,9 +387,6 @@ class RpcHelper(object):
         Raises:
             RPCException: If an error occurs while making the RPC call.
         """
-        if not self._initialized:
-            await self.init(redis_conn)
-
         @retry(
             reraise=True,
             retry=retry_if_exception_type(RPCException),
@@ -400,50 +394,15 @@ class RpcHelper(object):
             stop=stop_after_attempt(settings.rpc.retry),
             before_sleep=self._on_node_exception,
         )
-        @acquire_bounded_semaphore(semaphore=self._semaphore)
         async def f(node_idx):
             if not self._initialized:
-                await self.init(redis_conn=redis_conn)
+                await self.init()
             node = self._nodes[node_idx]
-            rpc_url = node.get('rpc_url')
             web3_provider = node['web3_client_async']
 
-            await check_rpc_rate_limit(
-                parsed_limits=node.get('rate_limit', []),
-                app_id=rpc_url.split('/')[-1],
-                redis_conn=redis_conn,
-                request_payload='get_current_block_number',
-                error_msg={
-                    'msg': 'exhausted_api_key_rate_limit inside get_current_blocknumber',
-                },
-                logger=self._logger,
-                rate_limit_lua_script_shas=self._rate_limit_lua_script_shas,
-                limit_incr_by=1,
-            )
             try:
-                cur_time = time.time()
-                await asyncio.gather(
-                    redis_conn.zadd(
-                        name=rpc_get_block_number_calls,
-                        mapping={
-                            json.dumps(
-                                'get_current_block_number',
-                            ): cur_time,
-                        },
-                    ),
-                    redis_conn.zremrangebyscore(
-                        name=rpc_get_block_number_calls,
-                        min=0,
-                        max=cur_time - 3600,
-                    ),
-                )
                 current_block = await web3_provider.eth.block_number
             except Exception as e:
-                response = getattr(e, 'response', None)
-
-                if response and response.status_code == 429:
-                    await self._handle_429(e.response, request='get_block_number', redis_conn=redis_conn)
-
                 exc = RPCException(
                     request='get_current_block_number',
                     response=None,
@@ -454,8 +413,7 @@ class RpcHelper(object):
                 raise exc
             else:
                 return current_block
-
-        return f(node_idx=0)
+        return await f(node_idx=0)
 
     async def _async_web3_call(self, contract_function, redis_conn, from_address=None, block=None, overrides=None):
         """
