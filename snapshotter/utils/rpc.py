@@ -349,7 +349,7 @@ class RpcHelper(object):
             The current node to use for RPC calls.
         """
         if not self._sync_nodes_initialized:
-            self._load_web3_providers_and_rate_limits()
+            self._load_web3_providers()
             self._sync_nodes_initialized = True
 
         if self._node_count == 0:
