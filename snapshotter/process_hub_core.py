@@ -461,7 +461,7 @@ class ProcessHubCore(Process):
         self._anchor_rpc_helper = RpcHelper(
             rpc_settings=settings.anchor_chain_rpc,
         )
-        self._anchor_rpc_helper._load_web3_providers_and_rate_limits()
+        self._anchor_rpc_helper._load_web3_providers()
         protocol_abi = read_json_file(settings.protocol_state.abi, self._logger)
         self._protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
             address=to_checksum_address(
