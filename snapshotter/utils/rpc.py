@@ -155,22 +155,6 @@ class RpcHelper(object):
         self._rate_limit_lua_script_shas = None
         self._semaphore = None
 
-    async def _load_rate_limit_shas(self, redis_conn):
-        """
-        Loads the rate limit Lua script SHA values from Redis if they haven't already been loaded.
-
-        Args:
-            redis_conn: Redis connection object.
-
-        Returns:
-            None
-        """
-
-        if self._rate_limit_lua_script_shas is not None:
-            return
-        self._rate_limit_lua_script_shas = await load_rate_limiter_scripts(
-            redis_conn,
-        )
 
     async def _init_http_clients(self):
         """
@@ -284,7 +268,6 @@ class RpcHelper(object):
         if not self._sync_nodes_initialized:
             self._load_web3_providers()
             self._sync_nodes_initialized = True
-        await self._load_rate_limit_shas(redis_conn)
         await self._init_http_clients()
         await self._load_async_web3_providers()
 
