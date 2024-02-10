@@ -730,9 +730,10 @@ async def get_snapshotter_project_status(redis_conn: aioredis.Redis, project_id:
 
 
 async def get_project_time_series_data(
-        observations: int,
+        start_time: int,
+        end_time: int,
         step_seconds: int,
-        start_epoch: int,
+        end_epoch_id: int,
         redis_conn: aioredis.Redis,
         state_contract_obj,
         rpc_helper,
@@ -789,16 +790,36 @@ async def get_project_time_series_data(
             redis_conn,
             state_contract_obj,
             rpc_helper,
-            start_epoch,
+            end_epoch_id,
             project_id,
         ),
     )
 
-    count = 1
     seek_stop_flag = False
-    head_epoch = start_epoch
-    while not seek_stop_flag and count < observations:
-        tail_epoch_id = head_epoch - int(step_seconds / (source_chain_epoch_size * source_chain_block_time))
+
+    closest_step_time_gap = end_time % step_seconds
+    closest_step_timestamp = end_time - closest_step_time_gap
+    closest_step_epoch_id = end_epoch_id - int(step_seconds / (source_chain_epoch_size * source_chain_block_time))
+    if closest_step_epoch_id <= project_first_epoch:
+        closest_step_epoch_id = project_first_epoch
+        seek_stop_flag = True
+
+    cid_tasks.append(
+        get_project_finalized_cid(
+            redis_conn,
+            state_contract_obj,
+            rpc_helper,
+            closest_step_epoch_id,
+            project_id,
+        ),
+    )
+
+    remaining_observations = int((closest_step_timestamp - start_time) / step_seconds)
+
+    count = 0
+    head_epoch_id = closest_step_epoch_id
+    while not seek_stop_flag and count < remaining_observations:
+        tail_epoch_id = head_epoch_id - int(step_seconds / (source_chain_epoch_size * source_chain_block_time))
         if tail_epoch_id <= project_first_epoch:
             tail_epoch_id = project_first_epoch
             seek_stop_flag = True
@@ -813,7 +834,7 @@ async def get_project_time_series_data(
             ),
         )
 
-        head_epoch = tail_epoch_id - 1
+        head_epoch_id = tail_epoch_id
         count += 1
 
     all_cids = await asyncio.gather(*cid_tasks, return_exceptions=True)

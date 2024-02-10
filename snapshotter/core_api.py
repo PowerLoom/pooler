@@ -473,7 +473,8 @@ async def get_time_series_data_for_project_id(
             }
 
         data_list = await get_project_time_series_data(
-            observations,
+            start_time,
+            end_timestamp,
             step_seconds,
             epoch_id,
             request.app.state.redis_pool,
@@ -495,7 +496,7 @@ async def get_time_series_data_for_project_id(
             f' start_time: {start_time}, step: {step_seconds}, error: {e}',
         }
 
-    if not any(data_list):
+    if not any(data for data in data_list):
         response.status_code = 404
         return {
             'status': 'error',
