@@ -20,6 +20,11 @@
 				"internalType": "bool",
 				"name": "useBlockNumberAsEpochId",
 				"type": "bool"
+			},
+			{
+				"internalType": "uint256",
+				"name": "slotsPerDay",
+				"type": "uint256"
 			}
 		],
 		"stateMutability": "nonpayable",
@@ -47,8 +52,58 @@
 			{
 				"indexed": false,
 				"internalType": "address",
+				"name": "snapshotterAddress",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "dayId",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "timestamp",
+				"type": "uint256"
+			}
+		],
+		"name": "DailyTaskCompletedEvent",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "dayId",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "timestamp",
+				"type": "uint256"
+			}
+		],
+		"name": "DayStartedEvent",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "address",
 				"name": "snapshotterAddr",
 				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "slotId",
+				"type": "uint256"
 			},
 			{
 				"indexed": false,
@@ -140,7 +195,7 @@
 			{
 				"indexed": false,
 				"internalType": "string",
-				"name": "projectId",
+				"name": "projectType",
 				"type": "string"
 			},
 			{
@@ -156,7 +211,7 @@
 				"type": "uint256"
 			}
 		],
-		"name": "ProjectsUpdated",
+		"name": "ProjectTypeUpdated",
 		"type": "event"
 	},
 	{
@@ -189,6 +244,18 @@
 			{
 				"indexed": false,
 				"internalType": "uint256",
+				"name": "finalizedSnapshotCount",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "totalReceivedCount",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
 				"name": "timestamp",
 				"type": "uint256"
 			}
@@ -200,10 +267,16 @@
 		"anonymous": false,
 		"inputs": [
 			{
-				"indexed": false,
+				"indexed": true,
 				"internalType": "address",
 				"name": "snapshotterAddr",
 				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "slotId",
+				"type": "uint256"
 			},
 			{
 				"indexed": false,
@@ -291,29 +364,30 @@
 		"type": "event"
 	},
 	{
-		"anonymous": false,
-		"inputs": [
+		"inputs": [],
+		"name": "DailySnapshotQuota",
+		"outputs": [
 			{
-				"indexed": false,
-				"internalType": "string",
-				"name": "projectId",
-				"type": "string"
-			},
-			{
-				"indexed": false,
-				"internalType": "bool",
-				"name": "allowed",
-				"type": "bool"
-			},
-			{
-				"indexed": false,
 				"internalType": "uint256",
-				"name": "enableEpochId",
+				"name": "",
 				"type": "uint256"
 			}
 		],
-		"name": "pretestProjectsUpdated",
-		"type": "event"
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "DeploymentBlockNumber",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
 	},
 	{
 		"inputs": [],
@@ -323,6 +397,19 @@
 				"internalType": "uint8",
 				"name": "",
 				"type": "uint8"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "SLOTS_PER_DAY",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
 			}
 		],
 		"stateMutability": "view",
@@ -370,25 +457,6 @@
 	{
 		"inputs": [
 			{
-				"internalType": "string",
-				"name": "",
-				"type": "string"
-			}
-		],
-		"name": "allProjects",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "",
-				"type": "bool"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
 				"internalType": "address",
 				"name": "",
 				"type": "address"
@@ -409,6 +477,71 @@
 		"inputs": [
 			{
 				"internalType": "string",
+				"name": "",
+				"type": "string"
+			}
+		],
+		"name": "allowedProjectTypes",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "slotId",
+				"type": "uint256"
+			},
+			{
+				"internalType": "address",
+				"name": "snapshotterAddress",
+				"type": "address"
+			},
+			{
+				"internalType": "uint256",
+				"name": "timeSlot",
+				"type": "uint256"
+			}
+		],
+		"name": "assignSnapshotterToSlotWithTimeSlot",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256[]",
+				"name": "slotIds",
+				"type": "uint256[]"
+			},
+			{
+				"internalType": "address[]",
+				"name": "snapshotterAddresses",
+				"type": "address[]"
+			},
+			{
+				"internalType": "uint256[]",
+				"name": "timeSlots",
+				"type": "uint256[]"
+			}
+		],
+		"name": "assignSnapshotterToSlotsWithTimeSlot",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
 				"name": "projectId",
 				"type": "string"
 			},
@@ -419,6 +552,30 @@
 			}
 		],
 		"name": "checkDynamicConsensusSnapshot",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "slotId",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "day",
+				"type": "uint256"
+			}
+		],
+		"name": "checkSlotTaskStatusForDay",
 		"outputs": [
 			{
 				"internalType": "bool",
@@ -453,19 +610,8 @@
 		"type": "function"
 	},
 	{
-		"inputs": [
-			{
-				"internalType": "string",
-				"name": "",
-				"type": "string"
-			},
-			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"name": "currentFinalizedSnapshot",
+		"inputs": [],
+		"name": "dayCounter",
 		"outputs": [
 			{
 				"internalType": "uint256",
@@ -549,6 +695,19 @@
 		"type": "function"
 	},
 	{
+		"inputs": [],
+		"name": "epochsInADay",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
 		"inputs": [
 			{
 				"internalType": "string",
@@ -586,39 +745,9 @@
 	},
 	{
 		"inputs": [],
-		"name": "getBlock",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "string",
-				"name": "projectId",
-				"type": "string"
-			},
-			{
-				"internalType": "uint256",
-				"name": "epochId",
-				"type": "uint256"
-			}
-		],
-		"name": "getFinalizedSnapshot",
-		"outputs": [
-			{
-				"internalType": "string",
-				"name": "",
-				"type": "string"
-			}
-		],
-		"stateMutability": "view",
+		"name": "forceStartDay",
+		"outputs": [],
+		"stateMutability": "nonpayable",
 		"type": "function"
 	},
 	{
@@ -635,39 +764,94 @@
 		"type": "function"
 	},
 	{
-		"inputs": [],
-		"name": "getPretestProjects",
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "slotId",
+				"type": "uint256"
+			}
+		],
+		"name": "getSlotInfo",
 		"outputs": [
 			{
-				"internalType": "string[]",
+				"components": [
+					{
+						"internalType": "uint256",
+						"name": "slotId",
+						"type": "uint256"
+					},
+					{
+						"internalType": "address",
+						"name": "snapshotterAddress",
+						"type": "address"
+					},
+					{
+						"internalType": "uint256",
+						"name": "timeSlot",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "rewardPoints",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "currentStreak",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "currentStreakBonus",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "currentDaySnapshotCount",
+						"type": "uint256"
+					}
+				],
+				"internalType": "struct PowerloomProtocolState.SlotInfo",
 				"name": "",
-				"type": "string[]"
+				"type": "tuple"
 			}
 		],
 		"stateMutability": "view",
 		"type": "function"
 	},
 	{
-		"inputs": [],
-		"name": "getProjects",
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "slotId",
+				"type": "uint256"
+			}
+		],
+		"name": "getSlotStreak",
 		"outputs": [
 			{
-				"internalType": "string[]",
+				"internalType": "uint256",
 				"name": "",
-				"type": "string[]"
+				"type": "uint256"
 			}
 		],
 		"stateMutability": "view",
 		"type": "function"
 	},
 	{
-		"inputs": [],
-		"name": "getSnapshotters",
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "_slotId",
+				"type": "uint256"
+			}
+		],
+		"name": "getSnapshotterTimeSlot",
 		"outputs": [
 			{
-				"internalType": "address[]",
+				"internalType": "uint256",
 				"name": "",
-				"type": "address[]"
+				"type": "uint256"
 			}
 		],
 		"stateMutability": "view",
@@ -721,6 +905,25 @@
 			}
 		],
 		"name": "lastFinalizedSnapshot",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "lastSnapshotterAddressUpdate",
 		"outputs": [
 			{
 				"internalType": "uint256",
@@ -832,25 +1035,6 @@
 				"type": "string"
 			}
 		],
-		"name": "pretestProjects",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "",
-				"type": "bool"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "string",
-				"name": "",
-				"type": "string"
-			}
-		],
 		"name": "projectFirstEpochId",
 		"outputs": [
 			{
@@ -909,6 +1093,126 @@
 		"name": "renounceOwnership",
 		"outputs": [],
 		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "rewardBasePoints",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "rewardsEnabled",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "slotCounter",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "slotRewardPoints",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "slotSnapshotterMapping",
+		"outputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "slotStreakCounter",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "slotSubmissionCount",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
 		"type": "function"
 	},
 	{
@@ -1015,6 +1319,53 @@
 		"inputs": [
 			{
 				"internalType": "string",
+				"name": "",
+				"type": "string"
+			},
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "snapshotsReceivedSlot",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "streakBonusPoints",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "slotId",
+				"type": "uint256"
+			},
+			{
+				"internalType": "string",
 				"name": "snapshotCid",
 				"type": "string"
 			},
@@ -1030,6 +1381,11 @@
 			},
 			{
 				"components": [
+					{
+						"internalType": "uint256",
+						"name": "slotId",
+						"type": "uint256"
+					},
 					{
 						"internalType": "uint256",
 						"name": "deadline",
@@ -1067,6 +1423,76 @@
 		"type": "function"
 	},
 	{
+		"inputs": [],
+		"name": "timeSlotCheck",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "timeSlotPreference",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "toggleRewards",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "toggleTimeSlotCheck",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "",
+				"type": "string"
+			},
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "totalSnapshotsReceived",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
 		"inputs": [
 			{
 				"internalType": "address",
@@ -1082,17 +1508,17 @@
 	{
 		"inputs": [
 			{
-				"internalType": "string[]",
-				"name": "_projects",
-				"type": "string[]"
+				"internalType": "string",
+				"name": "_projectType",
+				"type": "string"
 			},
 			{
-				"internalType": "bool[]",
+				"internalType": "bool",
 				"name": "_status",
-				"type": "bool[]"
+				"type": "bool"
 			}
 		],
-		"name": "updateAllProjects",
+		"name": "updateAllowedProjectType",
 		"outputs": [],
 		"stateMutability": "nonpayable",
 		"type": "function"
@@ -1100,17 +1526,12 @@
 	{
 		"inputs": [
 			{
-				"internalType": "address[]",
-				"name": "_snapshotters",
-				"type": "address[]"
-			},
-			{
-				"internalType": "bool[]",
-				"name": "_status",
-				"type": "bool[]"
+				"internalType": "uint256",
+				"name": "dailySnapshotQuota",
+				"type": "uint256"
 			}
 		],
-		"name": "updateAllSnapshotters",
+		"name": "updateDailySnapshotQuota",
 		"outputs": [],
 		"stateMutability": "nonpayable",
 		"type": "function"
@@ -1149,24 +1570,6 @@
 	{
 		"inputs": [
 			{
-				"internalType": "string[]",
-				"name": "_projects",
-				"type": "string[]"
-			},
-			{
-				"internalType": "bool[]",
-				"name": "_status",
-				"type": "bool[]"
-			}
-		],
-		"name": "updatePretestProjects",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
 				"internalType": "uint256",
 				"name": "newsnapshotSubmissionWindow",
 				"type": "uint256"
@@ -1198,6 +1601,37 @@
 	{
 		"inputs": [
 			{
+				"internalType": "uint256",
+				"name": "newrewardBasePoints",
+				"type": "uint256"
+			}
+		],
+		"name": "updaterewardBasePoints",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "newstreakBonusPoints",
+				"type": "uint256"
+			}
+		],
+		"name": "updatestreakBonusPoints",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "slotId",
+				"type": "uint256"
+			},
+			{
 				"internalType": "string",
 				"name": "snapshotCid",
 				"type": "string"
@@ -1214,6 +1648,11 @@
 			},
 			{
 				"components": [
+					{
+						"internalType": "uint256",
+						"name": "slotId",
+						"type": "uint256"
+					},
 					{
 						"internalType": "uint256",
 						"name": "deadline",
