@@ -498,7 +498,8 @@ class RpcHelper(object):
                 else:
                     return normalized_data
             except Exception as e:
-                if e.response.status_code == 429:
+                response = e.get('response', None)
+                if response and response.status_code == 429:
                     await self._handle_429(e.response, request=[contract_function.fn_name], redis_conn=redis_conn)
 
                 exc = RPCException(
@@ -584,7 +585,8 @@ class RpcHelper(object):
                     tx_hash,
                 )
             except Exception as e:
-                if e.response.status_code == 429:
+                response = e.get('response', None)  
+                if response and response.status_code == 429:
                     await self._handle_429(e.response, request={'txHash': tx_hash}, redis_conn=redis_conn)
 
                 exc = RPCException(
@@ -978,8 +980,8 @@ class RpcHelper(object):
 
                 return all_events
             except Exception as e:
-
-                if e.response.status_code == 429:
+                response = e.get('response', None)
+                if response and response.status_code == 429:
                     await self._handle_429(e.response, request=event_log_query, redis_conn=redis_conn)
 
                 exc = RPCException(
