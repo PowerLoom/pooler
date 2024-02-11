@@ -1007,13 +1007,14 @@ class ProcessorDistributor(multiprocessing.Process):
 
                     for event in events:
                         event = PowerloomSnapshotSubmittedMessage.parse_raw(event)
-                        event_project_ids.add(event.projectId)
-                        finalized_messages.append(event)
+                        if event.projectId not in event_project_ids:
+                            event_project_ids.add(event.projectId)
+                            finalized_messages.append(event)
 
                     if event_project_ids == set(config.projects_to_wait_for):
                         self._logger.info(f'All projects present for {process_unit.epochId}, aggregating')
                         final_msg = PowerloomCalculateAggregateMessage(
-                            messages=finalized_messages,
+                            messages=sorted(finalized_messages, key=lambda x: x.projectId),
                             epochId=process_unit.epochId,
                             timestamp=int(time.time()),
                         )
