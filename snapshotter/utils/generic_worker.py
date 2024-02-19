@@ -467,11 +467,11 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._signer_private_key = PrivateKey.from_hex(settings.signer_private_key)
 
     async def generate_signature(self, snapshot_cid, epoch_id, project_id):
-        current_block = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.block_number
-        current_block_data = await self._anchor_rpc_helper.batch_eth_get_block(current_block, current_block, self._redis_conn)
-        current_block_hash = current_block_data[0]['result']['hash']
+        current_block = await self._anchor_rpc_helper.eth_get_block(redis_conn=self._redis_conn)
+        current_block_hash = current_block['hash']
+        current_block_number = int(current_block['number'], 16)
 
-        deadline = current_block + settings.protocol_state.deadline_buffer
+        deadline = current_block_number + settings.protocol_state.deadline_buffer
         request = EIPRequest(
             deadline=deadline,
             snapshotCid=snapshot_cid,
