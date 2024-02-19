@@ -20,7 +20,7 @@ from snapshotter.utils.exceptions import GenericExitOnSignal
 from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.models.data_models import EpochReleasedEvent
 from snapshotter.utils.models.data_models import EventBase
-from snapshotter.utils.models.data_models import SnapshotFinalizedEvent
+from snapshotter.utils.models.data_models import SnapshotBatchFinalizedEvent
 from snapshotter.utils.models.data_models import SnapshottersUpdatedEvent
 from snapshotter.utils.rabbitmq_helpers import RabbitmqThreadedSelectLoopInteractor
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
@@ -138,18 +138,18 @@ class EventDetectorProcess(multiprocessing.Process):
         )
 
         # event EpochReleased(uint256 indexed epochId, uint256 begin, uint256 end, uint256 timestamp);
-        # event SnapshotFinalized(uint256 indexed epochId, uint256 epochEnd, string projectId,
+        # event SnapshotBatchFinalized(uint256 indexed epochId, uint256 epochEnd, string projectId,
         #     string snapshotCid, uint256 timestamp);
 
         EVENTS_ABI = {
             'EpochReleased': self.contract.events.EpochReleased._get_event_abi(),
-            'SnapshotFinalized': self.contract.events.SnapshotFinalized._get_event_abi(),
+            'SnapshotBatchFinalized': self.contract.events.SnapshotBatchFinalized._get_event_abi(),
             'allSnapshottersUpdated': self.contract.events.allSnapshottersUpdated._get_event_abi(),
         }
 
         EVENT_SIGS = {
             'EpochReleased': 'EpochReleased(uint256,uint256,uint256,uint256)',
-            'SnapshotFinalized': 'SnapshotFinalized(uint256,uint256,string,string,uint256)',
+            'SnapshotBatchFinalized': 'SnapshotBatchFinalized(uint256,uint256,string,string,uint256)',
             'allSnapshottersUpdated': 'allSnapshottersUpdated(address,bool)',
 
         }
@@ -207,12 +207,10 @@ class EventDetectorProcess(multiprocessing.Process):
                 latest_epoch_id = max(latest_epoch_id, log.args.epochId)
                 events.append((log.event, event))
 
-            elif log.event == 'SnapshotFinalized':
-                event = SnapshotFinalizedEvent(
+            elif log.event == 'SnapshotBatchFinalized':
+                event = SnapshotBatchFinalizedEvent(
                     epochId=log.args.epochId,
-                    epochEnd=log.args.epochEnd,
-                    projectId=log.args.projectId,
-                    snapshotCid=log.args.snapshotCid,
+                    batchId=log.args.batchId,
                     timestamp=log.args.timestamp,
                 )
                 events.append((log.event, event))
@@ -417,3 +415,4 @@ class EventDetectorProcess(multiprocessing.Process):
         self.ev_loop.run_until_complete(
             self._detect_events(),
         )
+

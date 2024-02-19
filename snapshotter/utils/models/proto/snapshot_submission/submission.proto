@@ -13,8 +13,8 @@ message Request {
 
 message SnapshotSubmission {
   Request request = 1;
-  bytes signature = 2;
-  string signerPubKey = 3;
+  string signature = 2;
+  string header = 3;
 }
 
 service Submission {

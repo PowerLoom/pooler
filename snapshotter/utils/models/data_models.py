@@ -99,6 +99,11 @@ class SnapshotFinalizedEvent(EventBase):
     projectId: str
     snapshotCid: str
 
+class SnapshotBatchFinalizedEvent(EventBase):
+    epochId: int
+    batchId: int
+    timestamp: int
+
 
 class SnapshottersUpdatedEvent(EventBase):
     snapshotterAddress: str

@@ -297,7 +297,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                 await self._send_submission_to_collector(snapshot_cid, epoch.epochId, project_id)
             except Exception as e:
                 self._logger.error(
-                    'Exception submitting snapshot to relayer for epoch {}: {}, Error: {},'
+                    'Exception submitting snapshot to collector for epoch {}: {}, Error: {},'
                     'sending failure notifications', epoch, snapshot, e,
                 )
                 await self._redis_conn.hset(
@@ -332,7 +332,11 @@ class GenericAsyncWorker(multiprocessing.Process):
         return snapshot_cid
 
     async def _send_submission_to_collector(self, snapshot_cid, epoch_id, project_id):
-        request_, signature = self.generate_signature(snapshot_cid, epoch_id, project_id)
+        self._logger.debug(
+                f'Sending submission to collector...',
+            )
+        request_, signature, current_block_hash = await self.generate_signature(snapshot_cid, epoch_id, project_id)
+    
         async with self._grpc_stub.SubmitSnapshot.open() as stream:
             request_msg = Request(
                 deadline=request_['deadline'],
@@ -340,7 +344,13 @@ class GenericAsyncWorker(multiprocessing.Process):
                 epochId=request_['epochId'],
                 projectId=request_['projectId'],
             )
-            msg = SnapshotSubmission(request=request_msg, signature=signature, signerPubKey=settings.instance_id)
+            self._logger.debug(
+                'Snapshot submission creation with request: {}', request_msg
+            )
+            msg = SnapshotSubmission(request=request_msg, signature=signature.hex(), header=current_block_hash)
+            self._logger.debug(
+                'Snapshot submission created: {}', msg
+            )
             await stream.send_message(msg)
             response = await stream.recv_message()
             self._logger.info('Received response from collector: {}', response)
@@ -456,8 +466,10 @@ class GenericAsyncWorker(multiprocessing.Process):
         )
         self._signer_private_key = PrivateKey.from_hex(settings.signer_private_key)
 
-    def generate_signature(self, snapshot_cid, epoch_id, project_id):
+    async def generate_signature(self, snapshot_cid, epoch_id, project_id):
         current_block = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.block_number
+        current_block_data = await self._anchor_rpc_helper.batch_eth_get_block(current_block, current_block, self._redis_conn)
+        current_block_hash = current_block_data[0]['result']['hash']
 
         deadline = current_block + settings.protocol_state.deadline_buffer
         request = EIPRequest(
@@ -475,7 +487,7 @@ class GenericAsyncWorker(multiprocessing.Process):
 
         final_sig = r.to_bytes(32, 'big') + s.to_bytes(32, 'big') + v.to_bytes(1, 'big')
         request_ = {'deadline': deadline, 'snapshotCid': snapshot_cid, 'epochId': epoch_id, 'projectId': project_id}
-        return request_, final_sig
+        return request_, final_sig, current_block_hash
 
     async def _init_httpx_client(self):
         """
