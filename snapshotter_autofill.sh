@@ -25,10 +25,7 @@ if [ -z "$PROTOCOL_STATE_CONTRACT" ]; then
     exit 1;
 fi
 
-if [ -z "$SIGNER_ACCOUNT_PRIVATE_KEY" ]; then
-    echo "SIGNER_ACCOUNT_PRIVATE_KEY not found, please set this in your .env!";
-    exit 1;
-fi
+
 
 if [ "$RELAYER_HOST" ]; then
     echo "Found RELAYER_HOST ${RELAYER_HOST}";
