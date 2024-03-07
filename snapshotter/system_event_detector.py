@@ -11,6 +11,8 @@ from functools import wraps
 from signal import SIGINT
 from signal import SIGQUIT
 from signal import SIGTERM
+from urllib.parse import urljoin
+import httpx
 
 from web3 import Web3
 
@@ -18,7 +20,7 @@ from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.exceptions import GenericExitOnSignal
 from snapshotter.utils.file_utils import read_json_file
-from snapshotter.utils.models.data_models import EpochReleasedEvent
+from snapshotter.utils.models.data_models import EpochReleasedEvent, SnapshotterPing
 from snapshotter.utils.models.data_models import EventBase
 from snapshotter.utils.models.data_models import SnapshotFinalizedEvent
 from snapshotter.utils.models.data_models import SnapshottersUpdatedEvent
@@ -137,6 +139,15 @@ class EventDetectorProcess(multiprocessing.Process):
             abi=self.contract_abi,
         )
 
+        self._httpx_client = httpx.Client(
+            base_url=settings.reporting.service_url,
+            limits=httpx.Limits(
+                max_keepalive_connections=2,
+                max_connections=2,
+                keepalive_expiry=300,
+            ),
+        )
+
         # event EpochReleased(uint256 indexed epochId, uint256 begin, uint256 end, uint256 timestamp);
         # event SnapshotFinalized(uint256 indexed epochId, uint256 epochEnd, string projectId,
         #     string snapshotCid, uint256 timestamp);
@@ -158,6 +169,8 @@ class EventDetectorProcess(multiprocessing.Process):
             EVENT_SIGS,
             EVENTS_ABI,
         )
+        self._last_reporting_service_ping = 0
+
 
     async def _init_redis_pool(self):
         """
@@ -293,6 +306,24 @@ class EventDetectorProcess(multiprocessing.Process):
         """
         while True:
             try:
+                if settings.reporting.service_url and int(time.time()) - self._last_reporting_service_ping >= 30:
+                    self._last_reporting_service_ping = int(time.time())
+                    try:
+                        self._httpx_client.post(
+                            url=urljoin(settings.reporting.service_url, '/ping'),
+                            json=SnapshotterPing(instanceID=settings.instance_id, slotId=settings.slot_id).dict(),
+                        )
+
+                    except Exception as e:
+                        if settings.logs.trace_enabled:
+                            self._logger.opt(exception=True).error('Error while pinging reporting service: {}', e)
+                        else:
+                            self._logger.error(
+                                'Error while pinging reporting service: {}', e,
+                            )
+                    else:
+                        self._logger.info('Reporting service pinged successfully')
+
                 current_block = await self.rpc_helper.get_current_block(redis_conn=self._redis_conn)
                 self._logger.info('Current block: {}', current_block)
 
@@ -308,7 +339,7 @@ class EventDetectorProcess(multiprocessing.Process):
 
                 await asyncio.sleep(settings.rpc.polling_interval)
                 continue
-
+            
             # Only use redis is state is not locally present
             if not self._last_processed_block:
                 last_processed_block_data = await self._redis_conn.get(
