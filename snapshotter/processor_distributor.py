@@ -675,12 +675,12 @@ class ProcessorDistributor(multiprocessing.Process):
                 _is_snapshotter_active = 0
 
             if _is_snapshotter_enabled and _is_snapshotter_active:
-                if self._is_allowed_for_slot(epoch):
-                    await self._epoch_release_processor(message)
-                else:
-                    self._logger.info('Epoch {} not in snapshotter slot, ignoring', epoch.epochId)
-            else:
-                self._logger.error('System is not active, ignoring released Epoch')
+                # if self._is_allowed_for_slot(epoch):
+                await self._epoch_release_processor(message)
+                # else:
+            self._logger.info('Epoch {} not in snapshotter slot, ignoring', epoch.epochId)
+            # else:
+            #     self._logger.error('System is not active, ignoring released Epoch')
 
         elif message_type == 'ProjectTypeProcessingComplete':
             await self._distribute_callbacks_aggregate(
@@ -701,19 +701,21 @@ class ProcessorDistributor(multiprocessing.Process):
                         int(msg_cast.allowed),
                     )
         elif message_type == 'DayStartedEvent':
-            self._logger.info('Day started event received, setting active status to True')
-            if self._redis_conn:
-                await self._redis_conn.set(
-                    snapshotter_active_status_key,
-                    1,
-                )
+            # self._logger.info('Day started event received, setting active status to True')
+            # if self._redis_conn:
+            #     await self._redis_conn.set(
+            #         snapshotter_active_status_key,
+            #         1,
+            #     )
+            pass
         elif message_type == 'DailyTaskCompletedEvent':
-            self._logger.info('Daily task completed event received, setting active status to False')
-            if self._redis_conn:
-                await self._redis_conn.set(
-                    snapshotter_active_status_key,
-                    0,
-                )
+            # self._logger.info('Daily task completed event received, setting active status to False')
+            # if self._redis_conn:
+            #     await self._redis_conn.set(
+            #         snapshotter_active_status_key,
+            #         0,
+            #     )
+            pass
         elif message_type == 'SlotsPerDayUpdated':
             msg_cast = SlotsPerDayUpdatedMessage.parse_raw(message.body)
             self._slots_per_day = msg_cast.slotsPerDay
