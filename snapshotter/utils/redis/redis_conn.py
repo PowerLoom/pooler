@@ -18,7 +18,7 @@ from snapshotter.utils.models.data_models import SnapshotterIssue
 from snapshotter.utils.models.data_models import SnapshotterReportState
 
 # setup logging
-logger = logger.bind(module='Powerloom|RedisConn')
+logger = logger.bind(module='RedisConn')
 
 REDIS_CONN_CONF = {
     'host': settings_conf.redis.host,

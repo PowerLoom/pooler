@@ -17,7 +17,7 @@ from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import logger
 
 # setup logging
-logger = logger.bind(module='Powerloom|RabbitmqHelpers')
+logger = logger.bind(module='RabbitmqHelpers')
 
 
 def log_retry_callback(retry_state: RetryCallState) -> bool:
@@ -1106,7 +1106,7 @@ class RabbitmqThreadedSelectLoopInteractor(object):
                     break
 
     def run(self):
-        self._logger = logger.bind(module='Powerloom|RabbitmqHelpers')
+        self._logger = logger.bind(module='RabbitmqHelpers')
 
         while not self._stopping:
             self._connection = None

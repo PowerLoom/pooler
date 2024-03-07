@@ -36,7 +36,7 @@ class SnapshotterReportState(Enum):
 class SnapshotterStates(Enum):
     PRELOAD = 'PRELOAD'
     SNAPSHOT_BUILD = 'SNAPSHOT_BUILD'
-    SNAPSHOT_SUBMIT_PAYLOAD_COMMIT = 'SNAPSHOT_SUBMIT_PAYLOAD_COMMIT'
+    SNAPSHOT_SUBMIT_RELAYER = 'SNAPSHOT_SUBMIT_RELAYER'
     RELAYER_SEND = 'RELAYER_SEND'
     SNAPSHOT_FINALIZE = 'SNAPSHOT_FINALIZE'
 
@@ -98,12 +98,6 @@ class SnapshotFinalizedEvent(EventBase):
     epochEnd: int
     projectId: str
     snapshotCid: str
-
-
-class ProjectsUpdatedEvent(EventBase):
-    projectId: str
-    allowed: bool
-    enableEpochId: int
 
 
 class SnapshottersUpdatedEvent(EventBase):

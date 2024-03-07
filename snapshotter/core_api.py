@@ -49,7 +49,7 @@ REDIS_CONN_CONF = {
 }
 
 # setup logging
-rest_logger = logger.bind(module='Powerloom|CoreAPI')
+rest_logger = logger.bind(module='CoreAPI')
 
 
 protocol_state_contract_abi = read_json_file(
@@ -93,7 +93,7 @@ async def startup_boilerplate():
     await load_rate_limiter_scripts(app.state.auth_aioredis_pool)
     app.state.anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
     app.state.protocol_state_contract = app.state.anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
-        address=Web3.toChecksumAddress(
+        address=Web3.to_checksum_address(
             protocol_state_contract_address,
         ),
         abi=protocol_state_contract_abi,
@@ -719,7 +719,7 @@ async def get_task_status_post(
 
     # check wallet address is valid EVM address
     try:
-        Web3.toChecksumAddress(task_status_request.wallet_address)
+        Web3.to_checksum_address(task_status_request.wallet_address)
     except:
         response.status_code = 400
         return {

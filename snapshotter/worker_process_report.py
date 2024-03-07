@@ -41,7 +41,7 @@ def main():
     connection_pool = redis.BlockingConnectionPool(**REDIS_CONN_CONF)
     redis_conn = redis.Redis(connection_pool=connection_pool)
     map_raw = redis_conn.hgetall(
-        name=f'powerloom:snapshotter:{settings.namespace}:{settings.instance_id}:Processes',
+        name=f'snapshotter:{settings.namespace}:{settings.instance_id}:Processes',
     )
     event_det_pid = map_raw[b'SystemEventDetector']
     print('\n' + '=' * 20 + 'System Event Detector' + '=' * 20)

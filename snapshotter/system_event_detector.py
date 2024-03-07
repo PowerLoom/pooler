@@ -20,12 +20,12 @@ from snapshotter.utils.exceptions import GenericExitOnSignal
 from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.models.data_models import EpochReleasedEvent
 from snapshotter.utils.models.data_models import EventBase
-from snapshotter.utils.models.data_models import ProjectsUpdatedEvent
 from snapshotter.utils.models.data_models import SnapshotFinalizedEvent
 from snapshotter.utils.models.data_models import SnapshottersUpdatedEvent
 from snapshotter.utils.rabbitmq_helpers import RabbitmqThreadedSelectLoopInteractor
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import event_detector_last_processed_block
+from snapshotter.utils.redis.redis_keys import last_epoch_detected_epoch_id_key
 from snapshotter.utils.redis.redis_keys import last_epoch_detected_timestamp_key
 from snapshotter.utils.rpc import get_event_sig_and_abi
 from snapshotter.utils.rpc import RpcHelper
@@ -110,14 +110,14 @@ class EventDetectorProcess(multiprocessing.Process):
         self._rabbitmq_queue = queue.Queue()
         self._shutdown_initiated = False
         self._logger = logger.bind(
-            module=f'{name}|{settings.namespace}-{settings.instance_id[:5]}',
+            module=name,
         )
 
         self._exchange = (
             f'{settings.rabbitmq.setup.event_detector.exchange}:{settings.namespace}'
         )
         self._routing_key_prefix = (
-            f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.'
+            f'event-detector:{settings.namespace}:{settings.instance_id}.'
         )
         self._aioredis_pool = None
         self._redis_conn = None
@@ -131,7 +131,7 @@ class EventDetectorProcess(multiprocessing.Process):
         )
         self.contract_address = settings.protocol_state.address
         self.contract = self.rpc_helper.get_current_node()['web3_client'].eth.contract(
-            address=Web3.toChecksumAddress(
+            address=Web3.to_checksum_address(
                 self.contract_address,
             ),
             abi=self.contract_abi,
@@ -140,19 +140,16 @@ class EventDetectorProcess(multiprocessing.Process):
         # event EpochReleased(uint256 indexed epochId, uint256 begin, uint256 end, uint256 timestamp);
         # event SnapshotFinalized(uint256 indexed epochId, uint256 epochEnd, string projectId,
         #     string snapshotCid, uint256 timestamp);
-        # event ProjectsUpdated(string projectId, bool allowed);
 
         EVENTS_ABI = {
             'EpochReleased': self.contract.events.EpochReleased._get_event_abi(),
             'SnapshotFinalized': self.contract.events.SnapshotFinalized._get_event_abi(),
-            'ProjectsUpdated': self.contract.events.ProjectsUpdated._get_event_abi(),
             'allSnapshottersUpdated': self.contract.events.allSnapshottersUpdated._get_event_abi(),
         }
 
         EVENT_SIGS = {
             'EpochReleased': 'EpochReleased(uint256,uint256,uint256,uint256)',
             'SnapshotFinalized': 'SnapshotFinalized(uint256,uint256,string,string,uint256)',
-            'ProjectsUpdated': 'ProjectsUpdated(string,bool,uint256)',
             'allSnapshottersUpdated': 'allSnapshottersUpdated(address,bool)',
 
         }
@@ -197,6 +194,7 @@ class EventDetectorProcess(multiprocessing.Process):
 
         events = []
         new_epoch_detected = False
+        latest_epoch_id = - 1
         for log in events_log:
             if log.event == 'EpochReleased':
                 event = EpochReleasedEvent(
@@ -206,6 +204,7 @@ class EventDetectorProcess(multiprocessing.Process):
                     timestamp=log.args.timestamp,
                 )
                 new_epoch_detected = True
+                latest_epoch_id = max(latest_epoch_id, log.args.epochId)
                 events.append((log.event, event))
 
             elif log.event == 'SnapshotFinalized':
@@ -215,14 +214,6 @@ class EventDetectorProcess(multiprocessing.Process):
                     projectId=log.args.projectId,
                     snapshotCid=log.args.snapshotCid,
                     timestamp=log.args.timestamp,
-                )
-                events.append((log.event, event))
-            elif log.event == 'ProjectsUpdated':
-                event = ProjectsUpdatedEvent(
-                    projectId=log.args.projectId,
-                    allowed=log.args.allowed,
-                    enableEpochId=log.args.enableEpochId,
-                    timestamp=int(time.time()),
                 )
                 events.append((log.event, event))
             elif log.event == 'allSnapshottersUpdated':
@@ -237,6 +228,10 @@ class EventDetectorProcess(multiprocessing.Process):
             await self._redis_conn.set(
                 last_epoch_detected_timestamp_key(),
                 int(time.time()),
+            )
+            await self._redis_conn.set(
+                last_epoch_detected_epoch_id_key(),
+                latest_epoch_id,
             )
 
         self._logger.info('Events: {}', events)

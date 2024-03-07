@@ -112,6 +112,10 @@ def last_epoch_detected_timestamp_key():
     return f'lastEpochDetectedTimestamp:{settings.namespace}'
 
 
+def last_epoch_detected_epoch_id_key():
+    return f'lastEpochDetectedEpochID:{settings.namespace}'
+
+
 def submitted_base_snapshots_key(epoch_id, project_id):
     return f'submittedBaseSnapshots:{epoch_id}:{project_id}'
 

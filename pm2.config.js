@@ -19,6 +19,17 @@ module.exports = {
       }
     },
     {
+      name   : "health-manager",
+      script : `poetry run python -m snapshotter.health_manager`,
+      max_restarts: MAX_RESTART,
+      min_uptime: MIN_UPTIME,
+      error_file: "/dev/null",
+      out_file: "/dev/null",
+      env: {
+        NODE_ENV: NODE_ENV,
+      }
+    },
+    {
       name   : "core-api",
       script : `poetry run python -m snapshotter.gunicorn_core_launcher`,
       max_restarts: MAX_RESTART,

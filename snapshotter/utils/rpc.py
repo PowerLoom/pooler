@@ -18,11 +18,12 @@ from tenacity import retry
 from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
+from web3 import AsyncHTTPProvider
+from web3 import AsyncWeb3
 from web3 import Web3
 from web3._utils.abi import map_abi_data
 from web3._utils.events import get_event_data
 from web3._utils.normalizers import BASE_RETURN_NORMALIZERS
-from web3.eth import AsyncEth
 from web3.types import TxParams
 from web3.types import Wei
 
@@ -80,7 +81,7 @@ def get_encoded_function_signature(abi_dict, function_name, params: Union[List, 
     function_signature = abi_dict.get(function_name)['signature']
     encoded_signature = '0x' + keccak(text=function_signature).hex()[:8]
     if params:
-        encoded_signature += eth_abi.encode_abi(
+        encoded_signature += eth_abi.encode(
             abi_dict.get(function_name)['input'],
             params,
         ).hex()
@@ -125,7 +126,7 @@ class RpcHelper(object):
         self._rate_limit_lua_script_shas = None
         self._initialized = False
         self._sync_nodes_initialized = False
-        self._logger = logger.bind(module='Powerloom|RpcHelper')
+        self._logger = logger.bind(module='RpcHelper')
         self._client = None
         self._async_transport = None
         self._rate_limit_lua_script_shas = None
@@ -178,11 +179,7 @@ class RpcHelper(object):
         for node in self._nodes:
             if node['web3_client_async'] is not None:
                 continue
-            node['web3_client_async'] = Web3(
-                Web3.AsyncHTTPProvider(node['rpc_url']),
-                modules={'eth': (AsyncEth,)},
-                middlewares=[],
-            )
+            node['web3_client_async'] = AsyncWeb3(AsyncHTTPProvider(node['rpc_url']))
 
     async def init(self, redis_conn):
         """
@@ -344,7 +341,7 @@ class RpcHelper(object):
                 return current_block
         return await f(node_idx=0)
 
-    async def _async_web3_call(self, contract_function, redis_conn, from_address=None):
+    async def _async_web3_call(self, contract_function, redis_conn, from_address=None, block=None, overrides=None):
         """
         Executes a web3 call asynchronously.
 
@@ -365,7 +362,6 @@ class RpcHelper(object):
         )
         async def f(node_idx):
             try:
-
                 node = self._nodes[node_idx]
                 rpc_url = node.get('rpc_url')
 
@@ -386,7 +382,7 @@ class RpcHelper(object):
 
                 if not contract_function.address:
                     raise ValueError(
-                        f'Missing address for batch_call in `{contract_function.fn_name}`',
+                        f'Missing address for batch_call in `{[contract_function.fn_name]}`',
                     )
 
                 output_type = [
@@ -419,14 +415,24 @@ class RpcHelper(object):
                 if from_address:
                     payload['from'] = from_address
 
-                data = await node['web3_client_async'].eth.call(payload)
+                data = await node['web3_client_async'].eth.call(
+                    payload, block_identifier=block, state_override=overrides,
+                )
 
-                decoded_data = node['web3_client_async'].codec.decode_abi(
-                    output_type, HexBytes(data),
+                # if we're doing a state override call, at time of writing it means grabbing tick data
+                # more efficient to use eth_abi to decode rather than web3 codec
+                if overrides is not None:
+                    return data
+
+                decoded_data = node['web3_client_async'].codec.decode(
+                    output_type,
+                    HexBytes(data),
                 )
 
                 normalized_data = map_abi_data(
-                    BASE_RETURN_NORMALIZERS, output_type, decoded_data,
+                    BASE_RETURN_NORMALIZERS,
+                    output_type,
+                    decoded_data,
                 )
 
                 if len(normalized_data) == 1:
@@ -440,10 +446,9 @@ class RpcHelper(object):
                     underlying_exception=e,
                     extra_info={'msg': str(e)},
                 )
-                self._logger.opt(exception=settings.logs.trace_enabled).error(
-                    (
-                        'Error while making web3 batch call'
-                    ),
+
+                self._logger.opt(lazy=True).trace(
+                    ('Error while making web3 batch call'),
                     err=lambda: str(exc),
                 )
                 raise exc
@@ -577,7 +582,7 @@ class RpcHelper(object):
         )
         return current_block
 
-    async def web3_call(self, tasks, redis_conn, from_address=None):
+    async def web3_call(self, tasks, redis_conn, from_address=None, block=None, overrides=None):
         """
         Calls the given tasks asynchronously using web3 and returns the response.
 
@@ -595,8 +600,13 @@ class RpcHelper(object):
         try:
             web3_tasks = [
                 self._async_web3_call(
-                    contract_function=task, redis_conn=redis_conn, from_address=from_address,
-                ) for task in tasks
+                    contract_function=task,
+                    redis_conn=redis_conn,
+                    from_address=from_address,
+                    block=block,
+                    overrides=overrides,
+                )
+                for task in tasks
             ]
             response = await asyncio.gather(*web3_tasks)
             return response
@@ -658,6 +668,7 @@ class RpcHelper(object):
                 response = await self._client.post(url=rpc_url, json=rpc_query)
                 response_data = response.json()
             except Exception as e:
+
                 exc = RPCException(
                     request=rpc_query,
                     response=None,
@@ -761,7 +772,7 @@ class RpcHelper(object):
         from_block,
         to_block,
         params: Union[List, None] = None,
-        from_address=Web3.toChecksumAddress('0x0000000000000000000000000000000000000000'),
+        from_address=Web3.to_checksum_address('0x0000000000000000000000000000000000000000'),
     ):
         """
         Batch executes an Ethereum contract function call on a range of blocks.
@@ -798,7 +809,7 @@ class RpcHelper(object):
                     'params': [
                         {
                             'from': from_address,
-                            'to': Web3.toChecksumAddress(contract_address),
+                            'to': Web3.to_checksum_address(contract_address),
                             'data': function_signature,
                         },
                         hex(block),
@@ -814,7 +825,7 @@ class RpcHelper(object):
         response = response_data if isinstance(response_data, list) else [response_data]
         for result in response:
             rpc_response.append(
-                eth_abi.decode_abi(
+                eth_abi.decode(
                     abi_dict.get(
                         function_name,
                     )['output'],
@@ -893,7 +904,7 @@ class RpcHelper(object):
             web3_provider = node['web3_client_async']
 
             event_log_query = {
-                'address': Web3.toChecksumAddress(contract_address),
+                'address': Web3.to_checksum_address(contract_address),
                 'toBlock': to_block,
                 'fromBlock': from_block,
                 'topics': topics,
@@ -932,10 +943,11 @@ class RpcHelper(object):
                 event_log = await web3_provider.eth.get_logs(
                     event_log_query,
                 )
+
                 codec: ABICodec = web3_provider.codec
                 all_events = []
                 for log in event_log:
-                    abi = event_abi.get(log.topics[0].hex(), '')
+                    abi = event_abi.get(log['topics'][0].hex(), '')
                     evt = get_event_data(codec, abi, log)
                     all_events.append(evt)
 

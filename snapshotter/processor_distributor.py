@@ -6,7 +6,6 @@ import queue
 import resource
 import time
 from collections import defaultdict
-from datetime import datetime
 from functools import partial
 from signal import SIGINT
 from signal import signal
@@ -15,7 +14,6 @@ from signal import SIGTERM
 from typing import Awaitable
 from typing import Dict
 from typing import List
-from typing import Set
 from uuid import uuid4
 
 import uvloop
@@ -38,40 +36,29 @@ from snapshotter.settings.config import projects_config
 from snapshotter.settings.config import settings
 from snapshotter.utils.callback_helpers import get_rabbitmq_channel
 from snapshotter.utils.callback_helpers import get_rabbitmq_robust_connection_async
-from snapshotter.utils.callback_helpers import send_failure_notifications_async
-from snapshotter.utils.data_utils import get_projects_list
 from snapshotter.utils.data_utils import get_snapshot_submision_window
 from snapshotter.utils.data_utils import get_source_chain_epoch_size
 from snapshotter.utils.data_utils import get_source_chain_id
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.file_utils import read_json_file
-from snapshotter.utils.models.data_models import SnapshotterEpochProcessingReportItem
-from snapshotter.utils.models.data_models import SnapshotterIssue
-from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.data_models import SnapshottersUpdatedEvent
+from snapshotter.utils.models.message_models import CalculateAggregateMessage
 from snapshotter.utils.models.message_models import EpochBase
-from snapshotter.utils.models.message_models import PayloadCommitFinalizedMessage
-from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
-from snapshotter.utils.models.message_models import PowerloomProjectsUpdatedMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotFinalizedMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessage
-from snapshotter.utils.models.message_models import ProcessHubCommand
-from snapshotter.utils.models.settings_model import AggregateOn
+from snapshotter.utils.models.message_models import ProjectTypeProcessingCompleteMessage
+from snapshotter.utils.models.message_models import SnapshotFinalizedMessage
+from snapshotter.utils.models.message_models import SnapshotProcessMessage
+from snapshotter.utils.models.settings_model import AggregationConfigMulti
+from snapshotter.utils.models.settings_model import AggregationConfigSingle
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import active_status_key
 from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
-from snapshotter.utils.redis.redis_keys import last_epoch_detected_timestamp_key
-from snapshotter.utils.redis.redis_keys import last_snapshot_processing_complete_timestamp_key
-from snapshotter.utils.redis.redis_keys import process_hub_core_start_timestamp
 from snapshotter.utils.redis.redis_keys import project_finalized_data_zset
 from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_key
 from snapshotter.utils.redis.redis_keys import snapshot_submission_window_key
 from snapshotter.utils.rpc import RpcHelper
-# from snapshotter.utils.data_utils import build_projects_list_from_events
 
 
 class ProcessorDistributor(multiprocessing.Process):
@@ -102,15 +89,11 @@ class ProcessorDistributor(multiprocessing.Process):
             _initialized (bool): Flag indicating if the ProcessorDistributor has been initialized.
             _consume_queue_routing_key (str): The routing key for consuming events.
             _callback_exchange_name (str): The name of the exchange for callbacks.
-            _payload_commit_exchange_name (str): The name of the exchange for payload commits.
-            _payload_commit_routing_key (str): The routing key for payload commits.
             _upcoming_project_changes (defaultdict): Dictionary of upcoming project changes.
             _preload_completion_conditions (defaultdict): Dictionary of preload completion conditions.
-            _newly_added_projects (set): Set of newly added projects.
             _shutdown_initiated (bool): Flag indicating if shutdown has been initiated.
             _all_preload_tasks (set): Set of all preload tasks.
             _project_type_config_mapping (dict): Dictionary mapping project types to their configurations.
-            _last_epoch_processing_health_check (int): Timestamp of the last epoch processing health check.
             _preloader_compute_mapping (dict): Dictionary mapping preloader tasks to compute resources.
         """
         super(ProcessorDistributor, self).__init__(name=name, **kwargs)
@@ -123,29 +106,19 @@ class ProcessorDistributor(multiprocessing.Process):
         self._projects_list = None
         self._consume_exchange_name = f'{settings.rabbitmq.setup.event_detector.exchange}:{settings.namespace}'
         self._consume_queue_name = (
-            f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}'
+            f'event-detector:{settings.namespace}:{settings.instance_id}'
         )
 
-        # ...
-
         self._initialized = False
-        self._consume_queue_routing_key = f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.*'
+        self._consume_queue_routing_key = f'event-detector:{settings.namespace}:{settings.instance_id}.*'
         self._callback_exchange_name = (
             f'{settings.rabbitmq.setup.callbacks.exchange}:{settings.namespace}'
         )
-        self._payload_commit_exchange_name = (
-            f'{settings.rabbitmq.setup.commit_payload.exchange}:{settings.namespace}'
-        )
-        self._payload_commit_routing_key = (
-            f'powerloom-backend-commit-payload:{settings.namespace}:{settings.instance_id}.Finalized'
-        )
-
         self._upcoming_project_changes = defaultdict(list)
         self._preload_completion_conditions: Dict[int, Dict] = defaultdict(
             dict,
         )  # epoch ID to preloading complete event
 
-        self._newly_added_projects = set()
         self._shutdown_initiated = False
         self._all_preload_tasks = set()
         self._project_type_config_mapping = dict()
@@ -153,7 +126,6 @@ class ProcessorDistributor(multiprocessing.Process):
             self._project_type_config_mapping[project_config.project_type] = project_config
             for proload_task in project_config.preload_tasks:
                 self._all_preload_tasks.add(proload_task)
-        self._last_epoch_processing_health_check = 0
         self._preloader_compute_mapping = dict()
 
     def _signal_handler(self, signum, frame):
@@ -221,33 +193,6 @@ class ProcessorDistributor(multiprocessing.Process):
             transport=self._async_transport,
         )
 
-    async def _send_proc_hub_respawn(self):
-        """
-        Sends a respawn command to the process hub.
-
-        This method creates a ProcessHubCommand object with the command 'respawn',
-        acquires a channel from the channel pool, gets the exchange, and publishes
-        the command message to the exchange.
-
-        Args:
-            None
-
-        Returns:
-            None
-        """
-        proc_hub_cmd = ProcessHubCommand(
-            command='respawn',
-        )
-        async with self._rmq_channel_pool.acquire() as channel:
-            await channel.set_qos(10)
-            exchange = await channel.get_exchange(
-                name=f'{settings.rabbitmq.setup.core.exchange}:{settings.namespace}',
-            )
-            await exchange.publish(
-                routing_key=f'processhub-commands:{settings.namespace}:{settings.instance_id}',
-                message=Message(proc_hub_cmd.json().encode('utf-8')),
-            )
-
     async def _init_preloader_compute_mapping(self):
         """
         Initializes the preloader compute mapping by importing the preloader module and class and
@@ -285,7 +230,7 @@ class ProcessorDistributor(multiprocessing.Process):
             with open(settings.protocol_state.abi, 'r') as f:
                 abi_dict = json.load(f)
             protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
-                address=Web3.toChecksumAddress(
+                address=Web3.to_checksum_address(
                     settings.protocol_state.address,
                 ),
                 abi=abi_dict,
@@ -301,36 +246,6 @@ class ProcessorDistributor(multiprocessing.Process):
                 state_contract_obj=protocol_state_contract,
             )
 
-            self._projects_list = await get_projects_list(
-                redis_conn=self._redis_conn,
-                rpc_helper=self._anchor_rpc_helper,
-                state_contract_obj=protocol_state_contract,
-            )
-
-            # TODO: will be used after full project management overhaul
-            # using project set for now, keeping empty if not present in contract
-
-            # self._projects_list = await build_projects_list_from_events(
-            #     redis_conn=self._redis_conn,
-            #     rpc_helper=self._anchor_rpc_helper,
-            #     state_contract_obj=protocol_state_contract,
-            # )
-
-            # self._logger.info('Generated project list with {} projects', self._projects_list)
-
-            # iterate over project list fetched
-            for project_type, project_config in self._project_type_config_mapping.items():
-                project_type = project_config.project_type
-                if project_config.projects == []:
-                    relevant_projects = set(filter(lambda x: project_type in x, self._projects_list))
-                    project_data = set()
-                    for project in relevant_projects:
-                        data_source = project.split(':')[-2]
-                        project_data.add(
-                            data_source,
-                        )
-                    project_config.projects = list(project_data)
-
             submission_window = await get_snapshot_submision_window(
                 redis_conn=self._redis_conn,
                 rpc_helper=self._anchor_rpc_helper,
@@ -342,190 +257,6 @@ class ProcessorDistributor(multiprocessing.Process):
                     snapshot_submission_window_key,
                     submission_window,
                 )
-
-    async def _get_proc_hub_start_time(self) -> int:
-        """
-        Retrieves the start time of the process hub core from Redis.
-
-        Returns:
-            int: The start time of the process hub core, or 0 if not found.
-        """
-        _ = await self._redis_conn.get(process_hub_core_start_timestamp())
-        if _:
-            return int(_)
-        else:
-            return 0
-
-    async def _epoch_processing_health_check(self, current_epoch_id):
-        """
-        Perform health check for epoch processing.
-
-        Args:
-            current_epoch_id (int): The current epoch ID.
-
-        Returns:
-            None
-        """
-        # TODO: make the threshold values configurable.
-        # Range of epochs to be checked, success percentage/criteria, offset from current epoch
-        if current_epoch_id < 5:
-            return
-        # get last set start time by proc hub core
-        start_time = await self._get_proc_hub_start_time()
-
-        # only start if 5 minutes have passed since proc hub core start time
-        if int(time.time()) - start_time < 5 * 60:
-            self._logger.info(
-                'Skipping epoch processing health check because 5 minutes have not passed since proc hub core start time',
-            )
-            return
-
-        if start_time == 0:
-            self._logger.info('Skipping epoch processing health check because proc hub start time is not set')
-            return
-
-        # only runs once every minute
-        if self._last_epoch_processing_health_check != 0 and int(time.time()) - self._last_epoch_processing_health_check < 60:
-            self._logger.debug(
-                'Skipping epoch processing health check because it was run less than a minute ago',
-            )
-            return
-
-        if not (self._source_chain_block_time != 0 and self._epoch_size != 0):
-            self._logger.info(
-                'Skipping epoch processing health check because source chain block time or epoch size is not known | '
-                'Source chain block time: {} | Epoch size: {}',
-                self._source_chain_block_time,
-                self._epoch_size,
-            )
-            return
-        self._last_epoch_processing_health_check = int(time.time())
-
-        last_epoch_detected = await self._redis_conn.get(last_epoch_detected_timestamp_key())
-        last_snapshot_processed = await self._redis_conn.get(last_snapshot_processing_complete_timestamp_key())
-
-        if last_epoch_detected:
-            last_epoch_detected = int(last_epoch_detected)
-
-        if last_snapshot_processed:
-            last_snapshot_processed = int(last_snapshot_processed)
-
-        # if no epoch is detected for 30 epochs, report unhealthy and send respawn command
-        if last_epoch_detected and int(time.time()) - last_epoch_detected > 30 * self._source_chain_block_time * self._epoch_size:
-            self._logger.debug(
-                'Sending unhealthy epoch report to reporting service due to no epoch detected for ~30 epochs',
-            )
-            await send_failure_notifications_async(
-                client=self._client,
-                message=SnapshotterIssue(
-                    instanceID=settings.instance_id,
-                    issueType=SnapshotterReportState.UNHEALTHY_EPOCH_PROCESSING.value,
-                    projectID='',
-                    epochId='',
-                    timeOfReporting=datetime.now().isoformat(),
-                    extra=json.dumps(
-                        {
-                            'last_epoch_detected': last_epoch_detected,
-                        },
-                    ),
-                ),
-            )
-            self._logger.info(
-                'Sending respawn command for all process hub core children because no epoch was detected for ~30 epochs',
-            )
-            await self._send_proc_hub_respawn()
-
-        # if time difference between last epoch detected and last snapshot processed
-        # is more than 30 epochs, report unhealthy and send respawn command
-        if last_epoch_detected and last_snapshot_processed and \
-                last_epoch_detected - last_snapshot_processed > 30 * self._source_chain_block_time * self._epoch_size:
-            self._logger.debug(
-                'Sending unhealthy epoch report to reporting service due to no snapshot processing for ~30 epochs',
-            )
-            await send_failure_notifications_async(
-                client=self._client,
-                message=SnapshotterIssue(
-                    instanceID=settings.instance_id,
-                    issueType=SnapshotterReportState.UNHEALTHY_EPOCH_PROCESSING.value,
-                    projectID='',
-                    epochId='',
-                    timeOfReporting=datetime.now().isoformat(),
-                    extra=json.dumps(
-                        {
-                            'last_epoch_detected': last_epoch_detected,
-                            'last_snapshot_processed': last_snapshot_processed,
-                        },
-                    ),
-                ),
-            )
-            self._logger.info(
-                'Sending respawn command for all process hub core children because no snapshot processing was done for ~30 epochs',
-            )
-            await self._send_proc_hub_respawn()
-
-            # check for epoch processing status
-            epoch_health = dict()
-            # check from previous epoch processing status until 2 further epochs
-            build_state_val = SnapshotterStates.SNAPSHOT_BUILD.value
-            for epoch_id in range(current_epoch_id - 1, current_epoch_id - 3 - 1, -1):
-                epoch_specific_report = SnapshotterEpochProcessingReportItem.construct()
-                success_percentage = 0
-                epoch_specific_report.epochId = epoch_id
-                state_report_entries = await self._redis_conn.hgetall(
-                    name=epoch_id_project_to_state_mapping(epoch_id=epoch_id, state_id=build_state_val),
-                )
-                if state_report_entries:
-                    project_state_report_entries = {
-                        project_id.decode('utf-8'): SnapshotterStateUpdate.parse_raw(project_state_entry)
-                        for project_id, project_state_entry in state_report_entries.items()
-                    }
-                    epoch_specific_report.transitionStatus[build_state_val] = project_state_report_entries
-                    success_percentage += len(
-                        [
-                            project_state_report_entry
-                            for project_state_report_entry in project_state_report_entries.values()
-                            if project_state_report_entry.status == 'success'
-                        ],
-                    ) / len(project_state_report_entries)
-
-                if any([x is None for x in epoch_specific_report.transitionStatus.values()]):
-                    epoch_health[epoch_id] = False
-                    self._logger.debug(
-                        'Marking epoch {} as unhealthy due to missing state reports against transitions {}',
-                        epoch_id,
-                        [x for x, y in epoch_specific_report.transitionStatus.items() if y is None],
-                    )
-                if success_percentage < 0.5 and success_percentage != 0:
-                    epoch_health[epoch_id] = False
-                    self._logger.debug(
-                        'Marking epoch {} as unhealthy due to low success percentage: {}',
-                        epoch_id,
-                        success_percentage,
-                    )
-            if len([epoch_id for epoch_id, healthy in epoch_health.items() if not healthy]) >= 2:
-                self._logger.debug(
-                    'Sending unhealthy epoch report to reporting service: {}',
-                    epoch_health,
-                )
-                await send_failure_notifications_async(
-                    client=self._client,
-                    message=SnapshotterIssue(
-                        instanceID=settings.instance_id,
-                        issueType=SnapshotterReportState.UNHEALTHY_EPOCH_PROCESSING.value,
-                        projectID='',
-                        epochId='',
-                        timeOfReporting=datetime.now().isoformat(),
-                        extra=json.dumps(
-                            {
-                                'epoch_health': epoch_health,
-                            },
-                        ),
-                    ),
-                )
-                self._logger.info(
-                    'Sending respawn command for all process hub core children because epochs were found unhealthy: {}', epoch_health,
-                )
-                await self._send_proc_hub_respawn()
 
     async def _preloader_waiter(
         self,
@@ -684,12 +415,7 @@ class ProcessorDistributor(multiprocessing.Process):
             )
             return
 
-        self._newly_added_projects = self._newly_added_projects.union(
-            await self._enable_pending_projects_for_epoch(msg_obj.epochId),
-        )
-
         asyncio.ensure_future(self._exec_preloaders(msg_obj=msg_obj))
-        asyncio.ensure_future(self._epoch_processing_health_check(msg_obj.epochId))
 
     async def _distribute_callbacks_snapshotting(self, project_type: str, epoch: EpochBase):
         """
@@ -702,8 +428,6 @@ class ProcessorDistributor(multiprocessing.Process):
         Returns:
             None
         """
-        # send to snapshotters to get the balances of the addresses
-        queuing_tasks = []
 
         async with self._rmq_channel_pool.acquire() as ch:
             # Prepare a message to send
@@ -711,159 +435,30 @@ class ProcessorDistributor(multiprocessing.Process):
                 name=self._callback_exchange_name,
             )
 
-            project_config = self._project_type_config_mapping[project_type]
-
-            # handling bulk mode projects
-            if project_config.bulk_mode:
-                process_unit = PowerloomSnapshotProcessMessage(
-                    begin=epoch.begin,
-                    end=epoch.end,
-                    epochId=epoch.epochId,
-                    bulk_mode=True,
-                )
-
-                msg_body = Message(process_unit.json().encode('utf-8'))
-                await exchange.publish(
-                    routing_key=f'powerloom-backend-callback:{settings.namespace}'
-                    f':{settings.instance_id}:EpochReleased.{project_type}',
-                    message=msg_body,
-                )
-
-                self._logger.debug(
-                    'Sent out message to be processed by worker'
-                    f' {project_type} : {process_unit}',
-                )
-                return
-            # handling projects with no data sources
-            if project_config.projects is None:
-                project_id = f'{project_type}:{settings.namespace}'
-                if project_id.lower() in self._newly_added_projects:
-                    genesis = True
-                    self._newly_added_projects.remove(project_id.lower())
-                else:
-                    genesis = False
-                process_unit = PowerloomSnapshotProcessMessage(
-                    begin=epoch.begin,
-                    end=epoch.end,
-                    epochId=epoch.epochId,
-                    genesis=genesis,
-                )
-
-                msg_body = Message(process_unit.json().encode('utf-8'))
-                await exchange.publish(
-                    routing_key=f'powerloom-backend-callback:{settings.namespace}'
-                    f':{settings.instance_id}:EpochReleased.{project_type}',
-                    message=msg_body,
-                )
-                self._logger.debug(
-                    'Sent out message to be processed by worker'
-                    f' {project_type} : {process_unit}',
-                )
-                return
-
-            # handling projects with data sources
-            for project in project_config.projects:
-                project_id = f'{project_type}:{project}:{settings.namespace}'
-
-                if project_id.lower() in self._newly_added_projects:
-                    genesis = True
-                    self._newly_added_projects.remove(project_id.lower())
-                else:
-                    genesis = False
-
-                data_sources = project.split('_')
-                if len(data_sources) == 1:
-                    data_source = data_sources[0]
-                    primary_data_source = None
-                else:
-                    primary_data_source, data_source = data_sources
-                process_unit = PowerloomSnapshotProcessMessage(
-                    begin=epoch.begin,
-                    end=epoch.end,
-                    epochId=epoch.epochId,
-                    data_source=data_source,
-                    primary_data_source=primary_data_source,
-                    genesis=genesis,
-                )
-
-                msg_body = Message(process_unit.json().encode('utf-8'))
-                queuing_tasks.append(
-                    exchange.publish(
-                        routing_key=f'powerloom-backend-callback:{settings.namespace}'
-                        f':{settings.instance_id}:EpochReleased.{project_type}',
-                        message=msg_body,
-                    ),
-                )
-
-                self._logger.debug(
-                    'Sent out message to be processed by worker'
-                    f' {project_type} : {process_unit}',
-                )
-
-            results = await asyncio.gather(*queuing_tasks, return_exceptions=True)
-
-        for result in results:
-            if isinstance(result, Exception):
-                self._logger.error(
-                    'Error while sending message to queue. Error - {}',
-                    result,
-                )
-
-    async def _enable_pending_projects_for_epoch(self, epoch_id) -> Set[str]:
-        """
-        Enables pending projects for the given epoch ID and returns a set of project IDs that were allowed.
-
-        :param epoch_id: The epoch ID for which to enable pending projects.
-        :type epoch_id: Any
-        :return: A set of project IDs that were allowed.
-        :rtype: set
-        """
-        pending_project_msgs: List[PowerloomProjectsUpdatedMessage] = self._upcoming_project_changes.pop(epoch_id, [])
-        if not pending_project_msgs:
-            return set()
-        else:
-            for msg_obj in pending_project_msgs:
-                # Update projects list
-                for project_type, project_config in self._project_type_config_mapping.items():
-                    projects_set = set(project_config.projects)
-                    if project_type in msg_obj.projectId:
-                        if project_config.projects is None:
-                            continue
-                        data_source = msg_obj.projectId.split(':')[-2]
-                        if msg_obj.allowed:
-                            projects_set.add(data_source)
-                        else:
-                            if data_source in project_config.projects:
-                                projects_set.discard(data_source)
-                    project_config.projects = list(projects_set)
-
-        return set([msg.projectId.lower() for msg in pending_project_msgs if msg.allowed])
-
-    async def _update_all_projects(self, message: IncomingMessage):
-        """
-        Updates all projects based on the incoming message.
-
-        Args:
-            message (IncomingMessage): The incoming message containing the project updates.
-        """
-
-        event_type = message.routing_key.split('.')[-1]
-
-        if event_type == 'ProjectsUpdated':
-            msg_obj: PowerloomProjectsUpdatedMessage = (
-                PowerloomProjectsUpdatedMessage.parse_raw(message.body)
+            process_unit = SnapshotProcessMessage(
+                begin=epoch.begin,
+                end=epoch.end,
+                epochId=epoch.epochId,
             )
-        else:
-            return
 
-        self._upcoming_project_changes[msg_obj.enableEpochId].append(msg_obj)
+            msg_body = Message(process_unit.json().encode('utf-8'))
+            await exchange.publish(
+                routing_key=f'backend-callback:{settings.namespace}'
+                f':{settings.instance_id}:EpochReleased.{project_type}',
+                message=msg_body,
+            )
 
-    async def _cache_and_forward_to_payload_commit_queue(self, message: IncomingMessage):
+            self._logger.debug(
+                'Sent out message to be processed by worker'
+                f' {project_type} : {process_unit}',
+            )
+
+    async def _handle_snapshot_finalized_message(self, message: IncomingMessage):
         """
-        Caches the snapshot data and forwards it to the payload commit queue.
+        Handles the SnapshotFinalized message.
 
         Args:
-            message (IncomingMessage): The incoming message containing the snapshot data.
+            message (IncomingMessage): The incoming message object.
 
         Returns:
             None
@@ -871,8 +466,8 @@ class ProcessorDistributor(multiprocessing.Process):
         event_type = message.routing_key.split('.')[-1]
 
         if event_type == 'SnapshotFinalized':
-            msg_obj: PowerloomSnapshotFinalizedMessage = (
-                PowerloomSnapshotFinalizedMessage.parse_raw(message.body)
+            msg_obj: SnapshotFinalizedMessage = (
+                SnapshotFinalizedMessage.parse_raw(message.body)
             )
         else:
             return
@@ -898,47 +493,15 @@ class ProcessorDistributor(multiprocessing.Process):
             },
         )
 
-        self._logger.trace(f'Payload Commit Message Distribution time - {int(time.time())}')
-
-        # If not initialized yet, return
-        if not self._source_chain_id:
-            return
-
-        process_unit = PayloadCommitFinalizedMessage(
-            message=msg_obj,
-            web3Storage=True,
-            sourceChainId=self._source_chain_id,
-        )
-        async with self._rmq_channel_pool.acquire() as channel:
-            exchange = await channel.get_exchange(
-                name=self._payload_commit_exchange_name,
-            )
-            await exchange.publish(
-                routing_key=self._payload_commit_routing_key,
-                message=Message(process_unit.json().encode('utf-8')),
-            )
-
-        self._logger.trace(
-            (
-                'Sent out Event to Payload Commit Queue'
-                f' {event_type} : {process_unit}'
-            ),
-        )
-
     async def _distribute_callbacks_aggregate(self, message: IncomingMessage):
         """
         Distributes the callbacks for aggregation.
 
         :param message: IncomingMessage object containing the message to be processed.
         """
-        event_type = message.routing_key.split('.')[-1]
         try:
-            if event_type != 'SnapshotSubmitted':
-                self._logger.error(f'Unknown event type {event_type}')
-                return
-
-            process_unit: PowerloomSnapshotSubmittedMessage = (
-                PowerloomSnapshotSubmittedMessage.parse_raw(message.body)
+            process_unit: ProjectTypeProcessingCompleteMessage = (
+                ProjectTypeProcessingCompleteMessage.parse_raw(message.body)
             )
 
         except ValidationError:
@@ -961,39 +524,35 @@ class ProcessorDistributor(multiprocessing.Process):
             )
             for config in aggregator_config:
                 task_type = config.project_type
-                if config.aggregate_on == AggregateOn.single_project:
-                    if config.filters.projectId not in process_unit.projectId:
-                        self._logger.trace(f'projectId mismatch {process_unit.projectId} {config.filters.projectId}')
-                        continue
 
-                    rabbitmq_publish_tasks.append(
-                        exchange.publish(
-                            routing_key=f'powerloom-backend-callback:{settings.namespace}:'
-                            f'{settings.instance_id}:CalculateAggregate.{task_type}',
-                            message=Message(process_unit.json().encode('utf-8')),
-                        ),
-                    )
-                elif config.aggregate_on == AggregateOn.multi_project:
-                    if process_unit.projectId not in config.projects_to_wait_for:
-                        self._logger.trace(
-                            f'projectId not required for {config.project_type}: {process_unit.projectId}',
+                if type(config) == AggregationConfigSingle:
+                    if config.filters.project_type == process_unit.projectType:
+                        rabbitmq_publish_tasks.append(
+                            exchange.publish(
+                                routing_key=f'backend-callback:{settings.namespace}:'
+                                f'{settings.instance_id}:CalculateAggregate.{task_type}',
+                                message=Message(process_unit.json().encode('utf-8')),
+                            ),
                         )
+
+                elif type(config) == AggregationConfigMulti:
+                    if process_unit.projectType not in config.project_types_to_wait_for:
                         continue
 
                     # cleanup redis for all previous epochs (5 buffer)
                     await self._redis_conn.zremrangebyscore(
-                        f'powerloom:aggregator:{config.project_type}:events',
+                        f'aggregator:{config.project_type}:events',
                         0,
                         process_unit.epochId - 5,
                     )
 
                     await self._redis_conn.zadd(
-                        f'powerloom:aggregator:{config.project_type}:events',
+                        f'aggregator:{config.project_type}:events',
                         {process_unit.json(): process_unit.epochId},
                     )
 
                     events = await self._redis_conn.zrangebyscore(
-                        f'powerloom:aggregator:{config.project_type}:events',
+                        f'aggregator:{config.project_type}:events',
                         process_unit.epochId,
                         process_unit.epochId,
                     )
@@ -1002,17 +561,17 @@ class ProcessorDistributor(multiprocessing.Process):
                         self._logger.info(f'No events found for {process_unit.epochId}')
                         continue
 
-                    event_project_ids = set()
+                    event_project_types = set()
                     finalized_messages = list()
 
                     for event in events:
-                        event = PowerloomSnapshotSubmittedMessage.parse_raw(event)
-                        event_project_ids.add(event.projectId)
+                        event = ProjectTypeProcessingCompleteMessage.parse_raw(event)
+                        event_project_types.add(event.projectType)
                         finalized_messages.append(event)
 
-                    if event_project_ids == set(config.projects_to_wait_for):
+                    if event_project_types == set(config.project_types_to_wait_for):
                         self._logger.info(f'All projects present for {process_unit.epochId}, aggregating')
-                        final_msg = PowerloomCalculateAggregateMessage(
+                        final_msg = CalculateAggregateMessage(
                             messages=finalized_messages,
                             epochId=process_unit.epochId,
                             timestamp=int(time.time()),
@@ -1020,7 +579,7 @@ class ProcessorDistributor(multiprocessing.Process):
 
                         rabbitmq_publish_tasks.append(
                             exchange.publish(
-                                routing_key=f'powerloom-backend-callback:{settings.namespace}'
+                                routing_key=f'backend-callback:{settings.namespace}'
                                 f':{settings.instance_id}:CalculateAggregate.{task_type}',
                                 message=Message(final_msg.json().encode('utf-8')),
                             ),
@@ -1029,16 +588,15 @@ class ProcessorDistributor(multiprocessing.Process):
                         # Cleanup redis for current epoch
 
                         await self._redis_conn.zremrangebyscore(
-                            f'powerloom:aggregator:{config.project_type}:events',
+                            f'aggregator:{config.project_type}:events',
                             process_unit.epochId,
                             process_unit.epochId,
                         )
 
-                    else:
-                        self._logger.trace(
-                            f'Not all projects present for {process_unit.epochId},'
-                            f' {len(set(config.projects_to_wait_for)) - len(event_project_ids)} missing',
-                        )
+        if not rabbitmq_publish_tasks:
+            self._logger.info(f'No aggregators found for {process_unit.projectType}')
+            return
+
         await asyncio.gather(*rabbitmq_publish_tasks, return_exceptions=True)
 
     async def _cleanup_older_epoch_status(self, epoch_id: int):
@@ -1086,25 +644,24 @@ class ProcessorDistributor(multiprocessing.Process):
                 )
                 asyncio.ensure_future(self._cleanup_older_epoch_status(_.epochId))
 
-            _ = await self._redis_conn.get(active_status_key)
-            if _:
-                active_status = bool(int(_))
+            _is_snapshotter_active = await self._redis_conn.get(active_status_key)
+            if _is_snapshotter_active:
+                active_status = bool(int(_is_snapshotter_active))
                 if not active_status:
                     self._logger.error('System is not active, ignoring released Epoch')
                 else:
                     await self._epoch_release_processor(message)
 
-        elif message_type == 'SnapshotSubmitted':
+        elif message_type == 'ProjectTypeProcessingComplete':
             await self._distribute_callbacks_aggregate(
                 message,
             )
 
         elif message_type == 'SnapshotFinalized':
-            await self._cache_and_forward_to_payload_commit_queue(
+            await self._handle_snapshot_finalized_message(
                 message,
             )
-        elif message_type == 'ProjectsUpdated':
-            await self._update_all_projects(message)
+
         elif message_type == 'allSnapshottersUpdated':
             msg_cast = SnapshottersUpdatedEvent.parse_raw(message.body)
             if msg_cast.snapshotterAddress == to_checksum_address(settings.instance_id):
@@ -1118,7 +675,7 @@ class ProcessorDistributor(multiprocessing.Process):
                 (
                     'Unknown routing key for callback distribution: {}'
                 ),
-                message.routing_key,
+                message_type,
             )
 
         if self._redis_conn:
@@ -1155,7 +712,7 @@ class ProcessorDistributor(multiprocessing.Process):
         initializing the worker, starting the RabbitMQ consumer, and running the event loop.
         """
         self._logger = logger.bind(
-            module=f'Powerloom|Callbacks|ProcessDistributor:{settings.namespace}-{settings.instance_id}',
+            module=f'ProcessDistributor',
         )
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         resource.setrlimit(

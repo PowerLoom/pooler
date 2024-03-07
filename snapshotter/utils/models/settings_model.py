@@ -67,7 +67,6 @@ class RabbitMQSetup(BaseModel):
     core: RabbitMQConfig
     callbacks: RabbitMQConfig
     event_detector: RabbitMQConfig
-    commit_payload: RabbitMQConfig
     delegated_worker: RabbitMQConfig
 
 
@@ -110,6 +109,7 @@ class Logs(BaseModel):
 class EventContract(BaseModel):
     address: str
     abi: str
+    deadline_buffer: int
 
 
 class CallbackWorkerConfig(BaseModel):
@@ -141,10 +141,16 @@ class Web3Storage(BaseModel):
     # rate_limit: Optional[IPFSWriterRateLimit] = None
 
 
+class Relayer(BaseModel):
+    host: str
+    endpoint: str
+
+
 class Settings(BaseModel):
     namespace: str
     core_api: CoreAPI
     instance_id: str
+    signer_private_key: str
     rpc: RPCConfigFull
     rlimit: RLimit
     rabbitmq: RabbitMQ
@@ -157,6 +163,7 @@ class Settings(BaseModel):
     pair_contract_abi: str
     aggregator_config_path: str
     protocol_state: EventContract
+    relayer: Relayer
     callback_worker_config: CallbackWorkerConfig
     ipfs: IPFSConfig
     web3storage: Web3Storage
@@ -171,10 +178,8 @@ class ProcessorConfig(BaseModel):
 
 class ProjectConfig(BaseModel):
     project_type: str
-    projects: Optional[List[str]] = None
     processor: ProcessorConfig
     preload_tasks: List[str]
-    bulk_mode: Optional[bool] = False
 
 
 class ProjectsConfig(BaseModel):
@@ -182,7 +187,7 @@ class ProjectsConfig(BaseModel):
 
 
 class AggregateFilterConfig(BaseModel):
-    projectId: str
+    project_type: str
 
 
 class AggregateOn(str, Enum):
@@ -190,16 +195,22 @@ class AggregateOn(str, Enum):
     multi_project = 'MultiProject'
 
 
-class AggregationConfig(BaseModel):
+class AggregationConfigSingle(BaseModel):
     project_type: str
     aggregate_on: AggregateOn
-    filters: Optional[AggregateFilterConfig]
-    projects_to_wait_for: Optional[List[str]]
+    filters: AggregateFilterConfig
+    processor: ProcessorConfig
+
+
+class AggregationConfigMulti(BaseModel):
+    project_type: str
+    aggregate_on: AggregateOn
+    project_types_to_wait_for: List[str]
     processor: ProcessorConfig
 
 
 class AggregatorConfig(BaseModel):
-    config: List[AggregationConfig]
+    config: List[Union[AggregationConfigSingle, AggregationConfigMulti]]
 
 
 class Preloader(BaseModel):

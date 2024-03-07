@@ -37,8 +37,6 @@ from snapshotter.utils.models.data_models import SnapshotterPing
 from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.message_models import ProcessHubCommand
 from snapshotter.utils.rabbitmq_helpers import RabbitmqSelectLoopInteractor
-from snapshotter.utils.redis.redis_conn import provide_async_redis_conn
-from snapshotter.utils.redis.redis_conn import provide_redis_conn
 from snapshotter.utils.redis.redis_conn import provide_redis_conn_repsawning_thread
 from snapshotter.utils.redis.redis_conn import REDIS_CONN_CONF
 from snapshotter.utils.redis.redis_keys import process_hub_core_start_timestamp
@@ -48,12 +46,12 @@ from snapshotter.utils.snapshot_worker import SnapshotAsyncWorker
 PROC_STR_ID_TO_CLASS_MAP = {
     'SystemEventDetector': {
         'class': EventDetectorProcess,
-        'name': 'Powerloom|SystemEventDetector',
+        'name': 'SystemEventDetector',
         'target': None,
     },
     'ProcessorDistributor': {
         'class': ProcessorDistributor,
-        'name': 'Powerloom|ProcessorDistributor',
+        'name': 'ProcessorDistributor',
         'target': None,
     },
 }
@@ -192,7 +190,7 @@ class ProcessHubCore(Process):
                 proc_id_map['callback_workers'],
             )
             redis_conn.hset(
-                name=f'powerloom:snapshotter:{settings.namespace}:{settings.instance_id}:Processes',
+                name=f'snapshotter:{settings.namespace}:{settings.instance_id}:Processes',
                 mapping=proc_id_map,
             )
             if settings.reporting.service_url and int(time.time()) - self._last_reporting_service_ping >= 30:
@@ -216,7 +214,7 @@ class ProcessHubCore(Process):
             ),
         )
         redis_conn.delete(
-            f'powerloom:snapshotter:{settings.namespace}:{settings.instance_id}:Processes',
+            f'snapshotter:{settings.namespace}:{settings.instance_id}:Processes',
         )
 
     def _kill_all_children(self, core_workers=True):
@@ -307,8 +305,7 @@ class ProcessHubCore(Process):
         for _ in range(settings.callback_worker_config.num_snapshot_workers):
             unique_id = str(uuid.uuid4())[:5]
             unique_name = (
-                f'Powerloom|SnapshotWorker:{settings.namespace}:{settings.instance_id}' +
-                '-' +
+                f'SnapshotWorker:' +
                 unique_id
             )
             snapshot_worker_obj: Process = SnapshotAsyncWorker(name=unique_name)
@@ -331,8 +328,7 @@ class ProcessHubCore(Process):
         for _ in range(settings.callback_worker_config.num_aggregation_workers):
             unique_id = str(uuid.uuid4())[:5]
             unique_name = (
-                f'Powerloom|AggregationWorker:{settings.namespace}:{settings.instance_id}' +
-                '-' +
+                f'AggregationWorker:' +
                 unique_id
             )
             aggregation_worker_obj: Process = AggregationAsyncWorker(name=unique_name)
@@ -356,8 +352,7 @@ class ProcessHubCore(Process):
         for _ in range(settings.callback_worker_config.num_delegate_workers):
             unique_id = str(uuid.uuid4())[:5]
             unique_name = (
-                f'Powerloom|DelegateWorker:{settings.namespace}:{settings.instance_id}' +
-                '-' +
+                f'DelegateWorker:' +
                 unique_id
 
             )
@@ -450,7 +445,7 @@ class ProcessHubCore(Process):
         Protocol State contract, source chain block time, epoch size, snapshot callback workers,
         internal state reporter, RabbitMQ consumer, and raises a SelfExitException to exit the process.
         """
-        self._logger = logger.bind(module='Powerloom|ProcessHub|Core')
+        self._logger = logger.bind(module='ProcessHub|Core')
 
         for signame in [SIGINT, SIGTERM, SIGQUIT, SIGCHLD]:
             signal(signame, self.signal_handler)
@@ -503,12 +498,12 @@ class ProcessHubCore(Process):
         self._reporter_thread.start()
         self._logger.debug('Starting Process Hub Core...')
 
-        queue_name = f'powerloom-processhub-commands-q:{settings.namespace}:{settings.instance_id}'
+        queue_name = f'processhub-commands-q:{settings.namespace}:{settings.instance_id}'
         self.rabbitmq_interactor: RabbitmqSelectLoopInteractor = RabbitmqSelectLoopInteractor(
             consume_queue_name=queue_name,
             consume_callback=self.callback,
             consumer_worker_name=(
-                f'Powerloom|ProcessHub|Core-{settings.instance_id[:5]}'
+                f'ProcessHub|Core-{settings.instance_id[:5]}'
             ),
         )
         self._logger.debug('Starting RabbitMQ consumer on queue {}', queue_name)
@@ -624,7 +619,7 @@ class ProcessHubCore(Process):
 
 
 if __name__ == '__main__':
-    p = ProcessHubCore(name='Powerloom|SnapshotterProcessHub|Core')
+    p = ProcessHubCore(name='SnapshotterProcessHub|Core')
     p.start()
     while p.is_alive():
         logger.debug(

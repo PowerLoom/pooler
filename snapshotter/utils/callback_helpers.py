@@ -3,9 +3,9 @@ import functools
 from abc import ABC
 from abc import ABCMeta
 from abc import abstractmethod
-from abc import abstractproperty
 from typing import Any
 from typing import Dict
+from typing import List
 from typing import Union
 from urllib.parse import urljoin
 
@@ -19,15 +19,15 @@ from redis import asyncio as aioredis
 
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import logger
+from snapshotter.utils.models.message_models import CalculateAggregateMessage
+from snapshotter.utils.models.message_models import DelegateWorkerRequestMessage
 from snapshotter.utils.models.message_models import EpochBase
-from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
-from snapshotter.utils.models.message_models import PowerloomDelegateWorkerRequestMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessage
+from snapshotter.utils.models.message_models import ProjectTypeProcessingCompleteMessage
+from snapshotter.utils.models.message_models import SnapshotProcessMessage
 from snapshotter.utils.rpc import RpcHelper
 
 # setup logger
-helper_logger = logger.bind(module='Powerloom|Callback|Helpers')
+helper_logger = logger.bind(module='Callback|Helpers')
 
 
 async def get_rabbitmq_robust_connection_async():
@@ -176,26 +176,6 @@ def send_failure_notifications_sync(client: SyncClient, message: BaseModel):
         sync_notification_callback_result_handler(f)
 
 
-class GenericProcessorSnapshot(ABC):
-    __metaclass__ = ABCMeta
-
-    def __init__(self):
-        pass
-
-    @abstractproperty
-    def transformation_lambdas(self):
-        pass
-
-    @abstractmethod
-    async def compute(
-        self,
-        epoch: PowerloomSnapshotProcessMessage,
-        redis: aioredis.Redis,
-        rpc_helper: RpcHelper,
-    ):
-        pass
-
-
 class GenericPreloader(ABC):
     __metaclass__ = ABCMeta
 
@@ -260,9 +240,28 @@ class GenericDelegateProcessor(ABC):
     @abstractmethod
     async def compute(
         self,
-        msg_obj: PowerloomDelegateWorkerRequestMessage,
+        msg_obj: DelegateWorkerRequestMessage,
         redis_conn: aioredis.Redis,
         rpc_helper: RpcHelper,
+    ):
+        pass
+
+
+class GenericProcessor(ABC):
+    __metaclass__ = ABCMeta
+
+    def __init__(self):
+        pass
+
+    @abstractmethod
+    async def compute(
+        self,
+        msg_obj: SnapshotProcessMessage,
+        redis: aioredis.Redis,
+        rpc_helper: RpcHelper,
+        anchor_rpc_helper: RpcHelper,
+        ipfs_reader: AsyncIPFSClient,
+        protocol_state_contract,
     ):
         pass
 
@@ -273,19 +272,18 @@ class GenericProcessorAggregate(ABC):
     def __init__(self):
         pass
 
-    @abstractproperty
-    def transformation_lambdas(self):
-        pass
-
     @abstractmethod
     async def compute(
         self,
-        msg_obj: Union[PowerloomSnapshotSubmittedMessage, PowerloomCalculateAggregateMessage],
+        msg_obj: Union[
+            ProjectTypeProcessingCompleteMessage,
+            CalculateAggregateMessage,
+        ],
         redis: aioredis.Redis,
         rpc_helper: RpcHelper,
         anchor_rpc_helper: RpcHelper,
         ipfs_reader: AsyncIPFSClient,
         protocol_state_contract,
-        project_id: str,
+        project_ids: List[str],
     ):
         pass

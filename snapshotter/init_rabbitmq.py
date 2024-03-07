@@ -4,7 +4,7 @@ from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import logger
 
 # setup logging
-init_rmq_logger = logger.bind(module='Powerloom|RabbitMQ|Init')
+init_rmq_logger = logger.bind(module='RabbitMQ|Init')
 
 
 def create_rabbitmq_conn() -> pika.BlockingConnection:
@@ -67,9 +67,9 @@ def get_snapshot_queue_routing_key_pattern() -> tuple[str, str]:
         A tuple containing the queue name and routing key pattern.
     """
     queue_name = (
-        f'powerloom-backend-cb-snapshot:{settings.namespace}:{settings.instance_id}'
+        f'backend-cb-snapshot:{settings.namespace}:{settings.instance_id}'
     )
-    routing_key_pattern = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}:EpochReleased.*'
+    routing_key_pattern = f'backend-callback:{settings.namespace}:{settings.instance_id}:EpochReleased.*'
     return queue_name, routing_key_pattern
 
 
@@ -81,9 +81,9 @@ def get_aggregate_queue_routing_key_pattern() -> tuple[str, str]:
         A tuple containing the queue name and routing key pattern.
     """
     queue_name = (
-        f'powerloom-backend-cb-aggregate:{settings.namespace}:{settings.instance_id}'
+        f'backend-cb-aggregate:{settings.namespace}:{settings.instance_id}'
     )
-    routing_key_pattern = f'powerloom-backend-callback:{settings.namespace}:{settings.instance_id}:CalculateAggregate.*'
+    routing_key_pattern = f'backend-callback:{settings.namespace}:{settings.instance_id}:CalculateAggregate.*'
     return queue_name, routing_key_pattern
 
 
@@ -94,8 +94,8 @@ def get_delegate_worker_request_queue_routing_key() -> tuple[str, str]:
     Returns:
         A tuple containing the request queue name and routing key.
     """
-    request_queue_routing_key = f'powerloom-delegated-worker:{settings.namespace}:{settings.instance_id}:Request'
-    request_queue_name = f'powerloom-delegated-worker-request:{settings.namespace}:{settings.instance_id}'
+    request_queue_routing_key = f'delegated-worker:{settings.namespace}:{settings.instance_id}:Request'
+    request_queue_name = f'delegated-worker-request:{settings.namespace}:{settings.instance_id}'
     return request_queue_name, request_queue_routing_key
 
 
@@ -106,8 +106,8 @@ def get_delegate_worker_response_queue_routing_key_pattern() -> tuple[str, str]:
     Returns:
         tuple[str, str]: A tuple containing the response queue name and routing key pattern.
     """
-    response_queue_routing_key = f'powerloom-delegated-worker:{settings.namespace}:{settings.instance_id}:Response.*'
-    response_queue_name = f'powerloom-delegated-worker-response:{settings.namespace}:{settings.instance_id}'
+    response_queue_routing_key = f'delegated-worker:{settings.namespace}:{settings.instance_id}:Response.*'
+    response_queue_name = f'delegated-worker-response:{settings.namespace}:{settings.instance_id}'
     return response_queue_name, response_queue_routing_key
 
 
@@ -213,33 +213,6 @@ def init_callback_queue(
     )
 
 
-def init_commit_payload_queue(
-    ch: pika.adapters.blocking_connection.BlockingChannel,
-) -> None:
-    """
-    Initializes a RabbitMQ queue for commit payloads.
-
-    Args:
-        ch (pika.adapters.blocking_connection.BlockingChannel): The RabbitMQ channel to use.
-
-    Returns:
-        None
-    """
-    commit_payload_exchange_name = (
-        f'{settings.rabbitmq.setup.commit_payload.exchange}:{settings.namespace}'
-    )
-    routing_key_pattern = f'powerloom-backend-commit-payload:{settings.namespace}:{settings.instance_id}.*'
-    queue_name = (
-        f'powerloom-backend-commit-payload-queue:{settings.namespace}:{settings.instance_id}'
-    )
-    init_topic_exchange_and_queue(
-        ch,
-        exchange_name=commit_payload_exchange_name,
-        queue_name=queue_name,
-        routing_key_pattern=routing_key_pattern,
-    )
-
-
 def init_delegate_worker_queue(
     ch: pika.adapters.blocking_connection.BlockingChannel,
 ) -> None:
@@ -296,9 +269,9 @@ def init_event_detector_queue(
     event_detector_exchange_name = (
         f'{settings.rabbitmq.setup.event_detector.exchange}:{settings.namespace}'
     )
-    routing_key_pattern = f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.*'
+    routing_key_pattern = f'event-detector:{settings.namespace}:{settings.instance_id}.*'
     queue_name = (
-        f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}'
+        f'event-detector:{settings.namespace}:{settings.instance_id}'
     )
     init_topic_exchange_and_queue(
         ch,
@@ -327,7 +300,7 @@ def init_exchanges_queues():
     )
 
     to_be_inited = [
-        ('powerloom-processhub-commands-q', 'processhub-commands'),
+        ('processhub-commands-q', 'processhub-commands'),
     ]
     for queue_name, routing_key in to_be_inited:
         # add namespace and instance ID to facilitate multiple snapshotter instances
@@ -338,7 +311,6 @@ def init_exchanges_queues():
 
     init_callback_queue(ch)
     init_event_detector_queue(ch)
-    init_commit_payload_queue(ch)
     init_delegate_worker_queue(ch)
 
 

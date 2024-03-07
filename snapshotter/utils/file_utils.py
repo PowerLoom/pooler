@@ -6,7 +6,7 @@ from loguru import logger
 
 from snapshotter.settings.config import settings
 
-default_logger = logger.bind(module='Powerloom|FileUtils')
+default_logger = logger.bind(module='FileUtils')
 
 
 def read_json_file(

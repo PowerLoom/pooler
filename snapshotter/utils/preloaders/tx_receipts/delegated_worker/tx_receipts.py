@@ -5,8 +5,8 @@ from redis import asyncio as aioredis
 from snapshotter.utils.callback_helpers import GenericDelegateProcessor
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.helper_functions import attribute_dict_to_dict
-from snapshotter.utils.models.message_models import PowerloomDelegateTxReceiptWorkerResponseMessage
-from snapshotter.utils.models.message_models import PowerloomDelegateWorkerRequestMessage
+from snapshotter.utils.models.message_models import DelegateTxReceiptWorkerResponseMessage
+from snapshotter.utils.models.message_models import DelegateWorkerRequestMessage
 from snapshotter.utils.rpc import RpcHelper
 
 
@@ -16,7 +16,7 @@ class TxReceiptProcessor(GenericDelegateProcessor):
 
     async def compute(
             self,
-            msg_obj: PowerloomDelegateWorkerRequestMessage,
+            msg_obj: DelegateWorkerRequestMessage,
             redis_conn: aioredis.Redis,
             rpc_helper: RpcHelper,
     ):
@@ -35,7 +35,7 @@ class TxReceiptProcessor(GenericDelegateProcessor):
             redis_conn,
         )
         tx_receipt_dict = attribute_dict_to_dict(tx_receipt_obj)
-        return PowerloomDelegateTxReceiptWorkerResponseMessage(
+        return DelegateTxReceiptWorkerResponseMessage(
             txHash=tx_hash,
             requestId=msg_obj.requestId,
             txReceipt=tx_receipt_dict,

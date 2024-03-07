@@ -10,13 +10,21 @@ from signal import SIGQUIT
 from signal import SIGTERM
 from typing import Dict
 from typing import Union
+from urllib.parse import urljoin
 from uuid import uuid4
 
 import httpx
+import sha3
 import tenacity
 from aio_pika import IncomingMessage
 from aio_pika import Message
 from aio_pika.pool import Pool
+from coincurve import PrivateKey
+from eip712_structs import EIP712Struct
+from eip712_structs import make_domain
+from eip712_structs import String
+from eip712_structs import Uint
+from eth_utils import big_endian_to_int
 from eth_utils import keccak
 from httpx import AsyncClient
 from httpx import AsyncHTTPTransport
@@ -27,6 +35,7 @@ from ipfs_client.main import AsyncIPFSClient
 from pydantic import BaseModel
 from redis import asyncio as aioredis
 from tenacity import retry
+from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
 from web3 import Web3
@@ -34,8 +43,8 @@ from web3 import Web3
 from snapshotter.settings.config import settings
 from snapshotter.utils.callback_helpers import get_rabbitmq_channel
 from snapshotter.utils.callback_helpers import get_rabbitmq_robust_connection_async
+from snapshotter.utils.callback_helpers import misc_notification_callback_result_handler
 from snapshotter.utils.callback_helpers import send_failure_notifications_async
-from snapshotter.utils.data_utils import get_source_chain_id
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.models.data_models import SnapshotterIssue
@@ -44,14 +53,21 @@ from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.data_models import UnfinalizedSnapshot
 from snapshotter.utils.models.message_models import AggregateBase
-from snapshotter.utils.models.message_models import PayloadCommitMessage
-from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessage
+from snapshotter.utils.models.message_models import CalculateAggregateMessage
+from snapshotter.utils.models.message_models import SnapshotProcessMessage
+from snapshotter.utils.models.message_models import SnapshotSubmittedMessage
+from snapshotter.utils.models.message_models import SnapshotSubmittedMessageLite
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import submitted_unfinalized_snapshot_cids
 from snapshotter.utils.rpc import RpcHelper
+
+
+class Request(EIP712Struct):
+    deadline = Uint()
+    snapshotCid = String()
+    epochId = Uint()
+    projectId = String()
 
 
 def web3_storage_retry_state_callback(retry_state: tenacity.RetryCallState):
@@ -67,6 +83,22 @@ def web3_storage_retry_state_callback(retry_state: tenacity.RetryCallState):
     if retry_state and retry_state.outcome.failed:
         logger.warning(
             f'Encountered web3 storage upload exception: {retry_state.outcome.exception()} | args: {retry_state.args}, kwargs:{retry_state.kwargs}',
+        )
+
+
+def relayer_submit_retry_state_callback(retry_state: tenacity.RetryCallState):
+    """
+    Callback function to handle retry attempts for relayer submit.
+
+    Args:
+        retry_state (tenacity.RetryCallState): The current state of the retry call.
+
+    Returns:
+        None
+    """
+    if retry_state and retry_state.outcome.failed:
+        logger.warning(
+            f'Encountered relayer submit exception: {retry_state.outcome.exception()} | args: {retry_state.args}, kwargs:{retry_state.kwargs}',
         )
 
 
@@ -117,14 +149,8 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._rate_limiting_lua_scripts = None
 
         self.protocol_state_contract_address = settings.protocol_state.address
-        self._commit_payload_exchange = (
-            f'{settings.rabbitmq.setup.commit_payload.exchange}:{settings.namespace}'
-        )
         self._event_detector_exchange = f'{settings.rabbitmq.setup.event_detector.exchange}:{settings.namespace}'
-        self._event_detector_routing_key_prefix = f'powerloom-event-detector:{settings.namespace}:{settings.instance_id}.'
-        self._commit_payload_routing_key = (
-            f'powerloom-backend-commit-payload:{settings.namespace}:{settings.instance_id}.Data'
-        )
+        self._event_detector_routing_key_prefix = f'event-detector:{settings.namespace}:{settings.instance_id}.'
         self._initialized = False
 
     def _signal_handler(self, signum, frame):
@@ -196,9 +222,10 @@ class GenericAsyncWorker(multiprocessing.Process):
             _ipfs_writer_client: AsyncIPFSClient,
             project_id: str,
             epoch: Union[
-                PowerloomSnapshotProcessMessage,
-                PowerloomSnapshotSubmittedMessage,
-                PowerloomCalculateAggregateMessage,
+                SnapshotProcessMessage,
+                SnapshotSubmittedMessage,
+                SnapshotSubmittedMessageLite,
+                CalculateAggregateMessage,
             ],
             snapshot: Union[BaseModel, AggregateBase],
             storage_flag: bool,
@@ -211,14 +238,14 @@ class GenericAsyncWorker(multiprocessing.Process):
             task_type (str): The type of task being committed.
             _ipfs_writer_client (AsyncIPFSClient): The IPFS client to use for uploading the snapshot.
             project_id (str): The ID of the project the snapshot belongs to.
-            epoch (Union[PowerloomSnapshotProcessMessage, PowerloomSnapshotSubmittedMessage, PowerloomCalculateAggregateMessage]): The epoch the snapshot belongs to.
+            epoch (Union[SnapshotProcessMessage, SnapshotSubmittedMessage,
+            SnapshotSubmittedMessageLite, CalculateAggregateMessage]): The epoch the snapshot belongs to.
             snapshot (Union[BaseModel, AggregateBase]): The snapshot to commit.
             storage_flag (bool): Whether to upload the snapshot to web3 storage.
 
         Returns:
-            None
+            snapshot_cid (str): The CID of the uploaded snapshot.
         """
-        # payload commit sequence begins
         # upload to IPFS
         snapshot_json = json.dumps(snapshot.dict(by_alias=True), sort_keys=True, separators=(',', ':'))
         snapshot_bytes = snapshot_json.encode('utf-8')
@@ -250,41 +277,6 @@ class GenericAsyncWorker(multiprocessing.Process):
                 name=submitted_unfinalized_snapshot_cids(project_id),
                 mapping={unfinalized_entry.json(sort_keys=True): epoch.epochId},
             )
-            # publish snapshot submitted event to event detector queue
-            snapshot_submitted_message = PowerloomSnapshotSubmittedMessage(
-                snapshotCid=snapshot_cid,
-                epochId=epoch.epochId,
-                projectId=project_id,
-                timestamp=int(time.time()),
-            )
-            try:
-                async with self._rmq_connection_pool.acquire() as connection:
-                    async with self._rmq_channel_pool.acquire() as channel:
-                        # Prepare a message to send
-                        commit_payload_exchange = await channel.get_exchange(
-                            name=self._event_detector_exchange,
-                        )
-                        message_data = snapshot_submitted_message.json().encode()
-
-                        # Prepare a message to send
-                        message = Message(message_data)
-
-                        await commit_payload_exchange.publish(
-                            message=message,
-                            routing_key=self._event_detector_routing_key_prefix + 'SnapshotSubmitted',
-                        )
-
-                        self._logger.debug(
-                            'Sent snapshot submitted message to event detector queue | '
-                            'Project: {} | Epoch: {} | Snapshot CID: {}',
-                            project_id, epoch.epochId, snapshot_cid,
-                        )
-
-            except Exception as e:
-                self._logger.opt(exception=True).error(
-                    'Exception sending snapshot submitted message to event detector queue: {} | Project: {} | Epoch: {} | Snapshot CID: {}',
-                    e, project_id, epoch.epochId, snapshot_cid,
-                )
 
             try:
                 await self._redis_conn.zremrangebyscore(
@@ -294,17 +286,79 @@ class GenericAsyncWorker(multiprocessing.Process):
                 )
             except:
                 pass
-            # send to relayer dispatch queue
-            await self._send_payload_commit_service_queue(
-                task_type=task_type,
-                project_id=project_id,
-                epoch=epoch,
-                snapshot_cid=snapshot_cid,
-            )
+
+            # submit to relayer
+            try:
+                await self._submit_to_relayer(snapshot_cid, epoch.epochId, project_id)
+            except Exception as e:
+                await self._redis_conn.hset(
+                    name=epoch_id_project_to_state_mapping(
+                        epoch.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_RELAYER.value,
+                    ),
+                    mapping={
+                        project_id: SnapshotterStateUpdate(
+                            status='failed', error=str(e), timestamp=int(time.time()),
+                        ).json(),
+                    },
+                )
+            else:
+                await self._redis_conn.hset(
+                    name=epoch_id_project_to_state_mapping(
+                        epoch.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_RELAYER.value,
+                    ),
+                    mapping={
+                        project_id: SnapshotterStateUpdate(
+                            status='success', timestamp=int(time.time()),
+                        ).json(),
+                    },
+                )
 
         # upload to web3 storage
         if storage_flag:
             asyncio.ensure_future(self._upload_web3_storage(snapshot_bytes))
+
+        return snapshot_cid
+
+    @retry(
+        wait=wait_random_exponential(multiplier=1, max=10),
+        stop=stop_after_attempt(5),
+        retry=retry_if_exception_type(Exception),
+        after=relayer_submit_retry_state_callback,
+    )
+    async def _submit_to_relayer(self, snapshot_cid: str, epoch_id: int, project_id: str):
+        """
+        Submits the given snapshot to the relayer.
+
+        Args:
+            snapshot_cid (str): The CID of the snapshot to submit.
+            epoch (int): The epoch the snapshot belongs to.
+            project_id (str): The ID of the project the snapshot belongs to.
+
+        Returns:
+            None
+        """
+        request_, signature = self.generate_signature(snapshot_cid, epoch_id, project_id)
+
+        # submit to relayer
+        f = asyncio.ensure_future(
+            self._client.post(
+                url=urljoin(settings.relayer.host, settings.relayer.endpoint),
+                json={
+                    'request': request_,
+                    'signature': '0x' + str(signature.hex()),
+                    'projectId': project_id,
+                    'epochId': epoch_id,
+                    'snapshotCid': snapshot_cid,
+                },
+            ),
+        )
+        f.add_done_callback(misc_notification_callback_result_handler)
+        self._logger.info(
+            'Submitted snapshot CID {} to relayer | Epoch: {} | Project: {}',
+            snapshot_cid,
+            epoch_id,
+            project_id,
+        )
 
     async def _rabbitmq_consumer(self, loop):
         """
@@ -336,103 +390,6 @@ class GenericAsyncWorker(multiprocessing.Process):
             await q_obj.bind(exchange, routing_key=self._rmq_routing)
             await q_obj.consume(self._on_rabbitmq_message)
 
-    async def _send_payload_commit_service_queue(
-        self,
-        task_type: str,
-        project_id: str,
-        epoch: Union[
-            PowerloomSnapshotProcessMessage,
-            PowerloomSnapshotSubmittedMessage,
-            PowerloomCalculateAggregateMessage,
-        ],
-        snapshot_cid: str,
-    ):
-        """
-        Sends a commit payload message to the commit payload queue via RabbitMQ.
-
-        Args:
-            task_type (str): The type of task being performed.
-            project_id (str): The ID of the project.
-            epoch (Union[PowerloomSnapshotProcessMessage, PowerloomSnapshotSubmittedMessage, PowerloomCalculateAggregateMessage]): The epoch object.
-            snapshot_cid (str): The CID of the snapshot.
-
-        Raises:
-            Exception: If there is an error getting the source chain ID or sending the message to the commit payload queue.
-
-        Returns:
-            None
-        """
-        try:
-            source_chain_details = await get_source_chain_id(
-                redis_conn=self._redis_conn,
-                rpc_helper=self._anchor_rpc_helper,
-                state_contract_obj=self._protocol_state_contract,
-            )
-        except Exception as e:
-            self._logger.opt(exception=True).error(
-                'Exception getting source chain id: {}', e,
-            )
-            raise e
-        commit_payload = PayloadCommitMessage(
-            sourceChainId=source_chain_details,
-            projectId=project_id,
-            epochId=epoch.epochId,
-            snapshotCID=snapshot_cid,
-        )
-
-        # send through rabbitmq
-        try:
-            async with self._rmq_connection_pool.acquire() as connection:
-                async with self._rmq_channel_pool.acquire() as channel:
-                    # Prepare a message to send
-                    commit_payload_exchange = await channel.get_exchange(
-                        name=self._commit_payload_exchange,
-                    )
-                    message_data = commit_payload.json().encode()
-
-                    # Prepare a message to send
-                    message = Message(message_data)
-
-                    await commit_payload_exchange.publish(
-                        message=message,
-                        routing_key=self._commit_payload_routing_key,
-                    )
-
-                    self._logger.info(
-                        'Sent message to commit payload queue: {}', commit_payload,
-                    )
-
-        except Exception as e:
-            self._logger.opt(exception=True).error(
-                (
-                    'Exception committing snapshot CID {} to commit payload queue:'
-                    ' {} | dump: {}'
-                ),
-                snapshot_cid,
-                e,
-            )
-            await self._redis_conn.hset(
-                name=epoch_id_project_to_state_mapping(
-                    epoch.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_PAYLOAD_COMMIT.value,
-                ),
-                mapping={
-                    project_id: SnapshotterStateUpdate(
-                        status='failed', error=str(e), timestamp=int(time.time()),
-                    ).json(),
-                },
-            )
-        else:
-            await self._redis_conn.hset(
-                name=epoch_id_project_to_state_mapping(
-                    epoch.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_PAYLOAD_COMMIT.value,
-                ),
-                mapping={
-                    project_id: SnapshotterStateUpdate(
-                        status='success', timestamp=int(time.time()),
-                    ).json(),
-                },
-            )
-
     async def _on_rabbitmq_message(self, message: IncomingMessage):
         """
         Callback function that is called when a message is received from RabbitMQ.
@@ -457,7 +414,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
 
         self._protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
-            address=Web3.toChecksumAddress(
+            address=Web3.to_checksum_address(
                 self.protocol_state_contract_address,
             ),
             abi=read_json_file(
@@ -465,6 +422,35 @@ class GenericAsyncWorker(multiprocessing.Process):
                 self._logger,
             ),
         )
+
+        self._anchor_chain_id = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.chain_id
+        self._keccak_hash = lambda x: sha3.keccak_256(x).digest()
+        self._domain_separator = make_domain(
+            name='PowerloomProtocolContract', version='0.1', chainId=self._anchor_chain_id,
+            verifyingContract=self.protocol_state_contract_address,
+        )
+        self._signer_private_key = PrivateKey.from_hex(settings.signer_private_key)
+
+    def generate_signature(self, snapshot_cid, epoch_id, project_id):
+        current_block = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.block_number
+
+        deadline = current_block + settings.protocol_state.deadline_buffer
+        request = Request(
+            deadline=deadline,
+            snapshotCid=snapshot_cid,
+            epochId=epoch_id,
+            projectId=project_id,
+        )
+
+        signable_bytes = request.signable_bytes(self._domain_separator)
+        signature = self._signer_private_key.sign_recoverable(signable_bytes, hasher=self._keccak_hash)
+        v = signature[64] + 27
+        r = big_endian_to_int(signature[0:32])
+        s = big_endian_to_int(signature[32:64])
+
+        final_sig = r.to_bytes(32, 'big') + s.to_bytes(32, 'big') + v.to_bytes(1, 'big')
+        request_ = {'deadline': deadline, 'snapshotCid': snapshot_cid, 'epochId': epoch_id, 'projectId': project_id}
+        return request_, final_sig
 
     async def _init_httpx_client(self):
         """

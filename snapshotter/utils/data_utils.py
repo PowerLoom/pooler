@@ -1,6 +1,5 @@
 import asyncio
 import json
-import os
 from typing import List
 
 import tenacity
@@ -11,10 +10,7 @@ from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
 
-from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import logger
-from snapshotter.utils.file_utils import read_json_file
-from snapshotter.utils.file_utils import write_json_file
 from snapshotter.utils.models.data_models import ProjectStatus
 from snapshotter.utils.models.data_models import SnapshotterIncorrectSnapshotSubmission
 from snapshotter.utils.models.data_models import SnapshotterMissedSnapshotSubmission
@@ -135,6 +131,54 @@ async def w3_get_and_cache_finalized_cid(
         return f'null_{epoch_id}', epoch_id
 
 
+async def get_project_last_finalized_cid_and_epoch(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, project_id):
+    """
+    Get the last epoch for a given project ID.
+
+    Args:
+        redis_conn (aioredis.Redis): Redis connection object.
+        state_contract_obj: Contract object for the state contract.
+        rpc_helper: RPC helper object.
+        project_id (str): ID of the project.
+
+    Returns:
+        int: The last epoch for the given project ID.
+    """
+    project_last_finalized = await redis_conn.zrevrangebyscore(
+        project_finalized_data_zset(project_id),
+        max='+inf',
+        min='-inf',
+        withscores=True,
+        start=0,
+        num=1,
+    )
+
+    if project_last_finalized:
+        project_last_finalized_cid, project_last_finalized_epoch = project_last_finalized[0]
+        project_last_finalized_epoch = int(project_last_finalized_epoch)
+        project_last_finalized_cid = project_last_finalized_cid.decode('utf-8')
+
+        if project_last_finalized_cid and 'null' not in project_last_finalized_cid:
+            return project_last_finalized_cid, project_last_finalized_epoch
+
+    tasks = [
+        state_contract_obj.functions.lastFinalizedSnapshot(project_id),
+    ]
+
+    [last_finalized_epoch] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
+    logger.info(f'last finalized epoch for project {project_id} is {last_finalized_epoch}')
+
+    # getting finalized cid for last finalized epoch
+    last_finalized_cid = await get_project_finalized_cid(
+        redis_conn, state_contract_obj, rpc_helper, last_finalized_epoch, project_id,
+    )
+
+    if last_finalized_cid and 'null' not in last_finalized_cid:
+        return last_finalized_cid, int(last_finalized_epoch)
+    else:
+        return '', 0
+
+
 # TODO: warmup cache to reduce RPC calls overhead
 async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, project_id):
     """
@@ -216,23 +260,14 @@ async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, proj
     if 'null' in cid:
         return dict()
 
-    cached_data_path = os.path.join(settings.ipfs.local_cache_path, project_id, 'snapshots')
-    filename = f'{cid}.json'
+    logger.info('Project {} CID {}, fetching data from IPFS', project_id, cid)
     try:
-        submission_data = read_json_file(os.path.join(cached_data_path, filename))
-    except Exception as e:
-        # Fetch from IPFS
-        logger.trace('Error while reading from cache', error=e)
-        logger.info('Project {} CID {}, fetching data from IPFS', project_id, cid)
-        try:
-            submission_data = await fetch_file_from_ipfs(ipfs_reader, cid)
-        except:
-            logger.error('Error while fetching data from IPFS | Project {} | CID {}', project_id, cid)
-            submission_data = dict()
-        else:
-            # Cache it
-            write_json_file(cached_data_path, filename, submission_data)
-            submission_data = json.loads(submission_data)
+        submission_data = await fetch_file_from_ipfs(ipfs_reader, cid)
+    except:
+        logger.error('Error while fetching data from IPFS | Project {} | CID {}', project_id, cid)
+        submission_data = dict()
+    else:
+        submission_data = json.loads(submission_data)
     return submission_data
 
 

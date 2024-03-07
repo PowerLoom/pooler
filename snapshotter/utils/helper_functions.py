@@ -9,7 +9,7 @@ from snapshotter.utils.default_logger import logger
 from snapshotter.utils.models.message_models import EpochBase
 
 # setup logging
-logger = logger.bind(module='Powerloom|HelperFunctions')
+logger = logger.bind(module='HelperFunctions')
 
 
 def cleanup_proc_hub_children(fn):

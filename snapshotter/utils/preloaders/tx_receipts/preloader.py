@@ -2,13 +2,14 @@ import json
 
 from pydantic import ValidationError
 from redis import asyncio as aioredis
+
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.generic_delegator_preloader import DelegatorPreloaderAsyncWorker
 from snapshotter.utils.helper_functions import preloading_entry_exit_logger
+from snapshotter.utils.models.message_models import DelegateTxReceiptWorkerResponseMessage
+from snapshotter.utils.models.message_models import DelegateWorkerRequestMessage
 from snapshotter.utils.models.message_models import EpochBase
-from snapshotter.utils.models.message_models import PowerloomDelegateTxReceiptWorkerResponseMessage
-from snapshotter.utils.models.message_models import PowerloomDelegateWorkerRequestMessage
 from snapshotter.utils.redis.redis_keys import epoch_txs_htable
 from snapshotter.utils.rpc import RpcHelper
 from snapshotter.utils.snapshot_utils import get_block_details_in_block_range
@@ -21,8 +22,8 @@ class TxPreloadWorker(DelegatorPreloaderAsyncWorker):
 
     async def _handle_filter_worker_response_message(self, message: bytes):
         try:
-            msg_obj: PowerloomDelegateTxReceiptWorkerResponseMessage = (
-                PowerloomDelegateTxReceiptWorkerResponseMessage.parse_raw(message)
+            msg_obj: DelegateTxReceiptWorkerResponseMessage = (
+                DelegateTxReceiptWorkerResponseMessage.parse_raw(message)
             )
         except ValidationError:
             self._logger.opt(exception=settings.logs.trace_enabled).error(
@@ -84,7 +85,7 @@ class TxPreloadWorker(DelegatorPreloaderAsyncWorker):
         )
         [tx_list.extend(block['transactions']) for block in block_details.values()]
         tx_receipt_query_messages = [
-            PowerloomDelegateWorkerRequestMessage(
+            DelegateWorkerRequestMessage(
                 epochId=epoch.epochId,
                 extra={'tx_hash': tx_hash},
                 requestId=idx + 1,
