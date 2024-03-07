@@ -87,7 +87,7 @@ export ipfs_url="${IPFS_URL:-/dns/ipfs/tcp/5001}"
 export ipfs_api_key="${IPFS_API_KEY:-}"
 export ipfs_api_secret="${IPFS_API_SECRET:-}"
 export web3_storage_token="${WEB3_STORAGE_TOKEN:-}"
-export relayer_host="${RELAYER_HOST:-https://relayer-prod1d.powerloom.io}"
+export relayer_host="${RELAYER_HOST:-}"
 
 export slack_reporting_url="${SLACK_REPORTING_URL:-}"
 export powerloom_reporting_url="${POWERLOOM_REPORTING_URL:-}"
