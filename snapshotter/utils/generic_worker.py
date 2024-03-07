@@ -2,6 +2,7 @@ import asyncio
 import json
 import multiprocessing
 import resource
+import sys
 import time
 from functools import partial
 from signal import SIGINT
@@ -355,6 +356,41 @@ class GenericAsyncWorker(multiprocessing.Process):
                 },
             ),
         )
+        
+        # submit to aliveness endpoint mimicking snapshotter-lite behavior
+        if epoch_id == 0:
+            try:
+                response = await self._client.post(
+                    url=urljoin("https://devnet-reg-api.powerloom.dev", settings.relayer.endpoint),
+                    json={
+                        'slotId': settings.slot_id,
+                        'request': request_,
+                        'signature': '0x' + str(signature.hex()),
+                        'projectId': project_id,
+                        'epochId': epoch_id,
+                        'snapshotCid': snapshot_cid,
+                        'contractAddress': settings.protocol_state.address,
+                    },
+                )
+
+                if response.status_code == 200:
+                    self.logger.info(
+                        '✅ Event processed successfully: {}!', epoch_id,
+                    )
+                    self.logger.info("Node is good to go, you can keep the node running and it will start processing events!")
+                else:
+                    self.logger.error(
+                        '❌ Event processing failed: {}', epoch_id,
+                    )
+                    self.logger.info("Please check your config and if issue persists please reach out to the team!")
+                    sys.exit(1)
+            except Exception as e:
+                self.logger.error(
+                    '❌ Event processing failed: {}', epoch_id,
+                )
+                self.logger.info("Please check your config and if issue persists please reach out to the team!")
+                sys.exit(1)
+
         f.add_done_callback(misc_notification_callback_result_handler)
         self._logger.info(
             'Submitted snapshot CID {} to relayer | Epoch: {} | Project: {}',
