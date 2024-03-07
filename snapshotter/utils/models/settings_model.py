@@ -150,6 +150,7 @@ class Settings(BaseModel):
     namespace: str
     core_api: CoreAPI
     instance_id: str
+    slot_id: int
     signer_private_key: str
     rpc: RPCConfigFull
     rlimit: RLimit

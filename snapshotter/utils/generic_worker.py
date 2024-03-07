@@ -64,6 +64,7 @@ from snapshotter.utils.rpc import RpcHelper
 
 
 class Request(EIP712Struct):
+    slotId  = Uint()
     deadline = Uint()
     snapshotCid = String()
     epochId = Uint()
@@ -349,6 +350,8 @@ class GenericAsyncWorker(multiprocessing.Process):
                     'projectId': project_id,
                     'epochId': epoch_id,
                     'snapshotCid': snapshot_cid,
+                    'slotId': settings.slot_id,
+                    'contractAddress': settings.protocol_state.address
                 },
             ),
         )
@@ -436,6 +439,7 @@ class GenericAsyncWorker(multiprocessing.Process):
 
         deadline = current_block + settings.protocol_state.deadline_buffer
         request = Request(
+            slotId=settings.slot_id,
             deadline=deadline,
             snapshotCid=snapshot_cid,
             epochId=epoch_id,
@@ -449,7 +453,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         s = big_endian_to_int(signature[32:64])
 
         final_sig = r.to_bytes(32, 'big') + s.to_bytes(32, 'big') + v.to_bytes(1, 'big')
-        request_ = {'deadline': deadline, 'snapshotCid': snapshot_cid, 'epochId': epoch_id, 'projectId': project_id}
+        request_ = {'deadline': deadline, 'snapshotCid': snapshot_cid, 'epochId': epoch_id, 'projectId': project_id, 'slotId': settings.slot_id}
         return request_, final_sig
 
     async def _init_httpx_client(self):
