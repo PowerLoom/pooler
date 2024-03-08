@@ -11,3 +11,4 @@ uniswapTokenData
 config/*settings.json
 **/*.backup
 .vscode/*
+config_ca.py

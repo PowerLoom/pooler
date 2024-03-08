@@ -783,27 +783,17 @@ async def get_project_time_series_data(
         ),
     )
 
-    cid_tasks = []
-
-    cid_tasks.append(
-        get_project_finalized_cid(
-            redis_conn,
-            state_contract_obj,
-            rpc_helper,
-            end_epoch_id,
-            project_id,
-        ),
-    )
-
     seek_stop_flag = False
 
     closest_step_time_gap = end_time % step_seconds
     closest_step_timestamp = end_time - closest_step_time_gap
-    closest_step_epoch_id = end_epoch_id - int(step_seconds / (source_chain_epoch_size * source_chain_block_time))
+    closest_step_epoch_id = end_epoch_id - \
+        int(closest_step_time_gap / (source_chain_epoch_size * source_chain_block_time))
     if closest_step_epoch_id <= project_first_epoch:
         closest_step_epoch_id = project_first_epoch
         seek_stop_flag = True
 
+    cid_tasks = []
     cid_tasks.append(
         get_project_finalized_cid(
             redis_conn,
