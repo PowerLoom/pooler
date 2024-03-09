@@ -145,6 +145,7 @@ class Settings(BaseModel):
     namespace: str
     core_api: CoreAPI
     instance_id: str
+    slot_id: int
     rpc: RPCConfigFull
     rlimit: RLimit
     rabbitmq: RabbitMQ
@@ -161,6 +162,7 @@ class Settings(BaseModel):
     ipfs: IPFSConfig
     web3storage: Web3Storage
     anchor_chain_rpc: RPCConfigBase
+    node_version: str
 
 
 # Projects related models

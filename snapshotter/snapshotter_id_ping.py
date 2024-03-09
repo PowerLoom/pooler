@@ -7,8 +7,8 @@ from web3 import Web3
 from snapshotter.auth.helpers.redis_conn import RedisPoolCache
 from snapshotter.settings.config import settings
 from snapshotter.utils.file_utils import read_json_file
-from snapshotter.utils.redis.redis_keys import active_status_key
 from snapshotter.utils.rpc import RpcHelper
+from snapshotter.utils.redis.redis_keys import active_status_key
 
 
 async def main():
@@ -28,24 +28,23 @@ async def main():
         ),
         abi=protocol_abi,
     )
-    snapshotters_arr_query = await anchor_rpc.web3_call(
+    snapshotter_query = await anchor_rpc.web3_call(
         [
-            protocol_state_contract.functions.getMasterSnapshotters(),
+            protocol_state_contract.functions.slotSnapshotterMapping(settings.slot_id),
         ],
         redis_conn,
     )
-    allowed_snapshotters = snapshotters_arr_query[0]
-    if to_checksum_address(settings.instance_id) in allowed_snapshotters:
-        print('Snapshotting allowed...')
+    snapshotter_address = snapshotter_query[0]
+    if snapshotter_address != to_checksum_address(settings.instance_id):
+        print('Signer Account is not the one configured in slot, exiting!')
+        sys.exit(1)
+    else:
         await redis_conn.set(
             active_status_key,
             int(True),
         )
+        print('Signer Account is the one configured in slot, all good!')
         sys.exit(0)
-    else:
-        print('Snapshotting not allowed...')
-        sys.exit(1)
-
 
 if __name__ == '__main__':
     asyncio.run(main())

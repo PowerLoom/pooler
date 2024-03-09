@@ -58,6 +58,12 @@
 			{
 				"indexed": false,
 				"internalType": "uint256",
+				"name": "slotId",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
 				"name": "dayId",
 				"type": "uint256"
 			},
@@ -932,6 +938,44 @@
 			}
 		],
 		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "slotId",
+				"type": "uint256"
+			},
+			{
+				"internalType": "address",
+				"name": "snapshotterAddress",
+				"type": "address"
+			},
+			{
+				"internalType": "uint256",
+				"name": "timeSlot",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "rewardPoints",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "currentStreak",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "currentDaySnapshotCount",
+				"type": "uint256"
+			}
+		],
+		"name": "loadSlotInfo",
+		"outputs": [],
+		"stateMutability": "nonpayable",
 		"type": "function"
 	},
 	{
