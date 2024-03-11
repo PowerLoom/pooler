@@ -200,7 +200,10 @@ class ProcessHubCore(Process):
                 try:
                     self._httpx_client.post(
                         url=urljoin(settings.reporting.service_url, '/ping'),
-                        json=SnapshotterPing(instanceID=settings.instance_id).dict(),
+                        json=SnapshotterPing(
+                            instanceID=settings.instance_id,
+                            slotId=settings.slot_id
+                            ).dict(),
                     )
                 except Exception as e:
                     if settings.logs.trace_enabled:
