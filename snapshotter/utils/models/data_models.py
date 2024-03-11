@@ -136,6 +136,7 @@ class ProjectStatus(BaseModel):
 
 class SnapshotterPing(BaseModel):
     instanceID: str
+    slotId: int
 
 
 class SnapshotterStatus(BaseModel):
