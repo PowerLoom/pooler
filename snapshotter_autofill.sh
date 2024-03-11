@@ -50,10 +50,10 @@ if [ "$NAMESPACE" ]; then
     echo "Found NAMESPACE ${NAMESPACE}";
 fi
 
-# cp config/projects.example.json config/projects.json
-# cp config/aggregator.example.json config/aggregator.json
-# cp config/auth_settings.example.json config/auth_settings.json
-# cp config/settings.example.json config/settings.json
+cp config/projects.example.json config/projects.json
+cp config/aggregator.example.json config/aggregator.json
+cp config/auth_settings.example.json config/auth_settings.json
+cp config/settings.example.json config/settings.json
 
 export namespace="${NAMESPACE:-aavev3}"
 export ipfs_url="${IPFS_URL:-/dns/ipfs/tcp/5001}"
