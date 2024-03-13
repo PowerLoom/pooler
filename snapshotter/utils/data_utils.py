@@ -821,7 +821,7 @@ async def get_project_time_series_data(
         head_epoch_id = tail_epoch_id
         count += 1
 
-    all_cids = await asyncio.gather(*cid_tasks, return_exceptions=True)
+    all_cids = await asyncio.gather(*cid_tasks)
     project_ids = [project_id for _ in all_cids]
 
     return await get_submission_data_bulk(
