@@ -520,7 +520,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         )
     async def _init_grpc(self):
         self._grpc_channel = Channel(
-            host='snapshot-collector',
+            host='snapshot-server',
             port=50051,
             ssl=False,
         )
