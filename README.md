@@ -638,7 +638,7 @@ Now, whenever you commit anything, it'll automatically check the files you've ch
 
 ### 1. Pooler: Case study and extending this implementation
 
-An extension of the [Uniswap V2 Pooler](https://github.com/PowerLoom/snapshotter-lite?tab=readme-ov-file#overview), this branch (Aave V3) contains an Aave specific implementation of what is known as a 'snapshotter' in the PowerLoom Protocol ecosystem. It synchronizes with other snapshotter peers over a smart contract running on the present version of the PowerLoom Protocol testnet. It follows an architecture that is driven by state transitions which makes it easy to understand and modify. This snapshotter provides access to core data points for each Aave loan asset, along with aggregated 'snapshots' built using this base data. The following data points are available:
+An extension of the [Uniswap V2 Pooler](https://github.com/PowerLoom/snapshotter-lite?tab=readme-ov-file#overview), this branch contains an Aave specific implementation of what is known as a 'snapshotter' in the PowerLoom Protocol ecosystem. It synchronizes with other snapshotter peers over a smart contract running on the present version of the PowerLoom Protocol testnet. It follows an architecture that is driven by state transitions which makes it easy to understand and modify. This snapshotter provides access to core data points for each Aave loan asset, along with aggregated 'snapshots' built using this base data. These 'snapshots' are then used to display important lending metrics on the [Aave V3 Dashboard](https://aave-v3.powerloom.io/). The following data points are available:
 
 - Total supply and debt amounts for individual assets
 - Total market metrics for all assets
