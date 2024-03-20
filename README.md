@@ -37,10 +37,10 @@
 - [For Contributors](#for-contributors)
 - [Case Studies](#case-studies)
   - [1. Pooler: Case study and extending this implementation](#1-pooler-case-study-and-extending-this-implementation)
-    - [Extending pooler with a Uniswap v2 data point](#extending-pooler-with-a-uniswap-v2-data-point)
-      - [Step 1. Review: Base snapshot extraction logic for trade information](#step-1-review-base-snapshot-extraction-logic-for-trade-information)
-      - [Step 2. Review: 24 hour aggregate of trade volume snapshots over a single pair contract](#step-2-review-24-hour-aggregate-of-trade-volume-snapshots-over-a-single-pair-contract)
-      - [Step 3. New Datapoint: 2 hours aggregate of only swap events](#step-3-new-datapoint-2-hours-aggregate-of-only-swap-events)
+    - [Extending pooler](#extending-pooler)
+      - [Step 1. Review: Base snapshot extraction logic for lending information](#step-1-review-base-snapshot-extraction-logic-for-lending-information)
+      - [Step 2. Review: 24 hour aggregate of trade volume snapshots over a single asset contract](#step-2-review-24-hour-aggregate-of-trade-volume-snapshots-over-a-single-pair-contract)
+      - [Step 3. New Datapoint: 2 hours aggregate of only borrow events](#step-3-new-datapoint-2-hours-aggregate-of-only-swap-events)
   - [2. Zkevm Quests: A Case Study of Implementation](#2-zkevm-quests-a-case-study-of-implementation)
     - [Review: Base snapshots](#review-base-snapshots)
     - [`zkevm:bungee_bridge`](#zkevmbungee_bridge)
@@ -381,77 +381,68 @@ These instructions are needed to run the system using [`build-docker.sh`](build-
 
 ### Configuration
 Pooler needs the following config files to be present
-* **`settings.json` in `pooler/auth/settings`**: Changes are trivial. Copy [`config/auth_settings.example.json`](https://github.com/PowerLoom/snapshotter-configs/blob/f46cc86cd08913014decf7bced128433442c8f84/auth_settings.example.json) to `config/auth_settings.json`. This enables an authentication layer over the core API exposed by the pooler snapshotter.
 * settings files in `config/`
-    * **[`config/projects.json`](https://github.com/PowerLoom/snapshotter-configs/blob/f46cc86cd08913014decf7bced128433442c8f84/projects.example.json)**: Each entry in this configuration file defines the most fundamental unit of data representation in Powerloom Protocol, that is, a project. It is of the following schema
+    * **`auth_settings.json` in `config/`**: Changes are trivial. Copy [`config/auth_settings.example.json`](https://github.com/PowerLoom/snapshotter-configs/blob/f46cc86cd08913014decf7bced128433442c8f84/auth_settings.example.json) to `config/auth_settings.json`. This enables an authentication layer over the core API exposed by the pooler snapshotter.
+    * **[`config/projects.json`](https://github.com/Seth-Schmidt/snapshotter-configs/blob/582045837fd66b8da1d528410d5984bbe304bcfa/projects.example.json)**: Each entry in this configuration file defines the most fundamental unit of data representation in Powerloom Protocol, that is, a project. It is of the following schema
         ```javascript
         {
             "project_type": "snapshot_project_name_prefix_",
-            "projects": ["array of smart contract addresses"], // Uniswap v2 pair contract addresses in this implementation
+            "projects": ["array of smart contract addresses"], // Aave V3 asset contract addresses in this implementation
             "preload_tasks":[
               "eth_price",
               "block_details"
             ],
             "processor":{
-                "module": "snapshotter.modules.uniswapv2.pair_total_reserves",
-                "class_name": "PairTotalReservesProcessor" // class to be found in module snapshotter/modules/pooler/uniswapv2/pair_total_reserves.py
+                "module": "snapshotter.modules.computes.poolContract_total_supply",
+                "class_name": "AssetTotalSupplyProcessor" // class to be found in module snapshotter/modules/computes/pool_total_supply.py
             }
         }
         ```
-        Copy over [`config/projects.example.json`](https://github.com/PowerLoom/snapshotter-configs/blob/f46cc86cd08913014decf7bced128433442c8f84/projects.example.json) to `config/projects.json`. For more details, read on in the [use case study](#1-pooler-case-study-and-extending-this-implementation) for this current implementation.
+        Copy over [`config/projects.example.json`](https://github.com/Seth-Schmidt/snapshotter-configs/blob/582045837fd66b8da1d528410d5984bbe304bcfa/projects.example.json) to `config/projects.json`. For more details, read on in the [use case study](#1-pooler-case-study-and-extending-this-implementation) for this current implementation.
 
-  * **`config/aggregator.json`** : This lists out different type of aggregation work to be performed over a span of snapshots. Copy over [`config/aggregator.example.json`](https://github.com/PowerLoom/snapshotter-configs/blob/f46cc86cd08913014decf7bced128433442c8f84/aggregator.example.json) to `config/aggregator.json`. The span is usually calculated as a function of the epoch size and average block time on the data source network. For eg,
-        * the following configuration calculates a snapshot of total trade volume over a 24 hour time period, based on the [snapshot finalization](#snapshot-finalization) of a project ID corresponding to a pair contract. This can be seen by the `aggregate_on` key being set to `SingleProject`.
-            * This is specified by the `filters` key below. When a snapshot build is achieved for an epoch over a project ID [(ref:generation of project ID for snapshot building workers)](#epoch-generation). For eg, a snapshot build on `pairContract_trade_volume:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2` triggers the worker [`AggregateTradeVolumeProcessor`](https://github.com/PowerLoom/snapshotter-computes/blob/6fb98b1bbc22be8b5aba8bdc860004d35786f4df/aggregate/single_uniswap_trade_volume_24h.py) as defined in the `processor` section of the config against the pair contract `0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc`.
+  * **`config/aggregator.json`** : This lists out different type of aggregation work to be performed over a span of snapshots. Copy over [`config/aggregator.example.json`](https://github.com/Seth-Schmidt/snapshotter-configs/blob/582045837fd66b8da1d528410d5984bbe304bcfa/aggregator.example.json#L26) to `config/aggregator.json`. The span is usually calculated as a function of the epoch size and average block time on the data source network. For eg,
+        * the following configuration calculates a snapshot of total volume by action over a 24 hour time period, based on the [snapshot finalization](#snapshot-finalization) of a project ID corresponding to an asset contract. This can be seen by the `aggregate_on` key being set to `SingleProject`.
+            * This is specified by the `filters` key below. When a snapshot build is achieved for an epoch over a project ID [(ref:generation of project ID for snapshot building workers)](#epoch-generation). For eg, a snapshot build on `poolContract_supply_volume:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48:aavev3` triggers the worker [`AggregateSupplyVolumeProcessor`](https://github.com/Seth-Schmidt/snapshotter-computes/blob/3e56f33aec5ceb2fecc6ec1b10d4536572136145/aggregate/single_aave_volume_24h.py#L21) as defined in the `processor` section of the config against the asset contract `0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48`.
 
     ```javascript
         {
             "config": [
                 {
-                    "project_type": "aggregate_pairContract_24h_trade_volume",
+                    "project_type": "aggregate_poolContract_volume_24h",
                     "aggregate_on": "SingleProject",
                     "filters": {
                         // this triggers the compute() contained in the processor class at the module location
-                        // every time a `SnapshotFinalized` event is received for project IDs containing the prefix `pairContract_trade_volume`
+                        // every time a `SnapshotFinalized` event is received for project IDs containing the prefix `poolContract_supply_volume`
                         // at each epoch ID
-                        "projectId": "pairContract_trade_volume"
+                        "projectId": "poolContract_supply_volume"
                     },
                     "processor": {
-                        "module": "snapshotter.modules.uniswapv2.aggregate.single_uniswap_trade_volume_24h",
-                        "class_name": "AggregateTradeVolumeProcessor"
+                        "module": "snapshotter.modules.computes.aggregate.single_aave_volume_24h",
+                        "class_name": "AggregateSupplyVolumeProcessor"
                     }
                 }
             ]
         }
     ```
 
-    * The following configuration generates a collection of data sets of 24 hour trade volume as calculated by the worker above across multiple pair contracts. This can be seen by the `aggregate_on` key being set to `MultiProject`.
+    * The following configuration generates a collection of data sets of 24 hour volume by action as calculated by the worker above across multiple asset contracts. This can be seen by the `aggregate_on` key being set to `MultiProject`.
             * `projects_to_wait_for` specifies the exact project IDs on which this collection will be generated once a snapshot build has been achieved for an [`epochId`](#epoch-generation).
 
         ```javascript
         {
             "config": [
-                "project_type": "aggregate_24h_top_pairs_lite",
+                "project_type": "aggregate_top_volume",
                 "aggregate_on": "MultiProject",
                 "projects_to_wait_for": [
-                    "aggregate_pairContract_24h_trade_volume:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2",
-                    "pairContract_pair_total_reserves:0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc:UNISWAPV2",
-                    "aggregate_pairContract_24h_trade_volume:0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5:UNISWAPV2",
-                    "pairContract_pair_total_reserves:0xae461ca67b15dc8dc81ce7615e0320da1a9ab8d5:UNISWAPV2",
-                    "aggregate_pairContract_24h_trade_volume:0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852:UNISWAPV2",
-                    "pairContract_pair_total_reserves:0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852:UNISWAPV2",
-                    "aggregate_pairContract_24h_trade_volume:0x3041cbd36888becc7bbcbc0045e3b1f144466f5f:UNISWAPV2",
-                    "pairContract_pair_total_reserves:0x3041cbd36888becc7bbcbc0045e3b1f144466f5f:UNISWAPV2",
-                    "aggregate_pairContract_24h_trade_volume:0xd3d2e2692501a5c9ca623199d38826e513033a17:UNISWAPV2",
-                    "pairContract_pair_total_reserves:0xd3d2e2692501a5c9ca623199d38826e513033a17:UNISWAPV2",
-                    "aggregate_pairContract_24h_trade_volume:0xbb2b8038a1640196fbe3e38816f3e67cba72d940:UNISWAPV2",
-                    "pairContract_pair_total_reserves:0xbb2b8038a1640196fbe3e38816f3e67cba72d940:UNISWAPV2",
-                    "aggregate_pairContract_24h_trade_volume:0xa478c2975ab1ea89e8196811f51a7b7ade33eb11:UNISWAPV2",
-                    "pairContract_pair_total_reserves:0xa478c2975ab1ea89e8196811f51a7b7ade33eb11:UNISWAPV2"
+                    "aggregate_poolContract_volume_24h:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48:aavev3",
+                    "aggregate_poolContract_volume_24h:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2:aavev3",
+                    "aggregate_poolContract_volume_24h:0x2260fac5e5542a773aa44fbcfedf7c193bc2c599:aavev3",
+                    "aggregate_poolContract_volume_24h:0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0:aavev3",
+                    "aggregate_poolContract_volume_24h:0x6b175474e89094c44da98b954eedeac495271d0f:aavev3"
                 ],
                 "processor": {
-                    "module": "snapshotter.modules.uniswapv2.aggregate.multi_uniswap_top_pairs_24h",
-                    "class_name": "AggreagateTopPairsProcessor"
+                    "module": "snapshotter.modules.computes.aggregate.multi_aave_top_volume",
+                    "class_name": "AggreagateTopVolumeProcessor"
                 }
             ]
         }
@@ -464,12 +455,12 @@ Pooler needs the following config files to be present
         - RPC service URL(s) and rate limit configurations. Rate limits are service provider specific, different RPC providers have different rate limits. Example rate limit config for a node looks something like this `"100000000/day;20000/minute;2500/second"`
             - **`rpc.full_nodes`**: This will correspond to RPC nodes for the chain on which the data source smart contracts live (for eg. Ethereum Mainnet, Polygon Mainnet, etc).
             - **`anchor_chain_rpc.full_nodes`**: This will correspond to RPC nodes for the anchor chain on which the protocol state smart contract lives (Prost Chain).
-            - **`protocol_state.address`** : This will correspond to the address at which the protocol state smart contract is deployed on the anchor chain. **`protocol_state.abi`** is already filled in the example and already available at the static path specified [`pooler/static/abis/ProtocolContract.json`](pooler/static/abis/ProtocolContract.json)
+            - **`protocol_state.address`** : This will correspond to the address at which the protocol state smart contract is deployed on the anchor chain. **`protocol_state.abi`** is already filled in the example and already available at the static path specified [`pooler/static/abis/ProtocolContract.json`](snapshotter/static/abis/ProtocolContract.json)
 
 
 ## Monitoring and Debugging
 
-Login to the pooler docker container using `docker exec -it deploy-boost-1 bash` (use `docker ps` to verify its presence in the list of running containers) and use the following commands for monitoring and debugging
+Login to the pooler docker container using `docker exec -it deploy-pooler-1 bash` (use `docker ps` to verify its presence in the list of running containers) and use the following commands for monitoring and debugging
 - To monitor the status of running processes, you simply need to run `pm2 status`.
 - To see all logs you can run `pm2 logs`
 - To see logs for a specific process you can run `pm2 logs <Process Identifier>`
@@ -514,7 +505,7 @@ curl -X 'GET' \
             "timestamp": 1692530595
           },
           "PRELOAD": {
-            "pairContract_pair_total_reserves": {
+            "bulk_asset": {
               "status": "success",
               "error": null,
               "extra": null,
@@ -522,7 +513,7 @@ curl -X 'GET' \
             },
           },
           "SNAPSHOT_BUILD": {
-            "aggregate_24h_stats_lite:35ee1886fa4665255a0d0486c6079c4719c82f0f62ef9e96a98f26fde2e8a106:UNISWAPV2": {
+            "poolContract_supply_volume:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48:aavev3": {
               "status": "success",
               "error": null,
               "extra": null,
@@ -559,7 +550,7 @@ Response
   "totalIncorrectSubmissions": 1,
   "projects":[
     {
-      "projectId": "projectid"
+      "projectId": "projectid",
       "successfulSubmissions": 3,
       "missedSubmissions": 2,
       "incorrectSubmissions": 1
@@ -578,7 +569,7 @@ Response
   "totalIncorrectSubmissions": 1,
   "projects":[
     {
-      "projectId": "projectid"
+      "projectId": "projectid",
       "successfulSubmissions": 3,
       "missedSubmissions": 2,
       "incorrectSubmissions": 1
@@ -627,7 +618,7 @@ Response
     {
       "epochId": 12,
       "submittedSnapshotCid": "snapshotcid",
-      "submittedSnapshot": {}
+      "submittedSnapshot": {},
       "finalizedSnapshotCid": "finalizedsnapshotcid",
       "finalizedSnapshot": {},
       "reason": "reason for incorrect submission"
@@ -647,65 +638,69 @@ Now, whenever you commit anything, it'll automatically check the files you've ch
 
 ### 1. Pooler: Case study and extending this implementation
 
-Pooler is a Uniswap specific implementation of what is known as a 'snapshotter' in the PowerLoom Protocol ecosystem. It synchronizes with other snapshotter peers over a smart contract running on the present version of the PowerLoom Protocol testnet. It follows an architecture that is driven by state transitions which makes it easy to understand and modify. This present release ultimately provide access to rich aggregates that can power a Uniswap v2 dashboard with the following data points:
+An extension of the [Uniswap V2 Pooler](https://github.com/PowerLoom/snapshotter-lite?tab=readme-ov-file#overview), this branch (Aave V3) contains an Aave specific implementation of what is known as a 'snapshotter' in the PowerLoom Protocol ecosystem. It synchronizes with other snapshotter peers over a smart contract running on the present version of the PowerLoom Protocol testnet. It follows an architecture that is driven by state transitions which makes it easy to understand and modify. This snapshotter provides access to core data points for each Aave loan asset, along with aggregated 'snapshots' built using this base data. The following data points are available:
 
-- Total Value Locked (TVL)
-- Trade Volume, Liquidity reserves, Fees earned
-    - grouped by
-        - Pair contracts
-        - Individual tokens participating in pair contract
+- Total supply and debt amounts for individual assets
+- Total market metrics for all assets
+  - aggregated over time periods
+      - 24 hours
+- Volume by Action (Supply, Borrow, Repay, etc.) for each asset
     - aggregated over time periods
-        - 24 hours
-        - 7 days
-- Transactions containing `Swap`, `Mint`, and `Burn` events
+      - 24 hours
+- Lending and Borrowing interest rate APYs
+    - aggregated over time periods
+      - 6 hours
+      - 24 hours
+- Transactions containing `Supply`, `Borrow`, `Withdraw`, `Repay`, and `LiquidationCall` events
 
-#### Extending pooler with a Uniswap v2 data point
+#### Extending pooler
 
-In this section, let us take a look at the data composition abilities of Pooler to build on the base snapshot being built that captures information on Uniswap trades.
+In this section, let us take a look at the data composition abilities of Pooler to build on the base snapshot being built that captures information on Aave lending activities.
 
-##### Step 1. Review: Base snapshot extraction logic for trade information
+##### Step 1. Review: Base snapshot extraction logic for lending information
 
 Required reading:
 * [Base Snapshot Generation](#base-snapshot-generation) and
 * [configuring `config/projects.json`](#configuration)
 * [Aggregation and data composition](#aggregation-and-data-composition---snapshot-generation-of-higher-order-data-points-on-base-snapshots)
 
-As you can notice in [`config/projects.example.json`](https://github.com/PowerLoom/snapshotter-configs/blob/f46cc86cd08913014decf7bced128433442c8f84/projects.example.json), each project config needs to have the following components
+As you can notice in [`config/projects.example.json`](https://github.com/Seth-Schmidt/snapshotter-configs/blob/582045837fd66b8da1d528410d5984bbe304bcfa/projects.example.json), each project config needs to have the following components
 
 - `project_type` (unique identifier prefix for the usecase, [used to generate project ID](#base-snapshot-generation))
 - `projects` (smart contracts to extract data from, pooler can generate different snapshots from multiple sources as long as the Contract ABI is same)
 - `processor` (the actual compuation logic reference, while you can write the logic anywhere, it is recommended to write your implementation in pooler/modules folder)
+
+Optionally, a project can define one or more `preloaders` as a dependency in `snapshotter/modules/computes/utils/preloaders/` that will run before any core compute logic is executed. Preloaders can be used to fetch data points that will be shared between projects to prevent redundant RPC queries, or to submit large workloads over a request queue and wait for the results to be returned over a response queue. See the [Powerloom Docs](https://docs.powerloom.io/docs/Protocol/Specifications/Snapshotter/preloading) for more information on preloaders. This use case leverages the `preloader` concept to fetch the following data:
+
+- `bulk_asset`: Fetches key data points for all assets using Aave's [UiPoolDataProviderV3](https://docs.aave.com/developers/periphery-contracts/uipooldataproviderv3) Smart Contract
+- `bulk_event`: Fetches emitted events from Aave's [Pool](https://docs.aave.com/developers/core-contracts/pool) Smart Contract for all assets 
 
 There's currently no limitation on the number or type of usecases you can build using snapshotter. Just write the Processor class and pooler libraries will take care of the rest.
 
 https://github.com/PowerLoom/pooler/blob/1452c166bef7534568a61b3a2ab0ff94535d7229/config/projects.example.json#L1-L35
 
 
-If we take a look at the `TradeVolumeProcessor` class present at [`snapshotter/modules/computes/trade_volume.py`](https://github.com/PowerLoom/snapshotter-computes/blob/6fb98b1bbc22be8b5aba8bdc860004d35786f4df/trade_volume.py) it implements the interface of `GenericProcessorSnapshot` defined in [`pooler/utils/callback_helpers.py`](pooler/utils/callback_helpers.py).
+If we take a look at the `AssetSupplyVolumeProcessor` class present at [`snapshotter/modules/computes/pool_supply_volume.py`](https://github.com/Seth-Schmidt/snapshotter-computes/blob/aave/pool_supply_volume.py) it implements the interface of `GenericProcessorSnapshot` defined in [`snapshotter/utils/callback_helpers.py`](snapshotter/utils/callback_helpers.py).
 
 
 There are a couple of important concepts here necessary to write your extraction logic:
 * `compute` is the main function where most of the snapshot extraction and generation logic needs to be written. It receives the following inputs:
-- `epoch` (current epoch details)
-- `redis` (async redis connection)
-- `rpc_helper` ([`RpcHelper`](pooler/utils/rpc.py) instance to help with any calls to the data source contract's chain)
-
-* `transformation_lambdas` provide an additional layer for computation on top of the generated snapshot (if needed). If `compute` function handles everything you can just set `transformation_lambdas` to `[]` otherwise pass the list of transformation function sequence. Each function referenced in `transformation_lambdas` must have same input interface. It should receive the following inputs -
- - `snapshot` (the generated snapshot to apply transformation on)
- - `address` (contract address to extract data from)
- - `epoch_begin` (epoch begin block)
- - `epoch_end` (epoch end block)
+- `msg_obj` (`SnapshotProcessMessage` instance, contains all the necessary epoch related information to generate snapshots)
+- `rpc_helper` ([`RpcHelper`](snapshotter/utils/rpc.py) instance to help with any calls to the data source contract's chain)
+- `anchor_rpc_helper` ([`RpcHelper`](snapshotter/utils/rpc.py) instance to help with any calls to the protocol state contract's chain)
+- `ipfs_reader` (async IPFS client to read the data from IPFS)
+- `protocol_state_contract` (protocol state contract instance to read the finalized snapshot CID or anything else from the protocol state contract required for snapshot generation)
 
 Output format can be anything depending on the usecase requirements. Although it is recommended to use proper [`pydantic`](https://pypi.org/project/pydantic/) models to define the snapshot interface.
 
-The resultant output model in this specific example is `UniswapTradesSnapshot` as defined in the Uniswap v2 specific modules directory: [`utils/models/message_models.py`](https://github.com/PowerLoom/snapshotter-computes/blob/6fb98b1bbc22be8b5aba8bdc860004d35786f4df/utils/models/message_models.py#L47-L54). This encapsulates state information captured by `TradeVolumeProcessor` between the block heights of the epoch: `min_chain_height` and `max_chain_height`.
+The resultant output model in this specific example is `AaveSupplyVolumeSnapshot` as defined in the Aave V3 specific modules directory: [`utils/models/message_models.py`](https://github.com/Seth-Schmidt/snapshotter-computes/blob/3e56f33aec5ceb2fecc6ec1b10d4536572136145/utils/models/message_models.py#L91). This encapsulates state information captured by `AssetSupplyVolumeProcessor` between the block heights of the epoch: `min_chain_height` and `max_chain_height`.
 
 
-##### Step 2. Review: 24 hour aggregate of trade volume snapshots over a single pair contract
+##### Step 2. Review: 24 hour aggregate of volume by action snapshots over a single asset contract
 
-* As demonstrated in the previous section, the `TradeVolumeProcessor` logic takes care of capturing a snapshot of information regarding Uniswap v2 trades between the block heights of `min_chain_height` and `max_chain_height`.
+* As demonstrated in the previous section, the `AssetSupplyVolumeProcessor` logic takes care of capturing a snapshot of information regarding Aave V3 lending activities between the block heights of `min_chain_height` and `max_chain_height`.
 
-* The epoch size as described in the prior section on [epoch generation](#epoch-generation) can be considered to be constant for this specific implementation of the Uniswap v2 use case on PowerLoom Protocol, and by extension, the time duration captured within the epoch.
+* The epoch size as described in the prior section on [epoch generation](#epoch-generation) can be considered to be constant for this specific implementation of the Aave V3 use case on PowerLoom Protocol, and by extension, the time duration captured within the epoch.
 
 * As shown in the section on [dependency graph of data composition](#aggregation-and-data-composition---snapshot-generation-of-higher-order-data-points-on-base-snapshots), every aggregate is calculated relative to the `epochId` at which the dependee [`SnapshotFinalized` event](#snapshot-finalization) is receieved.
 
@@ -726,20 +721,20 @@ https://github.com/PowerLoom/pooler/blob/d8b7be32ad329e8dcf0a7e5c1b27862894bc990
 
 ```javascript
     {
-      "project_type": "aggregate_pairContract_24h_trade_volume",
+      "project_type": "aggregate_poolContract_volume_24h",
       "aggregate_on": "SingleProject",
       "filters": {
-        "projectId": "pairContract_trade_volume"
+        "projectId": "poolContract_supply_volume"
       },
       "processor": {
-        "module": "snapshotter.modules.computes.aggregate.single_uniswap_trade_volume_24h",
-        "class_name": "AggregateTradeVolumeProcessor"
+        "module": "snapshotter.modules.computes.aggregate.single_aave_volume_24h",
+        "class_name": "AggregateSupplyVolumeProcessor"
       }
     }
 ```
 * Each finalized `epochId` is registered with a snapshot commit against the aggregated data set generated by running summations on trade volumes on all the base snapshots contained within the span calculated above.
 
-##### Step 3. New Datapoint: 2 hours aggregate of only swap events
+##### Step 3. New Datapoint: 2 hours aggregate of only borrow events
 
 From the information provided above, the following is left as an exercise for the reader to generate aggregate datasets at every `epochId` finalization for a pair contract, spanning 2 hours worth of snapshots and containing only `Swap` event logs and the trade volume generated from them as a result.
 
@@ -747,11 +742,11 @@ From the information provided above, the following is left as an exercise for th
 
 * Add a new configuration entry in `config/aggregator.json` for this new aggregation worker class
 
-* Define a new data model in [`utils/message_models.py`](https://github.com/PowerLoom/snapshotter-computes/blob/6fb98b1bbc22be8b5aba8bdc860004d35786f4df/aggregate/single_uniswap_trade_volume_24h.py) referring to
-    * `UniswapTradesAggregateSnapshot` as used in above example
-    * `UniswapTradesSnapshot` used to capture each epoch's trade snapshots which includes the raw event logs as well
+* Define a new data model in [`utils/message_models.py`](https://github.com/Seth-Schmidt/snapshotter-computes/blob/3e56f33aec5ceb2fecc6ec1b10d4536572136145/utils/models/message_models.py#L91-L107) referring to
+    * `AaveVolumeAggregateSnapshot` as used in above example
+    * `AaveSupplyVolumeSnapshot` used to capture each epoch's volume by action snapshots which includes the raw event logs as well
 
-* Follow the example of the aggregator worker [as implemented for 24 hours aggregation calculation](https://github.com/PowerLoom/snapshotter-computes/blob/6fb98b1bbc22be8b5aba8bdc860004d35786f4df/aggregate/single_uniswap_trade_volume_24h.py) , and work on calculating an `epochId` span of 2 hours and filtering out only the `Swap` events and the trade volume contained within.
+* Follow the example of the aggregator worker [as implemented for 24 hours aggregation calculation](https://github.com/Seth-Schmidt/snapshotter-computes/blob/aave/aggregate/single_aave_volume_24h.py) , and work on calculating an `epochId` span of 2 hours and filtering out only the `Borrow` events and the trade volume contained within.
 
 
 ### 2. Zkevm Quests: A Case Study of Implementation
