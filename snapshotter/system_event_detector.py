@@ -302,7 +302,7 @@ class EventDetectorProcess(multiprocessing.Process):
                         last_processed_block_data,
                     )
 
-            if self.last_sent_block == current_block:
+            if self._last_processed_block == current_block:
                 self._logger.info(
                     'No new blocks detected, sleeping for {} seconds...',
                     settings.anchor_chain.polling_interval,
