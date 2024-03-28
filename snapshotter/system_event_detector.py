@@ -305,9 +305,9 @@ class EventDetectorProcess(multiprocessing.Process):
             if self._last_processed_block == current_block:
                 self._logger.info(
                     'No new blocks detected, sleeping for {} seconds...',
-                    settings.anchor_chain.polling_interval,
+                    settings.rpc.polling_interval,
                 )
-                await asyncio.sleep(settings.anchor_chain.polling_interval)
+                await asyncio.sleep(settings.rpc.polling_interval)
                 continue
 
             if self._last_processed_block:
