@@ -678,17 +678,32 @@ class RpcHelper(object):
                 )
 
             response_exceptions = []
+            return_response_data = None
+            trie_node_exc = False
             if type(response_data) is list:
+                return_response_list = []
                 for response_item in response_data:
                     if 'error' in response_item:
+                        if type(response_item['error']) == dict and 'message' in response_item['error'] and 'missing trie node' in response_item['error']['message']:
+                            # do not raise exception for missing trie node error, further retries will only be wasteful
+                            trie_node_exc = True or trie_node_exc
+                            continue
                         response_exceptions.append(
                             response_exceptions.append(response_item['error']),
                         )
+                    else:
+                        return_response_list.append(response_item)
+                return_response_data = return_response_list
             else:
                 if 'error' in response_data:
+                    if type(response_data['error']) == dict and 'message' in response_data['error'] and 'missing trie node' in response_data['error']['message']:
+                            # do not raise exception for missing trie node error, further retries will only be wasteful
+                            trie_node_exc = True
                     response_exceptions.append(response_data['error'])
+                else:   # if response is not a list, it is a dict
+                    return_response_data = response_data                
 
-            if response_exceptions:
+            if response_exceptions and not trie_node_exc:
                 raise RPCException(
                     request=rpc_query,
                     response=response_data,
@@ -696,7 +711,7 @@ class RpcHelper(object):
                     extra_info=f'RPC_BATCH_ETH_CALL_ERROR: {response_exceptions}',
                 )
 
-            return response_data
+            return return_response_data
         return await f(node_idx=0)
 
     async def batch_eth_get_balance_on_block_range(
@@ -738,17 +753,16 @@ class RpcHelper(object):
         try:
             response_data = await self._make_rpc_jsonrpc_call(rpc_query, redis_conn)
 
-            rpc_respnse = []
-
-            for response in response_data:
-                if 'result' in response:
-                    eth_balance = response['result']
-                    rpc_respnse.append(eth_balance)
-                else:
-                    rpc_respnse.append(None)
-
-            return rpc_respnse
-
+            rpc_response = []
+            if not isinstance(response_data, list) and response_data is not None and isinstance(response_data, dict):
+                response_data = [response_data]
+                for response in response_data:
+                    if 'result' in response:
+                        eth_balance = response['result']
+                        rpc_response.append(eth_balance)
+                    else:
+                        rpc_response.append(None)
+            return rpc_response
         except Exception as e:
             raise e
 
@@ -810,18 +824,21 @@ class RpcHelper(object):
 
         response_data = await self._make_rpc_jsonrpc_call(rpc_query, redis_conn=redis_conn)
         rpc_response = []
-
-        response = response_data if isinstance(response_data, list) else [response_data]
+        if isinstance(response_data, list):
+            response = response_data
+        else:
+            if response_data is not None and isinstance(response_data, dict):
+                response = [response_data]
         for result in response:
-            rpc_response.append(
-                eth_abi.decode_abi(
-                    abi_dict.get(
-                        function_name,
-                    )['output'],
-                    HexBytes(result['result']),
-                ),
-            )
-
+            if 'result' in result:
+                rpc_response.append(
+                    eth_abi.decode_abi(
+                        abi_dict.get(
+                            function_name,
+                        )['output'],
+                        HexBytes(result['result']),
+                    ),
+                )
         return rpc_response
 
     async def batch_eth_call_on_block_range_hex_data(
@@ -884,7 +901,11 @@ class RpcHelper(object):
         rpc_response = []
 
         # Return the hexbytes data to be decoded outside the function
-        response = response_data if isinstance(response_data, list) else [response_data]
+        if isinstance(response_data, list):
+            response = response_data
+        else:
+            if response_data is not None and isinstance(response_data, dict):
+                response = [response_data]
         for result in response:
             rpc_response.append(HexBytes(result['result']))
 
