@@ -302,6 +302,14 @@ class EventDetectorProcess(multiprocessing.Process):
                         last_processed_block_data,
                     )
 
+            if self._last_processed_block == current_block:
+                self._logger.info(
+                    'No new blocks detected, sleeping for {} seconds...',
+                    settings.rpc.polling_interval,
+                )
+                await asyncio.sleep(settings.rpc.polling_interval)
+                continue
+
             if self._last_processed_block:
                 if current_block - self._last_processed_block >= 10:
                     self._logger.warning(
@@ -312,7 +320,7 @@ class EventDetectorProcess(multiprocessing.Process):
 
                 # Get events from current block to last_processed_block
                 try:
-                    events = await self.get_events(self._last_processed_block, current_block)
+                    events = await self.get_events(self._last_processed_block + 1, current_block)
                 except Exception as e:
                     self._logger.opt(exception=True).error(
                         (
