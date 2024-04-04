@@ -689,7 +689,7 @@ class ProcessorDistributor(multiprocessing.Process):
         )
 
         asyncio.ensure_future(self._exec_preloaders(msg_obj=msg_obj))
-        asyncio.ensure_future(self._epoch_processing_health_check(msg_obj.epochId))
+        # asyncio.ensure_future(self._epoch_processing_health_check(msg_obj.epochId))
 
     async def _distribute_callbacks_snapshotting(self, project_type: str, epoch: EpochBase):
         """
