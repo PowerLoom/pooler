@@ -334,7 +334,7 @@ class ProcessorDistributor(multiprocessing.Process):
                             data_source,
                         )
                     project_config.projects = list(project_data)
-                all_projects += [f'{project_type}:{project}:{settings.namespace}' for project in project_config.projects]
+                all_projects += [f'{project_type}:{project.lower()}:{settings.namespace}' for project in project_config.projects]
 
             for config in aggregator_config:
                 if config.aggregate_on == AggregateOn.single_project:
