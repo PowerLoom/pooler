@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import sys
 from functools import wraps
 
@@ -177,3 +178,38 @@ def _parse_value(val):
         return val.hex()
     else:
         return val
+
+
+def gen_single_type_project_id(task_type, project_id):
+    """
+    Generates a project ID for a single task type and epoch.
+
+    Args:
+        task_type (str): The task type.
+        epoch (Epoch): The epoch object.
+
+    Returns:
+        str: The generated project ID.
+    """
+    data_source = project_id.split(':')[-2]
+    project_id = f'{task_type}:{data_source}:{settings.namespace}'
+    return project_id
+
+
+def gen_multiple_type_project_id(task_type, underlying_project_ids):
+    """
+    Generates a unique project ID based on the task type and epoch messages.
+
+    Args:
+        task_type (str): The type of task.
+        epoch (Epoch): The epoch object containing messages.
+
+    Returns:
+        str: The generated project ID.
+    """
+    unique_project_id = ''.join(sorted(underlying_project_ids))
+
+    project_hash = hashlib.sha3_256(unique_project_id.encode()).hexdigest()
+
+    project_id = f'{task_type}:{project_hash}:{settings.namespace}'
+    return project_id
