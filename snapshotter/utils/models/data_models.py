@@ -58,7 +58,7 @@ class SnapshotterEpochProcessingReportItem(BaseModel):
 class SnapshotterIssue(BaseModel):
     instanceID: str
     issueType: str
-    projectID: str
+    projectID: Optional[str] = ''
     epochId: str
     timeOfReporting: str
     extra: Optional[str] = ''
