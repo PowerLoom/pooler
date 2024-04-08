@@ -113,12 +113,9 @@ async def w3_get_and_cache_finalized_cid(
     Returns:
         Tuple[str, int]: The CID and epoch ID if the consensus status is True, or the null value and epoch ID if the consensus status is False.
     """
-    tasks = [
-        state_contract_obj.functions.snapshotStatus(project_id, epoch_id),
-        state_contract_obj.functions.maxSnapshotsCid(project_id, epoch_id),
-    ]
+    consensus_status = state_contract_obj.functions.snapshotStatus(project_id, epoch_id).call()
+    cid = state_contract_obj.functions.maxSnapshotsCid(project_id, epoch_id).call()
 
-    [consensus_status, cid] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
     logger.trace(f'consensus status for project {project_id} and epoch {epoch_id} is {consensus_status}')
     if consensus_status[0]:
         await redis_conn.zadd(
@@ -157,11 +154,8 @@ async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj
         first_epoch = int(first_epoch_data)
         return first_epoch
     else:
-        tasks = [
-            state_contract_obj.functions.projectFirstEpochId(project_id),
-        ]
+        first_epoch = state_contract_obj.functions.projectFirstEpochId(project_id).call()
 
-        [first_epoch] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
         logger.info(f'first epoch for project {project_id} is {first_epoch}')
         # Don't cache if it is 0
         if first_epoch == 0:
@@ -727,3 +721,112 @@ async def get_snapshotter_project_status(redis_conn: aioredis.Redis, project_id:
             )
 
     return project_status
+
+
+async def get_project_time_series_data(
+        start_time: int,
+        end_time: int,
+        step_seconds: int,
+        end_epoch_id: int,
+        redis_conn: aioredis.Redis,
+        state_contract_obj,
+        rpc_helper,
+        ipfs_reader,
+        project_id,
+):
+    """
+    Returns a list of snapshot data containing equally spaced observations starting with the start_epoch id
+    for the given project_id, and including epochs spaced step_seconds apart until the maximum observations has been reached.
+
+    Args:
+        observations: Total number of data points to gather
+        step_seconds: Time in seconds between each obsveration
+        project_last_finalized_epoch: Epoch ID of the last finalized epoch for'project_id'
+        redis_conn (aioredis.Redis): Redis connection object.
+        state_contract_obj: State contract object.
+        rpc_helper: RPC helper object.
+        ipfs_reader: IPFS reader object.
+        project_id: ID of the project to fetch snapshot data for.
+
+
+    Returns:
+        A list of snapshot data objects for the given project_id with a maximum length of the observations param.
+    """
+
+    # get metadata for building steps
+    [
+        source_chain_epoch_size,
+        source_chain_block_time,
+        project_first_epoch,
+    ] = await asyncio.gather(
+        get_source_chain_epoch_size(
+            redis_conn,
+            state_contract_obj,
+            rpc_helper,
+        ),
+        get_source_chain_block_time(
+            redis_conn,
+            state_contract_obj,
+            rpc_helper,
+        ),
+        get_project_first_epoch(
+            redis_conn,
+            state_contract_obj,
+            rpc_helper,
+            project_id,
+        ),
+    )
+
+    seek_stop_flag = False
+
+    closest_step_time_gap = end_time % step_seconds
+    closest_step_timestamp = end_time - closest_step_time_gap
+    closest_step_epoch_id = end_epoch_id - \
+        int(closest_step_time_gap / (source_chain_epoch_size * source_chain_block_time))
+    if closest_step_epoch_id <= project_first_epoch:
+        closest_step_epoch_id = project_first_epoch
+        seek_stop_flag = True
+
+    cid_tasks = []
+    cid_tasks.append(
+        get_project_finalized_cid(
+            redis_conn,
+            state_contract_obj,
+            rpc_helper,
+            closest_step_epoch_id,
+            project_id,
+        ),
+    )
+
+    remaining_observations = int((closest_step_timestamp - start_time) / step_seconds)
+
+    count = 0
+    head_epoch_id = closest_step_epoch_id
+    while not seek_stop_flag and count < remaining_observations:
+        tail_epoch_id = head_epoch_id - int(step_seconds / (source_chain_epoch_size * source_chain_block_time))
+        if tail_epoch_id <= project_first_epoch:
+            tail_epoch_id = project_first_epoch
+            seek_stop_flag = True
+
+        cid_tasks.append(
+            get_project_finalized_cid(
+                redis_conn,
+                state_contract_obj,
+                rpc_helper,
+                tail_epoch_id,
+                project_id,
+            ),
+        )
+
+        head_epoch_id = tail_epoch_id
+        count += 1
+
+    all_cids = await asyncio.gather(*cid_tasks)
+    project_ids = [project_id for _ in all_cids]
+
+    return await get_submission_data_bulk(
+        redis_conn=redis_conn,
+        cids=all_cids,
+        ipfs_reader=ipfs_reader,
+        project_ids=project_ids,
+    )
