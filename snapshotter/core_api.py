@@ -62,6 +62,10 @@ REDIS_CONN_CONF = {
 # setup logging
 rest_logger = logger.bind(module='Powerloom|CoreAPI')
 
+# Disables unnecessary logging for httpx requests
+rest_logger.disable('httpcore._trace')
+rest_logger.disable('httpx._client')
+
 
 protocol_state_contract_abi = read_json_file(
     settings.protocol_state.abi,
