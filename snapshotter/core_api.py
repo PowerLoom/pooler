@@ -1,4 +1,5 @@
 import json
+import time
 from typing import List
 
 from fastapi import Depends
@@ -9,6 +10,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi_pagination import add_pagination
 from fastapi_pagination import Page
 from fastapi_pagination import paginate
+from httpx import AsyncClient
+from httpx import AsyncHTTPTransport
+from httpx import Limits
+from httpx import Timeout
 from ipfs_client.main import AsyncIPFSClientSingleton
 from pydantic import Field
 from redis import asyncio as aioredis
@@ -21,17 +26,22 @@ from snapshotter.auth.helpers.helpers import inject_rate_limit_fail_response
 from snapshotter.auth.helpers.helpers import rate_limit_auth_check
 from snapshotter.auth.helpers.redis_conn import RedisPoolCache as AuthRedisPoolCache
 from snapshotter.settings.config import settings
+from snapshotter.utils.callback_helpers import send_failure_notifications_async
 from snapshotter.utils.data_utils import get_project_epoch_snapshot
 from snapshotter.utils.data_utils import get_project_finalized_cid
 from snapshotter.utils.data_utils import get_project_time_series_data
 from snapshotter.utils.data_utils import get_snapshotter_project_status
 from snapshotter.utils.data_utils import get_snapshotter_status
+from snapshotter.utils.data_utils import snapshotter_last_finalized_check
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.models.data_models import SnapshotterEpochProcessingReportItem
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
+from snapshotter.utils.models.data_models import SnapshotterIssue
+from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.data_models import TaskStatusRequest
+from snapshotter.utils.models.data_models import UnfinalizedProject
 from snapshotter.utils.redis.rate_limiter import load_rate_limiter_scripts
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import active_status_key
@@ -103,6 +113,19 @@ async def startup_boilerplate():
     await app.state.ipfs_singleton.init_sessions()
     app.state.ipfs_reader_client = app.state.ipfs_singleton._ipfs_read_client
     app.state.epoch_size = 0
+    app.state.last_unfinalized_check = 0
+
+    app.state.async_client = AsyncClient(
+        timeout=Timeout(timeout=5.0),
+        follow_redirects=False,
+        transport=AsyncHTTPTransport(
+            limits=Limits(
+                max_connections=200,
+                max_keepalive_connections=50,
+                keepalive_expiry=None,
+            ),
+        ),
+    )
 
 
 # Health check endpoint
@@ -131,6 +154,36 @@ async def health_check(
                 'status': 'error',
                 'message': 'Snapshotter is not active',
             }
+    
+    # check if there are any unfinalized projects every 10 minutes
+    if int(time.time()) - app.state.last_unfinalized_check >= 600:
+        app.state.last_unfinalized_check = int(time.time())
+        unfinalized_projects: List[UnfinalizedProject] = await snapshotter_last_finalized_check(
+            redis_conn,
+            request.app.state.protocol_state_contract,
+            request.app.state.anchor_rpc_helper,
+        )
+
+        if unfinalized_projects:
+            for unfinalized_project in unfinalized_projects:
+                notification_message = SnapshotterIssue(
+                    instanceID=settings.instance_id,
+                    issueType=SnapshotterReportState.UNFINALIZED_PROJECT.value,
+                    projectID=unfinalized_project.projectId,
+                    epochId=str(unfinalized_project.currentEpochId),
+                    timeOfReporting=str(time.time()),
+                    extra=json.dumps({'issueDetails': 'Error : project has been unfinalized for > 50 epochs'}),
+                )
+                await send_failure_notifications_async(
+                    client=app.state.async_client, message=notification_message,
+                )
+
+            response.status_code = 503
+            return {
+                'status': 'error',
+                'message': 'Snapshotter has unfinalized projects',
+            }
+
     return {'status': 'OK'}
 
 
