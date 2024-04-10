@@ -1,8 +1,8 @@
 import asyncio
 import json
 import os
-from typing import List
 from random import sample
+from typing import List
 
 import tenacity
 from ipfs_client.dag import IPFSAsyncClientError
@@ -834,11 +834,12 @@ async def get_project_time_series_data(
         project_ids=project_ids,
     )
 
+
 async def snapshotter_last_finalized_check(
     redis_conn: aioredis.Redis,
     state_contract_obj,
     rpc_helper,
-):  
+):
     try:
         # get all projects from redis
         all_projects = await redis_conn.smembers(stored_projects_key())
@@ -850,7 +851,7 @@ async def snapshotter_last_finalized_check(
         # get current epoch and the last finalized snapshot for each sampled project
         tasks = [state_contract_obj.functions.currentEpoch()]
         tasks += [
-            state_contract_obj.functions.lastFinalizedSnapshot(project_id) 
+            state_contract_obj.functions.lastFinalizedSnapshot(project_id)
             for project_id in samples
         ]
 
@@ -868,9 +869,9 @@ async def snapshotter_last_finalized_check(
                     lastFinalizedEpochId=last_finalized_snapshot,
                 )
                 unfinalized_projects.append(unfinalized_project)
-        
+
         return unfinalized_projects
-    
+
     except Exception as e:
         logger.warning('Error while checking for unfinalized snapshots', error=e)
         return []

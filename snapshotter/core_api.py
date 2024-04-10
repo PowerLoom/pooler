@@ -36,10 +36,10 @@ from snapshotter.utils.data_utils import snapshotter_last_finalized_check
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.models.data_models import SnapshotterEpochProcessingReportItem
-from snapshotter.utils.models.data_models import SnapshotterStates
-from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.data_models import SnapshotterIssue
 from snapshotter.utils.models.data_models import SnapshotterReportState
+from snapshotter.utils.models.data_models import SnapshotterStates
+from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.data_models import TaskStatusRequest
 from snapshotter.utils.models.data_models import UnfinalizedProject
 from snapshotter.utils.redis.rate_limiter import load_rate_limiter_scripts
@@ -50,7 +50,6 @@ from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import epoch_process_report_cached_key
 from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_key
 from snapshotter.utils.rpc import RpcHelper
-
 
 REDIS_CONN_CONF = {
     'host': settings.redis.host,
@@ -158,7 +157,7 @@ async def health_check(
                 'status': 'error',
                 'message': 'Snapshotter is not active',
             }
-    
+
     # check if there are any unfinalized projects every 10 minutes
     if int(time.time()) - app.state.last_unfinalized_check >= 600:
         app.state.last_unfinalized_check = int(time.time())

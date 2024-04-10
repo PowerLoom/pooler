@@ -197,6 +197,7 @@ class TaskStatusRequest(BaseModel):
     task_type: str
     wallet_address: str
 
+
 class UnfinalizedProject(BaseModel):
     projectId: str
     currentEpochId: int
