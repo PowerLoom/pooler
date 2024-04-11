@@ -932,6 +932,72 @@ class RpcHelper(object):
 
         return rpc_response
 
+    async def batch_eth_call_on_block_range_hex_data(
+        self,
+        abi_dict,
+        function_name,
+        contract_address,
+        redis_conn,
+        from_block,
+        to_block,
+        params: Union[List, None] = None,
+        from_address=Web3.toChecksumAddress('0x0000000000000000000000000000000000000000'),
+    ):
+        """
+        Batch executes an Ethereum contract function call on a range of blocks.
+
+        Args:
+            abi_dict (dict): The ABI dictionary of the contract.
+            function_name (str): The name of the function to call.
+            contract_address (str): The address of the contract.
+            redis_conn (redis.Redis): The Redis connection object.
+            from_block (int): The starting block number.
+            to_block (int): The ending block number.
+            params (list, optional): The list of parameters to pass to the function. Defaults to None.
+            from_address (str, optional): The address to use as the sender of the transaction. Defaults to '0x0000000000000000000000000000000000000000'.
+
+        Returns:
+            list: A list raw HexBytes data results from the function call.
+        """
+        if not self._initialized:
+            await self.init(redis_conn)
+
+        if params is None:
+            params = []
+
+        function_signature = get_encoded_function_signature(
+            abi_dict, function_name, params,
+        )
+        rpc_query = []
+        request_id = 1
+        for block in range(from_block, to_block + 1):
+            rpc_query.append(
+                {
+                    'jsonrpc': '2.0',
+                    'method': 'eth_call',
+                    'params': [
+                        {
+                            'from': from_address,
+                            'to': Web3.toChecksumAddress(contract_address),
+                            'data': function_signature,
+                        },
+                        hex(block),
+                    ],
+                    'id': request_id,
+                },
+            )
+            request_id += 1
+
+        response_data = await self._make_rpc_jsonrpc_call(rpc_query, redis_conn=redis_conn)
+        rpc_response = []
+
+        # Return the hexbytes data to be decoded outside the function
+        response = response_data if isinstance(response_data, list) else [response_data]
+        for result in response:
+            rpc_response.append(HexBytes(result['result']))
+
+        return rpc_response
+
     async def batch_eth_get_block(self, from_block, to_block, redis_conn):
         """
         Batch retrieves Ethereum blocks using eth_getBlockByNumber JSON-RPC method.

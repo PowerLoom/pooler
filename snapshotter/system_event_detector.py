@@ -20,9 +20,7 @@ from snapshotter.utils.exceptions import GenericExitOnSignal
 from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.models.data_models import EpochReleasedEvent
 from snapshotter.utils.models.data_models import EventBase
-from snapshotter.utils.models.data_models import ProjectsUpdatedEvent
 from snapshotter.utils.models.data_models import SnapshotFinalizedEvent
-from snapshotter.utils.models.data_models import SnapshottersUpdatedEvent
 from snapshotter.utils.rabbitmq_helpers import RabbitmqThreadedSelectLoopInteractor
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import event_detector_last_processed_block
@@ -139,22 +137,16 @@ class EventDetectorProcess(multiprocessing.Process):
 
         # event EpochReleased(uint256 indexed epochId, uint256 begin, uint256 end, uint256 timestamp);
         # event SnapshotFinalized(uint256 indexed epochId, uint256 epochEnd, string projectId,
-        #     string snapshotCid, uint256 timestamp);
-        # event ProjectsUpdated(string projectId, bool allowed);
+        # string snapshotCid, uint256 finalizedSnapshotCount, uint256 totalReceivedCount, uint256 timestamp);
 
         EVENTS_ABI = {
             'EpochReleased': self.contract.events.EpochReleased._get_event_abi(),
             'SnapshotFinalized': self.contract.events.SnapshotFinalized._get_event_abi(),
-            'ProjectsUpdated': self.contract.events.ProjectsUpdated._get_event_abi(),
-            'allSnapshottersUpdated': self.contract.events.allSnapshottersUpdated._get_event_abi(),
         }
 
         EVENT_SIGS = {
             'EpochReleased': 'EpochReleased(uint256,uint256,uint256,uint256)',
-            'SnapshotFinalized': 'SnapshotFinalized(uint256,uint256,string,string,uint256)',
-            'ProjectsUpdated': 'ProjectsUpdated(string,bool,uint256)',
-            'allSnapshottersUpdated': 'allSnapshottersUpdated(address,bool)',
-
+            'SnapshotFinalized': 'SnapshotFinalized(uint256,uint256,string,string,uint256,uint256,uint256)',
         }
 
         self.event_sig, self.event_abi = get_event_sig_and_abi(
@@ -215,21 +207,6 @@ class EventDetectorProcess(multiprocessing.Process):
                     projectId=log.args.projectId,
                     snapshotCid=log.args.snapshotCid,
                     timestamp=log.args.timestamp,
-                )
-                events.append((log.event, event))
-            elif log.event == 'ProjectsUpdated':
-                event = ProjectsUpdatedEvent(
-                    projectId=log.args.projectId,
-                    allowed=log.args.allowed,
-                    enableEpochId=log.args.enableEpochId,
-                    timestamp=int(time.time()),
-                )
-                events.append((log.event, event))
-            elif log.event == 'allSnapshottersUpdated':
-                event = SnapshottersUpdatedEvent(
-                    snapshotterAddress=log.args.snapshotterAddress,
-                    allowed=log.args.allowed,
-                    timestamp=int(time.time()),
                 )
                 events.append((log.event, event))
 
@@ -325,6 +302,14 @@ class EventDetectorProcess(multiprocessing.Process):
                         last_processed_block_data,
                     )
 
+            if self._last_processed_block == current_block:
+                self._logger.info(
+                    'No new blocks detected, sleeping for {} seconds...',
+                    settings.rpc.polling_interval,
+                )
+                await asyncio.sleep(settings.rpc.polling_interval)
+                continue
+
             if self._last_processed_block:
                 if current_block - self._last_processed_block >= 10:
                     self._logger.warning(
@@ -335,7 +320,7 @@ class EventDetectorProcess(multiprocessing.Process):
 
                 # Get events from current block to last_processed_block
                 try:
-                    events = await self.get_events(self._last_processed_block, current_block)
+                    events = await self.get_events(self._last_processed_block + 1, current_block)
                 except Exception as e:
                     self._logger.opt(exception=True).error(
                         (
