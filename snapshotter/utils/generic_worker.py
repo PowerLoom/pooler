@@ -1,6 +1,7 @@
 import asyncio
 import json
 import multiprocessing
+import random
 import resource
 import time
 from functools import partial
@@ -8,10 +9,11 @@ from signal import SIGINT
 from signal import signal
 from signal import SIGQUIT
 from signal import SIGTERM
-from typing import Dict
+from typing import Dict, Optional
 from typing import Union
 from uuid import uuid4
 
+import aiorwlock
 import httpx
 import tenacity
 from aio_pika import IncomingMessage
@@ -26,11 +28,10 @@ from ipfs_client.dag import IPFSAsyncClientError
 from ipfs_client.main import AsyncIPFSClient
 from pydantic import BaseModel
 from redis import asyncio as aioredis
-from tenacity import retry
+from tenacity import retry, retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
-from web3 import Web3
-
+from web3 import Web3, AsyncHTTPProvider, AsyncWeb3
 from snapshotter.settings.config import settings
 from snapshotter.utils.callback_helpers import get_rabbitmq_channel
 from snapshotter.utils.callback_helpers import get_rabbitmq_robust_connection_async
@@ -38,7 +39,8 @@ from snapshotter.utils.callback_helpers import send_failure_notifications_async
 from snapshotter.utils.data_utils import get_source_chain_id
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.file_utils import read_json_file
-from snapshotter.utils.models.data_models import SnapshotterIssue
+from snapshotter.utils.helper_functions import aiorwlock_aqcuire_release
+from snapshotter.utils.models.data_models import SnapshotSubmissionSignerState, SnapshotterIssue, TxnPayload
 from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
@@ -52,6 +54,7 @@ from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import submitted_unfinalized_snapshot_cids
 from snapshotter.utils.rpc import RpcHelper
+from snapshotter.utils.transaction_utils import write_transaction
 
 
 def web3_storage_retry_state_callback(retry_state: tenacity.RetryCallState):
@@ -67,6 +70,28 @@ def web3_storage_retry_state_callback(retry_state: tenacity.RetryCallState):
     if retry_state and retry_state.outcome.failed:
         logger.warning(
             f'Encountered web3 storage upload exception: {retry_state.outcome.exception()} | args: {retry_state.args}, kwargs:{retry_state.kwargs}',
+        )
+
+
+def submit_snapshot_retry_callback(retry_state: tenacity.RetryCallState):
+    if retry_state.attempt_number >= 3:
+        logger.error(
+            'Txn signing worker failed after 3 attempts | Txn payload: {} | Signer: {}', retry_state.kwargs['txn_payload'], retry_state.kwargs['signer_in_use'].address
+        )
+    else:
+        if retry_state.outcome.failed:
+            if 'nonce' in str(retry_state.outcome.exception()):
+                # reassing the signer object to ensure nonce is reset
+                retry_state.kwargs['signer_in_use'] = retry_state.args[0]._signers[retry_state.kwargs['signer_in_use'].address]  # basically self._signers[signer_in_use.address]
+                logger.warning(
+                    'Tx signing worker attempt number {} result {} failed with nonce exception | Reset nonce and reassigned signer object: {} with nonce {} | Txn payload: {}',
+                    retry_state.attempt_number, retry_state.outcome, retry_state.kwargs["signer_in_use"].address, 
+                    retry_state.kwargs['signer_in_use'].nonce, retry_state.kwargs["txn_payload"]
+                )
+        logger.warning(
+            'Tx signing worker {} attempt number {} result {} | Txn payload: {}', retry_state.kwargs['signer_in_use'].address, retry_state.attempt_number, retry_state.outcome,
+            retry_state.kwargs['txn_payload'],
+
         )
 
 
@@ -97,7 +122,11 @@ class GenericAsyncWorker(multiprocessing.Process):
     _httpx_client: AsyncClient
     _web3_storage_upload_transport: AsyncHTTPTransport
     _web3_storage_upload_client: AsyncClient
-
+    _chain_id: int
+    _epoch_size: int
+    _source_chain_block_time: int
+    _signers: Dict[str, SnapshotSubmissionSignerState]
+    
     def __init__(self, name, **kwargs):
         """
         Initializes a GenericAsyncWorker instance.
@@ -433,6 +462,65 @@ class GenericAsyncWorker(multiprocessing.Process):
                 },
             )
 
+    @aiorwlock_aqcuire_release
+    @retry(
+        reraise=True,
+        retry=retry_if_exception_type(Exception),
+        wait=wait_random_exponential(multiplier=1, max=10),
+        stop=stop_after_attempt(3),
+        after=submit_snapshot_retry_callback
+    )
+    async def submit_snapshot(self, txn_payload: TxnPayload, signer_in_use: Optional[SnapshotSubmissionSignerState] = None):
+        """
+        Submit Snapshot
+        """
+        if signer_in_use is None:
+            self._logger.info('No signer passed to submit_snapshot, quitting')
+            return None
+        _nonce = signer_in_use.nonce
+        try:
+            tx_hash = await write_transaction(
+                self._w3,
+                self._chain_id,
+                signer_in_use.address,
+                signer_in_use.private_key,
+                self._protocol_state_contract,
+                'submitSnapshot',
+                _nonce,
+                txn_payload.slotId,
+                txn_payload.snapshotCid,
+                txn_payload.epochId,
+                txn_payload.projectId,
+                (
+                    txn_payload.request.slotId, txn_payload.request.deadline,
+                    txn_payload.request.snapshotCid, txn_payload.request.epochId,
+                    txn_payload.request.projectId,
+                ),
+                txn_payload.signature,
+            )
+
+            self._logger.info(
+                f'submitted transaction with tx_hash: {tx_hash}',
+            )
+
+        except Exception as e:
+            self._logger.error(f'Exception: {e}')
+
+            if 'nonce' in str(e):
+                # sleep for 10 seconds and reset nonce
+                await asyncio.sleep(10)
+                self._signers[signer_in_use.address].nonce = await self._w3.eth.get_transaction_count(
+                    signer_in_use.address,
+                )
+                self._logger.info(
+                    f'nonce reset to: {self._signers[signer_in_use.address].nonce}',
+                )
+                raise Exception('nonce error, reset nonce')
+            else:
+                raise Exception('other error, still retrying')
+        else:
+            return tx_hash
+     
     async def _on_rabbitmq_message(self, message: IncomingMessage):
         """
         Callback function that is called when a message is received from RabbitMQ.
@@ -465,6 +553,18 @@ class GenericAsyncWorker(multiprocessing.Process):
                 self._logger,
             ),
         )
+
+        self._w3 = self._anchor_rpc_helper._nodes[0]['web3_client_async']
+        # web3 v5 camel case helpers
+        self._signers = {
+            Web3.toChecksumAddress(signer.address): SnapshotSubmissionSignerState(
+                address=signer.address,
+                private_key=signer.private_key,
+                nonce=await self._w3.eth.get_transaction_count(signer.address),
+                nonce_lock=aiorwlock.RWLock(fast=True),
+            )  for signer in settings.snapshot_submissions.signers
+        }
+        self._logger.info('Loaded signers with nonces: {}', {k: v.nonce for k, v in self._signers.items()})
 
     async def _init_httpx_client(self):
         """
@@ -526,6 +626,21 @@ class GenericAsyncWorker(multiprocessing.Process):
         else:
             self._epoch_size = epoch_size[0]
             self._logger.debug('Set epoch size to {}', self._epoch_size)
+
+        # get chain ID
+        try:
+            chain_id = await self._anchor_rpc_helper.web3_call(
+                [self._protocol_state_contract.functions.SOURCE_CHAIN_ID()],
+                redis_conn=self._redis_conn,
+            )
+        except Exception as e:
+            self._logger.exception(
+                'Exception in querying protocol state for chain ID: {}',
+                e,
+            )
+        else:
+            self._chain_id = chain_id[0]
+            self._logger.debug('Set chain ID to {}', self._chain_id)
 
     async def init(self):
         """

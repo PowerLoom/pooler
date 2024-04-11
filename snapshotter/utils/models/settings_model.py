@@ -141,11 +141,27 @@ class Web3Storage(BaseModel):
     # rate_limit: Optional[IPFSWriterRateLimit] = None
 
 
+class RelayerService(BaseModel):
+    host: str
+    port: str
+    keepalive_secs: int
+
+
+class SignerConfig(BaseModel):
+    address: str
+    private_key: str
+
+class TxSubmissionConfig(BaseModel):
+    enabled: bool = True
+    # relayer: RelayerService
+    signers: List[SignerConfig] = []
+
 class Settings(BaseModel):
     namespace: str
     core_api: CoreAPI
     instance_id: str
     rpc: RPCConfigFull
+    snapshot_submissions: TxSubmissionConfig
     rlimit: RLimit
     rabbitmq: RabbitMQ
     reporting: ReportingConfig
