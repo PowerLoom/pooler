@@ -36,7 +36,7 @@ from redis import asyncio as aioredis
 from tenacity import retry, retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
-from web3 import Web3, AsyncHTTPProvider, AsyncWeb3
+from web3 import Web3
 from snapshotter.settings.config import settings
 from snapshotter.utils.callback_helpers import get_rabbitmq_channel
 from snapshotter.utils.callback_helpers import get_rabbitmq_robust_connection_async
