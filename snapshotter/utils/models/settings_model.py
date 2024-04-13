@@ -110,7 +110,7 @@ class Logs(BaseModel):
 class EventContract(BaseModel):
     address: str
     abi: str
-
+    deadline_buffer: int
 
 class CallbackWorkerConfig(BaseModel):
     num_snapshot_workers: int
@@ -158,6 +158,7 @@ class TxSubmissionConfig(BaseModel):
 
 class Settings(BaseModel):
     namespace: str
+    signer_private_key: str
     core_api: CoreAPI
     instance_id: str
     rpc: RPCConfigFull

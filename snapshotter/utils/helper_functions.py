@@ -201,13 +201,7 @@ def aiorwlock_aqcuire_release(fn):
         kwargs.update(signer_in_use=signer)
         self._logger.info('Using signer {} for submission task: {}. AcquirED lock with signer filled in kwargs', signer.address)
         try:
-            tx_hash = await fn(self, *args, **kwargs)
-            signer.nonce += 1
-            try:
-                signer.nonce_lock.writer_lock.release()
-            except Exception as e:
-                logger.error('Error releasing rwlock: {}. But moving on regardless... | Context: '
-                             'Using signer {} for submission task: {}. Acquiring lock', e, signer.address, kwargs)
+            tx_hash = await fn(self, *args, **kwargs)  # including the retry calls
         except Exception as e:
             # this is ultimately reraised by tenacity once the retries are exhausted
             # nothing to do here
@@ -232,5 +226,12 @@ def aiorwlock_aqcuire_release(fn):
                         )
                 except:
                     pass
-
+                signer.nonce += 1
+            self._logger.info('Using signer {} for submission task: {}. Incremented nonce', signer.address, kwargs, signer.nonce)
+        finally:
+            try:
+                signer.nonce_lock.writer_lock.release()
+            except Exception as e:
+                logger.error('Error releasing rwlock: {}. But moving on regardless... | Context: '
+                             'Using signer {} for submission task: {}. Acquiring lock', e, signer.address, kwargs)
     return wrapper

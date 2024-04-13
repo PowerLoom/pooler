@@ -1,7 +1,7 @@
 import asyncio
 import json
 import multiprocessing
-import random
+import sha3
 import resource
 import time
 from functools import partial
@@ -12,14 +12,19 @@ from signal import SIGTERM
 from typing import Dict, Optional
 from typing import Union
 from uuid import uuid4
-
+from eip712_structs import EIP712Struct
+from eip712_structs import make_domain
+from eip712_structs import String
+from eip712_structs import Uint
+from eth_utils.encoding import big_endian_to_int
 import aiorwlock
 import httpx
 import tenacity
+from coincurve import PrivateKey
 from aio_pika import IncomingMessage
 from aio_pika import Message
 from aio_pika.pool import Pool
-from eth_utils import keccak
+from eth_utils.crypto import keccak
 from httpx import AsyncClient
 from httpx import AsyncHTTPTransport
 from httpx import Limits
@@ -40,7 +45,7 @@ from snapshotter.utils.data_utils import get_source_chain_id
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.helper_functions import aiorwlock_aqcuire_release
-from snapshotter.utils.models.data_models import SnapshotSubmissionSignerState, SnapshotterIssue, TxnPayload
+from snapshotter.utils.models.data_models import SignRequest, SnapshotSubmissionSignerState, SnapshotterIssue, TxnPayload
 from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
@@ -55,6 +60,14 @@ from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import submitted_unfinalized_snapshot_cids
 from snapshotter.utils.rpc import RpcHelper
 from snapshotter.utils.transaction_utils import write_transaction
+
+
+class Request(EIP712Struct):
+    slotId = Uint()
+    deadline = Uint()
+    snapshotCid = String()
+    epochId = Uint()
+    projectId = String()
 
 
 def web3_storage_retry_state_callback(retry_state: tenacity.RetryCallState):
@@ -81,15 +94,23 @@ def submit_snapshot_retry_callback(retry_state: tenacity.RetryCallState):
     else:
         if retry_state.outcome.failed:
             if 'nonce' in str(retry_state.outcome.exception()):
-                # reassing the signer object to ensure nonce is reset
-                retry_state.kwargs['signer_in_use'] = retry_state.args[0]._signers[retry_state.kwargs['signer_in_use'].address]  # basically self._signers[signer_in_use.address]
+                # reassigning the signer object to ensure nonce is reset
+                # basically retry_state.args[0] accesses the self object. 
+                # self._signers[signer_in_use.address]
+                retry_state.kwargs['signer_in_use'] = retry_state.args[0]._signers[retry_state.kwargs['signer_in_use'].address]  
                 logger.warning(
                     'Tx signing worker attempt number {} result {} failed with nonce exception | Reset nonce and reassigned signer object: {} with nonce {} | Txn payload: {}',
                     retry_state.attempt_number, retry_state.outcome, retry_state.kwargs["signer_in_use"].address, 
                     retry_state.kwargs['signer_in_use'].nonce, retry_state.kwargs["txn_payload"]
                 )
+            else:
+                logger.warning(
+                    'Tx signing worker attempt number {} result {} failed with exception {} | Txn payload: {}', 
+                    retry_state.attempt_number, retry_state.outcome, retry_state.outcome.exception(), retry_state.kwargs["txn_payload"]
+                )
         logger.warning(
-            'Tx signing worker {} attempt number {} result {} | Txn payload: {}', retry_state.kwargs['signer_in_use'].address, retry_state.attempt_number, retry_state.outcome,
+            'Tx signing worker {} attempt number {} result {} | Txn payload: {}', 
+            retry_state.kwargs['signer_in_use'].address, retry_state.attempt_number, retry_state.outcome,
             retry_state.kwargs['txn_payload'],
 
         )
@@ -145,7 +166,7 @@ class GenericAsyncWorker(multiprocessing.Process):
 
         self._rate_limiting_lua_scripts = None
 
-        self.protocol_state_contract_address = settings.protocol_state.address
+        self.protocol_state_contract_address = Web3.toChecksumAddress(settings.protocol_state.address)
         self._commit_payload_exchange = (
             f'{settings.rabbitmq.setup.commit_payload.exchange}:{settings.namespace}'
         )
@@ -154,6 +175,11 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._commit_payload_routing_key = (
             f'powerloom-backend-commit-payload:{settings.namespace}:{settings.instance_id}.Data'
         )
+        self._keccak_hash = lambda x: sha3.keccak_256(x).digest()
+        self._private_key = settings.signer_private_key
+        if self._private_key.startswith('0x'):
+            self._private_key = self._private_key[2:]
+        self._identity_private_key = PrivateKey.from_hex(settings.signer_private_key)
         self._initialized = False
 
     def _signal_handler(self, signum, frame):
@@ -218,6 +244,29 @@ class GenericAsyncWorker(multiprocessing.Process):
         """
         snapshot_cid = await _ipfs_writer_client.add_bytes(snapshot)
         return snapshot_cid
+
+    
+    def generate_signature(self, snapshot_cid, epoch_id, project_id):
+        current_block = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.block_number
+
+        deadline = current_block + settings.protocol_state.deadline_buffer
+        request = Request(
+            slotId=0,
+            deadline=deadline,
+            snapshotCid=snapshot_cid,
+            epochId=epoch_id,
+            projectId=project_id,
+        )
+
+        signable_bytes = request.signable_bytes(self._domain_separator)
+        signature = self._identity_private_key.sign_recoverable(signable_bytes, hasher=self._keccak_hash)
+        v = signature[64] + 27
+        r = big_endian_to_int(signature[0:32])
+        s = big_endian_to_int(signature[32:64])
+
+        final_sig = r.to_bytes(32, 'big') + s.to_bytes(32, 'big') + v.to_bytes(1, 'big')
+        request_ = {'slotId': 0, 'deadline': deadline, 'snapshotCid': snapshot_cid, 'epochId': epoch_id, 'projectId': project_id}
+        return request_, final_sig
 
     async def _commit_payload(
             self,
@@ -324,12 +373,33 @@ class GenericAsyncWorker(multiprocessing.Process):
             except:
                 pass
             # send to relayer dispatch queue
-            await self._send_payload_commit_service_queue(
-                task_type=task_type,
-                project_id=project_id,
-                epoch=epoch,
-                snapshot_cid=snapshot_cid,
-            )
+            if not settings.snapshot_submissions.enabled:
+                await self._send_payload_commit_service_queue(
+                    task_type=task_type,
+                    project_id=project_id,
+                    epoch=epoch,
+                    snapshot_cid=snapshot_cid,
+                )
+            else:
+                cur_block = await self._w3.eth.block_number
+                _, sig = self.generate_signature(snapshot_cid, epoch.epochId, project_id)
+                await self.submit_snapshot(
+                    TxnPayload(
+                        slotId=0,
+                        snapshotCid=snapshot_cid,
+                        epochId=epoch.epochId,
+                        projectId=project_id,
+                        request=SignRequest(
+                            slotId=0,
+                            deadline=settings.protocol_state.deadline_buffer + cur_block,
+                            snapshotCid=snapshot_cid,
+                            epochId=epoch.epochId,
+                            projectId=project_id,
+                        ),
+                        signature='0x' + str(sig.hex()),
+                        contractAddress=settings.protocol_state.address,
+                    )
+                )
 
         # upload to web3 storage
         if storage_flag:
@@ -475,7 +545,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         Submit Snapshot
         """
         if signer_in_use is None:
-            self._logger.info('No signer passed to submit_snapshot, quitting')
+            self._logger.warning('No signer passed to submit_snapshot, quitting')
             return None
         _nonce = signer_in_use.nonce
         try:
@@ -558,13 +628,17 @@ class GenericAsyncWorker(multiprocessing.Process):
         # web3 v5 camel case helpers
         self._signers = {
             Web3.toChecksumAddress(signer.address): SnapshotSubmissionSignerState(
-                address=signer.address,
+                address=Web3.toChecksumAddress(signer.address),
                 private_key=signer.private_key,
                 nonce=await self._w3.eth.get_transaction_count(signer.address),
                 nonce_lock=aiorwlock.RWLock(fast=True),
             )  for signer in settings.snapshot_submissions.signers
         }
         self._logger.info('Loaded signers with nonces: {}', {k: v.nonce for k, v in self._signers.items()})
+        self._domain_separator = make_domain(
+            name='PowerloomProtocolContract', version='0.1', chainId=self._chain_id,
+            verifyingContract=self.protocol_state_contract_address,
+        )
 
     async def _init_httpx_client(self):
         """
