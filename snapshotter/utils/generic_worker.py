@@ -97,8 +97,8 @@ def submit_snapshot_retry_callback(retry_state: tenacity.RetryCallState):
             if 'nonce' in str(retry_state.outcome.exception()):
                 # reassigning the signer object to ensure nonce is reset
                 # basically retry_state.args[0] accesses the self object. 
-                # self._signers[signer_in_use.address]
-                retry_state.kwargs['signer_in_use'] = retry_state.args[0]._signers[retry_state.kwargs['signer_in_use'].address]  
+                # self._signer is the signer object
+                retry_state.kwargs['signer_in_use'] = retry_state.args[0]._signer  
                 logger.warning(
                     'Tx signing worker attempt number {} result {} failed with nonce exception | Reset nonce and reassigned signer object: {} with nonce {} | Txn payload: {}',
                     retry_state.attempt_number, retry_state.outcome, retry_state.kwargs["signer_in_use"].address, 
@@ -147,9 +147,12 @@ class GenericAsyncWorker(multiprocessing.Process):
     _chain_id: int
     _epoch_size: int
     _source_chain_block_time: int
-    _signers: Dict[str, SnapshotSubmissionSignerState]
+    _signer: SnapshotSubmissionSignerState
+    _signer_private_key: str
+    _signer_nonce: int
+    _signer_address: str
     
-    def __init__(self, name, **kwargs):
+    def __init__(self, name, signer_idx, **kwargs):
         """
         Initializes a GenericAsyncWorker instance.
 
@@ -164,7 +167,8 @@ class GenericAsyncWorker(multiprocessing.Process):
         super(GenericAsyncWorker, self).__init__(name=name, **kwargs)
         self._protocol_state_contract = None
         self._qos = 1
-
+        # this acts as the index of the signer to use from the list in settings for self submission
+        self._signer_index = signer_idx
         self._rate_limiting_lua_scripts = None
 
         self.protocol_state_contract_address = Web3.toChecksumAddress(settings.protocol_state.address)
@@ -580,11 +584,11 @@ class GenericAsyncWorker(multiprocessing.Process):
             if 'nonce' in str(e):
                 # sleep for 10 seconds and reset nonce
                 await asyncio.sleep(10)
-                self._signers[signer_in_use.address].nonce = await self._w3.eth.get_transaction_count(
+                self._signer.nonce = await self._w3.eth.get_transaction_count(
                     signer_in_use.address,
                 )
                 self._logger.info(
-                    f'nonce reset to: {self._signers[signer_in_use.address].nonce}',
+                    f'nonce for {self._signer.address} reset to: {self._signer.nonce}',
                 )
                 raise Exception('nonce error, reset nonce')
             else:
@@ -631,15 +635,16 @@ class GenericAsyncWorker(multiprocessing.Process):
 
         self._w3 = self._anchor_rpc_helper._nodes[0]['web3_client_async']
         # web3 v5 camel case helpers
-        self._signers = {
-            Web3.toChecksumAddress(signer.address): SnapshotSubmissionSignerState(
-                address=Web3.toChecksumAddress(signer.address),
-                private_key=signer.private_key,
-                nonce=await self._w3.eth.get_transaction_count(signer.address),
-                nonce_lock=aiorwlock.RWLock(fast=True),
-            )  for signer in settings.snapshot_submissions.signers
-        }
-        self._logger.info('Loaded signers with nonces: {}', {k: v.nonce for k, v in self._signers.items()})
+        self._signer_address = Web3.toChecksumAddress(settings.snapshot_submissions.signers[self._signer_index].address)
+        self._signer_nonce = await self._w3.eth.get_transaction_count(self._signer_address)
+        self._signer_private_key = settings.snapshot_submissions.signers[self._signer_index].private_key
+        self._signer = SnapshotSubmissionSignerState(
+            address=self._signer_address,
+            private_key=self._signer_private_key,
+            nonce=self._signer_nonce,
+            nonce_lock=aiorwlock.RWLock(fast=True),
+        )
+        self._logger.debug('Picked signer {} at index {} and nonce {} for self submission', self._signer_address, self._signer_index, self._signer_nonce)
         self._chain_id = await self._w3.eth.chain_id
         self._logger.debug('Set anchor chain ID to {}', self._chain_id)
         self._domain_separator = make_domain(
