@@ -176,13 +176,13 @@ class RpcHelper(object):
         If a node already has a web3 client, it is skipped.
         """
         for node in self._nodes:
-            if node['web3_client_async'] is not None:
-                continue
             node['web3_client_async'] = Web3(
                 Web3.AsyncHTTPProvider(node['rpc_url']),
                 modules={'eth': (AsyncEth,)},
                 middlewares=[],
             )
+            self._logger.info('Loaded async web3 provider for node {}: {}', node['rpc_url'], node['web3_client_async'])
+        self._logger.info('Post async web3 provider loading: {}', self._nodes)
 
     async def init(self, redis_conn):
         """
@@ -196,24 +196,37 @@ class RpcHelper(object):
         Returns:
             None
         """
-        if not self._sync_nodes_initialized:
-            self._load_web3_providers_and_rate_limits()
-            self._sync_nodes_initialized = True
-        await self._load_rate_limit_shas(redis_conn)
-        await self._init_http_clients()
-        await self._load_async_web3_providers()
-        self._initialized = True
+        if not self._initialized:
+            if not self._sync_nodes_initialized:
+                self._logger.debug('Sync nodes not initialized, initializing...')
+                self.sync_init()
+            if self._nodes:
+                await self._load_rate_limit_shas(redis_conn)
+                await self._init_http_clients()
+                # load async web3 providers
+                for node in self._nodes:
+                    node['web3_client_async'] = Web3(
+                        Web3.AsyncHTTPProvider(node['rpc_url']),
+                        modules={'eth': (AsyncEth,)},
+                        middlewares=[],
+                    )
+                    self._logger.info('Loaded async web3 provider for node {}: {}', node['rpc_url'], node['web3_client_async'])
+                self._logger.info('Post async web3 provider loading: {}', self._nodes)
+                self._initialized = True
+                self._logger.info('RPC client initialized')
+            else:
+                self._logger.error('No full nor archive nodes found in config')
 
-    def _load_web3_providers_and_rate_limits(self):
-        """
-        Load web3 providers and rate limits based on the archive mode.
-        If archive mode is True, load archive nodes, otherwise load full nodes.
-        """
+    def sync_init(self):
+        if self._sync_nodes_initialized:
+            return
         if self._archive_mode:
-            nodes = self._rpc_settings.archive_nodes
+                nodes = self._rpc_settings.archive_nodes
         else:
             nodes = self._rpc_settings.full_nodes
-
+        if not nodes:
+            self._logger.error('No full nor archive nodes found in config')
+            raise Exception('No full nor archive nodes found in config')
         for node in nodes:
             try:
                 self._nodes.append(
@@ -231,9 +244,10 @@ class RpcHelper(object):
                         f' err_msg: {exc}'
                     ),
                 )
-
-        if self._nodes:
-            self._node_count = len(self._nodes)
+            else:
+                self._logger.info('Loaded blank node settings for node {}', node.url)          
+        self._node_count = len(self._nodes)
+        self._sync_nodes_initialized = True
 
     def get_current_node(self):
         """
@@ -245,9 +259,10 @@ class RpcHelper(object):
         Returns:
             The current node to use for RPC calls.
         """
-        if not self._sync_nodes_initialized:
-            self._load_web3_providers_and_rate_limits()
-            self._sync_nodes_initialized = True
+        # NOTE: the following should not do an implicit initialization of the nodes. too much of hidden logic
+        # if not self._sync_nodes_initialized:
+        #     self._load_web3_providers_and_rate_limits()
+        #     self._sync_nodes_initialized = True
 
         if self._node_count == 0:
             raise Exception('No full nodes available')
@@ -295,8 +310,8 @@ class RpcHelper(object):
             before_sleep=self._on_node_exception,
         )
         async def f(node_idx):
-            if not self._initialized:
-                await self.init(redis_conn=redis_conn)
+            # if not self._initialized:
+            #     await self.init(redis_conn=redis_conn)
             node = self._nodes[node_idx]
             rpc_url = node.get('rpc_url')
             web3_provider = node['web3_client_async']
@@ -473,8 +488,8 @@ class RpcHelper(object):
             before_sleep=self._on_node_exception,
         )
         async def f(node_idx):
-            if not self._initialized:
-                await self.init(redis_conn=redis_conn)
+            # if not self._initialized:
+            #     await self.init(redis_conn=redis_conn)
             node = self._nodes[node_idx]
             rpc_url = node.get('rpc_url')
 
@@ -589,8 +604,8 @@ class RpcHelper(object):
         Returns:
             list: List of responses from the contract function calls.
         """
-        if not self._initialized:
-            await self.init(redis_conn)
+        # if not self._initialized:
+        #     await self.init(redis_conn)
 
         try:
             web3_tasks = [
@@ -734,8 +749,8 @@ class RpcHelper(object):
             list: A list of Ethereum balances for each block in the range. If a balance could not be retrieved for a block,
             None is returned in its place.
         """
-        if not self._initialized:
-            await self.init(redis_conn)
+        # if not self._initialized:
+        #     await self.init(redis_conn)
 
         rpc_query = []
         request_id = 1
@@ -793,8 +808,8 @@ class RpcHelper(object):
         Returns:
             list: A list of decoded results from the function call.
         """
-        if not self._initialized:
-            await self.init(redis_conn)
+        # if not self._initialized:
+        #     await self.init(redis_conn)
 
         if params is None:
             params = []
@@ -868,8 +883,8 @@ class RpcHelper(object):
         Returns:
             list: A list raw HexBytes data results from the function call.
         """
-        if not self._initialized:
-            await self.init(redis_conn)
+        # if not self._initialized:
+        #     await self.init(redis_conn)
 
         if params is None:
             params = []
@@ -923,8 +938,8 @@ class RpcHelper(object):
         Returns:
             dict: A dictionary containing the response data from the JSON-RPC call.
         """
-        if not self._initialized:
-            await self.init(redis_conn)
+        # if not self._initialized:
+        #     await self.init(redis_conn)
 
         rpc_query = []
 
@@ -963,8 +978,8 @@ class RpcHelper(object):
         Returns:
             List[Dict]: A list of dictionaries representing the decoded events logs.
         """
-        if not self._initialized:
-            await self.init(redis_conn)
+        # if not self._initialized:
+        #     await self.init(redis_conn)
 
         @retry(
             reraise=True,

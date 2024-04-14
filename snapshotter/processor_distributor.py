@@ -180,9 +180,11 @@ class ProcessorDistributor(multiprocessing.Process):
         """
         Initializes the RpcHelper instance if it is not already initialized.
         """
-        if not self._rpc_helper:
-            self._rpc_helper = RpcHelper()
-            self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
+        # if not self._rpc_helper:
+        self._rpc_helper = RpcHelper()
+        await self._rpc_helper.init(redis_conn=self._redis_conn)
+        self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
+        await self._anchor_rpc_helper.init(redis_conn=self._redis_conn)
 
     async def _init_rabbitmq_connection(self):
         """
@@ -1169,7 +1171,7 @@ class ProcessorDistributor(multiprocessing.Process):
         self._anchor_rpc_helper = RpcHelper(
             rpc_settings=settings.anchor_chain_rpc,
         )
-        self._anchor_rpc_helper._load_web3_providers_and_rate_limits()
+        self._anchor_rpc_helper.sync_init()
         protocol_abi = read_json_file(settings.protocol_state.abi, self._logger)
         self._protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
             address=to_checksum_address(

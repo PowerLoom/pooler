@@ -1,6 +1,7 @@
 import asyncio
 import json
 import multiprocessing
+import sys
 import sha3
 import resource
 import time
@@ -574,7 +575,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             )
 
         except Exception as e:
-            self._logger.error(f'Exception: {e}')
+            self._logger.opt(exception=True).error(f'Exception: {e}')
 
             if 'nonce' in str(e):
                 # sleep for 10 seconds and reset nonce
@@ -612,8 +613,12 @@ class GenericAsyncWorker(multiprocessing.Process):
         Initializes the RpcHelper objects for the worker and anchor chain, and sets up the protocol state contract.
         """
         self._rpc_helper = RpcHelper(rpc_settings=settings.rpc)
+        await self._rpc_helper.init(redis_conn=self._redis_conn)
         self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
-
+        await self._anchor_rpc_helper.init(redis_conn=self._redis_conn)
+        await self._anchor_rpc_helper._load_async_web3_providers()
+        self._logger.info('Anchor chain RPC helper nodes: {}', self._anchor_rpc_helper._nodes)
+        # sys.exit(1)
         self._protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
             address=Web3.toChecksumAddress(
                 self.protocol_state_contract_address,
@@ -635,6 +640,8 @@ class GenericAsyncWorker(multiprocessing.Process):
             )  for signer in settings.snapshot_submissions.signers
         }
         self._logger.info('Loaded signers with nonces: {}', {k: v.nonce for k, v in self._signers.items()})
+        self._chain_id = await self._w3.eth.chain_id
+        self._logger.debug('Set anchor chain ID to {}', self._chain_id)
         self._domain_separator = make_domain(
             name='PowerloomProtocolContract', version='0.1', chainId=self._chain_id,
             verifyingContract=self.protocol_state_contract_address,
@@ -700,21 +707,6 @@ class GenericAsyncWorker(multiprocessing.Process):
         else:
             self._epoch_size = epoch_size[0]
             self._logger.debug('Set epoch size to {}', self._epoch_size)
-
-        # get chain ID
-        try:
-            chain_id = await self._anchor_rpc_helper.web3_call(
-                [self._protocol_state_contract.functions.SOURCE_CHAIN_ID()],
-                redis_conn=self._redis_conn,
-            )
-        except Exception as e:
-            self._logger.exception(
-                'Exception in querying protocol state for chain ID: {}',
-                e,
-            )
-        else:
-            self._chain_id = chain_id[0]
-            self._logger.debug('Set chain ID to {}', self._chain_id)
 
     async def init(self):
         """

@@ -123,6 +123,7 @@ class EventDetectorProcess(multiprocessing.Process):
         self._last_processed_block = None
 
         self.rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
+        self.rpc_helper.sync_init()
         self.contract_abi = read_json_file(
             settings.protocol_state.abi,
             self._logger,
@@ -382,6 +383,12 @@ class EventDetectorProcess(multiprocessing.Process):
             )
             await asyncio.sleep(settings.rpc.polling_interval)
 
+    async def _init_rpc(self):
+        """
+        Initializes the RpcHelper instance.
+        """
+        await self.rpc_helper.init(redis_conn=self._redis_conn)
+    
     @rabbitmq_and_redis_cleanup
     def run(self):
         """
@@ -407,6 +414,9 @@ class EventDetectorProcess(multiprocessing.Process):
 
         self.ev_loop.run_until_complete(
             self._init_redis_pool(),
+        )
+        self.ev_loop.run_until_complete(
+            self._init_rpc(),
         )
         self._rabbitmq_thread.start()
 

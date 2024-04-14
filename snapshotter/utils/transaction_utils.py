@@ -1,3 +1,4 @@
+from web3 import Web3
 from snapshotter.settings.config import settings
 
 
@@ -18,8 +19,10 @@ async def write_transaction(w3, chain_id, address, private_key, contract, functi
 
     # Create the function
     func = getattr(contract.functions, function)
+    # web3py v5: Returns a transaction dictionary. 
+    # This transaction dictionary can then be sent using send_transaction().
     # Get the transaction
-    transaction = await func(*args).build_transaction({
+    transaction = func(*args).build_transaction({
         'from': address,
         'gas': 2000000,
         'gasPrice': w3.to_wei('0.0001', 'gwei'),
@@ -28,8 +31,9 @@ async def write_transaction(w3, chain_id, address, private_key, contract, functi
     })
 
     # Sign the transaction
+    # ref: https://web3py.readthedocs.io/en/v5/web3.eth.html#web3.eth.Eth.send_raw_transaction
     signed_transaction = w3.eth.account.sign_transaction(
-        transaction, private_key=private_key,
+        transaction, private_key
     )
     # Send the transaction
     tx_hash = await w3.eth.send_raw_transaction(signed_transaction.rawTransaction)
