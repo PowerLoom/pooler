@@ -22,7 +22,6 @@ class CoreAPI(BaseModel):
 
 class RPCNodeConfig(BaseModel):
     url: str
-    rate_limit: str
 
 
 class ConnectionLimits(BaseModel):
@@ -43,6 +42,7 @@ class RPCConfigBase(BaseModel):
 class RPCConfigFull(RPCConfigBase):
     skip_epoch_threshold_blocks: int
     polling_interval: int
+    semaphore_value: int
 
 
 class RLimit(BaseModel):
@@ -112,6 +112,7 @@ class EventContract(BaseModel):
     abi: str
     deadline_buffer: int
 
+
 class CallbackWorkerConfig(BaseModel):
     num_snapshot_workers: int
     num_aggregation_workers: int
@@ -151,10 +152,12 @@ class SignerConfig(BaseModel):
     address: str
     private_key: str
 
+
 class TxSubmissionConfig(BaseModel):
     enabled: bool = True
     # relayer: RelayerService
     signers: List[SignerConfig] = []
+
 
 class Settings(BaseModel):
     namespace: str
