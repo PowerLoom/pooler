@@ -196,7 +196,7 @@ def aiorwlock_aqcuire_release(fn):
         self._logger.info('Using signer {} for submission task. Acquiring lock', self._signer.address)
         await self._signer.nonce_lock.writer_lock.acquire()
         kwargs.update(signer_in_use=self._signer)
-        self._logger.info('Using signer {} for submission task. AcquirED lock with signer filled in kwargs', self._signer.address)
+        self._logger.info('Using signer {} for submission task. Acquired lock with signer filled in kwargs', self._signer.address)
         # self._logger.debug('Wrapping fn: {}', fn.__name__)
         try:
             tx_hash = await fn(self, *args, **kwargs)  # including the retry calls
