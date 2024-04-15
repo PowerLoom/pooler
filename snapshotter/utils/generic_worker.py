@@ -250,7 +250,6 @@ class GenericAsyncWorker(multiprocessing.Process):
         snapshot_cid = await _ipfs_writer_client.add_bytes(snapshot)
         return snapshot_cid
 
-    
     def generate_signature(self, snapshot_cid, epoch_id, project_id):
         current_block = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.block_number
 
@@ -386,20 +385,19 @@ class GenericAsyncWorker(multiprocessing.Process):
                     snapshot_cid=snapshot_cid,
                 )
             else:
-                cur_block = await self._w3.eth.block_number
-                _, sig = self.generate_signature(snapshot_cid, epoch.epochId, project_id)
+                request_, sig = self.generate_signature(snapshot_cid, epoch.epochId, project_id)
                 await self.submit_snapshot(
                     TxnPayload(
-                        slotId=0,
+                        slotId=request_['slotId'],
                         snapshotCid=snapshot_cid,
                         epochId=epoch.epochId,
                         projectId=project_id,
                         request=SignRequest(
-                            slotId=0,
-                            deadline=settings.protocol_state.deadline_buffer + cur_block,
-                            snapshotCid=snapshot_cid,
-                            epochId=epoch.epochId,
-                            projectId=project_id,
+                            slotId=request_['slotId'],
+                            deadline=request_['deadline'],
+                            snapshotCid=request_['snapshotCid'],
+                            epochId=request_['epochId'],
+                            projectId=request_['projectId'],
                         ),
                         signature='0x' + str(sig.hex()),
                         contractAddress=settings.protocol_state.address,
