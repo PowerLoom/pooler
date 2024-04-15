@@ -395,7 +395,7 @@ class RpcHelper(object):
                     (
                         'Error while making web3 batch call'
                     ),
-                    err=lambda: str(exc),
+                    err=str(exc),
                 )
                 raise exc
 
@@ -578,8 +578,8 @@ class RpcHelper(object):
             else:
                 if 'error' in response_data:
                     if type(response_data['error']) == dict and 'message' in response_data['error'] and 'missing trie node' in response_data['error']['message']:
-                            # do not raise exception for missing trie node error, further retries will only be wasteful
-                            trie_node_exc = True
+                        # do not raise exception for missing trie node error, further retries will only be wasteful
+                        trie_node_exc = True
                     response_exceptions.append(response_data['error'])
                 else:   # if response is not a list, it is a dict
                     return_response_data = response_data                
