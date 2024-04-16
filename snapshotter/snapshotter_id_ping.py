@@ -21,6 +21,7 @@ async def main():
     await aioredis_pool.populate()
     redis_conn = aioredis_pool._aioredis_pool
     anchor_rpc = RpcHelper(settings.anchor_chain_rpc)
+    await anchor_rpc.init(redis_conn=redis_conn)
     protocol_abi = read_json_file(settings.protocol_state.abi)
     protocol_state_contract = anchor_rpc.get_current_node()['web3_client'].eth.contract(
         address=Web3.toChecksumAddress(

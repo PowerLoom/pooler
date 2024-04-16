@@ -6,6 +6,7 @@ from typing import List
 from typing import Optional
 from typing import Union
 
+import aiorwlock
 from pydantic import BaseModel
 
 from snapshotter.utils.callback_helpers import GenericPreloader
@@ -24,6 +25,14 @@ class PreloaderAsyncFutureDetails(BaseModel):
         arbitrary_types_allowed = True
 
 
+class SnapshotSubmissionSignerState(BaseModel):
+    address: str
+    private_key: str
+    nonce: int
+    nonce_lock: aiorwlock.RWLock
+    class Config:
+        arbitrary_types_allowed = True
+
 class SnapshotterReportState(Enum):
     MISSED_SNAPSHOT = 'MISSED_SNAPSHOT'
     SUBMITTED_INCORRECT_SNAPSHOT = 'SUBMITTED_INCORRECT_SNAPSHOT'
@@ -31,6 +40,7 @@ class SnapshotterReportState(Enum):
     CRASHED_CHILD_WORKER = 'CRASHED_CHILD_WORKER'
     CRASHED_REPORTER_THREAD = 'CRASHED_REPORTER_THREAD'
     UNHEALTHY_EPOCH_PROCESSING = 'UNHEALTHY_EPOCH_PROCESSING'
+    ONLY_FINALIZED_SNAPSHOT_RECIEVED = 'ONLY_FINALIZED_SNAPSHOT_RECIEVED'
 
 
 class SnapshotterStates(Enum):
@@ -194,3 +204,30 @@ class UnfinalizedSnapshot(BaseModel):
 class TaskStatusRequest(BaseModel):
     task_type: str
     wallet_address: str
+
+
+class GenericTxnIssue(BaseModel):
+    accountAddress: str
+    issueType: str
+    projectId: Optional[str]
+    epochBegin: Optional[str]
+    epochId: Optional[str]
+    extra: Optional[str] = ''
+
+
+class SignRequest(BaseModel):
+    slotId: int
+    deadline: int
+    snapshotCid: str
+    epochId: int
+    projectId: str
+
+
+class TxnPayload(BaseModel):
+    slotId: int
+    projectId: str
+    snapshotCid: str
+    epochId: int
+    request: SignRequest
+    signature: str
+    contractAddress: str
