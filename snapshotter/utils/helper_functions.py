@@ -212,9 +212,12 @@ def aiorwlock_aqcuire_release(fn):
             # nothing to do here
             pass
         else:
+            if not tx_hash:
+                self._logger.info('tx_hash is None for submission task')
+                self.pending_nonces.put(self._signer.nonce)
             if tx_hash is not None:
                 try:
-                    receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=15)
+                    receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash)
                     if receipt['status'] == 0:
                         self._logger.info(
                             'tx_hash: {} failed to gather success receipt after 120 seconds, receipt: {} | '
@@ -231,6 +234,7 @@ def aiorwlock_aqcuire_release(fn):
                         'Context: Using signer {} for submission task',
                         tx_hash, e, self._signer.address
                     )
+                    self.pending_nonces.put(self._signer.nonce)
         finally:
             try:
                 self._signer.nonce_lock.writer_lock.release()

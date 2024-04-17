@@ -61,6 +61,7 @@ from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import submitted_unfinalized_snapshot_cids
 from snapshotter.utils.rpc import RpcHelper
 from snapshotter.utils.transaction_utils import write_transaction
+from asyncio import Queue
 
 
 class Request(EIP712Struct):
@@ -170,6 +171,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         # this acts as the index of the signer to use from the list in settings for self submission
         self._signer_index = signer_idx
         self._rate_limiting_lua_scripts = None
+        self.pending_nonces = Queue()
 
         self.protocol_state_contract_address = Web3.toChecksumAddress(settings.protocol_state.address)
         self._commit_payload_exchange = (
@@ -550,7 +552,13 @@ class GenericAsyncWorker(multiprocessing.Process):
         if signer_in_use is None:
             self._logger.warning('No signer passed to submit_snapshot, quitting')
             return None
-        _nonce = signer_in_use.nonce
+        if self.pending_nonces.empty():
+            _nonce = signer_in_use.nonce
+        else:
+            try:
+                _nonce = self.pending_nonces.get_nowait()
+            except asyncio.QueueEmpty:
+                _nonce = signer_in_use.nonce
         try:
             tx_hash = await write_transaction(
                 self._w3,
