@@ -164,8 +164,9 @@ async def get_current_epoch(
 
     try:
         [current_epoch_data] = await request.app.state.anchor_rpc_helper.web3_call(
-            [request.app.state.protocol_state_contract.functions.currentEpoch()],
-            redis_conn=request.app.state.redis_pool,
+            [('currentEpoch', [])],
+            request.app.state.protocol_state_contract.address,
+            request.app.state.protocol_state_contract.abi
         )
         current_epoch = {
             'begin': current_epoch_data[0],
@@ -220,8 +221,9 @@ async def get_epoch_info(
 
     try:
         [epoch_info_data] = await request.app.state.anchor_rpc_helper.web3_call(
-            [request.app.state.protocol_state_contract.functions.epochInfo(epoch_id)],
-            redis_conn=request.app.state.redis_pool,
+            [('epochInfo', [epoch_id])],
+            request.app.state.protocol_state_contract.address,
+            request.app.state.protocol_state_contract.abi
         )
         epoch_info = {
             'timestamp': epoch_info_data[0],
@@ -286,15 +288,17 @@ async def get_project_last_finalized_epoch_info(
             # find from contract
             epoch_finalized = False
             [cur_epoch] = await request.app.state.anchor_rpc_helper.web3_call(
-                [request.app.state.protocol_state_contract.functions.currentEpoch()],
-                redis_conn=request.app.state.redis_pool,
+                [('currentEpoch', [])],
+                request.app.state.protocol_state_contract.address,
+                request.app.state.protocol_state_contract.abi
             )
             epoch_id = int(cur_epoch[2])
             while not epoch_finalized and epoch_id >= 0:
                 # get finalization status
                 [epoch_finalized_contract] = await request.app.state.anchor_rpc_helper.web3_call(
-                    [request.app.state.protocol_state_contract.functions.snapshotStatus(project_id, epoch_id)],
-                    redis_conn=request.app.state.redis_pool,
+                    [('snapshotStatus', [project_id, epoch_id])],
+                    request.app.state.protocol_state_contract.address,
+                    request.app.state.protocol_state_contract.abi
                 )
                 if epoch_finalized_contract[0]:
                     epoch_finalized = True
@@ -314,8 +318,9 @@ async def get_project_last_finalized_epoch_info(
         else:
             project_last_finalized_epoch = int(project_last_finalized_epoch.decode('utf-8'))
         [epoch_info_data] = await request.app.state.anchor_rpc_helper.web3_call(
-            [request.app.state.protocol_state_contract.functions.epochInfo(project_last_finalized_epoch)],
-            redis_conn=request.app.state.redis_pool,
+            [('epochInfo', [project_last_finalized_epoch])],
+            request.app.state.protocol_state_contract.address,
+            request.app.state.protocol_state_contract.abi
         )
         epoch_info = {
             'epochId': project_last_finalized_epoch,
@@ -444,8 +449,11 @@ async def get_time_series_data_for_project_id(
     try:
 
         [epoch_info_data] = await request.app.state.anchor_rpc_helper.web3_call(
-            [request.app.state.protocol_state_contract.functions.epochInfo(epoch_id)],
-            redis_conn=request.app.state.redis_pool,
+            [
+                ('epochInfo', [epoch_id])
+            ],
+            request.app.state.protocol_state_contract.address,
+            request.app.state.protocol_state_contract.abi
         )
 
         end_timestamp = epoch_info_data[0]
@@ -721,8 +729,11 @@ async def get_snapshotter_epoch_processing_status(
     epoch_processing_final_report: List[SnapshotterEpochProcessingReportItem] = list()
     try:
         [current_epoch_data] = await request.app.state.anchor_rpc_helper.web3_call(
-            [request.app.state.protocol_state_contract.functions.currentEpoch()],
-            redis_conn=request.app.state.redis_pool,
+            [
+                ('currentEpoch', [])
+            ],
+            request.app.state.protocol_state_contract.address,
+            request.app.state.protocol_state_contract.abi
         )
         current_epoch = {
             'begin': current_epoch_data[0],
@@ -743,8 +754,11 @@ async def get_snapshotter_epoch_processing_status(
     current_epoch_id = current_epoch['epochId']
     if request.app.state.epoch_size == 0:
         [epoch_size] = await request.app.state.anchor_rpc_helper.web3_call(
-            [request.app.state.protocol_state_contract.functions.EPOCH_SIZE()],
-            redis_conn=request.app.state.redis_pool,
+            [
+                ('EPOCH_SIZE', [])
+            ],
+            request.app.state.protocol_state_contract.address,
+            request.app.state.protocol_state_contract.abi
         )
         rest_logger.info(f'Setting Epoch size: {epoch_size}')
         request.app.state.epoch_size = epoch_size
@@ -844,8 +858,11 @@ async def get_task_status_post(
         if last_finalized_epoch is None:
 
             [last_finalized_epoch] = await request.app.state.anchor_rpc_helper.web3_call(
-                [request.app.state.protocol_state_contract.functions.lastFinalizedSnapshot(project_id)],
-                redis_conn=request.app.state.redis_pool,
+                [
+                    ('lastFinalizedSnapshot', [project_id])
+                ],
+                request.app.state.protocol_state_contract.address,
+                request.app.state.protocol_state_contract.abi
             )
             # cache it in redis
             if last_finalized_epoch != 0:

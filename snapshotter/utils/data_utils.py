@@ -28,7 +28,7 @@ from snapshotter.utils.redis.redis_keys import project_snapshotter_status_report
 from snapshotter.utils.redis.redis_keys import source_chain_block_time_key
 from snapshotter.utils.redis.redis_keys import source_chain_epoch_size_key
 from snapshotter.utils.redis.redis_keys import source_chain_id_key
-from snapshotter.utils.rpc import get_event_sig_and_abi
+from snapshotter.utils.rpc import RpcHelper, get_event_sig_and_abi
 
 logger = logger.bind(module='data_helper')
 
@@ -94,7 +94,7 @@ async def get_project_finalized_cid(redis_conn: aioredis.Redis, state_contract_o
 async def w3_get_and_cache_finalized_cid(
     redis_conn: aioredis.Redis,
     state_contract_obj,
-    rpc_helper,
+    rpc_helper: RpcHelper,
     epoch_id,
     project_id,
 ):
@@ -105,7 +105,7 @@ async def w3_get_and_cache_finalized_cid(
 
     Args:
         redis_conn (aioredis.Redis): Redis connection object
-        state_contract_obj: Contract object for the state contract
+        state_contract_obj: Contract object for the protocol state contract
         rpc_helper: Helper object for making web3 calls
         epoch_id (int): Epoch ID
         project_id (int): Project ID
@@ -113,12 +113,15 @@ async def w3_get_and_cache_finalized_cid(
     Returns:
         Tuple[str, int]: The CID and epoch ID if the consensus status is True, or the null value and epoch ID if the consensus status is False.
     """
-    tasks = [
-        state_contract_obj.functions.snapshotStatus(project_id, epoch_id),
-        state_contract_obj.functions.maxSnapshotsCid(project_id, epoch_id),
-    ]
 
-    [consensus_status, cid] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
+    [consensus_status, cid] = await rpc_helper.web3_call(
+        tasks=[
+            ('snapshotStatus', [project_id, epoch_id]),
+            ('maxSnapshotsCid', [project_id, epoch_id])
+        ],
+        contract_addr=state_contract_obj.address,
+        abi=state_contract_obj.abi,
+    )
     logger.trace(f'consensus status for project {project_id} and epoch {epoch_id} is {consensus_status}')
     if consensus_status[0]:
         await redis_conn.zadd(
@@ -136,7 +139,7 @@ async def w3_get_and_cache_finalized_cid(
 
 
 # TODO: warmup cache to reduce RPC calls overhead
-async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, project_id):
+async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper: RpcHelper, project_id):
     """
     Get the first epoch for a given project ID.
 
@@ -161,7 +164,13 @@ async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj
             state_contract_obj.functions.projectFirstEpochId(project_id),
         ]
 
-        [first_epoch] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
+        [first_epoch] = await rpc_helper.web3_call(
+            tasks=[
+                ('projectFirstEpochId', [project_id]),
+            ],
+            contract_addr=state_contract_obj.address,
+            abi=state_contract_obj.abi,
+        )
         logger.info(f'first epoch for project {project_id} is {first_epoch}')
         # Don't cache if it is 0
         if first_epoch == 0:
@@ -295,7 +304,7 @@ async def get_project_epoch_snapshot(
         return dict()
 
 
-async def get_source_chain_id(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper):
+async def get_source_chain_id(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper: RpcHelper):
     """
     Retrieves the source chain ID from Redis cache if available, otherwise fetches it from the state contract and caches it in Redis.
 
@@ -314,11 +323,13 @@ async def get_source_chain_id(redis_conn: aioredis.Redis, state_contract_obj, rp
         source_chain_id = int(source_chain_id_data.decode('utf-8'))
         return source_chain_id
     else:
-        tasks = [
-            state_contract_obj.functions.SOURCE_CHAIN_ID(),
-        ]
-
-        [source_chain_id] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
+        [source_chain_id] = await rpc_helper.web3_call(
+            tasks=[
+                ('SOURCE_CHAIN_ID', [])
+            ],
+            contract_addr=state_contract_obj.address,
+            abi=state_contract_obj.abi
+        )
 
         await redis_conn.set(
             source_chain_id_key(),
@@ -327,7 +338,7 @@ async def get_source_chain_id(redis_conn: aioredis.Redis, state_contract_obj, rp
         return source_chain_id
 
 
-async def build_projects_list_from_events(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper):
+async def build_projects_list_from_events(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper: RpcHelper):
     """
     Builds a list of project IDs from the 'ProjectsUpdated' events emitted by the state contract.
 
@@ -348,8 +359,9 @@ async def build_projects_list_from_events(redis_conn: aioredis.Redis, state_cont
     }
 
     [start_block] = await rpc_helper.web3_call(
-        [state_contract_obj.functions.DeploymentBlockNumber()],
-        redis_conn=redis_conn,
+        tasks=[('DeploymentBlockNumber', [])],
+        contract_addr=state_contract_obj.address,
+        abi=state_contract_obj.abi,
     )
 
     current_block = await rpc_helper.get_current_block_number(redis_conn)
@@ -391,7 +403,7 @@ async def build_projects_list_from_events(redis_conn: aioredis.Redis, state_cont
     return list(project_updates)
 
 
-async def get_projects_list(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper):
+async def get_projects_list(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper: RpcHelper):
     """
     Fetches the list of projects from the state contract.
 
@@ -404,11 +416,12 @@ async def get_projects_list(redis_conn: aioredis.Redis, state_contract_obj, rpc_
         List: List of projects.
     """
     try:
-        tasks = [
-            state_contract_obj.functions.getProjects(),
-        ]
 
-        [projects_list] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
+        [projects_list] = await rpc_helper.web3_call(
+            tasks=[('getProjects', [])],
+            contract_addr=state_contract_obj.address,
+            abi=state_contract_obj.abi
+        )
         return projects_list
 
     except Exception as e:
@@ -416,7 +429,7 @@ async def get_projects_list(redis_conn: aioredis.Redis, state_contract_obj, rpc_
         return []
 
 
-async def get_snapshot_submision_window(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper):
+async def get_snapshot_submision_window(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper: RpcHelper):
     """
     Get the snapshot submission window from the state contract.
 
@@ -432,12 +445,16 @@ async def get_snapshot_submision_window(redis_conn: aioredis.Redis, state_contra
         state_contract_obj.functions.snapshotSubmissionWindow(),
     ]
 
-    [submission_window] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
+    [submission_window] = await rpc_helper.web3_call(
+        tasks=[('snapshotSubmissionWindow', [])],
+        contract_addr=state_contract_obj.address,
+        abi=state_contract_obj.abi
+    )
 
     return submission_window
 
 
-async def get_source_chain_epoch_size(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper):
+async def get_source_chain_epoch_size(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper: RpcHelper):
     """
     This function retrieves the epoch size of the source chain from the state contract.
 
@@ -456,11 +473,11 @@ async def get_source_chain_epoch_size(redis_conn: aioredis.Redis, state_contract
         source_chain_epoch_size = int(source_chain_epoch_size_data.decode('utf-8'))
         return source_chain_epoch_size
     else:
-        tasks = [
-            state_contract_obj.functions.EPOCH_SIZE(),
-        ]
-
-        [source_chain_epoch_size] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
+        [source_chain_epoch_size] = await rpc_helper.web3_call(
+            tasks=[('EPOCH_SIZE', [])],
+            contract_addr=state_contract_obj.address,
+            abi=state_contract_obj.abi
+        )
 
         await redis_conn.set(
             source_chain_epoch_size_key(),
@@ -470,7 +487,7 @@ async def get_source_chain_epoch_size(redis_conn: aioredis.Redis, state_contract
         return source_chain_epoch_size
 
 
-async def get_source_chain_block_time(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper):
+async def get_source_chain_block_time(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper: RpcHelper):
     """
     Get the block time of the source chain.
 
@@ -493,7 +510,11 @@ async def get_source_chain_block_time(redis_conn: aioredis.Redis, state_contract
             state_contract_obj.functions.SOURCE_CHAIN_BLOCK_TIME(),
         ]
 
-        [source_chain_block_time] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
+        [source_chain_block_time] = await rpc_helper.web3_call(
+            tasks=[('SOURCE_CHAIN_BLOCK_TIME', [])],
+            contract_addr=state_contract_obj.address,
+            abi=state_contract_obj.abi
+        )
         source_chain_block_time = int(source_chain_block_time / 1e4)
 
         await redis_conn.set(

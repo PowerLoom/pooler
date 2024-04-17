@@ -175,7 +175,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._signer_index = signer_idx
         self._rate_limiting_lua_scripts = None
 
-        self.protocol_state_contract_address = Web3.toChecksumAddress(settings.protocol_state.address)
+        self.protocol_state_contract_address = Web3.to_checksum_address(settings.protocol_state.address)
         self._commit_payload_exchange = (
             f'{settings.rabbitmq.setup.commit_payload.exchange}:{settings.namespace}'
         )
