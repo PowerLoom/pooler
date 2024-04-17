@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package submission;
+option go_package = "github.com/PowerLoom/proto-snapshot-collector/pkgs";
+
+// Request structure as defined in your Solidity contract
+message Request {
+  uint64 deadline = 1;
+  string snapshotCid = 2;
+  uint64 epochId = 3;
+  string projectId = 4;
+}
+
+message SnapshotSubmission {
+  Request request = 1;
+  string signature = 2;
+  string header = 3;
+}
+
+service Submission {
+  rpc SubmitSnapshot (stream SnapshotSubmission) returns (SubmissionResponse);
+}
+
+message SubmissionResponse {
+  string message = 1; // Response message
+}

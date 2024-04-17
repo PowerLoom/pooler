@@ -21,6 +21,7 @@ from eth_utils.encoding import big_endian_to_int
 import aiorwlock
 import httpx
 import tenacity
+from grpclib.client import Channel
 from coincurve import PrivateKey
 from aio_pika import IncomingMessage
 from aio_pika import Message
@@ -51,6 +52,8 @@ from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.data_models import UnfinalizedSnapshot
+from snapshotter.utils.models.proto.snapshot_submission.submission_pb2 import Request, SnapshotSubmission
+from snapshotter.utils.models.proto.snapshot_submission.submission_grpc import SubmissionStub
 from snapshotter.utils.models.message_models import AggregateBase
 from snapshotter.utils.models.message_models import PayloadCommitMessage
 from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
@@ -63,8 +66,7 @@ from snapshotter.utils.rpc import RpcHelper
 from snapshotter.utils.transaction_utils import write_transaction
 
 
-class Request(EIP712Struct):
-    slotId = Uint()
+class EIPRequest(EIP712Struct):
     deadline = Uint()
     snapshotCid = String()
     epochId = Uint()
@@ -151,7 +153,9 @@ class GenericAsyncWorker(multiprocessing.Process):
     _signer_private_key: str
     _signer_nonce: int
     _signer_address: str
-    
+    _grpc_channel: Channel
+    _grpc_stub: SubmissionStub
+
     def __init__(self, name, signer_idx, **kwargs):
         """
         Initializes a GenericAsyncWorker instance.
@@ -250,12 +254,17 @@ class GenericAsyncWorker(multiprocessing.Process):
         snapshot_cid = await _ipfs_writer_client.add_bytes(snapshot)
         return snapshot_cid
 
-    def generate_signature(self, snapshot_cid, epoch_id, project_id):
-        current_block = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.block_number
-
-        deadline = current_block + settings.protocol_state.deadline_buffer
-        request = Request(
-            slotId=0,
+    async def generate_signature(self, snapshot_cid, epoch_id, project_id):
+        # current_block = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.block_number
+        # TODO: review if it makes sense to cache this with an LRU cache
+        current_block = await self._anchor_rpc_helper.eth_get_block(
+            redis_conn=self._redis_conn,
+        )
+        current_block_number = int(current_block['number'], 16)
+        current_block_hash = current_block['hash']
+        deadline = current_block_number + settings.protocol_state.deadline_buffer
+        request = EIPRequest(
+            # slotId=0,
             deadline=deadline,
             snapshotCid=snapshot_cid,
             epochId=epoch_id,
@@ -270,7 +279,7 @@ class GenericAsyncWorker(multiprocessing.Process):
 
         final_sig = r.to_bytes(32, 'big') + s.to_bytes(32, 'big') + v.to_bytes(1, 'big')
         request_ = {'slotId': 0, 'deadline': deadline, 'snapshotCid': snapshot_cid, 'epochId': epoch_id, 'projectId': project_id}
-        return request_, final_sig
+        return request_, final_sig, current_block_hash
 
     async def _commit_payload(
             self,
@@ -385,29 +394,63 @@ class GenericAsyncWorker(multiprocessing.Process):
                     snapshot_cid=snapshot_cid,
                 )
             else:
-                request_, sig = self.generate_signature(snapshot_cid, epoch.epochId, project_id)
-                await self.submit_snapshot(
-                    TxnPayload(
-                        slotId=request_['slotId'],
-                        snapshotCid=snapshot_cid,
-                        epochId=epoch.epochId,
-                        projectId=project_id,
-                        request=SignRequest(
-                            slotId=request_['slotId'],
-                            deadline=request_['deadline'],
-                            snapshotCid=request_['snapshotCid'],
-                            epochId=request_['epochId'],
-                            projectId=request_['projectId'],
-                        ),
-                        signature='0x' + str(sig.hex()),
-                        contractAddress=settings.protocol_state.address,
+                try:
+                    await self._send_submission_to_collector(snapshot_cid, epoch.epochId, project_id)
+                except Exception as e:
+                    self._logger.error(
+                        'Exception submitting snapshot to collector for epoch {}: {}, Error: {},'
+                        'sending failure notifications', epoch, snapshot, e,
                     )
-                )
+                    await self._redis_conn.hset(
+                        name=epoch_id_project_to_state_mapping(
+                            epoch.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_RELAYER.value,
+                        ),
+                        mapping={
+                            project_id: SnapshotterStateUpdate(
+                                status='failed', error=str(e), timestamp=int(time.time()),
+                            ).json(),
+                        },
+                    )
+                else:
+                    await self._redis_conn.hset(
+                        name=epoch_id_project_to_state_mapping(
+                            epoch.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_RELAYER.value,
+                        ),
+                        mapping={
+                            project_id: SnapshotterStateUpdate(
+                                status='success', timestamp=int(time.time()),
+                            ).json(),
+                        },
+                    )
 
         # upload to web3 storage
         if storage_flag:
             asyncio.ensure_future(self._upload_web3_storage(snapshot_bytes))
 
+    async def _send_submission_to_collector(self, snapshot_cid, epoch_id, project_id):
+        self._logger.debug(
+                f'Sending submission to collector...',
+            )
+        request_, signature, current_block_hash = await self.generate_signature(snapshot_cid, epoch_id, project_id)
+    
+        async with self._grpc_stub.SubmitSnapshot.open() as stream:
+            request_msg = Request(
+                deadline=request_['deadline'],
+                snapshotCid=request_['snapshotCid'],
+                epochId=request_['epochId'],
+                projectId=request_['projectId'],
+            )
+            self._logger.debug(
+                'Snapshot submission creation with request: {}', request_msg
+            )
+            msg = SnapshotSubmission(request=request_msg, signature=signature.hex(), header=current_block_hash)
+            self._logger.debug(
+                'Snapshot submission created: {}', msg
+            )
+            await stream.send_message(msg)
+            response = await stream.recv_message()
+            self._logger.info('Received response from collector: {}', response)
+    
     async def _rabbitmq_consumer(self, loop):
         """
         Consume messages from a RabbitMQ queue.
@@ -679,6 +722,14 @@ class GenericAsyncWorker(multiprocessing.Process):
             transport=self._web3_storage_upload_transport,
             headers={'Authorization': 'Bearer ' + settings.web3storage.api_token},
         )
+    
+    async def _init_grpc(self):
+        self._grpc_channel = Channel(
+            host='snapshot-server',
+            port=50051,
+            ssl=False,
+        )
+        self._grpc_stub = SubmissionStub(self._grpc_channel)
 
     async def _init_protocol_meta(self):
         # TODO: combine these into a single call
@@ -720,6 +771,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             await self._init_httpx_client()
             await self._init_rpc_helper()
             await self._init_protocol_meta()
+            await self._init_grpc()
         self._initialized = True
 
     def run(self) -> None:

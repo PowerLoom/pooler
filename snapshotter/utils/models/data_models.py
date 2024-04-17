@@ -49,6 +49,7 @@ class SnapshotterStates(Enum):
     SNAPSHOT_SUBMIT_PAYLOAD_COMMIT = 'SNAPSHOT_SUBMIT_PAYLOAD_COMMIT'
     RELAYER_SEND = 'RELAYER_SEND'
     SNAPSHOT_FINALIZE = 'SNAPSHOT_FINALIZE'
+    SNAPSHOT_SUBMIT_RELAYER = 'SNAPSHOT_SUBMIT_RELAYER'
 
 
 class SnapshotterStateUpdate(BaseModel):
@@ -231,3 +232,10 @@ class TxnPayload(BaseModel):
     request: SignRequest
     signature: str
     contractAddress: str
+
+
+class SnapshotBatchFinalizedEvent(EventBase):
+    epochId: int
+    batchId: int
+    timestamp: int
+

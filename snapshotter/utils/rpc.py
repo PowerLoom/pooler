@@ -543,7 +543,7 @@ class RpcHelper(object):
                     request=rpc_query,
                     response=None,
                     underlying_exception=e,
-                    extra_info=f'RPC_BATCH_ETH_CALL_ERROR: {str(e)}',
+                    extra_info=f'RPC call error | REQUEST: {rpc_query} | Exception: {str(e)}',
                 )
                 self._logger.trace(
                     'Error in making jsonrpc call, error {}', str(exc),
@@ -880,3 +880,33 @@ class RpcHelper(object):
                 raise exc
 
         return await f(node_idx=0)
+
+    async def eth_get_block(self, redis_conn, block_number=None):
+        """
+        Batch retrieves Ethereum blocks using eth_getBlockByNumber JSON-RPC method.
+        Args:
+            block_number (int): The block number to retrieve.
+            redis_conn (redis.Redis): Redis connection object.
+        Returns:
+            JSON-RPC response: A response containing the block data from the JSON-RPC call to fetch the respective block.
+        """
+        if not self._initialized:
+            await self.init(redis_conn)
+
+        rpc_query = []
+        block = hex(block_number) if block_number is not None else 'latest'
+        request_id = 1
+        rpc_query.append(
+                {
+                    'jsonrpc': '2.0',
+                    'method': 'eth_getBlockByNumber',
+                    'params': [
+                        block,
+                        False,
+                    ],
+                    'id': request_id,
+                },
+            )
+
+        response_data = await self._make_rpc_jsonrpc_call(rpc_query, redis_conn=redis_conn)
+        return response_data[0]['result']
