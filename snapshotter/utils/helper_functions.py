@@ -234,7 +234,7 @@ def aiorwlock_aqcuire_release(fn):
                         'Context: Using signer {} for submission task',
                         tx_hash, e, self._signer.address
                     )
-                    self.pending_nonces.put(self._signer.nonce)
+                    self.pending_nonces.put(self._signer.nonce - 1)
         finally:
             try:
                 self._signer.nonce_lock.writer_lock.release()
