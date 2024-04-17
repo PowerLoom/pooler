@@ -676,16 +676,31 @@ class GenericAsyncWorker(multiprocessing.Process):
 
         self._w3 = self._anchor_rpc_helper._nodes[0]['web3_client_async']
         # web3 v5 camel case helpers
-        self._signer_address = Web3.to_checksum_address(settings.snapshot_submissions.signers[self._signer_index].address)
-        self._signer_nonce = await self._w3.eth.get_transaction_count(self._signer_address)
-        self._signer_private_key = settings.snapshot_submissions.signers[self._signer_index].private_key
-        self._signer = SnapshotSubmissionSignerState(
-            address=self._signer_address,
-            private_key=self._signer_private_key,
-            nonce=self._signer_nonce,
-            nonce_lock=aiorwlock.RWLock(fast=True),
-        )
-        self._logger.debug('Picked signer {} at index {} and nonce {} for self submission', self._signer_address, self._signer_index, self._signer_nonce)
+        try:
+            self._signer_address = Web3.to_checksum_address(settings.snapshot_submissions.signers[self._signer_index].address)
+        except Exception as e:
+            self._logger.exception(
+                'Exception in getting signer address: {}. Assigning empty details to signer. Most likely we wont be signing then.',
+                e,
+            )
+            self._signer_address = ''
+            self._signer_private_key = ''
+            self._signer = SnapshotSubmissionSignerState(
+                address=self._signer_address,
+                private_key=self._signer_private_key,
+                nonce=0,
+                nonce_lock=aiorwlock.RWLock(fast=True),
+            )
+        else:
+            self._signer_nonce = await self._w3.eth.get_transaction_count(self._signer_address)
+            self._signer_private_key = settings.snapshot_submissions.signers[self._signer_index].private_key
+            self._signer = SnapshotSubmissionSignerState(
+                address=self._signer_address,
+                private_key=self._signer_private_key,
+                nonce=self._signer_nonce,
+                nonce_lock=aiorwlock.RWLock(fast=True),
+            )
+            self._logger.debug('Picked signer {} at index {} and nonce {} for self submission', self._signer_address, self._signer_index, self._signer_nonce)
         self._chain_id = await self._w3.eth.chain_id
         self._logger.debug('Set anchor chain ID to {}', self._chain_id)
         self._domain_separator = make_domain(
