@@ -231,10 +231,10 @@ def aiorwlock_aqcuire_release(fn):
                         'Context: Using signer {} for submission task',
                         tx_hash, e, self._signer.address
                     )
-        # finally:
-        #     try:
-        #         self._signer.nonce_lock.writer_lock.release()
-        #     except Exception as e:
-        #         logger.error('Error releasing rwlock: {}. But moving on regardless... | Context: '
-        #                      'Using signer {} for submission task: {}. Acquiring lock', e, self._signer.address, kwargs)
+        finally:
+            try:
+                self._signer.nonce_lock.writer_lock.release()
+            except Exception as e:
+                logger.error('Error releasing rwlock: {}. But moving on regardless... | Context: '
+                             'Using signer {} for submission task: {}. Acquiring lock', e, self._signer.address, kwargs)
     return wrapper
