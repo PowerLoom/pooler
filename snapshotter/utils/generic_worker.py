@@ -1,7 +1,6 @@
 import asyncio
 import json
 import multiprocessing
-import sys
 import sha3
 import resource
 import time
@@ -89,7 +88,7 @@ def web3_storage_retry_state_callback(retry_state: tenacity.RetryCallState):
 
 
 def submit_snapshot_retry_callback(retry_state: tenacity.RetryCallState):
-    if retry_state.attempt_number >= 1:
+    if retry_state.attempt_number >= 2:
         logger.error(
             'Txn signing worker failed after 3 attempts | Txn payload: {} | Signer: {}', retry_state.kwargs['txn_payload'], retry_state.kwargs['signer_in_use'].address
         )
@@ -389,7 +388,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             else:
                 request_, sig = self.generate_signature(snapshot_cid, epoch.epochId, project_id)
                 await self.submit_snapshot(
-                    TxnPayload(
+                    txn_payload=TxnPayload(
                         slotId=request_['slotId'],
                         snapshotCid=snapshot_cid,
                         epochId=epoch.epochId,
