@@ -1,8 +1,6 @@
 import asyncio
-import random
 import sys
 from functools import wraps
-
 import web3.datastructures
 
 from snapshotter.settings.config import settings
@@ -200,6 +198,7 @@ def aiorwlock_aqcuire_release(fn):
         # self._logger.debug('Wrapping fn: {}', fn.__name__)
         try:
             tx_hash = await fn(self, *args, **kwargs)  # including the retry calls
+
             self._signer.nonce += 1
             self._logger.info('Using signer {} for submission task. Incremented nonce {}', self._signer.address, self._signer.nonce)
             try:
@@ -210,17 +209,22 @@ def aiorwlock_aqcuire_release(fn):
         except Exception as e:
             # this is ultimately reraised by tenacity once the retries are exhausted
             # nothing to do here
-            pass
+            self._logger.opt(exception=True).error(
+                f'Exception: {e}, Nonce: {self._signer.nonce}, Pending Nonces: {self.pending_nonces._queue}'
+            )
+
         else:
             if not tx_hash:
                 self._logger.info('tx_hash is None for submission task')
-                self.pending_nonces.put(self._signer.nonce)
-            if tx_hash is not None:
+                await self.pending_nonces.put(self._signer.nonce - 1)
+                self._logger.info('Using signer {} for submission task. Put nonce {} back in queue', self._signer.address, self._signer.nonce - 1)
+                self._logger.info("Self.pending_nonces: {}", self.pending_nonces)
+            else:
                 try:
-                    receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash)
+                    receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=20)
                     if receipt['status'] == 0:
                         self._logger.info(
-                            'tx_hash: {} failed to gather success receipt after 120 seconds, receipt: {} | '
+                            'tx_hash: {} failed to gather success receipt after 20 seconds, receipt: {} | '
                             'Context: Using signer {} for submission task',
                             tx_hash, receipt, self._signer.address,
                         )
@@ -230,11 +234,11 @@ def aiorwlock_aqcuire_release(fn):
                         )
                 except Exception as e:
                     self._logger.error(
-                        'tx_hash: {} failed to gather receipt after 120 seconds, error: {} | '
+                        'tx_hash: {} failed to gather receipt after 20 seconds, error: {} | '
                         'Context: Using signer {} for submission task',
                         tx_hash, e, self._signer.address
                     )
-                    self.pending_nonces.put(self._signer.nonce)
+                    await self.pending_nonces.put(self._signer.nonce - 1)
         finally:
             try:
                 self._signer.nonce_lock.writer_lock.release()
