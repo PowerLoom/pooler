@@ -235,6 +235,6 @@ def aiorwlock_aqcuire_release(fn):
             try:
                 self._signer.nonce_lock.writer_lock.release()
             except Exception as e:
-                logger.error('Error releasing rwlock: {}. But moving on regardless... | Context: '
+                logger.trace('Error releasing rwlock: {}. But moving on regardless... | Context: '
                              'Using signer {} for submission task: {}. Acquiring lock', e, self._signer.address, kwargs)
     return wrapper
