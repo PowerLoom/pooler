@@ -20,7 +20,6 @@ from snapshotter.utils.exceptions import GenericExitOnSignal
 from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.models.data_models import EpochReleasedEvent, SnapshotBatchFinalizedEvent
 from snapshotter.utils.models.data_models import EventBase
-from snapshotter.utils.models.data_models import SnapshotFinalizedEvent
 from snapshotter.utils.rabbitmq_helpers import RabbitmqThreadedSelectLoopInteractor
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import event_detector_last_processed_block, last_epoch_detected_epoch_id_key
@@ -142,13 +141,11 @@ class EventDetectorProcess(multiprocessing.Process):
         # event SnapshotBatchFinalized(uint256 indexed epochId, uint256 epochEnd, string projectId, string snapshotCid, uint256 timestamp);
         EVENTS_ABI = {
             'EpochReleased': self.contract.events.EpochReleased._get_event_abi(),
-            'SnapshotFinalized': self.contract.events.SnapshotFinalized._get_event_abi(),
             'SnapshotBatchFinalized': self.contract.events.SnapshotBatchFinalized._get_event_abi(),
         }
 
         EVENT_SIGS = {
             'EpochReleased': 'EpochReleased(uint256,uint256,uint256,uint256)',
-            'SnapshotFinalized': 'SnapshotFinalized(uint256,uint256,string,string,uint256,uint256,uint256)',
             'SnapshotBatchFinalized': 'SnapshotBatchFinalized(uint256,uint256,string,string,uint256)',
         }
 
@@ -203,16 +200,6 @@ class EventDetectorProcess(multiprocessing.Process):
                 )
                 new_epoch_detected = True
                 latest_epoch_id = max(latest_epoch_id, log.args.epochId)
-                events.append((log.event, event))
-
-            elif log.event == 'SnapshotFinalized':
-                event = SnapshotFinalizedEvent(
-                    epochId=log.args.epochId,
-                    epochEnd=log.args.epochEnd,
-                    projectId=log.args.projectId,
-                    snapshotCid=log.args.snapshotCid,
-                    timestamp=log.args.timestamp,
-                )
                 events.append((log.event, event))
             
             elif log.event == 'SnapshotBatchFinalized':
