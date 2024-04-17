@@ -95,7 +95,7 @@ async def startup_boilerplate():
     app.state.anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
     await app.state.anchor_rpc_helper.init(redis_conn=app.state.redis_pool)
     app.state.protocol_state_contract = app.state.anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
-        address=Web3.toChecksumAddress(
+        address=Web3.to_checksum_address(
             protocol_state_contract_address,
         ),
         abi=protocol_state_contract_abi,
@@ -825,7 +825,7 @@ async def get_task_status_post(
 
     # check wallet address is valid EVM address
     try:
-        Web3.toChecksumAddress(task_status_request.wallet_address)
+        Web3.to_checksum_address(task_status_request.wallet_address)
     except:
         response.status_code = 400
         return {

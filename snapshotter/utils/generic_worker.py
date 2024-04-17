@@ -665,7 +665,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._logger.info('Anchor chain RPC helper nodes: {}', self._anchor_rpc_helper._nodes)
         # sys.exit(1)
         self._protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
-            address=Web3.toChecksumAddress(
+            address=Web3.to_checksum_address(
                 self.protocol_state_contract_address,
             ),
             abi=read_json_file(
@@ -676,7 +676,7 @@ class GenericAsyncWorker(multiprocessing.Process):
 
         self._w3 = self._anchor_rpc_helper._nodes[0]['web3_client_async']
         # web3 v5 camel case helpers
-        self._signer_address = Web3.toChecksumAddress(settings.snapshot_submissions.signers[self._signer_index].address)
+        self._signer_address = Web3.to_checksum_address(settings.snapshot_submissions.signers[self._signer_index].address)
         self._signer_nonce = await self._w3.eth.get_transaction_count(self._signer_address)
         self._signer_private_key = settings.snapshot_submissions.signers[self._signer_index].private_key
         self._signer = SnapshotSubmissionSignerState(

@@ -1,7 +1,4 @@
 import asyncio
-from typing import List
-from typing import Union
-
 import eth_abi
 import tenacity
 from eth_abi.codec import ABICodec
@@ -15,14 +12,15 @@ from tenacity import retry
 from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
-from web3 import Web3
+from web3 import AsyncHTTPProvider, AsyncWeb3
 from web3._utils.abi import map_abi_data
 from web3._utils.events import get_event_data
 from web3._utils.normalizers import BASE_RETURN_NORMALIZERS
-from web3.eth import AsyncEth
 from web3.types import TxParams
 from web3.types import Wei
-
+from web3 import Web3
+from typing import Union
+from typing import List
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.exceptions import RPCException
@@ -174,10 +172,8 @@ class RpcHelper(object):
         If a node already has a web3 client, it is skipped.
         """
         for node in self._nodes:
-            node['web3_client_async'] = Web3(
-                Web3.AsyncHTTPProvider(node['rpc_url']),
-                modules={'eth': (AsyncEth,)},
-                middlewares=[],
+            node['web3_client_async'] = AsyncWeb3(
+                AsyncHTTPProvider(node['rpc_url'])
             )
             self._logger.info('Loaded async web3 provider for node {}: {}', node['rpc_url'], node['web3_client_async'])
         self._logger.info('Post async web3 provider loading: {}', self._nodes)
@@ -203,10 +199,8 @@ class RpcHelper(object):
                 await self._init_http_clients()
                 # load async web3 providers
                 for node in self._nodes:
-                    node['web3_client_async'] = Web3(
-                        Web3.AsyncHTTPProvider(node['rpc_url']),
-                        modules={'eth': (AsyncEth,)},
-                        middlewares=[],
+                    node['web3_client_async'] = AsyncWeb3(
+                        AsyncHTTPProvider(node['rpc_url'])
                     )
                     self._logger.info('Loaded async web3 provider for node {}: {}', node['rpc_url'], node['web3_client_async'])
                 self._logger.info('Post async web3 provider loading: {}', self._nodes)
@@ -653,7 +647,7 @@ class RpcHelper(object):
         from_block,
         to_block,
         params: Union[List, None] = None,
-        from_address=Web3.toChecksumAddress('0x0000000000000000000000000000000000000000'),
+        from_address=Web3.to_checksum_address('0x0000000000000000000000000000000000000000'),
     ):
         """
         Batch executes an Ethereum contract function call on a range of blocks.
@@ -687,7 +681,7 @@ class RpcHelper(object):
                     'params': [
                         {
                             'from': from_address,
-                            'to': Web3.toChecksumAddress(contract_address),
+                            'to': Web3.to_checksum_address(contract_address),
                             'data': function_signature,
                         },
                         hex(block),
@@ -725,7 +719,7 @@ class RpcHelper(object):
         from_block,
         to_block,
         params: Union[List, None] = None,
-        from_address=Web3.toChecksumAddress('0x0000000000000000000000000000000000000000'),
+        from_address=Web3.to_checksum_address('0x0000000000000000000000000000000000000000'),
     ):
         """
         Batch executes an Ethereum contract function call on a range of blocks.
@@ -759,7 +753,7 @@ class RpcHelper(object):
                     'params': [
                         {
                             'from': from_address,
-                            'to': Web3.toChecksumAddress(contract_address),
+                            'to': Web3.to_checksum_address(contract_address),
                             'data': function_signature,
                         },
                         hex(block),
@@ -847,7 +841,7 @@ class RpcHelper(object):
             web3_provider = node['web3_client_async']
 
             event_log_query = {
-                'address': Web3.toChecksumAddress(contract_address),
+                'address': Web3.to_checksum_address(contract_address),
                 'toBlock': to_block,
                 'fromBlock': from_block,
                 'topics': topics,
