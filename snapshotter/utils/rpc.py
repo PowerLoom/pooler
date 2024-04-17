@@ -321,12 +321,13 @@ class RpcHelper(object):
         return await f(node_idx=0)
 
     @acquire_rpc_semaphore
-    async def _async_web3_call(self, contract_function, redis_conn, from_address=None):
+    # TODO: remove. uses deprecated web3.py v5 API
+    async def _async_web3_call(self, contract_function, contract_obj, redis_conn, from_address=None):
         """
         Executes a web3 call asynchronously.
 
         Args:
-            contract_function: The contract function to call.
+            contract_function: The contract function name to call.
             redis_conn: The Redis connection object.
             from_address: The address to send the transaction from.
 
@@ -480,28 +481,57 @@ class RpcHelper(object):
                 return current_block
         return await f(node_idx=0)
 
-    async def web3_call(self, tasks, redis_conn, from_address=None):
+    @acquire_rpc_semaphore
+    async def web3_call(self, tasks, contract_addr, abi):
         """
         Calls the given tasks asynchronously using web3 and returns the response.
 
         Args:
-            tasks (list): List of contract functions to call.
+            tasks (list): List of tuples of (contract functions, contract args) to call. By name.
+            contract_addr (str): Address of the contract to call.
+            abi (dict): ABI of the contract.
             redis_conn: Redis connection object.
             from_address (str, optional): Address to use as the transaction sender. Defaults to None.
 
         Returns:
             list: List of responses from the contract function calls.
         """
-        try:
-            web3_tasks = [
-                self._async_web3_call(
-                    contract_function=task, redis_conn=redis_conn, from_address=from_address,
-                ) for task in tasks
-            ]
-            response = await asyncio.gather(*web3_tasks)
-            return response
-        except Exception as e:
-            raise e
+        @retry(
+            reraise=True,
+            retry=retry_if_exception_type(RPCException),
+            wait=wait_random_exponential(multiplier=1, max=10),
+            stop=stop_after_attempt(settings.rpc.retry),
+            before_sleep=self._on_node_exception,
+        )
+        # TODO: add support for passing arbitrary arguments to contract functions depending on signature
+        # TODO: add support for validating function names, signatures etc 
+        async def f(node_idx):
+            try:
+                node = self._nodes[node_idx]
+                contract_obj = node['web3_client_async'].eth.contract(
+                    address=contract_addr,
+                    abi=abi,
+                )
+                web3_tasks = [
+                    contract_obj.functions[task[0]](*task[1]).call() for task in tasks
+                ]
+                response = await asyncio.gather(*web3_tasks)
+                return response
+            except Exception as e:
+                exc = RPCException(
+                        request=[tasks],
+                        response=None,
+                        underlying_exception=e,
+                        extra_info={'msg': str(e)},
+                    )
+                self._logger.opt(exception=settings.logs.trace_enabled).error(
+                    (
+                        'Error while making web3 batch call'
+                    ),
+                    err=str(exc),
+                )
+                raise exc
+        return await f(node_idx=0)
 
     @acquire_rpc_semaphore
     async def _make_rpc_jsonrpc_call(self, rpc_query, redis_conn):

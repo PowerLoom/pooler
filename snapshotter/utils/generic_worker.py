@@ -733,10 +733,12 @@ class GenericAsyncWorker(multiprocessing.Process):
 
     async def _init_protocol_meta(self):
         # TODO: combine these into a single call
+        self._protocol_abi = read_json_file(settings.protocol_state.abi)
         try:
             source_block_time = await self._anchor_rpc_helper.web3_call(
-                [self._protocol_state_contract.functions.SOURCE_CHAIN_BLOCK_TIME()],
-                redis_conn=self._redis_conn,
+                tasks=[('SOURCE_CHAIN_BLOCK_TIME', [])],
+                contract_addr=self.protocol_state_contract_address,
+                abi=self._protocol_abi,
             )
             # source_block_time = self._protocol_state_contract.functions.SOURCE_CHAIN_BLOCK_TIME().call()
         except Exception as e:
@@ -750,8 +752,9 @@ class GenericAsyncWorker(multiprocessing.Process):
             self._logger.debug('Set source chain block time to {}', self._source_chain_block_time)
         try:
             epoch_size = await self._anchor_rpc_helper.web3_call(
-                [self._protocol_state_contract.functions.EPOCH_SIZE()],
-                redis_conn=self._redis_conn,
+                tasks=[('EPOCH_SIZE', [])],
+                contract_addr=self.protocol_state_contract_address,
+                abi=self._protocol_abi,
             )
         except Exception as e:
             self._logger.exception(

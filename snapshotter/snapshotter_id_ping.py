@@ -21,19 +21,15 @@ async def main():
     await aioredis_pool.populate()
     redis_conn = aioredis_pool._aioredis_pool
     anchor_rpc = RpcHelper(settings.anchor_chain_rpc)
+    print('Anchor rpc settings: ', settings.anchor_chain_rpc)
     await anchor_rpc.init(redis_conn=redis_conn)
     protocol_abi = read_json_file(settings.protocol_state.abi)
-    protocol_state_contract = anchor_rpc.get_current_node()['web3_client'].eth.contract(
-        address=Web3.to_checksum_address(
-            settings.protocol_state.address,
-        ),
-        abi=protocol_abi,
-    )
+    print('abi file ', settings.protocol_state.abi)
+    print('Contract address: ', settings.protocol_state.address)
     snapshotters_arr_query = await anchor_rpc.web3_call(
-        [
-            protocol_state_contract.functions.getSnapshotters(),
-        ],
-        redis_conn,
+        tasks=[('getSnapshotters', [])],  # tuple of method name and args
+        contract_addr=settings.protocol_state.address,
+        abi=protocol_abi
     )
     allowed_snapshotters = snapshotters_arr_query[0]
     if to_checksum_address(settings.instance_id) in allowed_snapshotters:
