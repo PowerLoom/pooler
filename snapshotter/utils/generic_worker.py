@@ -89,7 +89,7 @@ def web3_storage_retry_state_callback(retry_state: tenacity.RetryCallState):
 
 
 def submit_snapshot_retry_callback(retry_state: tenacity.RetryCallState):
-    if retry_state.attempt_number >= 3:
+    if retry_state.attempt_number >= 1:
         logger.error(
             'Txn signing worker failed after 3 attempts | Txn payload: {} | Signer: {}', retry_state.kwargs['txn_payload'], retry_state.kwargs['signer_in_use'].address
         )
@@ -541,8 +541,8 @@ class GenericAsyncWorker(multiprocessing.Process):
     @retry(
         reraise=True,
         retry=retry_if_exception_type(Exception),
-        wait=wait_random_exponential(multiplier=1, max=10),
-        stop=stop_after_attempt(3),
+        wait=wait_random_exponential(multiplier=0, max=2),
+        stop=stop_after_attempt(2),
         after=submit_snapshot_retry_callback
     )
     async def submit_snapshot(self, txn_payload: TxnPayload, signer_in_use: Optional[SnapshotSubmissionSignerState] = None):
@@ -557,6 +557,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         else:
             try:
                 _nonce = self.pending_nonces.get_nowait()
+                self._logger.info('Using pending nonce {} for submission task', _nonce)
             except asyncio.QueueEmpty:
                 _nonce = signer_in_use.nonce
         try:
@@ -585,20 +586,30 @@ class GenericAsyncWorker(multiprocessing.Process):
             )
 
         except Exception as e:
-            self._logger.opt(exception=True).error(f'Exception: {e}')
 
-            if 'nonce' in str(e):
-                # sleep for 10 seconds and reset nonce
-                await asyncio.sleep(10)
+            if "nonce too low" in str(e):
+                error = eval(str(e))
+                message = error['message']
+                # extract next nonce from 'nonce too low: next nonce 26848, tx nonce 26844'
+                next_nonce = int(message.split('next nonce ')[1].split(',')[0])
+                self._logger.info('Nonce too low error. Next nonce: {}', next_nonce)
+                self._signer.nonce = next_nonce
+                # reset queue
+                self.pending_nonces = Queue()
+                raise Exception('nonce error, reset nonce')
+            if "replacement transaction underpriced" in str(e):
+                self._logger.info('replacement transaction underpriced, sleeping for 10 seconds, then retrying...')
+                time.sleep(10)
                 self._signer.nonce = await self._w3.eth.get_transaction_count(
                     signer_in_use.address,
                 )
                 self._logger.info(
                     f'nonce for {self._signer.address} reset to: {self._signer.nonce}',
                 )
-                raise Exception('nonce error, reset nonce')
+                self.pending_nonces = Queue()
+                raise Exception('replacement transaction underpriced, retrying')
             else:
-                raise Exception('other error, still retrying')
+                raise e
         else:
             return tx_hash
      
