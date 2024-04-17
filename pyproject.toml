@@ -34,6 +34,8 @@ aio-pika = "^9.1.4"
 fastapi-pagination = "^0.12.12"
 eip712-structs = "^1.1.0"
 coincurve = "^19.0.1"
+grpclib = {extras = ["protobuf"], version = "^0.4.7"}
+grpcio-tools = "^1.62.1"
 
 
 [build-system]

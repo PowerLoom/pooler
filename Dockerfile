@@ -8,8 +8,6 @@ COPY poetry.lock pyproject.toml ./
 
 # Install the Python dependencies
 RUN poetry install --no-dev
-RUN pip3 install "grpclib[protobuf]"
-RUN pip3 install "grpcio-tools"
 
 # Copy the rest of the application's files
 COPY . .
