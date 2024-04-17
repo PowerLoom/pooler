@@ -662,7 +662,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
         await self._anchor_rpc_helper.init(redis_conn=self._redis_conn)
         await self._anchor_rpc_helper._load_async_web3_providers()
-        self._logger.info('Anchor chain RPC helper nodes: {}', self._anchor_rpc_helper._nodes)
+        # self._logger.info('Anchor chain RPC helper nodes: {}', self._anchor_rpc_helper._nodes)
         # sys.exit(1)
         self._protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
             address=Web3.to_checksum_address(
@@ -679,10 +679,10 @@ class GenericAsyncWorker(multiprocessing.Process):
         try:
             self._signer_address = Web3.to_checksum_address(settings.snapshot_submissions.signers[self._signer_index].address)
         except Exception as e:
-            self._logger.exception(
-                'Exception in getting signer address: {}. Assigning empty details to signer. Most likely we wont be signing then.',
-                e,
-            )
+            # self._logger.exception(
+            #     'Exception in getting signer address. Assigning empty details to signer. Most likely we wont be signing then'
+                
+            # )
             self._signer_address = ''
             self._signer_private_key = ''
             self._signer = SnapshotSubmissionSignerState(

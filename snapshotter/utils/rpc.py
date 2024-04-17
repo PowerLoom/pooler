@@ -731,7 +731,7 @@ class RpcHelper(object):
         for result in response:
             if 'result' in result:
                 rpc_response.append(
-                    eth_abi.decode_abi(
+                    eth_abi.decode(
                         abi_dict.get(
                             function_name,
                         )['output'],

@@ -303,11 +303,12 @@ class ProcessorDistributor(multiprocessing.Process):
                 state_contract_obj=protocol_state_contract,
             )
 
-            self._projects_list = await get_projects_list(
-                redis_conn=self._redis_conn,
-                rpc_helper=self._anchor_rpc_helper,
-                state_contract_obj=protocol_state_contract,
-            )
+            # self._projects_list = await get_projects_list(
+            #     redis_conn=self._redis_conn,
+            #     rpc_helper=self._anchor_rpc_helper,
+            #     state_contract_obj=protocol_state_contract,
+            # )
+            self._projects_list = list()
 
             # TODO: will be used after full project management overhaul
             # using project set for now, keeping empty if not present in contract
