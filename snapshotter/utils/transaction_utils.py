@@ -24,8 +24,8 @@ async def write_transaction(w3, chain_id, address, private_key, contract, functi
     # Get the transaction
     transaction = func(*args).build_transaction({
         'from': address,
-        'gas': 2000000,
-        'gasPrice': w3.to_wei('0.0001', 'gwei'),
+        'gas': 500000,
+        'maxFeePerGas': w3.to_wei('0.01', 'gwei'),
         'nonce': nonce,
         'chainId': chain_id,
     })
