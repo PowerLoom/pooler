@@ -9,7 +9,7 @@ from signal import SIGINT
 from signal import signal
 from signal import SIGQUIT
 from signal import SIGTERM
-from typing import Dict,
+from typing import Dict
 from typing import Union
 from uuid import uuid4
 from eip712_structs import EIP712Struct
