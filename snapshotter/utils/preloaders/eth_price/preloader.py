@@ -31,6 +31,7 @@ class EthPricePreloader(GenericPreloader):
             )
         except Exception as e:
             self._logger.error(f'Error in Eth Price preloader: {e}')
+            raise e
         finally:
             await redis_conn.close()
 
