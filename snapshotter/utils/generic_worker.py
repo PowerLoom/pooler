@@ -618,7 +618,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._signer_address = Web3.toChecksumAddress(settings.snapshot_submissions.signers[self._signer_index].address)
         self._signer_nonce = await self._w3.eth.get_transaction_count(self._signer_address)
         self._signer_pkey = settings.snapshot_submissions.signers[self._signer_index].private_key
-        self._rw_lock = aiorwlock.RWLock(fast=True)
+        self._rwlock = aiorwlock.RWLock(fast=True)
 
         self._chain_id = await self._w3.eth.chain_id
         self._logger.debug('Set anchor chain ID to {}', self._chain_id)
