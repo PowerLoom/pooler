@@ -25,14 +25,6 @@ class PreloaderAsyncFutureDetails(BaseModel):
         arbitrary_types_allowed = True
 
 
-class SnapshotSubmissionSignerState(BaseModel):
-    address: str
-    private_key: str
-    nonce: int
-    nonce_lock: aiorwlock.RWLock
-    class Config:
-        arbitrary_types_allowed = True
-
 class SnapshotterReportState(Enum):
     MISSED_SNAPSHOT = 'MISSED_SNAPSHOT'
     SUBMITTED_INCORRECT_SNAPSHOT = 'SUBMITTED_INCORRECT_SNAPSHOT'

@@ -1,6 +1,3 @@
-from web3 import Web3
-from snapshotter.settings.config import settings
-
 
 async def write_transaction(w3, chain_id, address, private_key, contract, function, nonce, *args):
     """ Writes a transaction to the blockchain
