@@ -1,7 +1,6 @@
 import asyncio
 import sys
 from functools import wraps
-
 import web3.datastructures
 
 from snapshotter.settings.config import settings
