@@ -528,13 +528,20 @@ class GenericAsyncWorker(multiprocessing.Process):
                 self._signer_address, self._signer_nonce,
             )
         else:
-            self._signer_nonce = await self._w3.eth.get_transaction_count(
+            correct_nonce = await self._w3.eth.get_transaction_count(
                 self._signer_address,
             )
-            self._logger.info(
-                'Using signer {} for submission task. Reset nonce to {}',
-                self._signer_address, self._signer_nonce,
-            )
+            if correct_nonce and type(correct_nonce) is int:
+                self._signer_nonce = correct_nonce
+                self._logger.info(
+                    'Using signer {} for submission task. Reset nonce to {}',
+                    self._signer_address, self._signer_nonce,
+                )
+            else:
+                self._logger.error(
+                    'Using signer {} for submission task. Could not reset nonce',
+                    self._signer_address,
+                )
 
     @retry(
         reraise=True,
