@@ -1,7 +1,6 @@
 import asyncio
 import json
 import multiprocessing
-import sha3
 import resource
 import time
 from functools import partial
@@ -12,19 +11,21 @@ from signal import SIGTERM
 from typing import Dict
 from typing import Union
 from uuid import uuid4
+
+import aiorwlock
+import httpx
+import sha3
+import tenacity
+from aio_pika import IncomingMessage
+from aio_pika import Message
+from aio_pika.pool import Pool
+from coincurve import PrivateKey
 from eip712_structs import EIP712Struct
 from eip712_structs import make_domain
 from eip712_structs import String
 from eip712_structs import Uint
-from eth_utils.encoding import big_endian_to_int
-import aiorwlock
-import httpx
-import tenacity
-from coincurve import PrivateKey
-from aio_pika import IncomingMessage
-from aio_pika import Message
-from aio_pika.pool import Pool
 from eth_utils.crypto import keccak
+from eth_utils.encoding import big_endian_to_int
 from httpx import AsyncClient
 from httpx import AsyncHTTPTransport
 from httpx import Limits
@@ -33,10 +34,12 @@ from ipfs_client.dag import IPFSAsyncClientError
 from ipfs_client.main import AsyncIPFSClient
 from pydantic import BaseModel
 from redis import asyncio as aioredis
-from tenacity import retry, retry_if_exception_type
+from tenacity import retry
+from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
 from web3 import Web3
+
 from snapshotter.settings.config import settings
 from snapshotter.utils.callback_helpers import get_rabbitmq_channel
 from snapshotter.utils.callback_helpers import get_rabbitmq_robust_connection_async
@@ -44,10 +47,13 @@ from snapshotter.utils.callback_helpers import send_failure_notifications_async
 from snapshotter.utils.data_utils import get_source_chain_id
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.file_utils import read_json_file
-from snapshotter.utils.models.data_models import SignRequest, SnapshotterIssue, TxnPayload
+from snapshotter.utils.helper_functions import aiorwlock_aqcuire_release
+from snapshotter.utils.models.data_models import SignRequest
+from snapshotter.utils.models.data_models import SnapshotterIssue
 from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
+from snapshotter.utils.models.data_models import TxnPayload
 from snapshotter.utils.models.data_models import UnfinalizedSnapshot
 from snapshotter.utils.models.message_models import AggregateBase
 from snapshotter.utils.models.message_models import PayloadCommitMessage
@@ -118,7 +124,7 @@ class GenericAsyncWorker(multiprocessing.Process):
     _signer_pkey: str
     _signer_nonce: int
     _signer_address: str
-    
+
     def __init__(self, name, signer_idx, **kwargs):
         """
         Initializes a GenericAsyncWorker instance.
@@ -236,7 +242,10 @@ class GenericAsyncWorker(multiprocessing.Process):
         s = big_endian_to_int(signature[32:64])
 
         final_sig = r.to_bytes(32, 'big') + s.to_bytes(32, 'big') + v.to_bytes(1, 'big')
-        request_ = {'slotId': 0, 'deadline': deadline, 'snapshotCid': snapshot_cid, 'epochId': epoch_id, 'projectId': project_id}
+        request_ = {
+            'slotId': 0, 'deadline': deadline, 'snapshotCid': snapshot_cid,
+            'epochId': epoch_id, 'projectId': project_id,
+        }
         return request_, final_sig
 
     async def _commit_payload(
@@ -368,7 +377,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                         ),
                         signature='0x' + str(sig.hex()),
                         contractAddress=settings.protocol_state.address,
-                    )
+                    ),
                 )
 
         # upload to web3 storage
@@ -502,20 +511,43 @@ class GenericAsyncWorker(multiprocessing.Process):
                 },
             )
 
+    @aiorwlock_aqcuire_release
+    async def _increment_nonce(self):
+        self._signer_nonce += 1
+        self._logger.info(
+            'Using signer {} for submission task. Incremented nonce {}',
+            self._signer_address, self._signer_nonce,
+        )
+
+    @aiorwlock_aqcuire_release
+    async def _reset_nonce(self, value: int = 0):
+        if value > 0:
+            self._signer_nonce = value
+            self._logger.info(
+                'Using signer {} for submission task. Reset nonce to {}',
+                self._signer_address, self._signer_nonce,
+            )
+        else:
+            self._signer_nonce = await self._w3.eth.get_transaction_count(
+                self._signer_address,
+            )
+            self._logger.info(
+                'Using signer {} for submission task. Reset nonce to {}',
+                self._signer_address, self._signer_nonce,
+            )
+
     @retry(
         reraise=True,
         retry=retry_if_exception_type(Exception),
         wait=wait_random_exponential(multiplier=1, max=2),
-        stop=stop_after_attempt(3)
+        stop=stop_after_attempt(3),
     )
     async def submit_snapshot(self, txn_payload: TxnPayload):
         """
         Submit Snapshot
         """
-        await self._rwlock.writer_lock.acquire()
         _nonce = self._signer_nonce
-        self._signer_nonce += 1
-        self._rwlock.writer_lock.release()
+        await self._increment_nonce()
         self._logger.trace(f'nonce: {_nonce}')
 
         try:
@@ -542,7 +574,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             self._logger.info(
                 f'submitted transaction with tx_hash: {tx_hash}',
             )
-            await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=5)
+            await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=20)
 
         except Exception as e:
             if 'nonce too low' in str(e):
@@ -552,9 +584,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                 self._logger.info(
                     'Nonce too low error. Next nonce: {}', next_nonce,
                 )
-                await self._rwlock.writer_lock.acquire()
-                self._signer_nonce = next_nonce
-                self._rwlock.writer_lock.release()
+                await self._reset_nonce(next_nonce)
                 # reset queue
                 raise Exception('nonce error, reset nonce')
             else:
@@ -563,20 +593,12 @@ class GenericAsyncWorker(multiprocessing.Process):
                 )
                 # sleep for two seconds before updating nonce
                 time.sleep(2)
-                correct_nonce = await self._w3.eth.get_transaction_count(
-                    self._signer_address,
-                )
-                await self._rwlock.writer_lock.acquire()
-                self._signer_nonce = correct_nonce
-                self._rwlock.writer_lock.release()
+                await self._reset_nonce()
 
-                self._logger.info(
-                    f'nonce for {self._signer_address} reset to: {self._signer_nonce}',
-                )
                 raise e
         else:
             return tx_hash
-     
+
     async def _on_rabbitmq_message(self, message: IncomingMessage):
         """
         Callback function that is called when a message is received from RabbitMQ.
