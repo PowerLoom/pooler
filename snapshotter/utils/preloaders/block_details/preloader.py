@@ -31,6 +31,7 @@ class BlockDetailsPreloader(GenericPreloader):
             )
         except Exception as e:
             self._logger.error(f'Error in block details preloader: {e}')
+            raise e
         finally:
             await redis_conn.close()
 
