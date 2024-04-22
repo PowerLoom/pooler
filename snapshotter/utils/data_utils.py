@@ -114,9 +114,12 @@ async def w3_get_and_cache_finalized_cid(
     Returns:
         Tuple[str, int]: The CID and epoch ID if the consensus status is True, or the null value and epoch ID if the consensus status is False.
     """
-    consensus_status = state_contract_obj.functions.snapshotStatus(project_id, epoch_id).call()
-    cid = state_contract_obj.functions.maxSnapshotsCid(project_id, epoch_id).call()
+    tasks = [
+        state_contract_obj.functions.snapshotStatus(project_id, epoch_id),
+        state_contract_obj.functions.maxSnapshotsCid(project_id, epoch_id),
+    ]
 
+    [consensus_status, cid] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
     logger.trace(f'consensus status for project {project_id} and epoch {epoch_id} is {consensus_status}')
     if consensus_status[0]:
         await redis_conn.zadd(
@@ -155,8 +158,11 @@ async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj
         first_epoch = int(first_epoch_data)
         return first_epoch
     else:
-        first_epoch = state_contract_obj.functions.projectFirstEpochId(project_id).call()
+        tasks = [
+            state_contract_obj.functions.projectFirstEpochId(project_id),
+        ]
 
+        [first_epoch] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
         logger.info(f'first epoch for project {project_id} is {first_epoch}')
         # Don't cache if it is 0
         if first_epoch == 0:
