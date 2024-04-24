@@ -75,6 +75,25 @@ class Request(EIP712Struct):
     projectId = String()
 
 
+def submit_snapshot_retry_callback(retry_state: tenacity.RetryCallState):
+    if retry_state.attempt_number >= 3:
+        logger.error(
+            'Txn signing worker failed after 3 attempts | Txn payload: {}', retry_state.kwargs['txn_payload'],
+        )
+    else:
+        if retry_state.outcome.failed:
+            # use priority gas too
+            retry_state.kwargs['priority_gas_multiplier'] += 1
+            logger.info(
+                'Txn failed, retrying with priority gas multiplier {} | Txn payload: {}',
+            )
+        logger.warning(
+            'Tx signing attempt number {} result {} | Txn payload: {}',
+            retry_state.attempt_number, retry_state.outcome,
+            retry_state.kwargs['txn_payload'],
+        )
+
+
 def web3_storage_retry_state_callback(retry_state: tenacity.RetryCallState):
     """
     Callback function to handle retry attempts for web3 storage upload.
@@ -124,6 +143,9 @@ class GenericAsyncWorker(multiprocessing.Process):
     _signer_pkey: str
     _signer_nonce: int
     _signer_address: str
+    _last_gas_price_fetch_time: float
+    _last_gas_price: int
+    _gas_price_update_buffer: int
 
     def __init__(self, name, signer_idx, **kwargs):
         """
@@ -159,6 +181,8 @@ class GenericAsyncWorker(multiprocessing.Process):
             self._private_key = self._private_key[2:]
         self._identity_private_key = PrivateKey.from_hex(settings.signer_private_key)
         self._initialized = False
+        # set the default gas price update buffer to 5 seconds
+        self._gas_price_update_buffer = 5
 
     def _signal_handler(self, signum, frame):
         """
@@ -548,14 +572,16 @@ class GenericAsyncWorker(multiprocessing.Process):
         retry=retry_if_exception_type(Exception),
         wait=wait_random_exponential(multiplier=1, max=2),
         stop=stop_after_attempt(3),
+        after=submit_snapshot_retry_callback,
     )
-    async def submit_snapshot(self, txn_payload: TxnPayload):
+    async def submit_snapshot(self, txn_payload: TxnPayload, priority_gas_multiplier: int = 0):
         """
         Submit Snapshot
         """
         _nonce = self._signer_nonce
         await self._increment_nonce()
         self._logger.trace(f'nonce: {_nonce}')
+        gas_price = await self._fetch_gas_price()
 
         try:
             tx_hash = await write_transaction(
@@ -566,6 +592,8 @@ class GenericAsyncWorker(multiprocessing.Process):
                 self._protocol_state_contract,
                 'submitSnapshot',
                 _nonce,
+                gas_price,
+                priority_gas_multiplier,
                 txn_payload.slotId,
                 txn_payload.snapshotCid,
                 txn_payload.epochId,
@@ -655,6 +683,8 @@ class GenericAsyncWorker(multiprocessing.Process):
             name='PowerloomProtocolContract', version='0.1', chainId=self._chain_id,
             verifyingContract=self.protocol_state_contract_address,
         )
+        # setting a default value for gas price
+        self._last_gas_price = self._w3.to_wei('0.01', 'gwei')
 
     async def _init_httpx_client(self):
         """
@@ -685,6 +715,29 @@ class GenericAsyncWorker(multiprocessing.Process):
             transport=self._web3_storage_upload_transport,
             headers={'Authorization': 'Bearer ' + settings.web3storage.api_token},
         )
+
+    async def _fetch_gas_price(self):
+        """
+        Fetches the current gas price from the RPC node and sets the `_last_gas_price` attribute to the fetched value.
+        """
+        if time.time() - self._last_gas_price_fetch_time < self._gas_price_update_buffer:
+            return self._last_gas_price
+        else:
+            try:
+                latest_block_number = await self._anchor_rpc_helper.get_current_block_number()
+                block = await self._anchor_rpc_helper.batch_eth_get_block(
+                    latest_block_number, latest_block_number, self._redis_conn,
+                )
+                # base gas increases by 15% on each full block,
+                # settings gas to 2x base gas to accomodate for buffer blocks
+                self._last_gas_price = 2 * block['baseFeePerGas']
+                self._last_gas_price_fetch_time = time.time()
+                return self._last_gas_price
+            except Exception as e:
+                self._logger.opt(exception=True).error(
+                    'Exception fetching gas price: {}', e,
+                )
+                return self._last_gas_price
 
     async def _init_protocol_meta(self):
         # TODO: combine these into a single call
