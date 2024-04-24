@@ -185,6 +185,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._initialized = False
         # set the default gas price update buffer to 5 seconds
         self._gas_price_update_buffer = 5
+        self._last_gas_price_fetch_time = 0
 
     def _signal_handler(self, signum, frame):
         """
