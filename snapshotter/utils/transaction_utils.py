@@ -26,7 +26,7 @@ async def write_transaction(
         'gas': 500000,
         'maxFeePerGas': 2 * gas_price,
         # Priority fee starts from 0 and increases by 10% of the gas price on each retry
-        'maxPriorityFeePerGas': int((priority_gas_multiplier + 1) * gas_price),
+        'maxPriorityFeePerGas': int((priority_gas_multiplier + 1) * 0.1 * gas_price),
         'nonce': nonce,
         'chainId': chain_id,
     })

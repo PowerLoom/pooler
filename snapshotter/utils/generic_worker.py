@@ -611,9 +611,6 @@ class GenericAsyncWorker(multiprocessing.Process):
                 self._last_gas_price = transaction_receipt['baseFeePerGas']
 
         except Exception as e:
-            self._logger.opt(exception=True).error(
-                'Error submitting snapshot: {}', e,
-            )
             if 'nonce too low' in str(e):
                 error = eval(str(e))
                 message = error['message']
