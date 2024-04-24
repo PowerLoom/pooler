@@ -83,6 +83,8 @@ def submit_snapshot_retry_callback(retry_state: tenacity.RetryCallState):
     else:
         if retry_state.outcome.failed:
             # use priority gas too
+            if 'priority_gas_multiplier' not in retry_state.kwargs:
+                retry_state.kwargs['priority_gas_multiplier'] = 1
             retry_state.kwargs['priority_gas_multiplier'] += 1
             logger.info(
                 'Txn failed, retrying with priority gas multiplier {} | Txn payload: {}',
