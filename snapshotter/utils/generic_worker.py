@@ -622,6 +622,8 @@ class GenericAsyncWorker(multiprocessing.Process):
                 self._logger.info(
                     'Nonce too low error. Next nonce: {}', next_nonce,
                 )
+                # sleep for 5 seconds before updating nonce
+                time.sleep(5)
                 await self._reset_nonce(next_nonce)
                 # reset queue
                 raise Exception('nonce error, reset nonce')
@@ -629,8 +631,8 @@ class GenericAsyncWorker(multiprocessing.Process):
                 self._logger.info(
                     'Error submitting snapshot. Retrying...',
                 )
-                # sleep for two seconds before updating nonce
-                time.sleep(2)
+                # sleep for 5 seconds before updating nonce
+                time.sleep(5)
                 await self._reset_nonce()
 
                 raise e
@@ -727,13 +729,13 @@ class GenericAsyncWorker(multiprocessing.Process):
             return self._last_gas_price
         else:
             try:
-                latest_block_number = await self._anchor_rpc_helper.get_current_block_number()
+                latest_block_number = await self._anchor_rpc_helper.get_current_block_number(self._redis_conn)
                 block = await self._anchor_rpc_helper.batch_eth_get_block(
                     latest_block_number, latest_block_number, self._redis_conn,
                 )
                 # base gas increases by 15% on each full block,
-                # settings gas to 2x base gas to accomodate for buffer blocks
-                self._last_gas_price = 2 * block['baseFeePerGas']
+                # settings gas to 3x base gas to accomodate for buffer blocks
+                self._last_gas_price = 3 * int(block[0]['result']['baseFeePerGas'], 16)
                 self._last_gas_price_fetch_time = time.time()
                 return self._last_gas_price
             except Exception as e:
