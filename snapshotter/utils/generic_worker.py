@@ -145,9 +145,7 @@ class GenericAsyncWorker(multiprocessing.Process):
     _signer_pkey: str
     _signer_nonce: int
     _signer_address: str
-    _last_gas_price_fetch_time: float
     _last_gas_price: int
-    _gas_price_update_buffer: int
 
     def __init__(self, name, signer_idx, **kwargs):
         """
@@ -183,9 +181,6 @@ class GenericAsyncWorker(multiprocessing.Process):
             self._private_key = self._private_key[2:]
         self._identity_private_key = PrivateKey.from_hex(settings.signer_private_key)
         self._initialized = False
-        # set the default gas price update buffer to 5 seconds
-        self._gas_price_update_buffer = 5
-        self._last_gas_price_fetch_time = 0
 
     def _signal_handler(self, signum, frame):
         """
@@ -584,7 +579,6 @@ class GenericAsyncWorker(multiprocessing.Process):
         _nonce = self._signer_nonce
         await self._increment_nonce()
         self._logger.trace(f'nonce: {_nonce}')
-        gas_price = await self._fetch_gas_price()
 
         try:
             tx_hash = await write_transaction(
@@ -595,7 +589,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                 self._protocol_state_contract,
                 'submitSnapshot',
                 _nonce,
-                gas_price,
+                self._last_gas_price,
                 priority_gas_multiplier,
                 txn_payload.slotId,
                 txn_payload.snapshotCid,
@@ -612,9 +606,14 @@ class GenericAsyncWorker(multiprocessing.Process):
             self._logger.info(
                 f'submitted transaction with tx_hash: {tx_hash}',
             )
-            await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=20)
+            transaction_receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=20)
+            if 'baseFeePerGas' in transaction_receipt:
+                self._last_gas_price = transaction_receipt['baseFeePerGas']
 
         except Exception as e:
+            self._logger.opt(exception=True).error(
+                'Error submitting snapshot: {}', e,
+            )
             if 'nonce too low' in str(e):
                 error = eval(str(e))
                 message = error['message']
@@ -622,8 +621,6 @@ class GenericAsyncWorker(multiprocessing.Process):
                 self._logger.info(
                     'Nonce too low error. Next nonce: {}', next_nonce,
                 )
-                # sleep for 5 seconds before updating nonce
-                time.sleep(5)
                 await self._reset_nonce(next_nonce)
                 # reset queue
                 raise Exception('nonce error, reset nonce')
@@ -720,29 +717,6 @@ class GenericAsyncWorker(multiprocessing.Process):
             transport=self._web3_storage_upload_transport,
             headers={'Authorization': 'Bearer ' + settings.web3storage.api_token},
         )
-
-    async def _fetch_gas_price(self):
-        """
-        Fetches the current gas price from the RPC node and sets the `_last_gas_price` attribute to the fetched value.
-        """
-        if time.time() - self._last_gas_price_fetch_time < self._gas_price_update_buffer:
-            return self._last_gas_price
-        else:
-            try:
-                latest_block_number = await self._anchor_rpc_helper.get_current_block_number(self._redis_conn)
-                block = await self._anchor_rpc_helper.batch_eth_get_block(
-                    latest_block_number, latest_block_number, self._redis_conn,
-                )
-                # base gas increases by 15% on each full block,
-                # settings gas to 3x base gas to accomodate for buffer blocks
-                self._last_gas_price = 3 * int(block[0]['result']['baseFeePerGas'], 16)
-                self._last_gas_price_fetch_time = time.time()
-                return self._last_gas_price
-            except Exception as e:
-                self._logger.opt(exception=True).error(
-                    'Exception fetching gas price: {}', e,
-                )
-                return self._last_gas_price
 
     async def _init_protocol_meta(self):
         # TODO: combine these into a single call
