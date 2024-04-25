@@ -534,12 +534,14 @@ class GenericAsyncWorker(multiprocessing.Process):
             )
 
     @aiorwlock_aqcuire_release
-    async def _increment_nonce(self):
+    async def _return_and_increment_nonce(self):
+        nonce = self._signer_nonce
         self._signer_nonce += 1
         self._logger.info(
             'Using signer {} for submission task. Incremented nonce {}',
             self._signer_address, self._signer_nonce,
         )
+        return nonce
 
     @aiorwlock_aqcuire_release
     async def _reset_nonce(self, value: int = 0):
@@ -576,8 +578,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         """
         Submit Snapshot
         """
-        _nonce = self._signer_nonce
-        await self._increment_nonce()
+        _nonce = await self._return_and_increment_nonce()
         self._logger.trace(f'nonce: {_nonce}')
 
         try:
