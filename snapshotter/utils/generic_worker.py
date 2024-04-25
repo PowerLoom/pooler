@@ -88,6 +88,7 @@ def submit_snapshot_retry_callback(retry_state: tenacity.RetryCallState):
             retry_state.kwargs['priority_gas_multiplier'] += 1
             logger.info(
                 'Txn failed, retrying with priority gas multiplier {} | Txn payload: {}',
+                retry_state.kwargs['priority_gas_multiplier'], retry_state.kwargs['txn_payload'],
             )
         logger.warning(
             'Tx signing attempt number {} result {} | Txn payload: {}',
