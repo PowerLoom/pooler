@@ -67,7 +67,7 @@ from snapshotter.utils.rpc import RpcHelper
 from snapshotter.utils.transaction_utils import write_transaction
 
 
-class Request(EIP712Struct):
+class EIPRequest(EIP712Struct):
     slotId = Uint()
     deadline = Uint()
     snapshotCid = String()
@@ -250,7 +250,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         current_block = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.block_number
 
         deadline = current_block + settings.protocol_state.deadline_buffer
-        request = Request(
+        request = EIPRequest(
             slotId=0,
             deadline=deadline,
             snapshotCid=snapshot_cid,
