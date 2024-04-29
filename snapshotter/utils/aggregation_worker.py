@@ -1,5 +1,4 @@
 import asyncio
-import hashlib
 import importlib
 import json
 import time
@@ -15,6 +14,8 @@ from snapshotter.settings.config import projects_config
 from snapshotter.settings.config import settings
 from snapshotter.utils.callback_helpers import send_failure_notifications_async
 from snapshotter.utils.generic_worker import GenericAsyncWorker
+from snapshotter.utils.helper_functions import gen_multiple_type_project_id
+from snapshotter.utils.helper_functions import gen_single_type_project_id
 from snapshotter.utils.models.data_models import SnapshotterIssue
 from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.data_models import SnapshotterStates
@@ -56,40 +57,6 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 self._multi_project_types.add(config.project_type)
             self._task_types.add(config.project_type)
 
-    def _gen_single_type_project_id(self, task_type, epoch):
-        """
-        Generates a project ID for a single task type and epoch.
-
-        Args:
-            task_type (str): The task type.
-            epoch (Epoch): The epoch object.
-
-        Returns:
-            str: The generated project ID.
-        """
-        data_source = epoch.projectId.split(':')[-2]
-        project_id = f'{task_type}:{data_source}:{settings.namespace}'
-        return project_id
-
-    def _gen_multiple_type_project_id(self, task_type, epoch):
-        """
-        Generates a unique project ID based on the task type and epoch messages.
-
-        Args:
-            task_type (str): The type of task.
-            epoch (Epoch): The epoch object containing messages.
-
-        Returns:
-            str: The generated project ID.
-        """
-        underlying_project_ids = [project.projectId for project in epoch.messages]
-        unique_project_id = ''.join(sorted(underlying_project_ids))
-
-        project_hash = hashlib.sha3_256(unique_project_id.encode()).hexdigest()
-
-        project_id = f'{task_type}:{project_hash}:{settings.namespace}'
-        return project_id
-
     def _gen_project_id(self, task_type, epoch):
         """
         Generates a project ID based on the given task type and epoch.
@@ -105,9 +72,10 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             ValueError: If the task type is unknown.
         """
         if task_type in self._single_project_types:
-            return self._gen_single_type_project_id(task_type, epoch)
+            return gen_single_type_project_id(task_type, epoch.projectId)
         elif task_type in self._multi_project_types:
-            return self._gen_multiple_type_project_id(task_type, epoch)
+            underlying_project_ids = [project.projectId for project in epoch.messages]
+            return gen_multiple_type_project_id(task_type, underlying_project_ids)
         else:
             raise ValueError(f'Unknown project type {task_type}')
 

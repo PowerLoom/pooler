@@ -28,6 +28,7 @@ from snapshotter.utils.redis.redis_keys import project_snapshotter_status_report
 from snapshotter.utils.redis.redis_keys import source_chain_block_time_key
 from snapshotter.utils.redis.redis_keys import source_chain_epoch_size_key
 from snapshotter.utils.redis.redis_keys import source_chain_id_key
+from snapshotter.utils.redis.redis_keys import stored_projects_key
 from snapshotter.utils.rpc import get_event_sig_and_abi
 
 logger = logger.bind(module='data_helper')
@@ -632,7 +633,7 @@ async def get_snapshotter_status(redis_conn: aioredis.Redis):
     """
     status_keys = []
 
-    all_projects = await redis_conn.smembers('storedProjectIds')
+    all_projects = await redis_conn.smembers(stored_projects_key())
     all_projects = [project_id.decode('utf-8') for project_id in all_projects]
 
     for project_id in all_projects:
