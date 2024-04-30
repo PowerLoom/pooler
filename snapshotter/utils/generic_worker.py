@@ -12,12 +12,20 @@ from typing import Dict
 from typing import Union
 from uuid import uuid4
 
+import aiorwlock
 import httpx
+import sha3
 import tenacity
 from aio_pika import IncomingMessage
 from aio_pika import Message
 from aio_pika.pool import Pool
-from eth_utils import keccak
+from coincurve import PrivateKey
+from eip712_structs import EIP712Struct
+from eip712_structs import make_domain
+from eip712_structs import String
+from eip712_structs import Uint
+from eth_utils.crypto import keccak
+from eth_utils.encoding import big_endian_to_int
 from httpx import AsyncClient
 from httpx import AsyncHTTPTransport
 from httpx import Limits
@@ -27,6 +35,7 @@ from ipfs_client.main import AsyncIPFSClient
 from pydantic import BaseModel
 from redis import asyncio as aioredis
 from tenacity import retry
+from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
 from web3 import Web3
@@ -38,10 +47,13 @@ from snapshotter.utils.callback_helpers import send_failure_notifications_async
 from snapshotter.utils.data_utils import get_source_chain_id
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.file_utils import read_json_file
+from snapshotter.utils.helper_functions import aiorwlock_aqcuire_release
+from snapshotter.utils.models.data_models import SignRequest
 from snapshotter.utils.models.data_models import SnapshotterIssue
 from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
+from snapshotter.utils.models.data_models import TxnPayload
 from snapshotter.utils.models.data_models import UnfinalizedSnapshot
 from snapshotter.utils.models.message_models import AggregateBase
 from snapshotter.utils.models.message_models import PayloadCommitMessage
@@ -52,6 +64,37 @@ from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import submitted_unfinalized_snapshot_cids
 from snapshotter.utils.rpc import RpcHelper
+from snapshotter.utils.transaction_utils import write_transaction
+
+
+class Request(EIP712Struct):
+    slotId = Uint()
+    deadline = Uint()
+    snapshotCid = String()
+    epochId = Uint()
+    projectId = String()
+
+
+def submit_snapshot_retry_callback(retry_state: tenacity.RetryCallState):
+    if retry_state.attempt_number >= 3:
+        logger.error(
+            'Txn signing worker failed after 3 attempts | Txn payload: {}', retry_state.kwargs['txn_payload'],
+        )
+    else:
+        if retry_state.outcome.failed:
+            # use priority gas too
+            if 'priority_gas_multiplier' not in retry_state.kwargs:
+                retry_state.kwargs['priority_gas_multiplier'] = 1
+            retry_state.kwargs['priority_gas_multiplier'] += 1
+            logger.info(
+                'Txn failed, retrying with priority gas multiplier {} | Txn payload: {}',
+                retry_state.kwargs['priority_gas_multiplier'], retry_state.kwargs['txn_payload'],
+            )
+        logger.warning(
+            'Tx signing attempt number {} result {} | Txn payload: {}',
+            retry_state.attempt_number, retry_state.outcome,
+            retry_state.kwargs['txn_payload'],
+        )
 
 
 def web3_storage_retry_state_callback(retry_state: tenacity.RetryCallState):
@@ -97,8 +140,15 @@ class GenericAsyncWorker(multiprocessing.Process):
     _httpx_client: AsyncClient
     _web3_storage_upload_transport: AsyncHTTPTransport
     _web3_storage_upload_client: AsyncClient
+    _chain_id: int
+    _epoch_size: int
+    _source_chain_block_time: int
+    _signer_pkey: str
+    _signer_nonce: int
+    _signer_address: str
+    _last_gas_price: int
 
-    def __init__(self, name, **kwargs):
+    def __init__(self, name, signer_idx, **kwargs):
         """
         Initializes a GenericAsyncWorker instance.
 
@@ -113,10 +163,11 @@ class GenericAsyncWorker(multiprocessing.Process):
         super(GenericAsyncWorker, self).__init__(name=name, **kwargs)
         self._protocol_state_contract = None
         self._qos = 1
-
+        # this acts as the index of the signer to use from the list in settings for self submission
+        self._signer_index = signer_idx
         self._rate_limiting_lua_scripts = None
 
-        self.protocol_state_contract_address = settings.protocol_state.address
+        self.protocol_state_contract_address = Web3.toChecksumAddress(settings.protocol_state.address)
         self._commit_payload_exchange = (
             f'{settings.rabbitmq.setup.commit_payload.exchange}:{settings.namespace}'
         )
@@ -125,6 +176,11 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._commit_payload_routing_key = (
             f'powerloom-backend-commit-payload:{settings.namespace}:{settings.instance_id}.Data'
         )
+        self._keccak_hash = lambda x: sha3.keccak_256(x).digest()
+        self._private_key = settings.signer_private_key
+        if self._private_key.startswith('0x'):
+            self._private_key = self._private_key[2:]
+        self._identity_private_key = PrivateKey.from_hex(settings.signer_private_key)
         self._initialized = False
 
     def _signal_handler(self, signum, frame):
@@ -189,6 +245,31 @@ class GenericAsyncWorker(multiprocessing.Process):
         """
         snapshot_cid = await _ipfs_writer_client.add_bytes(snapshot)
         return snapshot_cid
+
+    def generate_signature(self, snapshot_cid, epoch_id, project_id):
+        current_block = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.block_number
+
+        deadline = current_block + settings.protocol_state.deadline_buffer
+        request = Request(
+            slotId=0,
+            deadline=deadline,
+            snapshotCid=snapshot_cid,
+            epochId=epoch_id,
+            projectId=project_id,
+        )
+
+        signable_bytes = request.signable_bytes(self._domain_separator)
+        signature = self._identity_private_key.sign_recoverable(signable_bytes, hasher=self._keccak_hash)
+        v = signature[64] + 27
+        r = big_endian_to_int(signature[0:32])
+        s = big_endian_to_int(signature[32:64])
+
+        final_sig = r.to_bytes(32, 'big') + s.to_bytes(32, 'big') + v.to_bytes(1, 'big')
+        request_ = {
+            'slotId': 0, 'deadline': deadline, 'snapshotCid': snapshot_cid,
+            'epochId': epoch_id, 'projectId': project_id,
+        }
+        return request_, final_sig
 
     async def _commit_payload(
             self,
@@ -295,12 +376,32 @@ class GenericAsyncWorker(multiprocessing.Process):
             except:
                 pass
             # send to relayer dispatch queue
-            await self._send_payload_commit_service_queue(
-                task_type=task_type,
-                project_id=project_id,
-                epoch=epoch,
-                snapshot_cid=snapshot_cid,
-            )
+            if not settings.snapshot_submissions.enabled:
+                await self._send_payload_commit_service_queue(
+                    task_type=task_type,
+                    project_id=project_id,
+                    epoch=epoch,
+                    snapshot_cid=snapshot_cid,
+                )
+            else:
+                request_, sig = self.generate_signature(snapshot_cid, epoch.epochId, project_id)
+                await self.submit_snapshot(
+                    txn_payload=TxnPayload(
+                        slotId=request_['slotId'],
+                        snapshotCid=snapshot_cid,
+                        epochId=epoch.epochId,
+                        projectId=project_id,
+                        request=SignRequest(
+                            slotId=request_['slotId'],
+                            deadline=request_['deadline'],
+                            snapshotCid=request_['snapshotCid'],
+                            epochId=request_['epochId'],
+                            projectId=request_['projectId'],
+                        ),
+                        signature='0x' + str(sig.hex()),
+                        contractAddress=settings.protocol_state.address,
+                    ),
+                )
 
         # upload to web3 storage
         if storage_flag:
@@ -433,6 +534,107 @@ class GenericAsyncWorker(multiprocessing.Process):
                 },
             )
 
+    @aiorwlock_aqcuire_release
+    async def _return_and_increment_nonce(self):
+        nonce = self._signer_nonce
+        self._signer_nonce += 1
+        self._logger.info(
+            'Using signer {} for submission task. Incremented nonce {}',
+            self._signer_address, self._signer_nonce,
+        )
+        return nonce
+
+    @aiorwlock_aqcuire_release
+    async def _reset_nonce(self, value: int = 0):
+        if value > 0:
+            self._signer_nonce = value
+            self._logger.info(
+                'Using signer {} for submission task. Reset nonce to {}',
+                self._signer_address, self._signer_nonce,
+            )
+        else:
+            correct_nonce = await self._w3.eth.get_transaction_count(
+                self._signer_address,
+            )
+            if correct_nonce and type(correct_nonce) is int:
+                self._signer_nonce = correct_nonce
+                self._logger.info(
+                    'Using signer {} for submission task. Reset nonce to {}',
+                    self._signer_address, self._signer_nonce,
+                )
+            else:
+                self._logger.error(
+                    'Using signer {} for submission task. Could not reset nonce',
+                    self._signer_address,
+                )
+
+    @retry(
+        reraise=True,
+        retry=retry_if_exception_type(Exception),
+        wait=wait_random_exponential(multiplier=1, max=2),
+        stop=stop_after_attempt(3),
+        after=submit_snapshot_retry_callback,
+    )
+    async def submit_snapshot(self, txn_payload: TxnPayload, priority_gas_multiplier: int = 0):
+        """
+        Submit Snapshot
+        """
+        _nonce = await self._return_and_increment_nonce()
+        self._logger.trace(f'nonce: {_nonce}')
+
+        try:
+            tx_hash = await write_transaction(
+                self._w3,
+                self._chain_id,
+                self._signer_address,
+                self._signer_pkey,
+                self._protocol_state_contract,
+                'submitSnapshot',
+                _nonce,
+                self._last_gas_price,
+                priority_gas_multiplier,
+                txn_payload.slotId,
+                txn_payload.snapshotCid,
+                txn_payload.epochId,
+                txn_payload.projectId,
+                (
+                    txn_payload.request.slotId, txn_payload.request.deadline,
+                    txn_payload.request.snapshotCid, txn_payload.request.epochId,
+                    txn_payload.request.projectId,
+                ),
+                txn_payload.signature,
+            )
+
+            self._logger.info(
+                f'submitted transaction with tx_hash: {tx_hash}',
+            )
+            transaction_receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=20)
+            if 'baseFeePerGas' in transaction_receipt:
+                self._last_gas_price = transaction_receipt['baseFeePerGas']
+
+        except Exception as e:
+            if 'nonce too low' in str(e):
+                error = eval(str(e))
+                message = error['message']
+                next_nonce = int(message.split('next nonce ')[1].split(',')[0])
+                self._logger.info(
+                    'Nonce too low error. Next nonce: {}', next_nonce,
+                )
+                await self._reset_nonce(next_nonce)
+                # reset queue
+                raise Exception('nonce error, reset nonce')
+            else:
+                self._logger.info(
+                    'Error submitting snapshot. Retrying...',
+                )
+                # sleep for 5 seconds before updating nonce
+                time.sleep(5)
+                await self._reset_nonce()
+
+                raise e
+        else:
+            return tx_hash
+
     async def _on_rabbitmq_message(self, message: IncomingMessage):
         """
         Callback function that is called when a message is received from RabbitMQ.
@@ -454,8 +656,11 @@ class GenericAsyncWorker(multiprocessing.Process):
         Initializes the RpcHelper objects for the worker and anchor chain, and sets up the protocol state contract.
         """
         self._rpc_helper = RpcHelper(rpc_settings=settings.rpc)
+        await self._rpc_helper.init(redis_conn=self._redis_conn)
         self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
-
+        await self._anchor_rpc_helper.init(redis_conn=self._redis_conn)
+        await self._anchor_rpc_helper._load_async_web3_providers()
+        self._logger.info('Anchor chain RPC helper nodes: {}', self._anchor_rpc_helper._nodes)
         self._protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
             address=Web3.toChecksumAddress(
                 self.protocol_state_contract_address,
@@ -465,6 +670,22 @@ class GenericAsyncWorker(multiprocessing.Process):
                 self._logger,
             ),
         )
+
+        self._w3 = self._anchor_rpc_helper._nodes[0]['web3_client_async']
+        # web3 v5 camel case helpers
+        self._signer_address = Web3.toChecksumAddress(settings.snapshot_submissions.signers[self._signer_index].address)
+        self._signer_nonce = await self._w3.eth.get_transaction_count(self._signer_address)
+        self._signer_pkey = settings.snapshot_submissions.signers[self._signer_index].private_key
+        self._rwlock = aiorwlock.RWLock(fast=True)
+
+        self._chain_id = await self._w3.eth.chain_id
+        self._logger.debug('Set anchor chain ID to {}', self._chain_id)
+        self._domain_separator = make_domain(
+            name='PowerloomProtocolContract', version='0.1', chainId=self._chain_id,
+            verifyingContract=self.protocol_state_contract_address,
+        )
+        # setting a default value for gas price
+        self._last_gas_price = self._w3.to_wei('0.01', 'gwei')
 
     async def _init_httpx_client(self):
         """

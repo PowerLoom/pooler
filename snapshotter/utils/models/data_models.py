@@ -6,6 +6,7 @@ from typing import List
 from typing import Optional
 from typing import Union
 
+import aiorwlock
 from pydantic import BaseModel
 
 from snapshotter.utils.callback_helpers import GenericPreloader
@@ -202,3 +203,30 @@ class UnfinalizedProject(BaseModel):
     projectId: str
     currentEpochId: int
     lastFinalizedEpochId: int
+
+
+class GenericTxnIssue(BaseModel):
+    accountAddress: str
+    issueType: str
+    projectId: Optional[str]
+    epochBegin: Optional[str]
+    epochId: Optional[str]
+    extra: Optional[str] = ''
+
+
+class SignRequest(BaseModel):
+    slotId: int
+    deadline: int
+    snapshotCid: str
+    epochId: int
+    projectId: str
+
+
+class TxnPayload(BaseModel):
+    slotId: int
+    projectId: str
+    snapshotCid: str
+    epochId: int
+    request: SignRequest
+    signature: str
+    contractAddress: str

@@ -303,7 +303,7 @@ class ProcessHubCore(Process):
 
         # Starting Snapshot workers
         self._spawned_cb_processes_map['snapshot_workers'] = dict()
-
+        signer_idx = 0
         for _ in range(settings.callback_worker_config.num_snapshot_workers):
             unique_id = str(uuid.uuid4())[:5]
             unique_name = (
@@ -311,7 +311,7 @@ class ProcessHubCore(Process):
                 '-' +
                 unique_id
             )
-            snapshot_worker_obj: Process = SnapshotAsyncWorker(name=unique_name)
+            snapshot_worker_obj: Process = SnapshotAsyncWorker(name=unique_name, signer_idx=signer_idx)
             snapshot_worker_obj.start()
             self._spawned_cb_processes_map['snapshot_workers'].update(
                 {unique_id: ProcessorWorkerDetails(unique_name=unique_name, pid=snapshot_worker_obj.pid)},
@@ -325,6 +325,7 @@ class ProcessHubCore(Process):
                 'snapshot_workers',
                 snapshot_worker_obj.pid,
             )
+            signer_idx += 1
         # Starting Aggregate workers
         self._spawned_cb_processes_map['aggregation_workers'] = dict()
 
@@ -335,7 +336,7 @@ class ProcessHubCore(Process):
                 '-' +
                 unique_id
             )
-            aggregation_worker_obj: Process = AggregationAsyncWorker(name=unique_name)
+            aggregation_worker_obj: Process = AggregationAsyncWorker(name=unique_name, signer_idx=signer_idx)
             aggregation_worker_obj.start()
             self._spawned_cb_processes_map['aggregation_workers'].update(
                 {unique_id: ProcessorWorkerDetails(unique_name=unique_name, pid=aggregation_worker_obj.pid)},
@@ -349,6 +350,7 @@ class ProcessHubCore(Process):
                 'aggregation_workers',
                 aggregation_worker_obj.pid,
             )
+            signer_idx += 1
 
         # Starting Delegate workers
         self._spawned_cb_processes_map['delegate_workers'] = dict()
@@ -466,7 +468,7 @@ class ProcessHubCore(Process):
         self._anchor_rpc_helper = RpcHelper(
             rpc_settings=settings.anchor_chain_rpc,
         )
-        self._anchor_rpc_helper._load_web3_providers_and_rate_limits()
+        self._anchor_rpc_helper.sync_init()
         protocol_abi = read_json_file(settings.protocol_state.abi, self._logger)
         self._protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
             address=to_checksum_address(
