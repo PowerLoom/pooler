@@ -48,7 +48,8 @@ from snapshotter.utils.redis.redis_keys import active_status_key
 from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import epoch_process_report_cached_key
-from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_key
+from snapshotter.utils.redis.redis_keys import project_last_finalized_sent_key
+from snapshotter.utils.redis.redis_keys import project_last_unfinalized_sent_key
 from snapshotter.utils.rpc import RpcHelper
 
 REDIS_CONN_CONF = {
@@ -170,6 +171,18 @@ async def health_check(
 
         if unfinalized_projects:
             for unfinalized_project in unfinalized_projects:
+
+                last_known_unfinalized_epoch = await redis_conn.get(
+                    project_last_unfinalized_sent_key(unfinalized_project.projectId),
+                )
+
+                # Check if project's last unfinalized epoch has been reported
+                if (
+                    last_known_unfinalized_epoch and
+                    int(last_known_unfinalized_epoch) == unfinalized_project.lastFinalizedEpochId
+                ):
+                    continue
+
                 notification_message = SnapshotterIssue(
                     instanceID=settings.instance_id,
                     issueType=SnapshotterReportState.UNFINALIZED_PROJECT.value,
@@ -180,6 +193,11 @@ async def health_check(
                 )
                 await send_failure_notifications_async(
                     client=app.state.async_client, message=notification_message,
+                )
+
+                await redis_conn.set(
+                    project_last_unfinalized_sent_key(unfinalized_project.projectId),
+                    unfinalized_project.lastFinalizedEpochId,
                 )
 
             response.status_code = 503
@@ -335,7 +353,7 @@ async def get_project_last_finalized_epoch_info(
 
         # get project last finalized epoch from redis
         project_last_finalized_epoch = await request.app.state.redis_pool.get(
-            project_last_finalized_epoch_key(project_id),
+            project_last_finalized_sent_key(project_id),
         )
 
         if project_last_finalized_epoch is None:
@@ -356,7 +374,7 @@ async def get_project_last_finalized_epoch_info(
                     epoch_finalized = True
                     project_last_finalized_epoch = epoch_id
                     await request.app.state.redis_pool.set(
-                        project_last_finalized_epoch_key(project_id),
+                        project_last_finalized_sent_key(project_id),
                         project_last_finalized_epoch,
                     )
                 else:
@@ -894,7 +912,7 @@ async def get_task_status_post(
 
         # check redis first, if doesn't exist, fetch from contract
         last_finalized_epoch = await request.app.state.redis_pool.get(
-            project_last_finalized_epoch_key(project_id),
+            project_last_finalized_sent_key(project_id),
         )
 
         if last_finalized_epoch is None:
@@ -906,7 +924,7 @@ async def get_task_status_post(
             # cache it in redis
             if last_finalized_epoch != 0:
                 await request.app.state.redis_pool.set(
-                    project_last_finalized_epoch_key(project_id),
+                    project_last_finalized_sent_key(project_id),
                     last_finalized_epoch,
                 )
         else:
