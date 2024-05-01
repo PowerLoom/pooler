@@ -608,7 +608,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             self._logger.info(
                 f'submitted transaction with tx_hash: {tx_hash}',
             )
-            transaction_receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=20)
+            transaction_receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=60)
             if 'baseFeePerGas' in transaction_receipt:
                 self._last_gas_price = transaction_receipt['baseFeePerGas']
 
