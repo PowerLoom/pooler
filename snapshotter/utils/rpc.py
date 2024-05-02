@@ -344,7 +344,7 @@ class RpcHelper(object):
                 return current_block
         return await f(node_idx=0)
 
-    async def _async_web3_call(self, contract_function, redis_conn, from_address=None):
+    async def _async_web3_call(self, contract_function, redis_conn, from_address=None, block=None, overrides=None):
         """
         Executes a web3 call asynchronously.
 
@@ -365,7 +365,6 @@ class RpcHelper(object):
         )
         async def f(node_idx):
             try:
-
                 node = self._nodes[node_idx]
                 rpc_url = node.get('rpc_url')
 
@@ -419,7 +418,14 @@ class RpcHelper(object):
                 if from_address:
                     payload['from'] = from_address
 
-                data = await node['web3_client_async'].eth.call(payload)
+                data = await node['web3_client_async'].eth.call(
+                    payload, block_identifier=block, state_override=overrides,
+                )
+
+                # if we're doing a state override call, at time of writing it means grabbing tick data
+                # more efficient to use eth_abi to decode rather than web3 codec
+                if overrides is not None:
+                    return data
 
                 decoded_data = node['web3_client_async'].codec.decode_abi(
                     output_type, HexBytes(data),
@@ -577,7 +583,7 @@ class RpcHelper(object):
         )
         return current_block
 
-    async def web3_call(self, tasks, redis_conn, from_address=None):
+    async def web3_call(self, tasks, redis_conn, from_address=None, block=None, overrides=None):
         """
         Calls the given tasks asynchronously using web3 and returns the response.
 
@@ -595,7 +601,7 @@ class RpcHelper(object):
         try:
             web3_tasks = [
                 self._async_web3_call(
-                    contract_function=task, redis_conn=redis_conn, from_address=from_address,
+                    contract_function=task, redis_conn=redis_conn, from_address=from_address, block=block, overrides=overrides,
                 ) for task in tasks
             ]
             response = await asyncio.gather(*web3_tasks)
@@ -821,6 +827,72 @@ class RpcHelper(object):
                     HexBytes(result['result']),
                 ),
             )
+
+        return rpc_response
+
+    async def batch_eth_call_on_block_range_hex_data(
+        self,
+        abi_dict,
+        function_name,
+        contract_address,
+        redis_conn,
+        from_block,
+        to_block,
+        params: Union[List, None] = None,
+        from_address=Web3.toChecksumAddress('0x0000000000000000000000000000000000000000'),
+    ):
+        """
+        Batch executes an Ethereum contract function call on a range of blocks.
+
+        Args:
+            abi_dict (dict): The ABI dictionary of the contract.
+            function_name (str): The name of the function to call.
+            contract_address (str): The address of the contract.
+            redis_conn (redis.Redis): The Redis connection object.
+            from_block (int): The starting block number.
+            to_block (int): The ending block number.
+            params (list, optional): The list of parameters to pass to the function. Defaults to None.
+            from_address (str, optional): The address to use as the sender of the transaction. Defaults to '0x0000000000000000000000000000000000000000'.
+
+        Returns:
+            list: A list raw HexBytes data results from the function call.
+        """
+        if not self._initialized:
+            await self.init(redis_conn)
+
+        if params is None:
+            params = []
+
+        function_signature = get_encoded_function_signature(
+            abi_dict, function_name, params,
+        )
+        rpc_query = []
+        request_id = 1
+        for block in range(from_block, to_block + 1):
+            rpc_query.append(
+                {
+                    'jsonrpc': '2.0',
+                    'method': 'eth_call',
+                    'params': [
+                        {
+                            'from': from_address,
+                            'to': Web3.toChecksumAddress(contract_address),
+                            'data': function_signature,
+                        },
+                        hex(block),
+                    ],
+                    'id': request_id,
+                },
+            )
+            request_id += 1
+
+        response_data = await self._make_rpc_jsonrpc_call(rpc_query, redis_conn=redis_conn)
+        rpc_response = []
+
+        # Return the hexbytes data to be decoded outside the function
+        response = response_data if isinstance(response_data, list) else [response_data]
+        for result in response:
+            rpc_response.append(HexBytes(result['result']))
 
         return rpc_response
 
