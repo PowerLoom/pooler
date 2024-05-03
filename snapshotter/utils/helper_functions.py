@@ -238,7 +238,7 @@ def aiorwlock_aqcuire_release(fn):
         # self._logger.debug('Wrapping fn: {}', fn.__name__)
         try:
             # including the retry calls
-            return await fn(self, *args, **kwargs)
+            result = await fn(self, *args, **kwargs)
 
         except Exception as e:
             self._logger.opt(exception=True).error(
@@ -254,4 +254,5 @@ def aiorwlock_aqcuire_release(fn):
                     'Error releasing rwlock: {}. But moving on regardless... | Context: '
                     'Using signer {} for submission task: {}.', e, self._signer_address, kwargs,
                 )
+            return result
     return wrapper
