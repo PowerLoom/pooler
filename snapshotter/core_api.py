@@ -48,7 +48,7 @@ from snapshotter.utils.redis.redis_keys import active_status_key
 from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import epoch_process_report_cached_key
-from snapshotter.utils.redis.redis_keys import project_last_finalized_sent_key
+from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_key
 from snapshotter.utils.redis.redis_keys import project_last_unfinalized_sent_key
 from snapshotter.utils.rpc import RpcHelper
 
@@ -353,7 +353,7 @@ async def get_project_last_finalized_epoch_info(
 
         # get project last finalized epoch from redis
         project_last_finalized_epoch = await request.app.state.redis_pool.get(
-            project_last_finalized_sent_key(project_id),
+            project_last_finalized_epoch_key(project_id),
         )
 
         if project_last_finalized_epoch is None:
@@ -374,7 +374,7 @@ async def get_project_last_finalized_epoch_info(
                     epoch_finalized = True
                     project_last_finalized_epoch = epoch_id
                     await request.app.state.redis_pool.set(
-                        project_last_finalized_sent_key(project_id),
+                        project_last_finalized_epoch_key(project_id),
                         project_last_finalized_epoch,
                     )
                 else:
@@ -912,7 +912,7 @@ async def get_task_status_post(
 
         # check redis first, if doesn't exist, fetch from contract
         last_finalized_epoch = await request.app.state.redis_pool.get(
-            project_last_finalized_sent_key(project_id),
+            project_last_finalized_epoch_key(project_id),
         )
 
         if last_finalized_epoch is None:
@@ -924,7 +924,7 @@ async def get_task_status_post(
             # cache it in redis
             if last_finalized_epoch != 0:
                 await request.app.state.redis_pool.set(
-                    project_last_finalized_sent_key(project_id),
+                    project_last_finalized_epoch_key(project_id),
                     last_finalized_epoch,
                 )
         else:

@@ -68,7 +68,7 @@ def source_chain_epoch_size_key():
     return 'sourceChainEpochSize'
 
 
-def project_last_finalized_sent_key(project_id):
+def project_last_finalized_epoch_key(project_id):
     return f'projectID:{project_id}:lastFinalizedEpoch'
 
 
