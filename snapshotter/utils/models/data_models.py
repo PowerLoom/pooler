@@ -33,6 +33,7 @@ class SnapshotterReportState(Enum):
     CRASHED_REPORTER_THREAD = 'CRASHED_REPORTER_THREAD'
     UNHEALTHY_EPOCH_PROCESSING = 'UNHEALTHY_EPOCH_PROCESSING'
     ONLY_FINALIZED_SNAPSHOT_RECIEVED = 'ONLY_FINALIZED_SNAPSHOT_RECIEVED'
+    UNFINALIZED_PROJECT = 'UNFINALIZED_PROJECT'
 
 
 class SnapshotterStates(Enum):
@@ -196,6 +197,12 @@ class UnfinalizedSnapshot(BaseModel):
 class TaskStatusRequest(BaseModel):
     task_type: str
     wallet_address: str
+
+
+class UnfinalizedProject(BaseModel):
+    projectId: str
+    currentEpochId: int
+    lastFinalizedEpochId: int
 
 
 class GenericTxnIssue(BaseModel):

@@ -75,6 +75,28 @@ class Request(EIP712Struct):
     projectId = String()
 
 
+def submit_snapshot_retry_callback(retry_state: tenacity.RetryCallState):
+    if retry_state.attempt_number >= 3:
+        logger.error(
+            'Txn signing worker failed after 3 attempts | Txn payload: {}', retry_state.kwargs['txn_payload'],
+        )
+    else:
+        if retry_state.outcome.failed:
+            # use priority gas too
+            if 'priority_gas_multiplier' not in retry_state.kwargs:
+                retry_state.kwargs['priority_gas_multiplier'] = 1
+            retry_state.kwargs['priority_gas_multiplier'] += 1
+            logger.info(
+                'Txn failed, retrying with priority gas multiplier {} | Txn payload: {}',
+                retry_state.kwargs['priority_gas_multiplier'], retry_state.kwargs['txn_payload'],
+            )
+        logger.warning(
+            'Tx signing attempt number {} result {} | Txn payload: {}',
+            retry_state.attempt_number, retry_state.outcome,
+            retry_state.kwargs['txn_payload'],
+        )
+
+
 def web3_storage_retry_state_callback(retry_state: tenacity.RetryCallState):
     """
     Callback function to handle retry attempts for web3 storage upload.
@@ -124,6 +146,7 @@ class GenericAsyncWorker(multiprocessing.Process):
     _signer_pkey: str
     _signer_nonce: int
     _signer_address: str
+    _last_gas_price: int
 
     def __init__(self, name, signer_idx, **kwargs):
         """
@@ -512,12 +535,14 @@ class GenericAsyncWorker(multiprocessing.Process):
             )
 
     @aiorwlock_aqcuire_release
-    async def _increment_nonce(self):
+    async def _return_and_increment_nonce(self):
+        nonce = self._signer_nonce
         self._signer_nonce += 1
         self._logger.info(
             'Using signer {} for submission task. Incremented nonce {}',
             self._signer_address, self._signer_nonce,
         )
+        return nonce
 
     @aiorwlock_aqcuire_release
     async def _reset_nonce(self, value: int = 0):
@@ -548,13 +573,13 @@ class GenericAsyncWorker(multiprocessing.Process):
         retry=retry_if_exception_type(Exception),
         wait=wait_random_exponential(multiplier=1, max=2),
         stop=stop_after_attempt(3),
+        after=submit_snapshot_retry_callback,
     )
-    async def submit_snapshot(self, txn_payload: TxnPayload):
+    async def submit_snapshot(self, txn_payload: TxnPayload, priority_gas_multiplier: int = 0):
         """
         Submit Snapshot
         """
-        _nonce = self._signer_nonce
-        await self._increment_nonce()
+        _nonce = await self._return_and_increment_nonce()
         self._logger.trace(f'nonce: {_nonce}')
 
         try:
@@ -566,6 +591,8 @@ class GenericAsyncWorker(multiprocessing.Process):
                 self._protocol_state_contract,
                 'submitSnapshot',
                 _nonce,
+                self._last_gas_price,
+                priority_gas_multiplier,
                 txn_payload.slotId,
                 txn_payload.snapshotCid,
                 txn_payload.epochId,
@@ -581,7 +608,9 @@ class GenericAsyncWorker(multiprocessing.Process):
             self._logger.info(
                 f'submitted transaction with tx_hash: {tx_hash}',
             )
-            await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=20)
+            transaction_receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=20)
+            if 'baseFeePerGas' in transaction_receipt:
+                self._last_gas_price = transaction_receipt['baseFeePerGas']
 
         except Exception as e:
             if 'nonce too low' in str(e):
@@ -598,8 +627,8 @@ class GenericAsyncWorker(multiprocessing.Process):
                 self._logger.info(
                     'Error submitting snapshot. Retrying...',
                 )
-                # sleep for two seconds before updating nonce
-                time.sleep(2)
+                # sleep for 5 seconds before updating nonce
+                time.sleep(5)
                 await self._reset_nonce()
 
                 raise e
@@ -655,6 +684,8 @@ class GenericAsyncWorker(multiprocessing.Process):
             name='PowerloomProtocolContract', version='0.1', chainId=self._chain_id,
             verifyingContract=self.protocol_state_contract_address,
         )
+        # setting a default value for gas price
+        self._last_gas_price = self._w3.to_wei('0.01', 'gwei')
 
     async def _init_httpx_client(self):
         """
