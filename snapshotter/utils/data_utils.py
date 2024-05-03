@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+from random import sample
 from typing import List
 
 import tenacity
@@ -22,6 +23,7 @@ from snapshotter.utils.models.data_models import SnapshotterProjectStatus
 from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.data_models import SnapshotterStatus
 from snapshotter.utils.models.data_models import SnapshotterStatusReport
+from snapshotter.utils.models.data_models import UnfinalizedProject
 from snapshotter.utils.redis.redis_keys import project_finalized_data_zset
 from snapshotter.utils.redis.redis_keys import project_first_epoch_hmap
 from snapshotter.utils.redis.redis_keys import project_snapshotter_status_report_key
@@ -837,3 +839,45 @@ async def get_project_time_series_data(
         ipfs_reader=ipfs_reader,
         project_ids=project_ids,
     )
+
+
+async def snapshotter_last_finalized_check(
+    redis_conn: aioredis.Redis,
+    state_contract_obj,
+    rpc_helper,
+):
+    try:
+        # get all projects from redis
+        all_projects = await redis_conn.smembers(stored_projects_key())
+        all_projects = [project_id.decode('utf-8') for project_id in all_projects]
+
+        # take random sample of 5 projects
+        samples = sample(all_projects, 5)
+
+        # get current epoch and the last finalized snapshot for each sampled project
+        tasks = [state_contract_obj.functions.currentEpoch()]
+        tasks += [
+            state_contract_obj.functions.lastFinalizedSnapshot(project_id)
+            for project_id in samples
+        ]
+
+        [current_epoch, *last_finalized_snapshots] = await rpc_helper.web3_call(tasks, redis_conn=redis_conn)
+
+        current_epoch_id = current_epoch[2]
+
+        # check if the last finalized snapshot is older than 50 epochs
+        unfinalized_projects = []
+        for project_id, last_finalized_snapshot in zip(samples, last_finalized_snapshots):
+            if current_epoch_id - last_finalized_snapshot > 50:
+                unfinalized_project = UnfinalizedProject(
+                    projectId=project_id,
+                    currentEpochId=current_epoch_id,
+                    lastFinalizedEpochId=last_finalized_snapshot,
+                )
+                unfinalized_projects.append(unfinalized_project)
+
+        return unfinalized_projects
+
+    except Exception as e:
+        logger.warning('Error while checking for unfinalized snapshots', error=e)
+        return []
