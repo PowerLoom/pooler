@@ -190,7 +190,7 @@ class GenericProcessorSnapshot(ABC):
     async def compute(
         self,
         epoch: PowerloomSnapshotProcessMessage,
-        redis: aioredis.Redis,
+        redis_conn: aioredis.Redis,
         rpc_helper: RpcHelper,
     ):
         pass
