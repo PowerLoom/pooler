@@ -67,6 +67,7 @@ from snapshotter.utils.transaction_utils import write_transaction
 
 
 class EIPRequest(EIP712Struct):
+    slotId = Uint()
     deadline = Uint()
     snapshotCid = String()
     epochId = Uint()
@@ -264,7 +265,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         current_block_hash = current_block['hash']
         deadline = current_block_number + settings.protocol_state.deadline_buffer
         request = EIPRequest(
-            # slotId=0,
+            slotId=settings.slot_id,
             deadline=deadline,
             snapshotCid=snapshot_cid,
             epochId=epoch_id,
@@ -434,7 +435,8 @@ class GenericAsyncWorker(multiprocessing.Process):
         request_, signature, current_block_hash = await self.generate_signature(snapshot_cid, epoch_id, project_id)
     
         async with self._grpc_stub.SubmitSnapshot.open() as stream:
-            request_msg = Request(
+            request_msg = dict(
+                slotId=request_['slotId'],
                 deadline=request_['deadline'],
                 snapshotCid=request_['snapshotCid'],
                 epochId=request_['epochId'],

@@ -161,9 +161,10 @@ class TxSubmissionConfig(BaseModel):
 
 class Settings(BaseModel):
     namespace: str
-    signer_private_key: str
+    signer_private_key: str  
     core_api: CoreAPI
     instance_id: str
+    slot_id: int
     rpc: RPCConfigFull
     snapshot_submissions: TxSubmissionConfig
     rlimit: RLimit

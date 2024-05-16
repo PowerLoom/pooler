@@ -25,6 +25,11 @@ if [ -z "$PROST_RPC_URL" ]; then
     exit 1;
 fi
 
+if [ -z "$SLOT_ID" ]; then
+    echo "SLOT_ID not found, please set this in your .env!";
+    exit 1;
+fi
+
 if [ -z "$PROTOCOL_STATE_CONTRACT" ]; then
     echo "PROTOCOL_STATE_CONTRACT not found, please set this in your .env!";
     exit 1;
@@ -90,6 +95,7 @@ echo "Using web3 storage token: ${web3_storage_token}"
 sed -i'.backup' "s#relevant-namespace#$namespace#" config/settings.json
 
 sed -i'.backup' "s#account-address#$SIGNER_ACCOUNT_ADDRESS#" config/settings.json
+sed -i'.backup' "s#slot-id#$SLOT_ID#" config/settings.json
 
 sed -i'.backup' "s#https://rpc-url#$SOURCE_RPC_URL#" config/settings.json
 
