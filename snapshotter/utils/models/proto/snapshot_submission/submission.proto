@@ -1,14 +1,15 @@
 syntax = "proto3";
 
 package submission;
-option go_package = "github.com/PowerLoom/proto-snapshot-collector/pkgs";
+option go_package = "github.com/PowerLoom/proto-snapshot-server/pkgs";
 
 // Request structure as defined in your Solidity contract
 message Request {
-  uint64 deadline = 1;
-  string snapshotCid = 2;
-  uint64 epochId = 3;
-  string projectId = 4;
+  uint64 slotId = 1;
+  uint64 deadline = 2;
+  string snapshotCid = 3;
+  uint64 epochId = 4;
+  string projectId = 5;
 }
 
 message SnapshotSubmission {
@@ -24,3 +25,4 @@ service Submission {
 message SubmissionResponse {
   string message = 1; // Response message
 }
+
