@@ -68,7 +68,7 @@ def get_encoded_function_signature(abi_dict, function_name, params: Union[List, 
     function_signature = abi_dict.get(function_name)['signature']
     encoded_signature = '0x' + keccak(text=function_signature).hex()[:8]
     if params:
-        encoded_signature += eth_abi.encode_abi(
+        encoded_signature += eth_abi.encode(
             abi_dict.get(function_name)['input'],
             params,
         ).hex()
