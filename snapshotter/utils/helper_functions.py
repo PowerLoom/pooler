@@ -201,7 +201,8 @@ def aiorwlock_aqcuire_release(fn):
         # self._logger.debug('Wrapping fn: {}', fn.__name__)
         try:
             # including the retry calls
-            return await fn(self, *args, **kwargs)
+            r =  await fn(self, *args, **kwargs)
+            return r
 
         except Exception as e:
             self._logger.opt(exception=True).error(
