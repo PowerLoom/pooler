@@ -624,10 +624,10 @@ class GenericAsyncWorker(multiprocessing.Process):
                 raise Exception('nonce error, reset nonce')
             else:
                 self._logger.info(
-                    'Error submitting snapshot. Retrying...',
+                    'Error submitting snapshot" {}. Retrying after 5 seconds of asyncio sleep...', e
                 )
                 # sleep for 5 seconds before updating nonce
-                time.sleep(5)
+                await asyncio.sleep(5)
                 await self._reset_nonce()
 
                 raise e
