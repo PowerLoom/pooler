@@ -874,6 +874,7 @@ class ProcessorDistributor(multiprocessing.Process):
         event_type = message.routing_key.split('.')[-1]
 
         if event_type == 'SnapshotFinalized':
+            self._logger.info(f'SnapshotFinalizedEvent caught with message {message}')
             msg_obj: PowerloomSnapshotFinalizedMessage = (
                 PowerloomSnapshotFinalizedMessage.parse_raw(message.body)
             )
@@ -882,8 +883,9 @@ class ProcessorDistributor(multiprocessing.Process):
 
         # set project last finalized epoch in redis
         await self._redis_conn.set(
-            project_last_finalized_epoch_key(msg_obj.projectId),
-            msg_obj.epochId,
+            name=project_last_finalized_epoch_key(msg_obj.projectId),
+            value=msg_obj.epochId,
+            ex=60.0
         )
 
         # Add to project finalized data zset
@@ -1104,6 +1106,7 @@ class ProcessorDistributor(multiprocessing.Process):
             )
 
         elif message_type == 'SnapshotFinalized':
+            self._logger.info(f'SnapshotFinalizedEvent caught with message {message}')
             await self._cache_and_forward_to_payload_commit_queue(
                 message,
             )
@@ -1211,3 +1214,4 @@ class ProcessorDistributor(multiprocessing.Process):
             ev_loop.run_forever()
         finally:
             ev_loop.close()
+

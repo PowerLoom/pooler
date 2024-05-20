@@ -27,7 +27,7 @@ async def main():
     print('abi file ', settings.protocol_state.abi)
     print('Contract address: ', settings.protocol_state.address)
     snapshotters_arr_query = await anchor_rpc.web3_call(
-        tasks=[('allSnapshotters', Web3.to_checksum_address(settings.instance_id))],  # tuple of method name and args
+        tasks=[('allSnapshotters', [Web3.to_checksum_address(settings.instance_id)])],  # tuple of method name and args
         contract_addr=settings.protocol_state.address,
         abi=protocol_abi
     )

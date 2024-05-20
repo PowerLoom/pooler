@@ -304,8 +304,9 @@ async def get_project_last_finalized_epoch_info(
                     epoch_finalized = True
                     project_last_finalized_epoch = epoch_id
                     await request.app.state.redis_pool.set(
-                        project_last_finalized_epoch_key(project_id),
-                        project_last_finalized_epoch,
+                        name=project_last_finalized_epoch_key(project_id),
+                        value=project_last_finalized_epoch,
+                        ex=60
                     )
                 else:
                     epoch_id -= 1
@@ -898,3 +899,4 @@ async def get_task_status_post(
                 'completed': False,
                 'message': f'Task {task_status_request.task_type} for wallet {task_status_request.wallet_address} is not completed yet',
             }
+
