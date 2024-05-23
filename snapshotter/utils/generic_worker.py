@@ -6,6 +6,7 @@ import sha3
 import resource
 import time
 from functools import partial
+from contextlib import asynccontextmanager
 from signal import SIGINT
 from signal import signal
 from signal import SIGQUIT
@@ -134,7 +135,6 @@ def ipfs_upload_retry_state_callback(retry_state: tenacity.RetryCallState):
         logger.warning(
             f'Encountered ipfs upload exception: {retry_state.outcome.exception()} | args: {retry_state.args}, kwargs:{retry_state.kwargs}',
         )
-
 
 class GenericAsyncWorker(multiprocessing.Process):
     _async_transport: AsyncHTTPTransport
@@ -279,7 +279,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         s = big_endian_to_int(signature[32:64])
 
         final_sig = r.to_bytes(32, 'big') + s.to_bytes(32, 'big') + v.to_bytes(1, 'big')
-        request_ = {'slotId': 0, 'deadline': deadline, 'snapshotCid': snapshot_cid, 'epochId': epoch_id, 'projectId': project_id}
+        request_ = {'slotId': settings.slot_id, 'deadline': deadline, 'snapshotCid': snapshot_cid, 'epochId': epoch_id, 'projectId': project_id}
         return request_, final_sig, current_block_hash
 
     async def _commit_payload(
@@ -428,30 +428,63 @@ class GenericAsyncWorker(multiprocessing.Process):
         if storage_flag:
             asyncio.ensure_future(self._upload_web3_storage(snapshot_bytes))
 
+    @asynccontextmanager
+    async def open_stream(self):
+        try:
+            async with self._grpc_stub.SubmitSnapshot.open() as stream:
+                self._stream = stream
+                yield self._stream
+        finally:
+            self._stream = None
+
+    async def _cancel_stream(self):
+        if self._stream is not None:
+            try:
+                await self._stream.cancel()
+            except:
+                self.logger.debug('Error cancelling stream, continuing...')
+            self.logger.debug('Stream cancelled due to inactivity.')
+            self._stream = None
+
+    @retry(
+        wait=wait_random_exponential(multiplier=1, max=10),
+        stop=stop_after_attempt(3),
+        retry=retry_if_exception_type(Exception),
+    )
+    async def send_message(self, msg):
+        try:
+            async with self.open_stream() as stream:
+                await stream.send_message(msg)
+                self.logger.debug(f'Sent message: {msg}')
+        except Exception as e:
+            raise Exception(f'Failed to send message: {e}')
+            
     async def _send_submission_to_collector(self, snapshot_cid, epoch_id, project_id):
         self._logger.debug(
                 f'Sending submission to collector...',
             )
         request_, signature, current_block_hash = await self.generate_signature(snapshot_cid, epoch_id, project_id)
-    
-        async with self._grpc_stub.SubmitSnapshot.open() as stream:
-            request_msg = dict(
+        request_msg = dict(
                 slotId=request_['slotId'],
                 deadline=request_['deadline'],
                 snapshotCid=request_['snapshotCid'],
                 epochId=request_['epochId'],
                 projectId=request_['projectId'],
             )
-            self._logger.debug(
-                'Snapshot submission creation with request: {}', request_msg
+        self._logger.debug(
+            'Snapshot submission creation with request: {}', request_msg
+        )
+        msg = SnapshotSubmission(request=request_msg, signature=signature.hex(), header=current_block_hash)
+        self._logger.debug(
+            'Snapshot submission created: {}', msg
+        )
+
+        try:
+            await self.send_message(msg)
+        except Exception as e:
+            self._logger.error(
+                'Snapshot submission error: {}', e
             )
-            msg = SnapshotSubmission(request=request_msg, signature=signature.hex(), header=current_block_hash)
-            self._logger.debug(
-                'Snapshot submission created: {}', msg
-            )
-            await stream.send_message(msg)
-            response = await stream.recv_message()
-            self._logger.info('Received response from collector: {}', response)
     
     async def _rabbitmq_consumer(self, loop):
         """
