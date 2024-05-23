@@ -14,7 +14,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\nCsnapshotter/utils/models/proto/snapshot_submission/submission.proto\x12\nsubmission\"d\n\x07Request\x12\x0e\n\x06slotId\x18\x01 \x01(\x04\x12\x10\n\x08\x64\x65\x61\x64line\x18\x02 \x01(\x04\x12\x13\n\x0bsnapshotCid\x18\x03 \x01(\t\x12\x0f\n\x07\x65pochId\x18\x04 \x01(\x04\x12\x11\n\tprojectId\x18\x05 \x01(\t\"]\n\x12SnapshotSubmission\x12$\n\x07request\x18\x01 \x01(\x0b\x32\x13.submission.Request\x12\x11\n\tsignature\x18\x02 \x01(\t\x12\x0e\n\x06header\x18\x03 \x01(\t\"%\n\x12SubmissionResponse\x12\x0f\n\x07message\x18\x01 \x01(\t2`\n\nSubmission\x12R\n\x0eSubmitSnapshot\x12\x1e.submission.SnapshotSubmission\x1a\x1e.submission.SubmissionResponse(\x01\x42\x31Z/github.com/PowerLoom/proto-snapshot-server/pkgsb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\nCsnapshotter/utils/models/proto/snapshot_submission/submission.proto\x12\nsubmission\"d\n\x07Request\x12\x0e\n\x06slotId\x18\x01 \x01(\x04\x12\x10\n\x08\x64\x65\x61\x64line\x18\x02 \x01(\x04\x12\x13\n\x0bsnapshotCid\x18\x03 \x01(\t\x12\x0f\n\x07\x65pochId\x18\x04 \x01(\x04\x12\x11\n\tprojectId\x18\x05 \x01(\t\"]\n\x12SnapshotSubmission\x12$\n\x07request\x18\x01 \x01(\x0b\x32\x13.submission.Request\x12\x11\n\tsignature\x18\x02 \x01(\t\x12\x0e\n\x06header\x18\x03 \x01(\t\"%\n\x12SubmissionResponse\x12\x0f\n\x07message\x18\x01 \x01(\t2\xc0\x01\n\nSubmission\x12^\n\x18SubmitSnapshotSimulation\x12\x1e.submission.SnapshotSubmission\x1a\x1e.submission.SubmissionResponse(\x01\x30\x01\x12R\n\x0eSubmitSnapshot\x12\x1e.submission.SnapshotSubmission\x1a\x1e.submission.SubmissionResponse(\x01\x42\x31Z/github.com/PowerLoom/proto-snapshot-server/pkgsb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -28,6 +28,6 @@ if _descriptor._USE_C_DESCRIPTORS == False:
   _globals['_SNAPSHOTSUBMISSION']._serialized_end=278
   _globals['_SUBMISSIONRESPONSE']._serialized_start=280
   _globals['_SUBMISSIONRESPONSE']._serialized_end=317
-  _globals['_SUBMISSION']._serialized_start=319
-  _globals['_SUBMISSION']._serialized_end=415
+  _globals['_SUBMISSION']._serialized_start=320
+  _globals['_SUBMISSION']._serialized_end=512
 # @@protoc_insertion_point(module_scope)
