@@ -442,8 +442,8 @@ class GenericAsyncWorker(multiprocessing.Process):
             try:
                 await self._stream.cancel()
             except:
-                self.logger.debug('Error cancelling stream, continuing...')
-            self.logger.debug('Stream cancelled due to inactivity.')
+                self._logger.debug('Error cancelling stream, continuing...')
+            self._logger.debug('Stream cancelled due to inactivity.')
             self._stream = None
 
     @retry(
@@ -454,9 +454,10 @@ class GenericAsyncWorker(multiprocessing.Process):
     async def send_message(self, msg):
         try:
             async with self.open_stream() as stream:
+                self._logger.debug(f'Sending message: {msg}')
                 await stream.send_message(msg)
-                self.logger.debug(f'Sent message: {msg}')
         except Exception as e:
+            self._logger.error(f'Failed to send message: {e}')
             raise Exception(f'Failed to send message: {e}')
             
     async def _send_submission_to_collector(self, snapshot_cid, epoch_id, project_id):
@@ -482,7 +483,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         try:
             await self.send_message(msg)
         except Exception as e:
-            self._logger.error(
+            self._logger.opt(exception=True).error(
                 'Snapshot submission error: {}', e
             )
     
