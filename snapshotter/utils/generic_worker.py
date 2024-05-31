@@ -2,6 +2,8 @@ import asyncio
 import json
 import multiprocessing
 import sys
+import grpclib
+from regex import E
 import sha3
 import resource
 import time
@@ -430,21 +432,14 @@ class GenericAsyncWorker(multiprocessing.Process):
 
     @asynccontextmanager
     async def open_stream(self):
+        if self._stream is not None:
+            yield self._stream
         try:
             async with self._grpc_stub.SubmitSnapshot.open() as stream:
-                self._stream = stream
-                yield self._stream
-        finally:
-            self._stream = None
-
-    async def _cancel_stream(self):
-        if self._stream is not None:
-            try:
-                await self._stream.cancel()
-            except:
-                self._logger.debug('Error cancelling stream, continuing...')
-            self._logger.debug('Stream cancelled due to inactivity.')
-            self._stream = None
+                self._stream  = stream
+                yield stream
+        except Exception as e:
+            raise e
 
     @retry(
         wait=wait_random_exponential(multiplier=1, max=10),
@@ -457,6 +452,8 @@ class GenericAsyncWorker(multiprocessing.Process):
                 self._logger.debug(f'Sending message: {msg}')
                 await stream.send_message(msg)
         except Exception as e:
+            if isinstance(e, grpclib.exceptions.StreamTerminatedError):
+                self._stream = None
             self._logger.error(f'Failed to send message: {e}')
             raise Exception(f'Failed to send message: {e}')
             
