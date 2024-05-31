@@ -778,6 +778,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             ssl=False,
         )
         self._grpc_stub = SubmissionStub(self._grpc_channel)
+        self._stream = None
 
     async def _init_protocol_meta(self):
         # TODO: combine these into a single call
