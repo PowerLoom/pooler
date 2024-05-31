@@ -434,12 +434,14 @@ class GenericAsyncWorker(multiprocessing.Process):
     async def open_stream(self):
         if self._stream is not None:
             yield self._stream
-        try:
-            async with self._grpc_stub.SubmitSnapshot.open() as stream:
-                self._stream  = stream
-                yield stream
-        except Exception as e:
-            raise e
+        else:
+            try:
+                async with self._grpc_stub.SubmitSnapshot.open() as stream:
+                    self._stream = stream
+                    yield stream
+            except Exception as e:
+                self._stream = None
+                raise e
 
     @retry(
         wait=wait_random_exponential(multiplier=1, max=10),
@@ -456,7 +458,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                 self._stream = None
             self._logger.error(f'Failed to send message: {e}')
             raise Exception(f'Failed to send message: {e}')
-            
+        
     async def _send_submission_to_collector(self, snapshot_cid, epoch_id, project_id):
         self._logger.debug(
                 f'Sending submission to collector...',
