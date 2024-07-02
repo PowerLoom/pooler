@@ -96,6 +96,7 @@ sed -i'.backup' "s#relevant-namespace#$namespace#" config/settings.json
 
 sed -i'.backup' "s#account-address#$SIGNER_ACCOUNT_ADDRESS#" config/settings.json
 sed -i'.backup' "s#slot-id#$SLOT_ID#" config/settings.json
+sed -i'.backup' "s#data-market-id#$DATA_MARKET_ID#" config/settings.json
 
 sed -i'.backup' "s#https://rpc-url#$SOURCE_RPC_URL#" config/settings.json
 
