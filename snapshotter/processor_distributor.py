@@ -1184,7 +1184,7 @@ class ProcessorDistributor(multiprocessing.Process):
             abi=protocol_abi,
         )
         try:
-            source_block_time = self._protocol_state_contract.functions.SOURCE_CHAIN_BLOCK_TIME().call()
+            source_block_time = self._protocol_state_contract.functions.SOURCE_CHAIN_BLOCK_TIME(settings.data_market_id).call()
         except Exception as e:
             self._logger.exception(
                 'Exception in querying protocol state for source chain block time: {}',
@@ -1195,7 +1195,7 @@ class ProcessorDistributor(multiprocessing.Process):
             self._logger.debug('Set source chain block time to {}', self._source_chain_block_time)
 
         try:
-            epoch_size = self._protocol_state_contract.functions.EPOCH_SIZE().call()
+            epoch_size = self._protocol_state_contract.functions.EPOCH_SIZE(settings.data_market_id).call()
         except Exception as e:
             self._logger.exception(
                 'Exception in querying protocol state for epoch size: {}',

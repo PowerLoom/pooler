@@ -116,8 +116,8 @@ async def w3_get_and_cache_finalized_cid(
 
     [consensus_status, cid] = await rpc_helper.web3_call(
         tasks=[
-            ('snapshotStatus', [project_id, epoch_id]),
-            ('maxSnapshotsCid', [project_id, epoch_id])
+            ('snapshotStatus', [settings.data_market_id, project_id, epoch_id]),
+            ('maxSnapshotsCid', [project_id, epoch_id, settings.data_market_id])
         ],
         contract_addr=state_contract_obj.address,
         abi=state_contract_obj.abi,
@@ -161,12 +161,12 @@ async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj
         return first_epoch
     else:
         tasks = [
-            state_contract_obj.functions.projectFirstEpochId(project_id),
+            state_contract_obj.functions.projectFirstEpochId(settings.data_market_id, project_id),
         ]
 
         [first_epoch] = await rpc_helper.web3_call(
             tasks=[
-                ('projectFirstEpochId', [project_id]),
+                ('projectFirstEpochId', [settings.data_market_id, project_id]),
             ],
             contract_addr=state_contract_obj.address,
             abi=state_contract_obj.abi,
@@ -325,7 +325,7 @@ async def get_source_chain_id(redis_conn: aioredis.Redis, state_contract_obj, rp
     else:
         [source_chain_id] = await rpc_helper.web3_call(
             tasks=[
-                ('SOURCE_CHAIN_ID', [])
+                ('SOURCE_CHAIN_ID', [settings.data_market_id])
             ],
             contract_addr=state_contract_obj.address,
             abi=state_contract_obj.abi
@@ -359,7 +359,7 @@ async def build_projects_list_from_events(redis_conn: aioredis.Redis, state_cont
     }
 
     [start_block] = await rpc_helper.web3_call(
-        tasks=[('DeploymentBlockNumber', [])],
+        tasks=[('DeploymentBlockNumber', [settings.data_market_id])],
         contract_addr=state_contract_obj.address,
         abi=state_contract_obj.abi,
     )
@@ -442,11 +442,11 @@ async def get_snapshot_submision_window(redis_conn: aioredis.Redis, state_contra
         submission_window (int): The snapshot submission window.
     """
     tasks = [
-        state_contract_obj.functions.snapshotSubmissionWindow(),
+        state_contract_obj.functions.snapshotSubmissionWindow(settings.data_market_id),
     ]
 
     [submission_window] = await rpc_helper.web3_call(
-        tasks=[('snapshotSubmissionWindow', [])],
+        tasks=[('snapshotSubmissionWindow', [settings.data_market_id])],
         contract_addr=state_contract_obj.address,
         abi=state_contract_obj.abi
     )
@@ -474,7 +474,7 @@ async def get_source_chain_epoch_size(redis_conn: aioredis.Redis, state_contract
         return source_chain_epoch_size
     else:
         [source_chain_epoch_size] = await rpc_helper.web3_call(
-            tasks=[('EPOCH_SIZE', [])],
+            tasks=[('EPOCH_SIZE', [settings.data_market_id])],
             contract_addr=state_contract_obj.address,
             abi=state_contract_obj.abi
         )
@@ -507,11 +507,11 @@ async def get_source_chain_block_time(redis_conn: aioredis.Redis, state_contract
         return source_chain_block_time
     else:
         tasks = [
-            state_contract_obj.functions.SOURCE_CHAIN_BLOCK_TIME(),
+            state_contract_obj.functions.SOURCE_CHAIN_BLOCK_TIME(settings.data_market_id),
         ]
 
         [source_chain_block_time] = await rpc_helper.web3_call(
-            tasks=[('SOURCE_CHAIN_BLOCK_TIME', [])],
+            tasks=[('SOURCE_CHAIN_BLOCK_TIME', [settings.data_market_id])],
             contract_addr=state_contract_obj.address,
             abi=state_contract_obj.abi
         )

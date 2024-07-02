@@ -160,9 +160,9 @@ class ProtocolStateLoader:
         """
         await self.init()
         state_query_call_tasks = []
-        cur_epoch_id_task = self._protocol_state_contract.functions.currentEpoch()
+        cur_epoch_id_task = self._protocol_state_contract.functions.currentEpoch(settings.data_market_id)
         state_query_call_tasks.append(cur_epoch_id_task)
-        all_project_ids_task = self._protocol_state_contract.functions.getProjects()
+        all_project_ids_task = self._protocol_state_contract.functions.getProjects(settings.data_market_id)
         state_query_call_tasks.append(all_project_ids_task)
         results = await self._anchor_rpc_helper.web3_call(state_query_call_tasks, self._redis_conn)
         # print(results)

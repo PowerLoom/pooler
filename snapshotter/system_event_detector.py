@@ -135,13 +135,21 @@ class EventDetectorProcess(multiprocessing.Process):
             abi=self.contract_abi,
         )
 
+        self.data_market_contract_address = self.logic_contract.functions.dataMarketIdToDataMarket(settings.data_market_id).call()
+        self.data_market_contract = self.rpc_helper.get_current_node()['web3_client'].eth.contract(
+            address=Web3.to_checksum_address(
+                self.data_market_contract_address,
+            ),
+            abi=self.data_market_contract_abi,
+        )
+
         # event EpochReleased(uint256 indexed epochId, uint256 begin, uint256 end, uint256 timestamp);
         # event SnapshotFinalized(uint256 indexed epochId, uint256 epochEnd, string projectId,
         # string snapshotCid, uint256 finalizedSnapshotCount, uint256 totalReceivedCount, uint256 timestamp);
         # event SnapshotBatchFinalized(uint256 indexed epochId, uint256 epochEnd, string projectId, string snapshotCid, uint256 timestamp);
         EVENTS_ABI = {
-            'EpochReleased': self.contract.events.EpochReleased._get_event_abi(),
-            'SnapshotBatchFinalized': self.contract.events.SnapshotBatchFinalized._get_event_abi(),
+            'EpochReleased': self.data_market_contract.events.EpochReleased._get_event_abi(),
+            'SnapshotBatchFinalized': self.data_market_contract.events.SnapshotBatchFinalized._get_event_abi(),
         }
 
         EVENT_SIGS = {
@@ -178,7 +186,7 @@ class EventDetectorProcess(multiprocessing.Process):
         """
         events_log = await self.rpc_helper.get_events_logs(
             **{
-                'contract_address': self.contract_address,
+                'contract_address': self.data_market_contract,
                 'to_block': to_block,
                 'from_block': from_block,
                 'topics': [self.event_sig],

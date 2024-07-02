@@ -433,15 +433,24 @@ class GenericAsyncWorker(multiprocessing.Process):
     @asynccontextmanager
     async def open_stream(self):
         if self._stream is not None:
+            self._logger.debug(f"Reusing existing stream. Open streams count: {self._open_stream_count}")
             yield self._stream
         else:
             try:
                 async with self._grpc_stub.SubmitSnapshot.open() as stream:
                     self._stream = stream
+                    self._open_stream_count += 1
+                    self._logger.debug(f"Opened new stream. Open streams count: {self._open_stream_count}")
                     yield stream
             except Exception as e:
                 self._stream = None
+                self._open_stream_count -= 1
+                self._logger.error(f"Failed to open stream. Open streams count: {self._open_stream_count}")
                 raise e
+            finally:
+                if self._stream is None:
+                    self._open_stream_count -= 1
+                    self._logger.debug(f"Stream closed. Open streams count: {self._open_stream_count}")
 
     @retry(
         wait=wait_random_exponential(multiplier=1, max=10),
@@ -474,7 +483,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._logger.debug(
             'Snapshot submission creation with request: {}', request_msg
         )
-        msg = SnapshotSubmission(request=request_msg, signature=signature.hex(), header=current_block_hash)
+        msg = SnapshotSubmission(request=request_msg, signature=signature.hex(), header=current_block_hash, dataMarketId=settings.data_market_id)
         self._logger.debug(
             'Snapshot submission created: {}', msg
         )
@@ -781,13 +790,14 @@ class GenericAsyncWorker(multiprocessing.Process):
         )
         self._grpc_stub = SubmissionStub(self._grpc_channel)
         self._stream = None
+        self._open_stream_count = 0
 
     async def _init_protocol_meta(self):
         # TODO: combine these into a single call
         self._protocol_abi = read_json_file(settings.protocol_state.abi)
         try:
             source_block_time = await self._anchor_rpc_helper.web3_call(
-                tasks=[('SOURCE_CHAIN_BLOCK_TIME', [])],
+                tasks=[('SOURCE_CHAIN_BLOCK_TIME', [settings.data_market_id])],
                 contract_addr=self.protocol_state_contract_address,
                 abi=self._protocol_abi,
             )
@@ -803,7 +813,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             self._logger.debug('Set source chain block time to {}', self._source_chain_block_time)
         try:
             epoch_size = await self._anchor_rpc_helper.web3_call(
-                tasks=[('EPOCH_SIZE', [])],
+                tasks=[('EPOCH_SIZE', [settings.data_market_id])],
                 contract_addr=self.protocol_state_contract_address,
                 abi=self._protocol_abi,
             )

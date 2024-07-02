@@ -165,6 +165,7 @@ class Settings(BaseModel):
     core_api: CoreAPI
     instance_id: str
     slot_id: int
+    data_market_id: int
     rpc: RPCConfigFull
     snapshot_submissions: TxSubmissionConfig
     rlimit: RLimit
@@ -178,6 +179,7 @@ class Settings(BaseModel):
     pair_contract_abi: str
     aggregator_config_path: str
     protocol_state: EventContract
+    data_market: EventContract
     callback_worker_config: CallbackWorkerConfig
     ipfs: IPFSConfig
     web3storage: Web3Storage
