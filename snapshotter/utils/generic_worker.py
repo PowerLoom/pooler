@@ -641,11 +641,26 @@ class GenericAsyncWorker(multiprocessing.Process):
                 )
                 await self._reset_nonce()
                 raise Exception('tx receipt not found in time')
+            elif "replacement transaction underpriced" in str(e):
+                self._logger.error(
+                    'WILL NOT RETRY: Transaction underpriced. Tx hash: {}. Submission deets: {}',
+                    tx_hash, str({
+                        'nonce':  _nonce,
+                        'last_gas_price': self._last_gas_price,
+                        'prio_gas_multiplier': priority_gas_multiplier,
+                        'slotId': txn_payload.slotId,
+                        'snapshotCid': txn_payload.snapshotCid,
+                        'epochId': txn_payload.epochId,
+                        'projectId': txn_payload.projectId
+                    }),
+                )
+                # there is no point with further retry since this has already been most likely included
+                return
             else:
                 # removing await sleep to avoid pile up of context switches
                 # will let further errors with nonce be handled in the future by the above condition
                 self._logger.info(
-                    'Error submitting snapshot" {}. Giving it up to retry callback handler for further fee multiplication...', e,
+                    'Error submitting snapshot: {}. Giving it up to retry callback handler for further fee multiplication...', e,
                 )
                 raise e
         else:
