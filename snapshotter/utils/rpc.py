@@ -1,4 +1,5 @@
 import asyncio
+from functools import wraps
 from typing import List
 from typing import Union
 
@@ -27,7 +28,6 @@ from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.exceptions import RPCException
 from snapshotter.utils.models.settings_model import RPCConfigBase
-from functools import wraps
 
 
 def get_contract_abi_dict(abi):
@@ -163,7 +163,12 @@ class RpcHelper(object):
             ),
         )
         self._client = AsyncClient(
-            timeout=Timeout(timeout=5.0),
+            timeout=Timeout(
+                pool=settings.httpx.pool_timeout,
+                connect=settings.httpx.connect_timeout,
+                read=settings.httpx.read_timeout,
+                write=settings.httpx.write_timeout,
+            ),
             follow_redirects=False,
             transport=self._async_transport,
         )
@@ -208,7 +213,10 @@ class RpcHelper(object):
                         modules={'eth': (AsyncEth,)},
                         middlewares=[],
                     )
-                    self._logger.info('Loaded async web3 provider for node {}: {}', node['rpc_url'], node['web3_client_async'])
+                    self._logger.info(
+                        'Loaded async web3 provider for node {}: {}',
+                        node['rpc_url'], node['web3_client_async'],
+                    )
                 self._logger.info('Post async web3 provider loading: {}', self._nodes)
                 self._initialized = True
                 self._logger.info('RPC client initialized')
@@ -242,7 +250,7 @@ class RpcHelper(object):
                     ),
                 )
             else:
-                self._logger.info('Loaded blank node settings for node {}', node.url)          
+                self._logger.info('Loaded blank node settings for node {}', node.url)
         self._node_count = len(self._nodes)
         self._sync_nodes_initialized = True
 
@@ -589,7 +597,7 @@ class RpcHelper(object):
                         trie_node_exc = True
                     response_exceptions.append(response_data['error'])
                 else:   # if response is not a list, it is a dict
-                    return_response_data = response_data                
+                    return_response_data = response_data
 
             if response_exceptions and not trie_node_exc:
                 raise RPCException(
