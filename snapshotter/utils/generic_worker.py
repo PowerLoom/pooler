@@ -613,24 +613,24 @@ class GenericAsyncWorker(multiprocessing.Process):
                 self._last_gas_price = transaction_receipt['baseFeePerGas']
 
         except Exception as e:
-            if 'nonce too low' in str(e):
+            if 'nonce too low' in str(e) or 'nonce too high' in str(e):
                 error = eval(str(e))
                 message = error['message']
-                next_nonce = int(message.split('next nonce ')[1].split(',')[0])
-                self._logger.info(
-                    'Nonce too low error. Next nonce: {}', next_nonce,
-                )
-                await self._reset_nonce(next_nonce)
+                # NOTE: commenting this out since this is a standard that might not be 
+                #       supported by the node returning the JSONRPC error
+                # next_nonce = int(message.split('next nonce ')[1].split(',')[0])
+                # self._logger.info(
+                #     'Nonce error: {}. Next nonce: {}', str(e), next_nonce,
+                # )
+                await self._reset_nonce()
                 # reset queue
                 raise Exception('nonce error, reset nonce')
             else:
+                # removing await sleep to avoid pile up of context switches
+                # will let further errors with nonce be handled in the future by the above condition
                 self._logger.info(
-                    'Error submitting snapshot" {}. Retrying after 5 seconds of asyncio sleep...', e,
+                    'Error submitting snapshot" {}. Giving it up to retry callback handler for further fee multiplication...', e,
                 )
-                # sleep for 5 seconds before updating nonce
-                await asyncio.sleep(5)
-                await self._reset_nonce()
-
                 raise e
         else:
             return tx_hash
