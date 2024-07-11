@@ -644,8 +644,8 @@ class GenericAsyncWorker(multiprocessing.Process):
                 raise Exception('tx receipt not found in time')
             elif "replacement transaction underpriced" in str(e):
                 self._logger.error(
-                    'WILL NOT RETRY: Transaction underpriced. Tx hash: {}. Submission deets: {}',
-                    tx_hash, str({
+                    'WILL NOT RETRY: Transaction underpriced. Submission deets: {}',
+                    str({
                         'nonce':  _nonce,
                         'last_gas_price': self._last_gas_price,
                         'prio_gas_multiplier': priority_gas_multiplier,
