@@ -104,7 +104,12 @@ class HealthManager(multiprocessing.Process):
         )
         self._client = AsyncClient(
             base_url=settings.reporting.service_url,
-            timeout=Timeout(timeout=5.0),
+            timeout=Timeout(
+                pool=settings.httpx.pool_timeout,
+                connect=settings.httpx.connect_timeout,
+                read=settings.httpx.read_timeout,
+                write=settings.httpx.write_timeout,
+            ),
             follow_redirects=False,
             transport=self._async_transport,
         )
@@ -207,8 +212,8 @@ class HealthManager(multiprocessing.Process):
 
         if self._last_epoch_checked == 0:
             self._logger.info(
-            'Skipping epoch processing health check because this is the first run with no reference of last epoch checked by this service',
-        )
+                'Skipping epoch processing health check because this is the first run with no reference of last epoch checked by this service',
+            )
             self._last_epoch_checked = current_epoch_id
             return
         elif current_epoch_id == self._last_epoch_checked:
@@ -357,6 +362,7 @@ class HealthManager(multiprocessing.Process):
                 )
                 await self._send_proc_hub_respawn()
         self._last_epoch_checked = current_epoch_id
+
     async def _check_health(self, loop):
         # will do constant health checks and send respawn command if unhealthy
         while True:

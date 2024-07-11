@@ -159,6 +159,13 @@ class TxSubmissionConfig(BaseModel):
     signers: List[SignerConfig] = []
 
 
+class HTTPXConfig(BaseModel):
+    pool_timeout: int
+    connect_timeout: int
+    read_timeout: int
+    write_timeout: int
+
+
 class Settings(BaseModel):
     namespace: str
     signer_private_key: str
@@ -170,6 +177,7 @@ class Settings(BaseModel):
     rabbitmq: RabbitMQ
     reporting: ReportingConfig
     redis: Redis
+    httpx: HTTPXConfig
     redis_reader: RedisReader
     logs: Logs
     projects_config_path: str

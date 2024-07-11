@@ -625,7 +625,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                 raise Exception('nonce error, reset nonce')
             else:
                 self._logger.info(
-                    'Error submitting snapshot" {}. Retrying after 5 seconds of asyncio sleep...', e
+                    'Error submitting snapshot" {}. Retrying after 5 seconds of asyncio sleep...', e,
                 )
                 # sleep for 5 seconds before updating nonce
                 await asyncio.sleep(5)
@@ -699,7 +699,12 @@ class GenericAsyncWorker(multiprocessing.Process):
             ),
         )
         self._client = AsyncClient(
-            timeout=Timeout(timeout=5.0),
+            timeout=Timeout(
+                pool=settings.httpx.pool_timeout,
+                connect=settings.httpx.connect_timeout,
+                read=settings.httpx.read_timeout,
+                write=settings.httpx.write_timeout,
+            ),
             follow_redirects=False,
             transport=self._async_transport,
         )
