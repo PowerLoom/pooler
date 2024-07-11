@@ -39,6 +39,7 @@ from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
 from web3 import Web3
+import web3.exceptions
 
 from snapshotter.settings.config import settings
 from snapshotter.utils.callback_helpers import get_rabbitmq_channel
@@ -625,6 +626,22 @@ class GenericAsyncWorker(multiprocessing.Process):
                 await self._reset_nonce()
                 # reset queue
                 raise Exception('nonce error, reset nonce')
+            elif isinstance(e, web3.exceptions.TimeExhausted):
+                self._logger.error(
+                    'Transaction not in the chain after a successful response.'
+                    'Tx hash: {}. Submission deets: {}, Time to reset nonce',
+                    tx_hash, str({
+                        'nonce':  _nonce,
+                        'last_gas_price': self._last_gas_price,
+                        'prio_gas_multiplier': priority_gas_multiplier,
+                        'slotId': txn_payload.slotId,
+                        'snapshotCid': txn_payload.snapshotCid,
+                        'epochId': txn_payload.epochId,
+                        'projectId': txn_payload.projectId
+                    }),
+                )
+                await self._reset_nonce()
+                raise Exception('tx receipt not found in time')
             else:
                 # removing await sleep to avoid pile up of context switches
                 # will let further errors with nonce be handled in the future by the above condition
