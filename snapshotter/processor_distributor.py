@@ -45,6 +45,8 @@ from snapshotter.utils.data_utils import get_source_chain_epoch_size
 from snapshotter.utils.data_utils import get_source_chain_id
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.file_utils import read_json_file
+from snapshotter.utils.helper_functions import gen_multiple_type_project_id
+from snapshotter.utils.helper_functions import gen_single_type_project_id
 from snapshotter.utils.models.data_models import SnapshotterEpochProcessingReportItem
 from snapshotter.utils.models.data_models import SnapshotterIssue
 from snapshotter.utils.models.data_models import SnapshotterReportState
@@ -70,6 +72,7 @@ from snapshotter.utils.redis.redis_keys import process_hub_core_start_timestamp
 from snapshotter.utils.redis.redis_keys import project_finalized_data_zset
 from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_key
 from snapshotter.utils.redis.redis_keys import snapshot_submission_window_key
+from snapshotter.utils.redis.redis_keys import stored_projects_key
 from snapshotter.utils.rpc import RpcHelper
 # from snapshotter.utils.data_utils import build_projects_list_from_events
 
@@ -180,9 +183,11 @@ class ProcessorDistributor(multiprocessing.Process):
         """
         Initializes the RpcHelper instance if it is not already initialized.
         """
-        if not self._rpc_helper:
-            self._rpc_helper = RpcHelper()
-            self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
+        # if not self._rpc_helper:
+        self._rpc_helper = RpcHelper()
+        await self._rpc_helper.init(redis_conn=self._redis_conn)
+        self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
+        await self._anchor_rpc_helper.init(redis_conn=self._redis_conn)
 
     async def _init_rabbitmq_connection(self):
         """
@@ -318,6 +323,7 @@ class ProcessorDistributor(multiprocessing.Process):
 
             # self._logger.info('Generated project list with {} projects', self._projects_list)
 
+            all_projects = []
             # iterate over project list fetched
             for project_type, project_config in self._project_type_config_mapping.items():
                 project_type = project_config.project_type
@@ -330,6 +336,23 @@ class ProcessorDistributor(multiprocessing.Process):
                             data_source,
                         )
                     project_config.projects = list(project_data)
+                all_projects += [f'{project_type}:{project.lower()}:{settings.namespace}' for project in project_config.projects]
+
+            for config in aggregator_config:
+                if config.aggregate_on == AggregateOn.single_project:
+                    project_ids = filter(lambda x: config.filters.projectId in x, all_projects)
+                    all_projects += [
+                        gen_single_type_project_id(config.project_type, project_id)
+                        for project_id in project_ids
+                    ]
+                if config.aggregate_on == AggregateOn.multi_project:
+                    all_projects.append(gen_multiple_type_project_id(config.project_type, config.projects_to_wait_for))
+
+            # update stored project set in redis
+            await self._redis_conn.sadd(
+                stored_projects_key(),
+                *all_projects,
+            )
 
             submission_window = await get_snapshot_submision_window(
                 redis_conn=self._redis_conn,
@@ -689,7 +712,7 @@ class ProcessorDistributor(multiprocessing.Process):
         )
 
         asyncio.ensure_future(self._exec_preloaders(msg_obj=msg_obj))
-        asyncio.ensure_future(self._epoch_processing_health_check(msg_obj.epochId))
+        # asyncio.ensure_future(self._epoch_processing_health_check(msg_obj.epochId))
 
     async def _distribute_callbacks_snapshotting(self, project_type: str, epoch: EpochBase):
         """
@@ -1169,7 +1192,7 @@ class ProcessorDistributor(multiprocessing.Process):
         self._anchor_rpc_helper = RpcHelper(
             rpc_settings=settings.anchor_chain_rpc,
         )
-        self._anchor_rpc_helper._load_web3_providers_and_rate_limits()
+        self._anchor_rpc_helper.sync_init()
         protocol_abi = read_json_file(settings.protocol_state.abi, self._logger)
         self._protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
             address=to_checksum_address(

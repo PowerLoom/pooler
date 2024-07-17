@@ -22,8 +22,10 @@ def acquire_bounded_semaphore(fn):
         result = None
         try:
             result = await fn(self, *args, **kwargs)
+            
         except Exception as e:
             logger.opt(exception=True).error('Error in asyncio semaphore acquisition decorator: {}', e)
+
         finally:
             sem.release()
             return result

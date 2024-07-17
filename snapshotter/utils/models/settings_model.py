@@ -22,7 +22,6 @@ class CoreAPI(BaseModel):
 
 class RPCNodeConfig(BaseModel):
     url: str
-    rate_limit: str
 
 
 class ConnectionLimits(BaseModel):
@@ -43,6 +42,7 @@ class RPCConfigBase(BaseModel):
 class RPCConfigFull(RPCConfigBase):
     skip_epoch_threshold_blocks: int
     polling_interval: int
+    semaphore_value: int = 20
 
 
 class RLimit(BaseModel):
@@ -110,6 +110,7 @@ class Logs(BaseModel):
 class EventContract(BaseModel):
     address: str
     abi: str
+    deadline_buffer: int
 
 
 class CallbackWorkerConfig(BaseModel):
@@ -141,11 +142,30 @@ class Web3Storage(BaseModel):
     # rate_limit: Optional[IPFSWriterRateLimit] = None
 
 
+class RelayerService(BaseModel):
+    host: str
+    port: str
+    keepalive_secs: int
+
+
+class SignerConfig(BaseModel):
+    address: str
+    private_key: str
+
+
+class TxSubmissionConfig(BaseModel):
+    enabled: bool = True
+    # relayer: RelayerService
+    signers: List[SignerConfig] = []
+
+
 class Settings(BaseModel):
     namespace: str
+    signer_private_key: str
     core_api: CoreAPI
     instance_id: str
     rpc: RPCConfigFull
+    snapshot_submissions: TxSubmissionConfig
     rlimit: RLimit
     rabbitmq: RabbitMQ
     reporting: ReportingConfig

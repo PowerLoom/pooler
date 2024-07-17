@@ -170,14 +170,14 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 return
 
             await p.execute()
-            await self._commit_payload(
+            asyncio.ensure_future(self._commit_payload(
                 task_type=task_type,
                 _ipfs_writer_client=self._ipfs_writer_client,
                 project_id=project_id,
                 epoch=msg_obj,
                 snapshot=snapshot,
                 storage_flag=settings.web3storage.upload_snapshots,
-            )
+            ))
 
     async def _process_bulk_mode(self, msg_obj: PowerloomSnapshotProcessMessage, task_type: str):
         """
@@ -289,14 +289,14 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                     },
                 )
                 await p.execute()
-                await self._commit_payload(
+                asyncio.ensure_future(self._commit_payload(
                     task_type=task_type,
                     _ipfs_writer_client=self._ipfs_writer_client,
                     project_id=project_id,
                     epoch=msg_obj,
                     snapshot=snapshot,
                     storage_flag=settings.web3storage.upload_snapshots,
-                )
+                ))
 
     async def _processor_task(self, msg_obj: PowerloomSnapshotProcessMessage, task_type: str):
         """

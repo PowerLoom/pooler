@@ -73,27 +73,31 @@ async def get_eth_price_usd(
             min=int(from_block),
             max=int(to_block),
         )
-        if cached_price_dict and len(cached_price_dict) == to_block - (
-            from_block - 1
-        ):
+
+        if cached_price_dict and len(cached_price_dict) == to_block - (from_block - 1):
+
             price_dict = {
                 json.loads(
                     price.decode(
                         'utf-8',
                     ),
-                )[
-                    'blockHeight'
-                ]: json.loads(price.decode('utf-8'))['price']
+                )['blockHeight']: json.loads(
+                    price.decode('utf-8'),
+                )['price']
                 for price in cached_price_dict
             }
             return price_dict
 
         pair_abi_dict = get_contract_abi_dict(pair_contract_abi)
 
+
+        # Get the current sqrtPriceX96 value from the pool
+        # sqrtPriceX96 = pair_contract.functions.slot0().call()[0]
         # NOTE: We can further optimize below call by batching them all,
         # but that would be a large batch call for RPC node
         dai_eth_slot0_list = await rpc_helper.batch_eth_call_on_block_range(
             abi_dict=pair_abi_dict,
+            function_name='slot0',
             function_name='slot0',
             contract_address=DAI_WETH_PAIR,
             from_block=from_block,
@@ -102,6 +106,7 @@ async def get_eth_price_usd(
         )
         usdc_eth_slot0_list = await rpc_helper.batch_eth_call_on_block_range(
             abi_dict=pair_abi_dict,
+            function_name='slot0',
             function_name='slot0',
             contract_address=USDC_WETH_PAIR,
             from_block=from_block,
@@ -156,7 +161,11 @@ async def get_eth_price_usd(
             ] = int(block_num)
             block_count += 1
 
+
         # cache price at height
+        source_chain_epoch_size = int(
+            await redis_conn.get(source_chain_epoch_size_key()),
+        )
         source_chain_epoch_size = int(
             await redis_conn.get(source_chain_epoch_size_key()),
         )
@@ -175,11 +184,10 @@ async def get_eth_price_usd(
         return eth_price_usd_dict
 
     except Exception as err:
-        snapshot_util_logger.opt(exception=settings.logs.trace_enabled).error(
+        snapshot_util_logger.opt(exception=True).error(
             f'RPC ERROR failed to fetch ETH price, error_msg:{err}',
         )
         raise err
-
 
 async def get_block_details_in_block_range(
     from_block,

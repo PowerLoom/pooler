@@ -15,6 +15,11 @@ if [ -z "$SIGNER_ACCOUNT_ADDRESS" ]; then
     exit 1;
 fi
 
+if [ -z "$SIGNER_ACCOUNT_PRIVATE_KEY" ]; then
+    echo "SIGNER_ACCOUNT_PRIVATE_KEY not found, please set this in your .env!";
+    exit 1;
+fi
+
 if [ -z "$PROST_RPC_URL" ]; then
     echo "PROST_RPC_URL not found, please set this in your .env!";
     exit 1;
@@ -28,6 +33,7 @@ fi
 echo "Found SOURCE RPC URL ${SOURCE_RPC_URL}";
 
 echo "Found SIGNER ACCOUNT ADDRESS ${SIGNER_ACCOUNT_ADDRESS}";
+echo "Found SIGNER PRIVATE KEY as well";
 
 if [ "$IPFS_URL" ]; then
     echo "Found IPFS_URL ${IPFS_URL}";
@@ -103,5 +109,7 @@ sed -i'.backup' "s#protocol-state-contract#$PROTOCOL_STATE_CONTRACT#" config/set
 sed -i'.backup' "s#https://slack-reporting-url#$slack_reporting_url#" config/settings.json
 
 sed -i'.backup' "s#https://powerloom-reporting-url#$powerloom_reporting_url#" config/settings.json
+
+sed -i'.backup' "s#signer-account-private-key#$SIGNER_ACCOUNT_PRIVATE_KEY#" config/settings.json
 
 echo 'settings has been populated!'
