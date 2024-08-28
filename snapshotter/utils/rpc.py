@@ -115,11 +115,12 @@ def acquire_rpc_semaphore(fn):
         result = None
         try:
             result = await fn(self, *args, **kwargs)
+            return result
         except Exception as e:
             logger.opt(exception=True).error('Error in asyncio semaphore acquisition decorator: {}', e)
+            raise e
         finally:
             sem.release()
-            return result
     return wrapped
 
 
